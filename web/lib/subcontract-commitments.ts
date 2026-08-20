@@ -12,7 +12,7 @@ export async function directSubcontractOpenCommitment(
   orgId: string,
   projectId: string,
 ): Promise<string> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ committed: string | null }>(sql`
     select coalesce(sum(greatest(0,
       s.original_commitment + coalesce(changes.approved, 0) - coalesce(apps.billed, 0)
     )), 0) as committed
@@ -30,7 +30,7 @@ export async function directSubcontractOpenCommitment(
      where s.org_id = ${orgId} and s.project_id = ${projectId}
        and s.status in ('active', 'substantially_complete')
        and s.purchase_order_id is null
-  `)) as unknown as { rows: { committed: string | null }[] };
+  `));
   return normalizeMoney(result.rows[0]?.committed ?? "0");
 }
 

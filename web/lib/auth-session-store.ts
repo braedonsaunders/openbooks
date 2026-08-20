@@ -10,7 +10,7 @@ import type { ParsedSessionToken } from "./auth-token-format";
 export async function isSessionRecordActive(token: string, parsed: ParsedSessionToken): Promise<boolean> {
   const hash = createHash("sha256").update(token).digest("hex");
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ active: boolean }>(sql`
       select exists(
         select 1
           from auth_sessions session
@@ -21,7 +21,7 @@ export async function isSessionRecordActive(token: string, parsed: ParsedSession
            and session.revoked_at is null
            and session.expires_at > now()
       ) as active
-    `)) as unknown as { rows: { active: boolean }[] };
+    `));
     return result.rows[0]?.active === true;
   });
 }

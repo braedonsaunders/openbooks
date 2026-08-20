@@ -66,9 +66,9 @@ async function orgName(orgId: string): Promise<string> {
 async function postingDeps(orgId: string): Promise<{
   control: { ar: string; ap: string; bank: string; taxCollected?: string; taxPaid?: string; employeePayable?: string };
 }> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ c: Record<string, string> | null }>(
     sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { c: Record<string, string> | null }[] };
+  ));
   const c = r.rows[0]?.c ?? {};
   if (!c.ap || !c.ar || !c.bank) {
     throw new Error("org control accounts are not configured (orgs.settings.controlAccounts)");

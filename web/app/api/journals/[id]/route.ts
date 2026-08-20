@@ -46,9 +46,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute(
+  const existing = (await db.execute<{ status: string }>(
     sql`select status from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
-  )) as unknown as { rows: { status: string }[] }
+  ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (existing.rows[0].status !== 'draft') {
     return NextResponse.json(
@@ -199,7 +199,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const owned = (await db.execute(
     sql`select 1 from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
-  )) as unknown as { rows: unknown[] }
+  ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
     await deleteDocument(id, gate.user.id)

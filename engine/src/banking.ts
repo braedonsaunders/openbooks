@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { db, schema } from "./db.ts";
+import { db, schema, type SqlExecutor } from "./db.ts";
 import { fromUnits, isZero, sum, toUnits } from "./money.ts";
 
 /**
@@ -533,21 +533,20 @@ export function parseMt940(text: string): ParsedStatement {
 // ---------------------------------------------------------------------------
 // Import
 // ---------------------------------------------------------------------------
-
-interface ReconcilableAccount {
+type ReconcilableAccount = {
   id: string;
   name: string;
   number: string | null;
   currency: string;
-}
+};
 
 async function loadReconcilableAccount(orgId: string, accountId: string): Promise<ReconcilableAccount> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ReconcilableAccount>(sql`
     select a.id, a.name, a.number, a.currency_restriction as currency
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary
-  `)) as unknown as { rows: ReconcilableAccount[] };
+  `));
   const account = r.rows[0];
   if (!account) throw new BankingError("Account not found or not reconcilable");
   if (!account.currency) {
@@ -655,13 +654,13 @@ export async function importStatement(
       )
     `);
     const ids = keyed.map((line) => line.bankTransactionId as string);
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select bank_transaction_id as id
         from bank_statement_lines
        where org_id = ${ctx.orgId}
          and account_id = ${account.id}
          and bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const dupes = new Set(existing.rows.map((row) => row.id));
     const batchSeen = new Set<string>();
     const fresh: ParsedStatementLine[] = [];
@@ -744,22 +743,21 @@ export async function importStatement(
 // ---------------------------------------------------------------------------
 // Reconciliation sessions
 // ---------------------------------------------------------------------------
-
-interface ReconciliationRow {
+type ReconciliationRow = {
   id: string;
   account_id: string;
   through_date: string;
   currency: string;
   statement_balance: string;
   status: "in_progress" | "balanced" | "signed_off";
-}
+};
 
 async function loadReconciliation(orgId: string, reconciliationId: string): Promise<ReconciliationRow> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ReconciliationRow>(sql`
     select id, account_id, through_date, currency, statement_balance, status
       from reconciliations
      where id = ${reconciliationId} and org_id = ${orgId}
-  `)) as unknown as { rows: ReconciliationRow[] };
+  `));
   const recon = r.rows[0];
   if (!recon) throw new BankingError("Reconciliation not found");
   return recon;
@@ -786,17 +784,17 @@ export async function startReconciliation(
         hashtextextended(${`bank-reconciliation:${ctx.orgId}:${account.id}`}, 0)
       )
     `);
-    const open = (await tx.execute(sql`
+    const open = (await tx.execute<{ id: string }>(sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off'
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (open.rows[0]) {
       throw new BankingError(
         "This account already has an open reconciliation — finish or discard it first",
       );
     }
-    const latestSigned = (await tx.execute(sql`
+    const latestSigned = (await tx.execute<{ through_date: string }>(sql`
       select through_date
         from reconciliations
        where org_id = ${ctx.orgId}
@@ -804,7 +802,7 @@ export async function startReconciliation(
          and status = 'signed_off'
        order by through_date desc
        limit 1
-    `)) as unknown as { rows: { through_date: string }[] };
+    `));
     if (latestSigned.rows[0] && opts.throughDate <= latestSigned.rows[0].through_date) {
       throw new BankingError(
         `Through date must be after the last signed-off reconciliation (${latestSigned.rows[0].through_date})`,
@@ -837,16 +835,14 @@ export interface ReconciliationTotals {
   matchedJournalLines: number;
 }
 
-interface BankingSqlExecutor {
-  execute(query: SQL): Promise<unknown>;
-}
+type BankingSqlExecutor = SqlExecutor;
 
 async function reconciliationTotalsUsing(
   executor: BankingSqlExecutor,
   recon: ReconciliationRow,
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }>(sql`
     select
       coalesce((
         select sum(jl.txn_amount)
@@ -867,9 +863,7 @@ async function reconciliationTotalsUsing(
          from bank_statement_lines l
         where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
           and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
-  `)) as unknown as {
-    rows: { cleared: string; matched_journal: string; matched_stmt: string; unmatched_stmt: string }[];
-  };
+  `));
   const row = r.rows[0];
   const clearedBalance = fromUnits(toUnits(row.cleared));
   const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(row.cleared));
@@ -931,17 +925,17 @@ export interface AutoMatchResult {
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
-    const reconResult = (await tx.execute(sql`
+    const reconResult = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
        where id = ${reconciliationId} and org_id = ${ctx.orgId}
        for update
-    `)) as unknown as { rows: ReconciliationRow[] };
+    `));
     const recon = reconResult.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-    const stmtRes = (await tx.execute(sql`
+    const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string }>(sql`
       select l.id, l.posted_on, l.amount
        from bank_statement_lines l
        where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
@@ -949,8 +943,8 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
        order by l.posted_on, l.line_number
        for update
-    `)) as unknown as { rows: { id: string; posted_on: string; amount: string }[] };
-    const glRes = (await tx.execute(sql`
+    `));
+    const glRes = (await tx.execute<{ id: string; posting_date: string; amount: string }>(sql`
       select jl.id, je.posting_date, jl.txn_amount as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
@@ -961,7 +955,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
        order by je.posting_date, jl.line_number
        for update of jl
-    `)) as unknown as { rows: { id: string; posting_date: string; amount: string }[] };
+    `));
 
     // candidates by exact signed amount
     const byAmount = new Map<string, { id: string; date: string }[]>();
@@ -1032,17 +1026,17 @@ export async function createMatch(
   if (journalLineIds.length === 0) throw new BankingError("Select at least one journal line");
 
   return db.transaction(async (tx) => {
-    const reconResult = (await tx.execute(sql`
+    const reconResult = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
        where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
        for update
-    `)) as unknown as { rows: ReconciliationRow[] };
+    `));
     const recon = reconResult.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-    const stmt = (await tx.execute(sql`
+    const stmt = (await tx.execute<{ id: string; amount: string; currency: string }>(sql`
       select l.id, l.amount, l.currency
         from bank_statement_lines l
        where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
@@ -1051,14 +1045,14 @@ export async function createMatch(
          and l.posted_on <= ${recon.through_date}
          and l.match_status = 'unmatched'
        for update
-    `)) as unknown as { rows: { id: string; amount: string; currency: string }[] };
+    `));
     if (!stmt.rows[0]) {
       throw new BankingError(
         "Statement line is unavailable, outside the reconciliation cutoff, or already matched",
       );
     }
 
-    const gl = (await tx.execute(sql`
+    const gl = (await tx.execute<{ id: string; amount: string }>(sql`
       select jl.id, jl.txn_amount as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
@@ -1073,7 +1067,7 @@ export async function createMatch(
          )
        order by jl.id
        for update of jl
-    `)) as unknown as { rows: { id: string; amount: string }[] };
+    `));
     if (gl.rows.length !== journalLineIds.length) {
       throw new BankingError(
         "One or more journal lines are unavailable, outside the cutoff, already reconciled, or already matched",
@@ -1112,23 +1106,23 @@ export async function unmatchStatementLine(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   return db.transaction(async (tx) => {
-    const reconResult = (await tx.execute(sql`
+    const reconResult = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
        where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
        for update
-    `)) as unknown as { rows: ReconciliationRow[] };
+    `));
     const recon = reconResult.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
-    const deleted = (await tx.execute(sql`
+    const deleted = (await tx.execute<{ id: string }>(sql`
       delete from reconciliation_matches
        where reconciliation_id = ${recon.id}
          and statement_line_id = ${opts.statementLineId}
          and org_id = ${ctx.orgId}
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (deleted.rows.length === 0) {
       throw new BankingError("No matches for that statement line in this reconciliation");
     }
@@ -1159,7 +1153,7 @@ export async function excludeStatementLine(
     throw new BankingError("Exclusion reason must be between 5 and 500 characters");
   }
   await db.transaction(async (tx) => {
-    const res = (await tx.execute(sql`
+    const res = (await tx.execute<{ id: string }>(sql`
       update bank_statement_lines l
          set match_status = 'excluded',
              exclusion_reason = ${reason},
@@ -1171,7 +1165,7 @@ export async function excludeStatementLine(
          and l.org_id = ${ctx.orgId}
          and l.match_status = 'unmatched'
       returning l.id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!res.rows[0]) throw new BankingError("Only unmatched lines can be excluded");
     await tx.execute(sql`
       insert into audit_log
@@ -1192,24 +1186,22 @@ export async function excludeStatementLine(
 /** Restore an excluded statement line back to the unmatched queue. */
 export async function restoreStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
   await db.transaction(async (tx) => {
-    const lineResult = (await tx.execute(sql`
+    const lineResult = (await tx.execute<{
+        id: string;
+        account_id: string;
+        posted_on: string;
+        exclusion_reason: string;
+      }>(sql`
       select l.id, l.account_id, l.posted_on, l.exclusion_reason
         from bank_statement_lines l
        where l.id = ${statementLineId}
          and l.org_id = ${ctx.orgId}
          and l.match_status = 'excluded'
        for update
-    `)) as unknown as {
-      rows: {
-        id: string;
-        account_id: string;
-        posted_on: string;
-        exclusion_reason: string;
-      }[];
-    };
+    `));
     const line = lineResult.rows[0];
     if (!line) throw new BankingError("Only excluded lines can be restored");
-    const signed = (await tx.execute(sql`
+    const signed = (await tx.execute<{ id: string }>(sql`
       select id
         from reconciliations
        where org_id = ${ctx.orgId}
@@ -1217,7 +1209,7 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
          and status = 'signed_off'
          and through_date >= ${line.posted_on}
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (signed.rows[0]) {
       throw new BankingError(
         "This exclusion is covered by a signed-off reconciliation and cannot be restored",
@@ -1255,22 +1247,22 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
  */
 export async function discardReconciliation(reconciliationId: string, ctx: BankingContext): Promise<void> {
   await db.transaction(async (tx) => {
-    const reconResult = (await tx.execute(sql`
+    const reconResult = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
        where id = ${reconciliationId} and org_id = ${ctx.orgId}
        for update
-    `)) as unknown as { rows: ReconciliationRow[] };
+    `));
     const recon = reconResult.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") {
       throw new BankingError("Signed-off reconciliations cannot be discarded");
     }
-    const released = (await tx.execute(sql`
+    const released = (await tx.execute<{ statement_line_id: string }>(sql`
       delete from reconciliation_matches
        where reconciliation_id = ${recon.id} and org_id = ${ctx.orgId}
       returning statement_line_id
-    `)) as unknown as { rows: { statement_line_id: string }[] };
+    `));
     const stmtIds = [...new Set(released.rows.map((r) => r.statement_line_id))];
     if (stmtIds.length > 0) {
       await tx.execute(sql`
@@ -1300,38 +1292,38 @@ export async function markReconciled(
   ctx: BankingContext,
 ): Promise<{ journalLinesReconciled: number }> {
   return db.transaction(async (tx) => {
-    const r = (await tx.execute(sql`
+    const r = (await tx.execute<ReconciliationRow>(sql`
       select id, account_id, through_date, currency, statement_balance, status
         from reconciliations
        where id = ${reconciliationId} and org_id = ${ctx.orgId}
        for update
-    `)) as unknown as { rows: ReconciliationRow[] };
+    `));
     const recon = r.rows[0];
     if (!recon) throw new BankingError("Reconciliation not found");
     if (recon.status === "signed_off") {
-      const existing = (await tx.execute(sql`
+      const existing = (await tx.execute<{ count: number }>(sql`
         select count(*)::int as count
           from journal_lines
          where org_id = ${ctx.orgId} and reconciliation_id = ${recon.id}
-      `)) as unknown as { rows: { count: number }[] };
+      `));
       return { journalLinesReconciled: existing.rows[0].count };
     }
 
-    const statementEvidence = (await tx.execute(sql`
+    const statementEvidence = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
          and account_id = ${recon.account_id}
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
-    `)) as unknown as { rows: { count: number }[] };
+    `));
     if (statementEvidence.rows[0].count === 0) {
       throw new BankingError(
         "Cannot sign off without imported statement evidence through the reconciliation date",
       );
     }
 
-    const unmatched = (await tx.execute(sql`
+    const unmatched = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
@@ -1339,14 +1331,14 @@ export async function markReconciled(
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
          and match_status = 'unmatched'
-    `)) as unknown as { rows: { count: number }[] };
+    `));
     if (unmatched.rows[0].count > 0) {
       throw new BankingError(
         `Cannot sign off: ${unmatched.rows[0].count} statement line(s) through the cutoff remain unmatched`,
       );
     }
 
-    const invalidMatches = (await tx.execute(sql`
+    const invalidMatches = (await tx.execute<{ statement_line_id: string }>(sql`
       select m.statement_line_id
         from reconciliation_matches m
         join bank_statement_lines l
@@ -1372,14 +1364,14 @@ export async function markReconciled(
           or bool_or(jl.reconciled_at is not null)
           or sum(jl.txn_amount) <> l.amount
        limit 1
-    `)) as unknown as { rows: { statement_line_id: string }[] };
+    `));
     if (invalidMatches.rows[0]) {
       throw new BankingError(
         "Cannot sign off: one or more matches fail account, currency, cutoff, availability, or exact-amount cross-footing",
       );
     }
 
-    const bal = (await tx.execute(sql`
+    const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
@@ -1389,7 +1381,7 @@ export async function markReconciled(
          and (jl.reconciled_at is not null
               or jl.id in (select journal_line_id from reconciliation_matches
                             where reconciliation_id = ${recon.id}))
-    `)) as unknown as { rows: { cleared: string }[] };
+    `));
     const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0].cleared));
     if (!isZero(difference)) {
       throw new BankingError(
@@ -1400,14 +1392,14 @@ export async function markReconciled(
     // journal_lines carries no row-level audit columns. The reconciliation
     // stamp is its own evidence; transaction amendments are preserved through
     // immutable document + GL snapshots in audit_log.
-    const stamped = (await tx.execute(sql`
+    const stamped = (await tx.execute<{ id: string }>(sql`
       update journal_lines jl
          set reconciled_at = now(), reconciliation_id = ${recon.id}
        where jl.org_id = ${ctx.orgId} and jl.reconciled_at is null
          and jl.id in (select journal_line_id from reconciliation_matches
                         where reconciliation_id = ${recon.id})
       returning jl.id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     await tx.execute(sql`
       update reconciliations
@@ -1415,7 +1407,7 @@ export async function markReconciled(
              updated_at = now(), updated_by = ${ctx.userId}
        where id = ${recon.id} and org_id = ${ctx.orgId}
     `);
-    const excluded = (await tx.execute(sql`
+    const excluded = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count
         from bank_statement_lines
        where org_id = ${ctx.orgId}
@@ -1423,7 +1415,7 @@ export async function markReconciled(
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
          and match_status = 'excluded'
-    `)) as unknown as { rows: { count: number }[] };
+    `));
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)

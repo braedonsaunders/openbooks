@@ -51,7 +51,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
 
   const [apRes, topRes, trendRes, badgeRes] = (await Promise.all([
     // Open payables aggregate — open bill/expense items with remaining balance.
-    db.execute(sql`
+    db.execute<any>(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -76,7 +76,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         from oi where remaining > 0.005
     `),
     // Hero roster — vendor commitments: open POs and open bills side by side.
-    db.execute(sql`
+    db.execute<any>(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -121,7 +121,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
        limit 10
     `),
     // 13-week billed-spend trend (posted vendor bills by week).
-    db.execute(sql`
+    db.execute<any>(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              coalesce(sum(abs(d.total)), 0) as spend
         from documents d
@@ -131,7 +131,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
        group by 1
     `),
     // Directory badges + the remaining vitals.
-    db.execute(sql`
+    db.execute<any>(sql`
       select
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_pos,
@@ -152,7 +152,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           and exists (select 1 from vendor_roles vr where vr.org_id = ${orgId} and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
     `),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }, { rows: any[] }]
+  ]))
 
   const weekStarts: string[] = []
   {

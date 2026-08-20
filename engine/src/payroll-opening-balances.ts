@@ -346,7 +346,7 @@ export async function openingComponentFields(
   taxYear: number | null,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<OpeningComponentField[]> {
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<Record<string, unknown>>(sql`
     select c.id, c.code, c.name, c.kind, c.basis_cap_amount_per_year
       from pay_components c
      where c.org_id = ${orgId}
@@ -358,7 +358,7 @@ export async function openingComponentFields(
                where oc.org_id = ${orgId} and oc.component_id = c.id
                  and (${taxYear}::int is null or b.tax_year = ${taxYear}::int)))
      order by c.code
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => ({
     componentId: String(row.id),
     code: String(row.code),
@@ -370,12 +370,11 @@ export async function openingComponentFields(
     capped: row.basis_cap_amount_per_year != null,
   }));
 }
-
-interface LockRow {
+type LockRow = {
   employee_party_id: string;
   document_number: string | null;
   pay_date: string;
-}
+};
 
 /**
  * Employees whose carry-in is already baked into a committed pay. A stub on a
@@ -387,7 +386,7 @@ export async function openingBalanceLocks(
   taxYear: number,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, { documentNumber: string | null; payDate: string }>> {
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<LockRow>(sql`
     select distinct on (s.employee_party_id)
            s.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from pay_stubs s
@@ -395,7 +394,7 @@ export async function openingBalanceLocks(
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and r.run_status = 'committed'
      order by s.employee_party_id, s.pay_date
-  `)) as unknown as { rows: LockRow[] };
+  `));
   return new Map(
     rows.rows.map((r) => [r.employee_party_id, { documentNumber: r.document_number, payDate: r.pay_date }]),
   );
@@ -411,7 +410,7 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
   const year = assertTaxYear(taxYear);
   const amountCols = OPENING_BALANCE_FIELDS.map((f) => sql.raw(`b.${f.column}`));
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select p.id as employee_party_id, p.display_name as employee_name,
            er.employee_number, prof.country, prof.province,
            b.id is not null as has_row, b.id as row_id,
@@ -425,11 +424,11 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
        and b.tax_year = ${year}
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
      order by p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
   // Rows for people who no longer have an active profile still exist and still
   // feed the engine, so surface them rather than pretending they are gone.
-  const orphans = (await db.execute(sql`
+  const orphans = (await db.execute<Record<string, unknown>>(sql`
     select b.employee_party_id, p.display_name as employee_name, er.employee_number,
            prof.country, prof.province, true as has_row, b.id as row_id,
            b.updated_at::text as updated_at,
@@ -442,24 +441,22 @@ export async function openingBalancesForYear(orgId: string, taxYear: number): Pr
      where b.org_id = ${orgId} and b.tax_year = ${year}
        and (prof.id is null or not prof.is_active or not p.is_active)
      order by p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
-  const years = (await db.execute(sql`
+  const years = (await db.execute<{ tax_year: number }>(sql`
     select distinct tax_year from payroll_opening_balances
      where org_id = ${orgId} order by tax_year desc
-  `)) as unknown as { rows: { tax_year: number }[] };
+  `));
 
   const components = await openingComponentFields(orgId, year);
 
   // Component openings for the whole year in one pass, keyed by parent row.
-  const componentRows = (await db.execute(sql`
+  const componentRows = (await db.execute<{ opening_balance_id: string; component_id: string; ytd_amount: string }>(sql`
     select oc.opening_balance_id, oc.component_id, oc.ytd_amount
       from payroll_opening_balance_components oc
       join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
      where oc.org_id = ${orgId} and b.tax_year = ${year}
-  `)) as unknown as {
-    rows: { opening_balance_id: string; component_id: string; ytd_amount: string }[];
-  };
+  `));
   const componentsByRow = new Map<string, OpeningComponentAmounts>();
   for (const row of componentRows.rows) {
     const amounts = componentsByRow.get(row.opening_balance_id) ?? {};
@@ -559,32 +556,30 @@ export async function saveOpeningBalances(input: {
 
     // Employees must belong to this org. Resolving names in one pass also
     // gives every error message something a human can act on.
-    const names = (await tx.execute(sql`
+    const names = (await tx.execute<{ id: string; display_name: string }>(sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${input.orgId} and p.id in (
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `)) as unknown as { rows: { id: string; display_name: string }[] };
+    `));
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
 
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ employee_party_id: string }>(sql`
       select employee_party_id from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
-    `)) as unknown as { rows: { employee_party_id: string }[] };
+    `));
     const hasRow = new Set(existing.rows.map((r) => r.employee_party_id));
 
     // Component descriptors resolve names/codes and enforce the annual cap;
     // stored amounts are what a caller that says nothing about components keeps.
     const componentFields = await openingComponentFields(input.orgId, year, tx);
-    const storedComponents = (await tx.execute(sql`
+    const storedComponents = (await tx.execute<{ employee_party_id: string; component_id: string; ytd_amount: string }>(sql`
       select b.employee_party_id, oc.component_id, oc.ytd_amount
         from payroll_opening_balance_components oc
         join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
        where oc.org_id = ${input.orgId} and b.tax_year = ${year}
-    `)) as unknown as {
-      rows: { employee_party_id: string; component_id: string; ytd_amount: string }[];
-    };
+    `));
     const storedByEmployee = new Map<string, OpeningComponentAmounts>();
     for (const row of storedComponents.rows) {
       const amounts = storedByEmployee.get(row.employee_party_id) ?? {};
@@ -652,12 +647,12 @@ export async function saveOpeningBalances(input: {
     const columns = OPENING_BALANCE_FIELDS.map((f) => f.column);
     for (const row of planned) {
       if (row.amounts === null) {
-        const deleted = (await tx.execute(sql`
+        const deleted = (await tx.execute<{ id: string }>(sql`
           delete from payroll_opening_balances
            where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
              and tax_year = ${year}
            returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (deleted.rows.length > 0) {
           result.deleted++;
           // The children cascade with the parent. Naming what they held is the
@@ -679,7 +674,7 @@ export async function saveOpeningBalances(input: {
       const updates = OPENING_BALANCE_FIELDS.map(
         (f) => sql`${sql.raw(f.column)} = excluded.${sql.raw(f.column)}`,
       );
-      const saved = (await tx.execute(sql`
+      const saved = (await tx.execute<{ id: string }>(sql`
         insert into payroll_opening_balances
           (org_id, employee_party_id, tax_year, ${sql.raw(columns.join(", "))}, created_by, updated_by)
         values
@@ -690,7 +685,7 @@ export async function saveOpeningBalances(input: {
                updated_by = ${input.actorId},
                updated_at = now()
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const rowId = saved.rows[0]!.id;
 
       // Component openings are REPLACED as a set, in the same transaction and
@@ -792,7 +787,7 @@ export async function componentYearToDate(
   },
 ): Promise<string> {
   const exclude = args.excludeRunDocumentId ?? null;
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ ytd: string }>(sql`
     select (
       coalesce((
         select sum(l.amount) from pay_stub_lines l
@@ -810,6 +805,6 @@ export async function componentYearToDate(
            and b.tax_year = ${args.taxYear} and oc.component_id = ${args.componentId}
       ), 0)
     )::text as ytd
-  `)) as unknown as { rows: { ytd: string }[] };
+  `));
   return normalizeMoney(String(r.rows[0]?.ytd ?? "0"));
 }

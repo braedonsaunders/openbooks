@@ -98,9 +98,9 @@ test("withBypassContext actually reaches the database with bypass", { skip: !DB 
   // bypass on globally, so under it an unscoped read legitimately sees every
   // org. Asserting 0 there tests the harness, not the posture.
   if (!process.env.OPENBOOKS_TRUSTED_TEST_BYPASS) {
-    const unscoped = (await db.execute(
+    const unscoped = (await db.execute<{ n: number }>(
       sql`select count(*)::int as n from orgs`,
-    )) as unknown as { rows: { n: number }[] };
+    ));
     assert.equal(Number(unscoped.rows[0]!.n), 0);
   }
 });

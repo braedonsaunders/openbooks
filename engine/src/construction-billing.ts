@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 
 /**
@@ -15,21 +15,21 @@ import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, 
 
 export class ConstructionBillingError extends Error {}
 
-async function assertProjectsEnabled(tx: any, orgId: string): Promise<void> {
-  const result = (await tx.execute(sql`
+async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
+  const result = (await tx.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { enabled: boolean }[] };
+  `));
   if (!result.rows[0]?.enabled) throw new ConstructionBillingError("Projects feature is disabled");
 }
 
-async function assertApplicationProcedure(tx: any, orgId: string, projectId: string): Promise<void> {
-  const result = (await tx.execute(sql`
+async function assertApplicationProcedure(tx: SqlExecutor, orgId: string, projectId: string): Promise<void> {
+  const result = (await tx.execute<{ supported: boolean }>(sql`
     select pt.invoicing_profile->>'billingProcedure' = 'application_for_payment' as supported
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${projectId}
-  `)) as unknown as { rows: { supported: boolean }[] };
+  `));
   if (!result.rows[0]?.supported) {
     throw new ConstructionBillingError("This project's billing profile does not use applications for payment");
   }
@@ -135,7 +135,7 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
 }
 
 async function nextNumber(
-  tx: any,
+  tx: SqlExecutor,
   orgId: string,
   kind: string,
   subsidiaryId: string | null,
@@ -144,32 +144,32 @@ async function nextNumber(
   const configured = subsidiaryId
     ? ((await tx.execute(sql`
         select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`)) as unknown as { rows: unknown[] }).rows.length > 0
+          and subsidiary_id = ${subsidiaryId} limit 1`))).rows.length > 0
     : false;
   const seqSub = configured ? subsidiaryId : null;
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${seqSub}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const s = r.rows[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
 
-async function retainageReceivableAccount(tx: any, orgId: string): Promise<string | null> {
-  const r = (await tx.execute(sql`
+async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
+  const r = (await tx.execute<{ acct: string | null }>(sql`
     select settings->'controlAccounts'->>'retainageReceivable' as acct from orgs where id = ${orgId}
-  `)) as unknown as { rows: { acct: string | null }[] };
+  `));
   return r.rows[0]?.acct ?? null;
 }
 
-async function defaultIncomeAccount(tx: any, orgId: string): Promise<string | null> {
-  const r = (await tx.execute(sql`
+async function defaultIncomeAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
+  const r = (await tx.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
      order by number nulls last limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return r.rows[0]?.id ?? null;
 }
 
@@ -196,46 +196,46 @@ export async function createPayApplication(
     // Serialize application numbering and cumulative snapshots per project.
     const owned = (await tx.execute(sql`
       select 1 from projects where org_id = ${orgId} and id = ${projectId} for update
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!owned.rows.length) throw new ConstructionBillingError("Project not found");
-    const lifecycle = (await tx.execute(sql`
+    const lifecycle = (await tx.execute<{ has_open: boolean; last_period: string | null }>(sql`
       select
         exists(select 1 from pay_applications where org_id = ${orgId} and project_id = ${projectId}
                and status in ('draft', 'submitted', 'approved')) as has_open,
         max(period_end) filter (where status in ('invoiced', 'posted')) as last_period
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `)) as unknown as { rows: { has_open: boolean; last_period: string | null }[] };
+    `));
     if (lifecycle.rows[0]?.has_open) throw new ConstructionBillingError("Complete or void the current application before starting another");
     if (lifecycle.rows[0]?.last_period && periodEnd <= lifecycle.rows[0].last_period) {
       throw new ConstructionBillingError("The period ending must be after the previous invoiced application");
     }
-    const sov = (await tx.execute(sql`
+    const sov = (await tx.execute<{ id: string; scheduled_value: string }>(sql`
       select id, scheduled_value from sov_lines where org_id = ${orgId} and project_id = ${projectId}
        order by sort_order
-    `)) as unknown as { rows: { id: string; scheduled_value: string }[] };
+    `));
     if (!sov.rows.length) throw new ConstructionBillingError("This project has no Schedule of Values yet");
 
-    const numRes = (await tx.execute(sql`
+    const numRes = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(application_number), 0) + 1 as n
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     const applicationNumber = Number(numRes.rows[0]!.n);
 
-    const app = (await tx.execute(sql`
+    const app = (await tx.execute<{ id: string }>(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, retainage_percent,
                                     created_by, updated_by)
       values (${orgId}, ${projectId}, ${applicationNumber}, ${periodEnd}, ${exactRetainage}, ${userId}, ${userId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const appId = app.rows[0]!.id;
 
     for (const line of sov.rows) {
-      const prior = (await tx.execute(sql`
+      const prior = (await tx.execute<{ prev: string }>(sql`
         select coalesce(sum(pal.this_period_completed + pal.materials_stored), 0) as prev
           from pay_application_lines pal
           join pay_applications pa on pa.id = pal.pay_application_id
          where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')
-      `)) as unknown as { rows: { prev: string }[] };
+      `));
       await tx.execute(sql`
         insert into pay_application_lines (org_id, pay_application_id, sov_line_id, previous_completed, created_by, updated_by)
         values (${orgId}, ${appId}, ${line.id}, ${prior.rows[0]?.prev ?? "0"}, ${userId}, ${userId})
@@ -261,10 +261,10 @@ export async function submitPayApplication(
 ): Promise<ComputedApplication> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const appRes = (await tx.execute(sql`
+    const appRes = (await tx.execute<{ id: string; project_id: string; status: string; retainage_percent: string }>(sql`
       select id, project_id, status, retainage_percent
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: { id: string; project_id: string; status: string; retainage_percent: string }[] };
+    `));
     const app = appRes.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (app.status !== "draft") throw new ConstructionBillingError("Only a draft application can be submitted");
@@ -279,24 +279,24 @@ export async function submitPayApplication(
       if (cmp(thisPeriod, "0") < 0 || cmp(stored, "0") < 0) {
         throw new ConstructionBillingError("Draw amounts cannot be negative");
       }
-      const updated = (await tx.execute(sql`
+      const updated = (await tx.execute<{ id: string }>(sql`
         update pay_application_lines
            set this_period_completed = ${thisPeriod}, materials_stored = ${stored},
                updated_at = now(), updated_by = ${userId}
          where pay_application_id = ${payAppId} and sov_line_id = ${update.sovLineId} and org_id = ${orgId}
          returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (!updated.rows.length) throw new ConstructionBillingError("A draw line does not belong to this application");
     }
 
-    const linesRes = (await tx.execute(sql`
+    const linesRes = (await tx.execute<any>(sql`
       select pal.sov_line_id, pal.previous_completed, pal.this_period_completed, pal.materials_stored,
              sl.scheduled_value, sl.retainage_percent
         from pay_application_lines pal
         join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
-    `)) as unknown as { rows: any[] };
+    `));
     const computed = computeApplication(linesRes.rows.map((line) => ({
       sovLineId: line.sov_line_id,
       scheduledValue: String(line.scheduled_value ?? "0"),
@@ -326,10 +326,10 @@ export async function submitPayApplication(
 export async function approvePayApplication(orgId: string, userId: string, payAppId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const appRes = (await tx.execute(sql`
+    const appRes = (await tx.execute<{ project_id: string; status: string; submitted_by: string | null; created_by: string | null }>(sql`
       select project_id, status, submitted_by, created_by
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: { project_id: string; status: string; submitted_by: string | null; created_by: string | null }[] };
+    `));
     const app = appRes.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (app.status !== "submitted") throw new ConstructionBillingError("Only a submitted application can be approved");
@@ -357,10 +357,10 @@ export async function approvePayApplication(orgId: string, userId: string, payAp
 export async function voidPayApplication(orgId: string, userId: string, payAppId: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const result = (await tx.execute(sql`
+    const result = (await tx.execute<{ project_id: string; status: string; invoice_document_id: string | null }>(sql`
       select project_id, status, invoice_document_id
         from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: { project_id: string; status: string; invoice_document_id: string | null }[] };
+    `));
     const app = result.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (!["draft", "submitted", "approved"].includes(app.status) || app.invoice_document_id) {
@@ -394,31 +394,31 @@ export async function generatePayApplicationInvoice(
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
-    const appRes = (await tx.execute(sql`
+    const appRes = (await tx.execute<any>(sql`
       select * from pay_applications where id = ${payAppId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: any[] };
+    `));
     const app = appRes.rows[0];
     if (!app) throw new ConstructionBillingError("Application not found");
     if (app.status !== "approved") throw new ConstructionBillingError("Only an approved application can create an invoice");
     await assertApplicationProcedure(tx, orgId, app.project_id);
 
-    const projRes = (await tx.execute(sql`
+    const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
         from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id
        where p.id = ${app.project_id} and p.org_id = ${orgId}
-    `)) as unknown as { rows: any[] };
+    `));
     const project = projRes.rows[0];
     if (!project) throw new ConstructionBillingError("Project not found");
     if (!project.customer_id) throw new ConstructionBillingError("The project has no customer to invoice");
 
-    const linesRes = (await tx.execute(sql`
+    const linesRes = (await tx.execute<any>(sql`
       select pal.sov_line_id, pal.previous_completed, pal.this_period_completed, pal.materials_stored,
              sl.description, sl.scheduled_value, sl.income_account_id, sl.retainage_percent
         from pay_application_lines pal
         join sov_lines sl on sl.id = pal.sov_line_id
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
-    `)) as unknown as { rows: any[] };
+    `));
 
     const computed = computeApplication(
       linesRes.rows.map((l) => ({
@@ -444,14 +444,14 @@ export async function generatePayApplicationInvoice(
     }
 
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", project.subsidiary_id ?? null, "INV-");
-    const invoice = (await tx.execute(sql`
+    const invoice = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
               ${app.period_end}, ${project.currency}, 'draft', ${app.project_id}, ${project.subsidiary_id},
               ${`Application for Payment #${app.application_number}`}, '0', '0', '0', ${userId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const invoiceId = invoice.rows[0]!.id;
 
     let lineNo = 1;
@@ -524,11 +524,11 @@ export async function releaseRetainage(
     await assertApplicationProcedure(tx, orgId, projectId);
     const exactAmount = normalizeMoney(amount);
     if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
-    const projRes = (await tx.execute(sql`
+    const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
         from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id
        where p.id = ${projectId} and p.org_id = ${orgId}
-    `)) as unknown as { rows: any[] };
+    `));
     const project = projRes.rows[0];
     if (!project?.customer_id) throw new ConstructionBillingError("Project has no customer to invoice");
 
@@ -537,11 +537,11 @@ export async function releaseRetainage(
 
     // Reserve against both posted GL retainage and draft release invoices so
     // two concurrent releases cannot overdraw the subledger before posting.
-    const projectLock = (await tx.execute(sql`
+    const projectLock = (await tx.execute<{ id: string }>(sql`
       select id from projects where id = ${projectId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!projectLock.rows.length) throw new ConstructionBillingError("Project not found");
-    const balance = (await tx.execute(sql`
+    const balance = (await tx.execute<{ held: string; reserved: string }>(sql`
       select
         coalesce((select sum(jl.amount)
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -550,19 +550,19 @@ export async function releaseRetainage(
           from pay_applications pa join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} and pa.kind = 'retainage_release'
            and pa.status in ('invoiced', 'posted') and d.status <> 'posted'), 0) as reserved
-    `)) as unknown as { rows: { held: string; reserved: string }[] };
+    `));
     const available = add(String(balance.rows[0]?.held ?? "0"), neg(String(balance.rows[0]?.reserved ?? "0")));
     if (cmp(exactAmount, available) > 0) throw new ConstructionBillingError("Release amount exceeds available retained funds");
 
     const documentNumber = await nextNumber(tx, orgId, "customer_invoice", project.subsidiary_id ?? null, "INV-");
-    const invoice = (await tx.execute(sql`
+    const invoice = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
                              project_id, subsidiary_id, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id}, ${periodEnd},
               ${project.currency}, 'draft', ${projectId}, ${project.subsidiary_id}, 'Retainage release',
               ${exactAmount}, '0', ${exactAmount}, ${userId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const invoiceId = invoice.rows[0]!.id;
     // Positive Retainage Receivable line → CR Retainage Receivable, DR AR.
     await tx.execute(sql`
@@ -571,18 +571,18 @@ export async function releaseRetainage(
       values (${orgId}, ${invoiceId}, 1, ${retAcct}, 'Retainage release', '1', ${exactAmount}, ${exactAmount}, false,
             ${projectId}, ${userId})
     `);
-    const numberRes = (await tx.execute(sql`
+    const numberRes = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(application_number), 0) + 1 as n
         from pay_applications where org_id = ${orgId} and project_id = ${projectId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     const applicationNumber = Number(numberRes.rows[0]?.n ?? 1);
-    const release = (await tx.execute(sql`
+    const release = (await tx.execute<{ id: string }>(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, kind, status,
                                     retainage_percent, invoice_document_id, memo, created_by, updated_by)
       values (${orgId}, ${projectId}, ${applicationNumber}, ${periodEnd}, 'retainage_release', 'invoiced',
               '0', ${invoiceId}, 'Retainage release', ${userId}, ${userId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'pay_applications', ${release.rows[0]!.id}, 'retainage_release',

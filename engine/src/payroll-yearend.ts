@@ -150,7 +150,7 @@ export interface T4SummaryTotals {
  */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
   const caps = caYearCaps(taxYear);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*, ${effectiveFilingAccountSql("prof")} as filing_account_id
         from pay_stubs s
@@ -186,7 +186,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name, c.filing_account_id, c.province
      order by p.display_name, min(c.pay_date), c.province
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
   // The annual maxima are per EMPLOYEE, so they are consumed across that
   // employee's slips in the chronological order the query just produced.
@@ -262,7 +262,7 @@ export async function t4Summary(
   const billAccountFilter = scoped
     ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
     : sql``;
-  const employer = (await db.execute(sql`
+  const employer = (await db.execute<{ employer_cpp: string | null; employer_ei: string | null }>(sql`
     select
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_cpp,
       sum(case when pc.system_key = 'ei' then l.amount else 0 end) as employer_ei
@@ -276,18 +276,18 @@ export async function t4Summary(
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
        ${employerAccountFilter}
        ${employeeFilter}
-  `)) as unknown as { rows: { employer_cpp: string | null; employer_ei: string | null }[] };
+  `));
   // NOT narrowed by employee: a posted remittance bill covers an ACCOUNT for a
   // period and carries no employee dimension, so there is no honest way to
   // attribute part of it to the slips of an amended return. It is an on-screen
   // reconciliation figure and never appears in the transmitted XML.
-  const remitted = (await db.execute(sql`
+  const remitted = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(total), 0) as amount from documents
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
        and custom ? 'payrollRemittance'
        and custom->'payrollRemittance'->>'to' like ${`${taxYear}-%`}
        ${billAccountFilter}
-  `)) as unknown as { rows: { amount: string }[] };
+  `));
   const total = (pick: (slip: T4Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   return {
@@ -346,7 +346,7 @@ export async function roeWorksheet(
   employeePartyId: string,
   limit = 27,
 ): Promise<{ periods: RoePeriod[]; totalInsurableEarnings: string; totalInsurableHours: string }> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ pay_date: string; period_start: string; period_end: string; insurable_earnings: string; hours: string }>(sql`
     select s.pay_date, r.period_start, r.period_end, s.insurable_earnings,
            (select coalesce(sum(l.hours), 0) from pay_stub_lines l
              where l.stub_id = s.id and l.kind = 'earning') as hours
@@ -355,9 +355,7 @@ export async function roeWorksheet(
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
      order by s.pay_date desc
      limit ${limit}
-  `)) as unknown as {
-    rows: { pay_date: string; period_start: string; period_end: string; insurable_earnings: string; hours: string }[];
-  };
+  `));
   const periods = rows.rows.map((row) => ({
     payDate: row.pay_date, periodStart: row.period_start, periodEnd: row.period_end,
     insurableEarnings: row.insurable_earnings, insurableHours: num(row.hours),
@@ -461,7 +459,11 @@ export interface RoeRecord {
  * employee so every caller (including the XML builder) fails closed.
  */
 export async function roeRecord(orgId: string, employeePartyId: string): Promise<RoeRecord | null> {
-  const header = (await db.execute(sql`
+  const header = (await db.execute<{
+      display_name: string; employee_number: string | null; job_title: string | null;
+      hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
+      frequency: string | null; country: string; filing_account_id: string | null;
+    }>(sql`
     select p.display_name, er.employee_number, er.job_title,
            er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
            prof.sin_last3, sched.frequency, coalesce(prof.country, 'CA') as country,
@@ -473,13 +475,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       left join pay_schedules sched on sched.id = prof.pay_schedule_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
        and coalesce(prof.country, 'CA') = 'CA'
-  `)) as unknown as {
-    rows: {
-      display_name: string; employee_number: string | null; job_title: string | null;
-      hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
-      frequency: string | null; country: string; filing_account_id: string | null;
-    }[];
-  };
+  `));
   const row = header.rows[0];
   if (!row) return null;
 
@@ -513,7 +509,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   // (engine/src/payroll/canada/filings.ts), not a literal in this query — a
   // pack with different keys must refuse or declare, never silently file 0.00.
   const separation17 = separationPaymentKeys("CA");
-  const separation = (await db.execute(sql`
+  const separation = (await db.execute<{ vacation: string; other: string }>(sql`
     select
       coalesce(sum(case when pc.system_key = any(${`{${separation17.vacationPay.join(",")}}`}::text[]) then l.amount else 0 end), 0) as vacation,
       coalesce(sum(case when pc.system_key = any(${`{${separation17.otherMonies.join(",")}}`}::text[]) then l.amount else 0 end), 0) as other
@@ -524,7 +520,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
        and l.kind = 'earning'
        and (${finalPeriod?.payDate ?? null}::date is null or s.pay_date = ${finalPeriod?.payDate ?? null})
-  `)) as unknown as { rows: { vacation: string; other: string }[] };
+  `));
 
   const accounts = await filingAccountsById(orgId);
   return {
@@ -563,7 +559,7 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   terminatedOn: string | null;
   lastPayDate: string | null;
 }[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; display_name: string; terminated_on: string | null; last_pay_date: string | null }>(sql`
     select p.id, p.display_name, er.terminated_on::text as terminated_on,
            max(s.pay_date)::text as last_pay_date
       from parties p
@@ -577,9 +573,7 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
        and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
      group by p.id, p.display_name, er.terminated_on
      order by p.display_name
-  `)) as unknown as {
-    rows: { id: string; display_name: string; terminated_on: string | null; last_pay_date: string | null }[];
-  };
+  `));
   return rows.rows.map((row) => ({
     employeePartyId: row.id,
     employeeName: row.display_name,
@@ -611,7 +605,7 @@ export interface Form941Quarter {
  * `form941Returns` below is the same per-account assembly `t4Returns` does.
  */
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -634,7 +628,7 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
      group by 1, 2 order by 2 nulls first, 1
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => ({
     quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
     filingAccountId: (row.filing_account_id as string | null) ?? null,
@@ -697,7 +691,7 @@ export interface W2Slip {
 }
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
            array_agg(distinct s.province order by s.province) as states,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
@@ -724,7 +718,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
      group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
      order by p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => {
     const states = ((row.states as string[] | null) ?? []).filter(Boolean);
     return {
@@ -789,9 +783,9 @@ export async function orgYearEndFilings(
   orgId: string,
   taxYear: number,
 ): Promise<YearEndFilingSection[]> {
-  const installedRow = (await db.execute(sql`
+  const installedRow = (await db.execute<{ countries: unknown }>(sql`
     select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
-  `)) as unknown as { rows: { countries: unknown }[] };
+  `));
   const raw = installedRow.rows[0]?.countries;
   const installed = new Set(Array.isArray(raw) ? raw.map(String) : []);
 

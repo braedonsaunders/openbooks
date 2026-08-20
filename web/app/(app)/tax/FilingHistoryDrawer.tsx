@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { Badge, Button, Input, Label, UrlDrawer } from '@openbooks/ui'
 
-export interface FilingHistoryRecord {
+export type FilingHistoryRecord = {
   id: string
   form_name: string
   form_code: string
@@ -20,7 +20,7 @@ export interface FilingHistoryRecord {
   filed_at: string | null
   snapshot_hash: string
   boxes: { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }[]
-}
+};
 
 export function FilingHistoryDrawer({ filing, closeHref, canFile }: { filing: FilingHistoryRecord; closeHref: string; canFile: boolean }) {
   const t = useTranslations('tax.history')

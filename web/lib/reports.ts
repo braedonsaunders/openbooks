@@ -313,7 +313,7 @@ export interface AgingResult {
   asOf: string;
 }
 
-export interface FinancialTrendRow {
+export type FinancialTrendRow = {
   id: string;
   name: string;
   starts_on: string;
@@ -325,12 +325,12 @@ export interface FinancialTrendRow {
   net_income: string;
   gross_margin_percent: string | null;
   closing_cash: string;
-}
+};
 
 /** Exact posted-only performance and cash position for recent completed periods. */
 export async function financialTrends(orgId: string, limit = 15): Promise<FinancialTrendRow[]> {
   const cappedLimit = Math.max(2, Math.min(limit, 15));
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<FinancialTrendRow>(sql`
     with recent as (
       select p.id, p.name, p.starts_on, p.ends_on
         from accounting_periods p
@@ -364,7 +364,7 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
            ), 0)::text as closing_cash
       from recent p join activity a on a.id = p.id
      order by p.ends_on
-  `)) as unknown as { rows: FinancialTrendRow[] };
+  `));
   return rows.rows;
 }
 
@@ -381,7 +381,10 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
   const resolvedOrgId = await resolveOrgId(orgId);
   const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice";
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      party_id: string | null; party_name: string | null;
+      current: string; b1: string; b2: string; b3: string; b4: string; total: string;
+    }>(sql`
     with open_items as (
       select d.party_id,
              (case when d.kind = ${creditKind} then -1 else 1 end)
@@ -406,12 +409,7 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
      group by oi.party_id, p.display_name
     having abs(sum(oi.open)) > 0.005
      order by abs(sum(oi.open)) desc
-  `)) as unknown as {
-    rows: {
-      party_id: string | null; party_name: string | null;
-      current: string; b1: string; b2: string; b3: string; b4: string; total: string;
-    }[];
-  };
+  `));
   const rows: AgingRow[] = r.rows.map((x) => ({
     partyId: x.party_id,
     partyName: x.party_name,
@@ -520,7 +518,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
   // Contra movements: non-bank lines on entries that also hit a bank account,
   // grouped by account type. `-sum(amount)` converts debit-signed line amounts
   // into their effect on cash (credit a contra → cash in → positive).
-  const contra = (await db.execute(sql`
+  const contra = (await db.execute<{ type: string; cash_effect: string }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -539,7 +537,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
      where e.id in (select id from cash_entries)
        and l.org_id = ${resolvedOrgId} and a.type <> 'asset_bank' and ${dimWhere(dims)}
      group by a.type
-  `)) as unknown as { rows: { type: string; cash_effect: string }[] };
+  `));
 
   const bySection: Record<CashFlowSection, CashFlowLine[]> = { operating: [], investing: [], financing: [] };
   for (const row of contra.rows) {
@@ -568,7 +566,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
         boundaries: [{ date: from, kind: 'start' }],
       })
     : null;
-  const cash = (await db.execute(
+  const cash = (await db.execute<{ opening: string; closing: string }>(
     cashBuckets
       // Inception-to-date bank movement from the summary; the two report
       // boundaries are the only months that fall back to the lines.
@@ -586,7 +584,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
-  )) as unknown as { rows: { opening: string; closing: string }[] };
+  ));
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
 
@@ -726,7 +724,7 @@ export async function cashFlowIndirect(
   const niBuckets = glSummaryEligibleDims(dims)
     ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [] })
     : null;
-  const ni = (await db.execute(
+  const ni = (await db.execute<{ ni: string }>(
     niBuckets
       // Window P&L from the summary; only months the report boundaries split
       // are read from the lines.
@@ -744,7 +742,7 @@ export async function cashFlowIndirect(
            where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
              and e.posting_date >= ${from} and e.posting_date <= ${to}
              and a.type in ${PNL_TYPES} and ${dim}`,
-  )) as unknown as { rows: { ni: string }[] };
+  ));
   const netIncome = ni.rows[0]?.ni ?? ZERO;
 
   // Add-backs. Sign convention throughout: the sum of the entry's debit-signed
@@ -752,7 +750,7 @@ export async function cashFlowIndirect(
   const adjustments: CfAdjustmentLine[] = [];
   {
     // (a) Unrealized FX revaluation (paired with the WC origin strip below).
-    const a = (await db.execute(sql`
+    const a = (await db.execute<{ impact: string }>(sql`
       select coalesce(sum(l.amount), 0) as impact
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -760,14 +758,14 @@ export async function cashFlowIndirect(
        where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.origin = 'revaluation' and a.type in ${PNL_TYPES} and ${dim}
-    `)) as unknown as { rows: { impact: string }[] };
+    `));
     const impact = a.rows[0]?.impact ?? ZERO;
     if (decimalIsMaterial(impact)) adjustments.push({ key: "unrealizedFx", amount: impact });
 
     // (b) P&L legs of no-bank entries that touch I/F accounts: depreciation
     // and amortization, impairment, non-cash disposal gains/losses. Per
     // account for detail; revaluation origin is excluded (handled at (a)).
-    const b = (await db.execute(sql`
+    const b = (await db.execute<{ account_id: string; number: string | null; name: string; impact: string }>(sql`
       with ${flaggedCte}
       select l.account_id, a.number, a.name, sum(l.amount) as impact
         from journal_lines l
@@ -778,7 +776,7 @@ export async function cashFlowIndirect(
          and e.origin <> 'revaluation'
          and a.type in ${PNL_TYPES} and ${dim}
        group by l.account_id, a.number, a.name
-    `)) as unknown as { rows: { account_id: string; number: string | null; name: string; impact: string }[] };
+    `));
     for (const r of b.rows) {
       const amount = r.impact;
       if (!decimalIsMaterial(amount)) continue;
@@ -795,7 +793,7 @@ export async function cashFlowIndirect(
   //   adjustedDelta = (balance[to] − balance[from−1]) − stripped[window]
   // stripped = re-measurement origins + legs of no-bank entries touching I/F.
   // Asset increases use cash (negative); liability increases provide cash.
-  const wc = (await db.execute(sql`
+  const wc = (await db.execute<{ account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }>(sql`
     with ${flaggedCte}
     select l.account_id, a.number, a.name, a.type,
            coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as bal_to,
@@ -809,9 +807,7 @@ export async function cashFlowIndirect(
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and e.posting_date <= ${to}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
-  `)) as unknown as {
-    rows: { account_id: string; number: string | null; name: string; type: string; bal_to: string; bal_from: string; stripped: string }[];
-  };
+  `));
   const workingCapital: CfWorkingCapitalLine[] = wc.rows
     .map((r) => {
       // Debit-signed balances: an increase reads positive on assets (cash
@@ -834,7 +830,7 @@ export async function cashFlowIndirect(
   // investing section presents gross proceeds (NBV movement + gain), matching
   // the disposal add-back in operating. Translation entries are excluded —
   // their non-bank legs are CTA re-measurement, not flows.
-  const contra = (await db.execute(sql`
+  const contra = (await db.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -858,9 +854,7 @@ export async function cashFlowIndirect(
          or (a.type in ${PNL_TYPES} and e.origin = 'disposal')
        ) and ${dimWhere(dims)}
      group by l.account_id, a.number, a.name, a.type, e.origin
-  `)) as unknown as {
-    rows: { account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string }[];
-  };
+  `));
   const investing: CfAccountLine[] = [];
   const financing: CfAccountLine[] = [];
   let disposalGainOnCash = ZERO;
@@ -881,7 +875,7 @@ export async function cashFlowIndirect(
   financing.sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
 
   // FX translation effect on foreign-currency cash balances.
-  const fx = (await db.execute(sql`
+  const fx = (await db.execute<{ effect: string }>(sql`
     select coalesce(sum(l.amount), 0) as effect
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -889,7 +883,7 @@ export async function cashFlowIndirect(
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.origin = 'translation' and a.type = 'asset_bank' and ${dim}
-  `)) as unknown as { rows: { effect: string }[] };
+  `));
   const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
 
   const operating = decimalSum([
@@ -908,7 +902,7 @@ export async function cashFlowIndirect(
         boundaries: [{ date: from, kind: 'start' }],
       })
     : null;
-  const cash = (await db.execute(
+  const cash = (await db.execute<{ opening: string; closing: string }>(
     cashBuckets
       // Inception-to-date bank movement from the summary; the two report
       // boundaries are the only months that fall back to the lines.
@@ -926,7 +920,7 @@ export async function cashFlowIndirect(
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
-  )) as unknown as { rows: { opening: string; closing: string }[] };
+  ));
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
 
@@ -1101,10 +1095,15 @@ export async function generalLedger(
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
          group by l.account_id`
-  const opening = (await db.execute(openingSql)) as unknown as { rows: { account_id: string; bal: string }[] }
+  const opening = (await db.execute<{ account_id: string; bal: string }>(openingSql))
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<{
+      account_id: string; number: string | null; name: string; type: string
+      entry_id: string; entry_number: string | null; date: string
+      memo: string | null; party: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+    }>(sql`
     select l.account_id, a.number, a.name, a.type,
            e.id as entry_id, e.entry_number, e.posting_date::text as date,
            l.memo, p.display_name as party, l.amount,
@@ -1117,14 +1116,7 @@ export async function generalLedger(
      where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}
      order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
-  `)) as unknown as {
-    rows: {
-      account_id: string; number: string | null; name: string; type: string
-      entry_id: string; entry_number: string | null; date: string
-      memo: string | null; party: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }[]
-  }
+  `))
   const truncated = lines.rows.length > maxLines
   const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
 
@@ -1218,7 +1210,11 @@ export async function journalReport(
          where org_id = ${orgId} and status in ('posted', 'reversed')
            and posting_date >= ${from} and posting_date <= ${to}
       )`
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
+      acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+    }>(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, p.display_name as party,
            l.memo as line_memo, l.amount,
@@ -1231,13 +1227,7 @@ export async function journalReport(
      where ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
      limit ${maxLines + 1}
-  `)) as unknown as {
-    rows: {
-      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
-      acct_number: string | null; acct_name: string; party: string | null; line_memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }[]
-  }
+  `))
   const truncated = r.rows.length > maxLines
   const rows = truncated ? r.rows.slice(0, maxLines) : r.rows
 
@@ -1304,7 +1294,11 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
   const resolvedOrgId = await resolveOrgId(orgId);
   const positiveKind = side === "ap" ? "vendor_bill" : "customer_invoice"
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit"
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      id: string; kind: string
+      party_id: string | null; party_name: string | null; reference: string | null
+      due_date: string | null; age_days: number; open: string
+    }>(sql`
     with open_items as (
       select d.id, d.kind, d.party_id, d.document_number,
              coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
@@ -1324,13 +1318,7 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
       left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
      where abs(oi.open) > 0.005
      order by p.display_name nulls last, oi.age_days desc
-  `)) as unknown as {
-    rows: {
-      id: string; kind: string
-      party_id: string | null; party_name: string | null; reference: string | null
-      due_date: string | null; age_days: number; open: string
-    }[]
-  }
+  `))
   const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   const rows: AgingDetailRow[] = r.rows.map((x) => {
     const open = x.open
@@ -1387,7 +1375,7 @@ export async function partyRegister(
   const maxLines = opts.maxLines ?? 4000
   const partyFilter = opts.partyId ? sql` and l.party_id = ${opts.partyId}` : sql``
 
-  const opening = (await db.execute(sql`
+  const opening = (await db.execute<{ party_id: string | null; bal: string }>(sql`
     select l.party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -1395,10 +1383,14 @@ export async function partyRegister(
      where a.type = ${acctType} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
      group by l.party_id
-  `)) as unknown as { rows: { party_id: string | null; bal: string }[] }
+  `))
   const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<{
+      party_id: string | null; party_name: string | null
+      entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+    }>(sql`
     select l.party_id, pt.display_name as party_name,
            e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
@@ -1411,13 +1403,7 @@ export async function partyRegister(
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
      order by pt.display_name nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
-  `)) as unknown as {
-    rows: {
-      party_id: string | null; party_name: string | null
-      entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }[]
-  }
+  `))
   const truncated = lines.rows.length > maxLines
   const rows = truncated ? lines.rows.slice(0, maxLines) : lines.rows
 
@@ -1471,9 +1457,7 @@ export async function partnerStatement(
 ): Promise<PartnerStatementResult> {
   const reg = await partyRegister(opts.side, { from: opts.from, to: opts.to, partyId, orgId })
   const p = reg.parties[0]
-  const nameRow = (await db.execute(sql`select display_name from parties where id = ${partyId} and org_id = ${orgId}`)) as unknown as {
-    rows: { display_name: string | null }[]
-  }
+  const nameRow = (await db.execute<{ display_name: string | null }>(sql`select display_name from parties where id = ${partyId} and org_id = ${orgId}`))
   const aging = await agingDetail(opts.side, opts.to, undefined, orgId)
   const agingTotals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   for (const row of aging.rows) {
@@ -1615,7 +1599,7 @@ export async function transactionDetail(opts: {
   // out to the clicked cell even when the line list is truncated. `net` is
   // reader-signed by default; profit subtotals instead negate every included
   // line so debit-normal costs subtract from credit-normal revenue.
-  const agg = (await db.execute(sql`
+  const agg = (await db.execute<{ n: number; debit: string; credit: string; net: string }>(sql`
     select count(*)::int as n,
            coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as debit,
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
@@ -1624,10 +1608,15 @@ export async function transactionDetail(opts: {
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
-  `)) as unknown as { rows: { n: number; debit: string; credit: string; net: string }[] }
+  `))
   const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0' }
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      line_id: string; entry_id: string; entry_number: string | null; date: string
+      acct_number: string | null; acct_name: string; acct_type: string
+      party: string | null; memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+    }>(sql`
     select l.id as line_id, e.id as entry_id, e.entry_number, e.posting_date::text as date,
            a.number as acct_number, a.name as acct_name, a.type as acct_type,
            p.display_name as party, l.memo, l.amount,
@@ -1640,14 +1629,7 @@ export async function transactionDetail(opts: {
      where ${where}
      order by e.posting_date, e.entry_number, l.line_number
      limit ${limit} offset ${offset}
-  `)) as unknown as {
-    rows: {
-      line_id: string; entry_id: string; entry_number: string | null; date: string
-      acct_number: string | null; acct_name: string; acct_type: string
-      party: string | null; memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }[]
-  }
+  `))
   const lines: TxnDetailLine[] = r.rows.map((x) => ({
     lineId: x.line_id,
     entryId: x.entry_id,
@@ -1759,7 +1741,10 @@ export async function projectProfitability(
   opts: { dims?: DimFilter; customerId?: string; search?: string; projectScope?: 'active' | 'all'; orgId?: string } = {},
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; project_type: string | null
+      revenue: string; cogs: string; expenses: string; hours: string
+    }>(sql`
     with pl as (
       select l.project_id,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
@@ -1797,12 +1782,7 @@ export async function projectProfitability(
        ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
        ${opts.search?.trim() ? sql`and (p.name ilike ${`%${opts.search.trim()}%`} or cu.display_name ilike ${`%${opts.search.trim()}%`})` : sql``}
      order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
-  `)) as unknown as {
-    rows: {
-      id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; project_type: string | null
-      revenue: string; cogs: string; expenses: string; hours: string
-    }[]
-  }
+  `))
   const rows: ProjectProfitRow[] = r.rows.map((x) => {
     const revenue = x.revenue
     const cogs = x.cogs
@@ -1827,13 +1807,13 @@ export async function projectProfitability(
 /** Customers that own at least one project, including historical/inactive rows. */
 export async function projectProfitabilityCustomerOptions(orgId?: string): Promise<{ id: string; name: string }[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string; name: string }>(sql`
     select distinct cu.id, cu.display_name as name
       from projects p
       join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
      where p.org_id = ${resolvedOrgId}
      order by cu.display_name, cu.id
-  `)) as unknown as { rows: { id: string; name: string }[] }
+  `))
   return result.rows
 }
 

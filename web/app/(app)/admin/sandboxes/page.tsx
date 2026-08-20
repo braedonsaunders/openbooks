@@ -16,11 +16,11 @@ export default async function SandboxesPage() {
   const rows = (await listSandboxes(authz.user.productionOrgId)) as unknown as SandboxRow[];
 
   // Accounting periods for the as-of clone cutoff (most recent first).
-  const periodsRes = (await db.execute(sql`
+  const periodsRes = (await db.execute<PeriodOption>(sql`
     select id, name from accounting_periods
      where org_id = ${authz.user.productionOrgId}
      order by fiscal_year desc, period_number desc
-     limit 240`)) as unknown as { rows: PeriodOption[] };
+     limit 240`));
 
   return (
     <ListPageLayout

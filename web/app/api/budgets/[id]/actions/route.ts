@@ -38,10 +38,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<Record<string, any>>(sql`
         select id, name, description, book_id, fiscal_year, kind, status, revision
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-      `)) as unknown as { rows: Record<string, any>[] }
+      `))
       const scenario = locked.rows[0]
       if (!scenario) throw new BudgetMutationError('not_found', 404)
       if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
@@ -52,26 +52,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const periods = (await tx.execute(sql`
           select 1 from accounting_periods
            where org_id = ${user.orgId} and fiscal_year = ${targetYear} and not is_adjustment limit 1
-        `)) as unknown as { rows: unknown[] }
+        `))
         if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
         const baseName = `${scenario.name} Copy`
-        const existing = (await tx.execute(sql`
+        const existing = (await tx.execute<{ name: string }>(sql`
           select name from budget_scenarios
            where org_id = ${user.orgId} and book_id = ${scenario.book_id}
              and fiscal_year = ${targetYear} and kind = ${scenario.kind}
              and (name = ${baseName} or name like ${`${baseName} (%`})
-        `)) as unknown as { rows: { name: string }[] }
+        `))
         const used = new Set(existing.rows.map((row) => row.name))
         let name = baseName
         for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
-        const created = (await tx.execute(sql`
+        const created = (await tx.execute<{ id: string }>(sql`
           insert into budget_scenarios
             (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
           values (${user.orgId}, ${scenario.book_id}, ${targetYear}, ${name}, ${scenario.description},
                   ${scenario.kind}, 'draft', ${user.id}, ${user.id})
           returning id
-        `)) as unknown as { rows: { id: string }[] }
+        `))
         const newId = created.rows[0]!.id
         await tx.execute(sql`
           insert into budget_lines
@@ -153,9 +153,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           ? body.sourceScenarioId
           : null
         if (!sourceScenarioId || sourceScenarioId === id) throw new BudgetMutationError('invalid_source_scenario')
-        const source = (await tx.execute(sql`
+        const source = (await tx.execute<{ id: string }>(sql`
           select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-        `)) as unknown as { rows: { id: string }[] }
+        `))
         if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
         await tx.execute(sql`delete from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}`)
         await tx.execute(sql`

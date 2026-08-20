@@ -97,9 +97,9 @@ test(
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
 
-      const stubs = (await db.execute(sql`
+      const stubs = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: Record<string, string>[] };
+      `));
       assert.equal(stubs.rows.length, 1);
       const stub = stubs.rows[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
@@ -124,20 +124,20 @@ test(
 
       // Commit: balanced signed document lines, time entries claimed
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const lines = (await db.execute(sql`
+      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)) as unknown as { rows: { account_id: string; amount: string; party_id: string | null }[] };
+      `));
       assert.ok(lines.rows.length >= 5);
       assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const netLeg = lines.rows.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "net pay leg carries the employee party");
       assert.equal(netLeg!.amount, neg(stub.net_pay));
 
-      const claimed = (await db.execute(sql`
+      const claimed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref = ${run.documentId}
-      `)) as unknown as { rows: { n: number }[] };
+      `));
       assert.equal(claimed.rows[0]!.n, 4);
 
       // The bank file now exists, behind the immutable-artifact lifecycle
@@ -153,9 +153,9 @@ test(
       const run2 = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
       });
-      const r2 = (await db.execute(sql`
+      const r2 = (await db.execute<{ period_start: string; period_end: string }>(sql`
         select period_start, period_end from pay_runs where document_id = ${run2.documentId}
-      `)) as unknown as { rows: { period_start: string; period_end: string }[] };
+      `));
       assert.equal(r2.rows[0]!.period_start, "2026-07-19"); // derived next period
       assert.equal(r2.rows[0]!.period_end, "2026-08-01");
       await db.execute(sql`
@@ -164,10 +164,10 @@ test(
         values (${org.orgId}, ${employeeId}, '2026-07-22', 20, 'approved', false,
                 'unbilled', 'actual', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-      const stub2 = (await db.execute(sql`
+      const stub2 = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-      `)) as unknown as { rows: { factors: Record<string, string> }[] };
+      `));
       const expected2 = calculateT4127({
         payDate: "2026-08-04", province: "ON", periodsPerYear: 26,
         income: "600.00", federalClaimCode: 1, provincialClaimCode: 1,
@@ -287,17 +287,17 @@ test(
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute(sql`
+      const stub = ((await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: Record<string, string>[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(stub.gross, "1920.0000"); // 40h × $48
       const factors = stub.factors as unknown as Record<string, string>;
 
-      const stubLines = ((await db.execute(sql`
+      const stubLines = ((await db.execute<Record<string, string | null>>(sql`
         select l.description, l.kind, l.amount, l.hours, l.project_id
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} order by l.sequence
-      `)) as unknown as { rows: Record<string, string | null>[] }).rows;
+      `))).rows;
 
       // Dues: 2.5% × 1920 = 48.00, deduction, feeds U1
       const dues = stubLines.find((l) => l.description === "Working dues");
@@ -321,10 +321,10 @@ test(
 
       // Commit: fringe expense legs carry the project split
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = ((await db.execute(sql`
+      const glLines = ((await db.execute<Record<string, string | null>>(sql`
         select account_id, amount, project_id from document_lines
          where document_id = ${run.documentId}
-      `)) as unknown as { rows: Record<string, string | null>[] }).rows;
+      `))).rows;
       assert.equal(cmp(sum(glLines.map((l) => l.amount!)), "0"), 0);
       const fringeLegs = glLines.filter((l) => l.account_id === fringeExpense && l.project_id);
       assert.equal(fringeLegs.length, 2);
@@ -463,10 +463,10 @@ test(
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute(sql`
+      const stubs = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
           and employee_party_id = ${employeeId}
-      `)) as unknown as { rows: Record<string, string>[] };
+      `));
       assert.equal(stubs.rows.length, 1);
       const stub = stubs.rows[0]!;
       assert.equal(stub.gross, "4000.0000"); // 104,000 / 26
@@ -499,10 +499,10 @@ test(
         sum([expected.ssEmployer, expected.medicareEmployer, expected.futa, expected.suta]));
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const lines = (await db.execute(sql`
+      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)) as unknown as { rows: { account_id: string; amount: string; party_id: string | null }[] };
+      `));
       assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const sutaLeg = lines.rows.find((l) => l.account_id === sutaPayable);
       assert.ok(sutaLeg, "SUI liability posts to its slot account");
@@ -511,11 +511,11 @@ test(
       // Second run: YTD wage bases carry — FUTA has 3,000 of room left.
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
       await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-      const stub2 = (await db.execute(sql`
+      const stub2 = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
            and employee_party_id = ${employeeId}
-      `)) as unknown as { rows: { factors: Record<string, string> }[] };
+      `));
       assert.equal(stub2.rows[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
       assert.equal(stub2.rows[0]!.factors.SS, "248.0000"); // far from the wage base
 
@@ -540,13 +540,13 @@ test(
       await seedPayrollComponents(org.orgId, actorId, "CA");
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
       assert.equal(removed.componentsRemoved, 12);
-      const caLeft = (await db.execute(sql`
+      const caLeft = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_components
-         where org_id = ${org.orgId} and country = 'CA'`)) as unknown as { rows: { n: number }[] };
+         where org_id = ${org.orgId} and country = 'CA'`));
       assert.equal(caLeft.rows[0]!.n, 0);
-      const markers = (await db.execute(sql`
+      const markers = (await db.execute<{ countries: unknown }>(sql`
         select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
-      `)) as unknown as { rows: { countries: unknown }[] };
+      `));
       assert.ok(!(markers.rows[0]!.countries as string[] | null ?? []).includes("CA"));
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -625,9 +625,9 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       // The run document carries the schedule's entity and its currency
-      const doc = ((await db.execute(sql`
+      const doc = ((await db.execute<{ subsidiary_id: string; currency: string }>(sql`
         select subsidiary_id, currency from documents where id = ${run.documentId}
-      `)) as unknown as { rows: { subsidiary_id: string; currency: string }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(doc.subsidiary_id, usSubId);
       assert.equal(doc.currency, "USD");
 
@@ -644,9 +644,9 @@ test(
         refused.errors[0]!.message,
         /on the CA country pack, but this run pays from US Entity, a US legal entity/,
       );
-      const noStubs = ((await db.execute(sql`
+      const noStubs = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(noStubs.n, 0, "nothing wrong was written");
 
       // Configure the employee honestly — a US employee, in a state the US
@@ -658,13 +658,11 @@ test(
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
-      const stubs = ((await db.execute(sql`
+      const stubs = ((await db.execute<{ employee_party_id: string; currency_code: string; province: string;
+                factors: Record<string, string> }>(sql`
         select employee_party_id, currency_code, province, factors
           from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as {
-        rows: { employee_party_id: string; currency_code: string; province: string;
-                factors: Record<string, string> }[];
-      }).rows;
+      `))).rows;
       assert.deepEqual(stubs.map((s) => s.employee_party_id), [usEmployee]);
       // The whole chain agrees: US pack, US state, USD, and Pub 15-T factors
       // (SS/Medicare) rather than T4127's CPP/EI.
@@ -713,36 +711,36 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const baseline = ((await db.execute(sql`
+      const baseline = ((await db.execute<{ gross: string; net_pay: string }>(sql`
         select gross, net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { gross: string; net_pay: string }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(baseline.gross, "3000.0000"); // 78,000 / 26
 
       // One-off bonus: taxed with the non-periodic method (TB), gross +500
-      const bonusComponent = ((await db.execute(sql`
+      const bonusComponent = ((await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      `))).rows[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, note, created_by, updated_by)
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${bonusComponent.id},
                 '500', 'Spot bonus', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const adjusted = ((await db.execute(sql`
+      const adjusted = ((await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { gross: string; factors: Record<string, string> }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(adjusted.gross, "3500.0000");
       assert.ok(Number(adjusted.factors.TB) > 0, "bonus method tax applies");
-      const bonusLine = ((await db.execute(sql`
+      const bonusLine = ((await db.execute<{ description: string }>(sql`
         select l.description from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.component_id = ${bonusComponent.id}
-      `)) as unknown as { rows: { description: string }[] }).rows;
+      `))).rows;
       assert.deepEqual(bonusLine.map((l) => l.description), ["Spot bonus"]);
 
       // Replace: override the salary-derived base pay line entirely
-      const baseComponent = ((await db.execute(sql`
+      const baseComponent = ((await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BASE'
-      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      `))).rows[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, replace_component,
@@ -750,9 +748,9 @@ test(
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${baseComponent.id},
                 '2000', true, 'Unpaid leave proration', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const replaced = ((await db.execute(sql`
+      const replaced = ((await db.execute<{ gross: string }>(sql`
         select gross from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { gross: string }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(replaced.gross, "2500.0000"); // 2,000 replaced base + 500 bonus
 
       // Exclude: employee drops out of the run entirely
@@ -762,9 +760,9 @@ test(
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'exclude', ${actorId}, ${actorId})`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.equal(result.employees, 0);
-      const stubCount = ((await db.execute(sql`
+      const stubCount = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(stubCount.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);

@@ -43,10 +43,10 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       materializeDueReportRuns(new Date()),
     ]);
     assert.equal(concurrent.flat().length, 1);
-    const runs = (await db.execute(sql`
+    const runs = (await db.execute<{ id: string; status: string; scheduled_for: Date; recipient_emails: string[]; filters: Record<string, unknown>; attempt_count: number }>(sql`
       select id, status, scheduled_for, recipient_emails, filters, attempt_count
         from report_runs where schedule_id=${scheduleId}
-    `)) as unknown as { rows: { id: string; status: string; scheduled_for: Date; recipient_emails: string[]; filters: Record<string, unknown>; attempt_count: number }[] };
+    `));
     assert.equal(runs.rows.length, 1);
     assert.equal(runs.rows[0]!.status, "queued");
     assert.equal(new Date(runs.rows[0]!.scheduled_for).toISOString(), dueAt.toISOString());
@@ -65,9 +65,9 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       ),
       /queue unavailable/,
     );
-    const afterQueueFailure = (await db.execute(sql`
+    const afterQueueFailure = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_runs where id=${runs.rows[0]!.id}
-    `)) as unknown as { rows: { status: string; dispatch_count: number }[] };
+    `));
     assert.deepEqual(afterQueueFailure.rows[0], { status: "queued", dispatch_count: 0 });
     await dispatchQueuedReportRuns(
       async (_data, options) => {
@@ -90,7 +90,7 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     ]);
     assert.equal(renderCalls, 1);
     assert.equal(processed.filter((value) => value.deliveries === 2).length, 1);
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{ status: string; attempt_count: number; size_bytes: number; content_hash: string; bytes: Buffer; deliveries: number }>(sql`
       select r.status, r.attempt_count, a.size_bytes, a.content_hash, a.bytes,
              count(d.id)::int as deliveries
         from report_runs r
@@ -98,7 +98,7 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
         left join report_delivery_outbox d on d.run_id=r.id
        where r.id=${runs.rows[0]!.id}
        group by r.id, a.id
-    `)) as unknown as { rows: { status: string; attempt_count: number; size_bytes: number; content_hash: string; bytes: Buffer; deliveries: number }[] };
+    `));
     assert.deepEqual(
       { status: evidence.rows[0]!.status, attempts: evidence.rows[0]!.attempt_count, size: evidence.rows[0]!.size_bytes, deliveries: evidence.rows[0]!.deliveries },
       { status: "succeeded", attempts: 1, size: pdf.length, deliveries: 2 },
@@ -115,20 +115,20 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("already dispatched"); }, dispatchAsOf), 0);
     assert.deepEqual(emailJobs.map((job) => job.recipient).sort(), ["audit@example.com", "controller@example.com"]);
 
-    const delivery = (await db.execute(sql`
+    const delivery = (await db.execute<{ id: string }>(sql`
       select id from report_delivery_outbox where run_id=${runs.rows[0]!.id} order by recipient limit 1
-    `)) as unknown as { rows: { id: string }[] };
-    const log = (await db.execute(sql`
+    `));
+    const log = (await db.execute<{ id: string }>(sql`
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Delivery contract', 'sent', 'report')
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await markReportDeliveryStarted(org.orgId, delivery.rows[0]!.id, "contract-job");
     await markReportDeliverySent(org.orgId, delivery.rows[0]!.id, log.rows[0]!.id, "provider-123");
-    const sent = (await db.execute(sql`
+    const sent = (await db.execute<Record<string, unknown>>(sql`
       select status, attempt_count, email_log_id, provider_message_id, sent_at is not null as has_sent_at
         from report_delivery_outbox where id=${delivery.rows[0]!.id}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     assert.deepEqual(sent.rows[0], {
       status: "sent", attempt_count: 1, email_log_id: log.rows[0]!.id,
       provider_message_id: "provider-123", has_sent_at: true,
@@ -145,20 +145,20 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       processScheduledReportRun(retryRunId, async () => { throw new Error("renderer unavailable"); }),
       /renderer unavailable/,
     );
-    const failed = (await db.execute(sql`
+    const failed = (await db.execute<Record<string, unknown>>(sql`
       select r.status, r.attempt_count,
              exists(select 1 from report_run_artifacts a where a.run_id=r.id) as has_artifact,
              exists(select 1 from report_delivery_outbox d where d.run_id=r.id) as has_delivery
         from report_runs r where r.id=${retryRunId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     assert.deepEqual(failed.rows[0], { status: "failed", attempt_count: 1, has_artifact: false, has_delivery: false });
     await processScheduledReportRun(retryRunId, async () => pdf);
-    const retried = (await db.execute(sql`
+    const retried = (await db.execute<Record<string, unknown>>(sql`
       select r.status, r.attempt_count, count(a.id)::int as artifacts, count(d.id)::int as deliveries
         from report_runs r left join report_run_artifacts a on a.run_id=r.id
         left join report_delivery_outbox d on d.run_id=r.id
        where r.id=${retryRunId} group by r.id
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     assert.deepEqual(retried.rows[0], { status: "succeeded", attempt_count: 2, artifacts: 1, deliveries: 1 });
   } finally {
     await dropScratchOrg(org.orgId);

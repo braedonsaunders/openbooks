@@ -14,9 +14,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ is_active: boolean }>(sql`
     select is_active from user_scripts where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { is_active: boolean }[] }
+  `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   await db.execute(sql`delete from user_scripts where id = ${id} and org_id = ${user.orgId}`)

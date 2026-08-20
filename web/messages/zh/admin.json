@@ -777,6 +777,7 @@
     "time_read": "查看工时单",
     "time_manage": "录入并编辑工时",
     "time_approve": "审批工时单",
+    "time_reopen": "重新打开已批准的工时表",
     "records_read": "查看自定义记录",
     "records_create": "创建并编辑自定义记录",
     "records_manage_types": "设计自定义记录类型",

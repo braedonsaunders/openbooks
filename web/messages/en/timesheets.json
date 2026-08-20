@@ -52,6 +52,23 @@
     "lineItemAria": "Line {line} item",
     "lineBillableAria": "Line {line} billable",
     "lineHoursAria": "Line {line} {day} hours",
-    "removeLineAria": "Remove line {line}"
+    "removeLineAria": "Remove line {line}",
+    "reject": "Reject",
+    "rejectTitle": "Reject this timesheet",
+    "rejectReasonLabel": "Reason",
+    "rejectPlaceholder": "What needs to change before this can be approved?",
+    "rejectedToast": "Timesheet rejected",
+    "rejectedBecause": "Rejected: {reason}",
+    "reopen": "Reopen",
+    "reopenTitle": "Reopen this timesheet?",
+    "reopenMessage": "The week returns to draft and the approval is cleared, so it will need approving again.",
+    "reopenedToast": "Timesheet reopened",
+    "lockedBecause": "This week can no longer be reopened — {count} entries are already {reasons}.",
+    "lockReason": {
+      "invoiced": "invoiced to the customer",
+      "paid": "paid through a pay run",
+      "costed": "posted to the ledger",
+      "ticketed": "inside a field ticket"
+    }
   }
 }

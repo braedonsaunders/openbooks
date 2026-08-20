@@ -77,11 +77,11 @@ export async function POST(req: Request) {
         await tx.execute(sql`
           select pg_advisory_xact_lock(hashtextextended(${`openbooks:user-roles:${actor.orgId}:${body.userId}`}, 0))
         `);
-        const assignments = (await tx.execute(sql`
+        const assignments = (await tx.execute<{ id: string; role_id: string }>(sql`
           select id, role_id from role_assignments
            where org_id = ${actor.orgId} and user_id = ${body.userId}
            order by id
-        `)) as unknown as { rows: { id: string; role_id: string }[] };
+        `));
         if (!assignments.rows.some((row) => row.role_id === body.roleId)) {
           return NextResponse.json({ ok: true });
         }
@@ -91,11 +91,11 @@ export async function POST(req: Request) {
             { status: 409 },
           );
         }
-        const deleted = (await tx.execute(sql`
+        const deleted = (await tx.execute<{ id: string }>(sql`
           delete from role_assignments
            where org_id = ${actor.orgId} and user_id = ${body.userId} and role_id = ${body.roleId}
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (deleted.rows[0]) {
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -118,12 +118,12 @@ export async function POST(req: Request) {
         );
       }
       if (body.isActive) {
-        const assignment = (await db.execute(sql`
+        const assignment = (await db.execute<{ "?column?": number }>(sql`
           select 1
             from role_assignments
            where org_id = ${actor.orgId} and user_id = ${body.userId}
            limit 1
-        `)) as unknown as { rows: { "?column?": number }[] };
+        `));
         if (!assignment.rows[0]) {
           return NextResponse.json(
             { error: "assign at least one role before activating this user" },

@@ -42,7 +42,7 @@ export async function loadProjectType(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
     throw new Error('project type asOf must be YYYY-MM-DD')
   }
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; fp_effective_from: string | null; ip: InvoicingProfile | null; bp: BackupProfile | null }>(sql`
     select pt.id, pt.key, pt.name, pt.billing_method as bm,
            version.financial_profile as fp,
            version.effective_from::text as fp_effective_from,
@@ -60,7 +60,7 @@ export async function loadProjectType(
          limit 1
       ) version on true
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; fp_effective_from: string | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
+  `))
   const row = r.rows[0]
   if (row?.id && row.fp && row.ip && row.bp) {
     if (!row.bm) throw new Error(`project type ${row.id} is missing its billing classification`)

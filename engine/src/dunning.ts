@@ -14,7 +14,7 @@ import { cmp } from "./money.ts";
  * lives outside the posting kernel entirely.
  */
 
-export interface DunningStage {
+export type DunningStage = {
   id: string;
   sequence: number;
   name: string;
@@ -22,7 +22,7 @@ export interface DunningStage {
   subjectTemplate: string;
   bodyTemplate: string;
   escalate: boolean;
-}
+};
 
 /**
  * Pick the one stage to fire for an invoice: the highest-sequence stage whose
@@ -73,47 +73,55 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
   const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [] };
 
   const orgs = await withBypass(async () => {
-    return (await db.execute(sql`
+    return (await db.execute<{ orgId: string }>(sql`
       select distinct policy.org_id as "orgId"
         from dunning_policies policy
         join orgs organization on organization.id = policy.org_id
        where policy.is_active and organization.env_kind = 'production'
-    `)) as unknown as { rows: { orgId: string }[] };
+    `));
   });
 
   for (const { orgId } of orgs.rows) {
     await withOrg(orgId, async () => {
-      const org = (await db.execute(
+      const org = (await db.execute<{ name: string; baseCurrency: string }>(
         sql`select name, base_currency as "baseCurrency" from orgs where id = ${orgId}`,
-      )) as unknown as { rows: { name: string; baseCurrency: string }[] };
+      ));
       const orgName = org.rows[0]?.name ?? "";
 
-      const policies = (await db.execute(sql`
-        select id, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
-               min_balance as "minBalance", reply_to as "replyTo"
-          from dunning_policies where org_id = ${orgId} and is_active
-      `)) as unknown as {
-        rows: {
+      const policies = (await db.execute<{
           id: string;
           appliesToKind: string;
           gracePeriodDays: number;
           minBalance: string;
           replyTo: string | null;
-        }[];
-      };
+        }>(sql`
+        select id, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
+               min_balance as "minBalance", reply_to as "replyTo"
+          from dunning_policies where org_id = ${orgId} and is_active
+      `));
 
       for (const policy of policies.rows) {
-        const stageRows = (await db.execute(sql`
+        const stageRows = (await db.execute<DunningStage>(sql`
           select id, sequence, name, offset_days as "offsetDays",
                  subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
             from dunning_stages where policy_id = ${policy.id} and org_id = ${orgId}
            order by sequence
-        `)) as unknown as { rows: DunningStage[] };
+        `));
         if (!stageRows.rows.length) continue;
 
         // Overdue open documents of the policy's kind, with the live balance due
         // reconstructed from un-reversed applications against the open-item leg.
-        const docs = (await db.execute(sql`
+        const docs = (await db.execute<{
+            id: string;
+            documentNumber: string;
+            dueDate: string;
+            currency: string | null;
+            total: string;
+            partyId: string | null;
+            partyName: string | null;
+            partyEmail: string | null;
+            balanceDue: string;
+          }>(sql`
           select d.id, d.document_number as "documentNumber", d.due_date as "dueDate",
                  d.currency, d.total, p.id as "partyId", p.display_name as "partyName",
                  p.email as "partyEmail",
@@ -128,19 +136,7 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             ) ap on true
            where d.org_id = ${orgId} and d.kind = ${policy.appliesToKind}
              and d.status = 'posted' and d.due_date is not null and d.due_date < ${today}
-        `)) as unknown as {
-          rows: {
-            id: string;
-            documentNumber: string;
-            dueDate: string;
-            currency: string | null;
-            total: string;
-            partyId: string | null;
-            partyName: string | null;
-            partyEmail: string | null;
-            balanceDue: string;
-          }[];
-        };
+        `));
 
         for (const doc of docs.rows) {
           result.scanned += 1;
@@ -148,9 +144,9 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           const daysOverdue = daysBetween(doc.dueDate, today);
           if (daysOverdue < policy.gracePeriodDays) continue;
 
-          const fired = (await db.execute(sql`
+          const fired = (await db.execute<{ stageId: string }>(sql`
             select stage_id as "stageId" from dunning_log where document_id = ${doc.id} and org_id = ${orgId}
-          `)) as unknown as { rows: { stageId: string }[] };
+          `));
           const firedIds = new Set(fired.rows.map((r) => r.stageId));
 
           const stage = selectDueStage(stageRows.rows, daysOverdue, firedIds);

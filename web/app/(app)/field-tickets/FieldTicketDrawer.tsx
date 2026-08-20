@@ -20,27 +20,22 @@ import { PdfButton } from '../../../components/pdf-button'
  * Draft tickets edit in place; submitted/approved are read-only views with
  * lifecycle actions in the drawer header.
  */
-
-interface Opt {
+type Opt = {
   id: string
   name: string
-}
-interface TimeTypeOpt extends Opt {
+}; type TimeTypeOpt = Opt & {
   bill_multiplier: string
-}
-interface ProjectOpt extends Opt {
+}; type ProjectOpt = Opt & {
   customerName: string | null
   period: string
-}
-interface ProjectTaskOpt extends Opt {
+}; type ProjectTaskOpt = Opt & {
   code: string | null
   status: string
   estimatedHours: string | null
-}
-interface EquipmentOpt extends Opt {
+}; type EquipmentOpt = Opt & {
   unitNumber: string
   chargeItemId: string
-}
+};
 
 interface EntryRow {
   id: string

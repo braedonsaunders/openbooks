@@ -25,9 +25,9 @@ type Params = { params: Promise<{ id: string }> }
 
 async function loadFlow(orgId: string, id: string) {
   if (!isUuid(id)) return null
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     select * from flows where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return r.rows[0] ?? null
 }
 
@@ -37,11 +37,11 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params
   const flow = await loadFlow(gate.user.orgId, id)
   if (!flow) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
       from flow_runs where flow_id = ${id} and org_id = ${gate.user.orgId}
      order by started_at desc limit 30
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return NextResponse.json({ flow, runs: runs.rows })
 }
 

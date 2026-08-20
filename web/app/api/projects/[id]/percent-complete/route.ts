@@ -29,13 +29,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const orgId = gate.user.orgId
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update projects
        set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{percentCompleteOverride}',
                               ${pct === null || pct === undefined ? sql`'null'::jsonb` : sql`to_jsonb(${pct}::numeric)`}),
            updated_by = ${gate.user.id}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
-     returning id`)) as unknown as { rows: { id: string }[] }
+     returning id`))
   if (!updated.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const today = new Date().toISOString().slice(0, 10)

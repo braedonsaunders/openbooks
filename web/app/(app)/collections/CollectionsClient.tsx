@@ -41,8 +41,7 @@ interface Policy {
 
 const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"];
 const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
-
-interface Opt { id: string; name?: string; label?: string }
+type Opt = { id: string; name?: string; label?: string };
 
 interface Plan {
   id: string; name: string; description: string | null; amount: string; currency: string | null;

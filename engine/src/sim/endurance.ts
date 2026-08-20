@@ -163,15 +163,13 @@ export interface RegenSweepResult {
 
 /** Trial-balance fingerprint: total debits|credits|account count. */
 async function tbFingerprint(orgId: string): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ debits: string; credits: string; accounts: string }>(sql`
     select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text as debits,
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0)::text as credits,
            count(distinct l.account_id)::text as accounts
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId}`)) as unknown as {
-    rows: { debits: string; credits: string; accounts: string }[];
-  };
+     where l.org_id = ${orgId}`));
   const row = r.rows[0]!;
   return `${row.debits}|${row.credits}|${row.accounts}`;
 }
@@ -183,11 +181,11 @@ async function tbFingerprint(orgId: string): Promise<string> {
  */
 export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
   const deps: PostingDeps = { ...(await paymentControlDeps(orgId)), migration: true };
-  const docs = (await db.execute(sql`
+  const docs = (await db.execute<{ id: string; kind: string; entry_status: string }>(sql`
     select d.id, d.kind, e.status as entry_status from documents d
       join journal_entries e on e.id = d.posted_entry_id
      where d.org_id = ${orgId} and d.status = 'posted'
-     order by d.created_at`)) as unknown as { rows: { id: string; kind: string; entry_status: string }[] };
+     order by d.created_at`));
 
   const before = await tbFingerprint(orgId);
   const changed: RegenSweepResult["changed"] = [];

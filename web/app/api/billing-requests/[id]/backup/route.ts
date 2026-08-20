@@ -11,9 +11,9 @@ export const runtime = 'nodejs'
 
 /** Resolve a billing request's generated invoice + its backup type. */
 async function requestInvoice(orgId: string, requestId: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ invoice_document_id: string | null; backup_type: string }>(sql`
     select invoice_document_id, backup_type from billing_requests where id = ${requestId} and org_id = ${orgId}
-  `)) as unknown as { rows: { invoice_document_id: string | null; backup_type: string }[] }
+  `))
   return r.rows[0] ?? null
 }
 

@@ -74,10 +74,10 @@ export async function POST(request: Request) {
 
   if (parentId) {
     if (!isUuid(parentId)) return bad('invalid_parent', 'parentId')
-    const parent = (await db.execute(sql`
+    const parent = (await db.execute<{ is_summary: boolean; type: string }>(sql`
       select is_summary, type from accounts
        where id = ${parentId} and org_id = ${gate.user.orgId}
-    `)) as unknown as { rows: { is_summary: boolean; type: string }[] }
+    `))
     if (!parent.rows[0]) return bad('invalid_parent', 'parentId')
     if (!parent.rows[0].is_summary) return bad('parent_must_be_summary', 'parentId')
     if (parent.rows[0].type !== body.type) return bad('parent_type_mismatch', 'parentId')
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     if (!CURRENCY_RE.test(currencyRestriction)) return bad('invalid_currency', 'currencyRestriction')
     const currency = (await db.execute(sql`
       select 1 from currencies where code = ${currencyRestriction}
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (!currency.rows[0]) return bad('invalid_currency', 'currencyRestriction')
   }
 
@@ -98,14 +98,14 @@ export async function POST(request: Request) {
     const subsidiary = (await db.execute(sql`
       select 1 from subsidiaries
        where id = ${subsidiaryId} and org_id = ${gate.user.orgId}
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (!subsidiary.rows[0]) return bad('invalid_subsidiary', 'subsidiaryId')
   }
 
-  const definitions = (await db.execute(sql`
+  const definitions = (await db.execute<{ key: string }>(sql`
     select key from segment_definitions
      where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-  `)) as unknown as { rows: { key: string }[] }
+  `))
   const allowedDimensions = new Set(['party', ...definitions.rows.map((row) => row.key)])
   const requestedDimensions = body.requiredDimensions ?? []
   if (
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
   let created = false
   try {
     created = await db.transaction(async (tx) => {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into accounts
           (id, org_id, number, name, type, description, parent_id, is_summary, is_active,
            currency_restriction, eliminate, subsidiary_id, subsidiary_include_children,
@@ -157,12 +157,12 @@ export async function POST(request: Request) {
            ${gate.user.id}, ${gate.user.id})
         on conflict (id) do nothing
         returning id
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       if (!inserted.rows[0]) {
-        const prior = (await tx.execute(sql`
+        const prior = (await tx.execute<{ id: string }>(sql`
           select id from accounts
            where id = ${requestId} and org_id = ${gate.user.orgId}
-        `)) as unknown as { rows: { id: string }[] }
+        `))
         if (!prior.rows[0]) throw new Error('idempotency_key_conflict')
         return false
       }

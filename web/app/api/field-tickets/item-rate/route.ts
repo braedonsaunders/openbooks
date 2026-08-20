@@ -33,10 +33,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid rate unit' }, { status: 422 })
   }
 
-  const item = (await db.execute(sql`
+  const item = (await db.execute<{ default_rate: string | null; default_cost: string | null; unit: string | null }>(sql`
     select default_rate, default_cost, unit from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
-  `)) as unknown as { rows: { default_rate: string | null; default_cost: string | null; unit: string | null }[] }
+  `))
   if (!item.rows[0]) return NextResponse.json({ error: 'item not found' }, { status: 404 })
 
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>

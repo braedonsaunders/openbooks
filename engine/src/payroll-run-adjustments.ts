@@ -29,15 +29,13 @@ export async function mutatePayRunAdjustment(input: {
 }): Promise<{ changed: boolean }> {
   const { orgId, documentId, actorId, mutation } = input;
   return db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
+    const runRows = (await tx.execute<{ run_status: string; pay_schedule_id: string; document_status: string }>(sql`
       select r.run_status, r.pay_schedule_id, d.status as document_status
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `)) as unknown as {
-      rows: { run_status: string; pay_schedule_id: string; document_status: string }[];
-    };
+    `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.run_status === "committed" || run.document_status !== "draft") {
@@ -55,7 +53,7 @@ export async function mutatePayRunAdjustment(input: {
            and prof.pay_schedule_id = ${run.pay_schedule_id}
            and prof.is_active and p.is_active
          limit 1
-      `)) as unknown as { rows: unknown[] };
+      `));
       if (membership.rows.length === 0) {
         throw new PayrollError("employee is not an active member of this pay run's schedule");
       }
@@ -69,7 +67,7 @@ export async function mutatePayRunAdjustment(input: {
          where org_id = ${orgId} and id = ${mutation.componentId} and is_active
            and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
          limit 1
-      `)) as unknown as { rows: unknown[] };
+      `));
       if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
       await tx.execute(sql`
         insert into pay_run_adjustments
@@ -82,16 +80,16 @@ export async function mutatePayRunAdjustment(input: {
       `);
       changed = true;
     } else if (mutation.action === "delete") {
-      const deleted = (await tx.execute(sql`
+      const deleted = (await tx.execute<{ id: string }>(sql`
         delete from pay_run_adjustments
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and id = ${mutation.adjustmentId}
          returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (deleted.rows.length === 0) throw new PayrollError("pay run adjustment not found");
       changed = true;
     } else if (mutation.action === "exclude") {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into pay_run_adjustments
           (org_id, pay_run_document_id, employee_party_id, adjustment_type, created_by, updated_by)
         values (${orgId}, ${documentId}, ${mutation.employeePartyId}, 'exclude', ${actorId}, ${actorId})
@@ -99,15 +97,15 @@ export async function mutatePayRunAdjustment(input: {
           where adjustment_type = 'exclude'
         do nothing
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       changed = inserted.rows.length > 0;
     } else {
-      const deleted = (await tx.execute(sql`
+      const deleted = (await tx.execute<{ id: string }>(sql`
         delete from pay_run_adjustments
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and employee_party_id = ${mutation.employeePartyId} and adjustment_type = 'exclude'
          returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       changed = deleted.rows.length > 0;
     }
 

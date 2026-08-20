@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -8,8 +9,10 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import {
   auditColumns,
   currencyCode,
@@ -18,6 +21,54 @@ import {
   money,
   orgRef,
 } from "./helpers";
+
+/**
+ * A weekly timesheet header — one row per employee per Sunday→Saturday week.
+ *
+ * The hours themselves stay in `time_entries`; this owns the WEEK as a record:
+ * its lifecycle status and the stamps that make approval auditable (who
+ * submitted, who approved, why it was returned). Two things need that.
+ *
+ * First, status was previously derived by aggregating every entry's status,
+ * which cannot express a week that exists but is empty, and forces every
+ * consumer to recompute the same fold. Second, an approval engine has to be
+ * able to name what it is approving: flow runs, gates and locks all key their
+ * subject by uuid, and a week assembled from a composite key has no id to give
+ * them. This row supplies it.
+ *
+ * Tenant extension deliberately does NOT live here — org-defined timesheet
+ * fields are line-level (`time_entries.custom`) and render as grid columns.
+ */
+export const timesheetWeeks = pgTable(
+  "timesheet_weeks",
+  {
+    id: id(),
+    orgId: orgRef(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    /** The week's Sunday. Weeks run Sunday→Saturday. */
+    weekStart: date("week_start").notNull(),
+    status: text("status", {
+      enum: ["draft", "submitted", "approved", "rejected"],
+    })
+      .notNull()
+      .default("draft"),
+    submittedBy: uuid("submitted_by"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** The approver's note when the week was returned to the employee. */
+    rejectionReason: text("rejection_reason"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("timesheet_weeks_employee_week").on(t.orgId, t.employeePartyId, t.weekStart),
+    index("timesheet_weeks_status").on(t.orgId, t.status),
+    check(
+      "timesheet_weeks_week_start_is_sunday",
+      sql`extract(dow from ${t.weekStart}) = 0`,
+    ),
+  ],
+);
 
 /**
  * Time entries — the atom of services job costing. Approved time flows
@@ -92,6 +143,17 @@ export const timeEntries = pgTable(
       .default("draft"),
     approvedBy: uuid("approved_by"),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
+    /** Why an approver bounced this entry back. Kept on the row so the person
+     * who has to fix it sees the reason, and so a rejection is a documented
+     * decision rather than a silent status change. */
+    rejectionReason: text("rejection_reason"),
+    /**
+     * The entry this one corrects. Once hours have been invoiced, paid or
+     * costed they are evidence for a document that already exists, so the
+     * correction is a new offsetting entry pointing back here — never an edit
+     * of the original. Null for ordinary entries.
+     */
+    amendsEntryId: uuid("amends_entry_id"),
     /** Downstream linkage. */
     costJournalEntryId: uuid("cost_journal_entry_id"),
     /** The net-zero overhead pair that carried this entry's hours (stamped at

@@ -23,10 +23,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   if (!isPdf) return NextResponse.json({ error: 'the official form must be a PDF' }, { status: 415 })
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'file exceeds 25 MB limit' }, { status: 413 })
 
-  const exists = (await db.execute(sql`
-    select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`)) as unknown as {
-    rows: { id: string; official_pdf_file_id: string | null }[]
-  }
+  const exists = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
+    select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`))
   if (exists.rows.length === 0) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
 
   const bytes = Buffer.from(await file.arrayBuffer())
@@ -68,11 +66,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ code:
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { code } = await params
-  const old = (await db.execute(sql`
+  const old = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms
-     where org_id = ${gate.user.orgId} and code = ${code} limit 1`)) as unknown as {
-    rows: { id: string; official_pdf_file_id: string | null }[]
-  }
+     where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
   if (!old.rows[0]) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
   await db.transaction(async (tx) => {
     await tx.execute(sql`

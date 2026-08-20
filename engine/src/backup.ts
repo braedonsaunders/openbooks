@@ -413,14 +413,11 @@ export async function auditBackupEvent(args: {
  */
 export async function executeBackupRun(runId: string): Promise<void> {
   assertUuid(runId);
-  const claimed = (await db.execute(sql`
+  const claimed = (await db.execute<{ id: string; org_id: string; kind: string; actor_id: string | null }>(sql`
     update backup_runs
        set status = 'running', started_at = now(), updated_at = now()
      where id = ${runId} and status = 'queued'
-     returning id, org_id, kind, actor_id`)) as unknown as {
-    rows: { id: string; org_id: string; kind: string; actor_id: string | null }[];
-    rowCount: number;
-  };
+     returning id, org_id, kind, actor_id`));
   const run = claimed.rows[0];
   if (!run) return; // already claimed/finished — redelivery
 
@@ -454,10 +451,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
     if (!s3Enabled) {
       throw new Error("S3 object storage is not configured (S3_ENDPOINT/S3_BUCKET/…)");
     }
-    const orgRes = (await db.execute(sql`
-      select name from orgs where id = ${run.org_id}`)) as unknown as {
-      rows: { name: string }[];
-    };
+    const orgRes = (await db.execute<{ name: string }>(sql`
+      select name from orgs where id = ${run.org_id}`));
     const orgName = orgRes.rows[0]?.name ?? "org";
     fileName = `${backupFileBaseName(orgName)}.json.gz`;
     objectKey = backupObjectKey(run.org_id, run.id);
@@ -482,14 +477,14 @@ export async function executeBackupRun(runId: string): Promise<void> {
       // Persist a deterministic upload intent before touching S3. A worker
       // crash can then reconcile this exact key/hash instead of leaking an
       // anonymous object or re-exporting a different snapshot.
-      const intended = (await db.execute(sql`
+      const intended = (await db.execute<{ id: string }>(sql`
         update backup_runs
            set object_key = ${objectKey}, file_name = ${fileName},
                byte_size = ${byteSize}, sha256 = ${sha256},
                table_count = ${stats.tables.length}, row_count = ${stats.totalRows},
                updated_at = now()
          where id = ${run.id} and status = 'running'
-         returning id`)) as unknown as { rows: { id: string }[] };
+         returning id`));
       if (!intended.rows[0]) throw new Error("backup run lost its running claim before upload");
 
       uploadAttempted = true;
@@ -504,12 +499,12 @@ export async function executeBackupRun(runId: string): Promise<void> {
       await rm(tmp, { recursive: true, force: true });
     }
 
-    const finalized = (await db.execute(sql`
+    const finalized = (await db.execute<{ id: string }>(sql`
       update backup_runs
          set status = 'completed', completed_at = now(), updated_at = now(),
              error = null
        where id = ${run.id} and status = 'running'
-       returning id`)) as unknown as { rows: { id: string }[] };
+       returning id`));
     if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
     completed = true;
   } catch (err) {
@@ -520,10 +515,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
     // a completed ledger row into a missing object.
     let state: { status: string } | undefined;
     try {
-      const stateResult = (await db.execute(sql`
-        select status from backup_runs where id = ${runId}`)) as unknown as {
-        rows: { status: string }[];
-      };
+      const stateResult = (await db.execute<{ status: string }>(sql`
+        select status from backup_runs where id = ${runId}`));
       state = stateResult.rows[0];
     } catch (stateError) {
       console.error(
@@ -620,20 +613,16 @@ export async function executeBackupRun(runId: string): Promise<void> {
  */
 export async function rotateBackups(orgId: string): Promise<void> {
   assertUuid(orgId);
-  const policy = (await db.execute(sql`
-    select max_keep from backup_policies where org_id = ${orgId}`)) as unknown as {
-    rows: { max_keep: number }[];
-  };
+  const policy = (await db.execute<{ max_keep: number }>(sql`
+    select max_keep from backup_policies where org_id = ${orgId}`));
   const maxKeep = policy.rows[0]?.max_keep ?? 7;
 
-  const excess = (await db.execute(sql`
+  const excess = (await db.execute<{ id: string; object_key: string | null; file_name: string | null; byte_size: number | null }>(sql`
     select id, object_key, file_name, byte_size
       from backup_runs
      where org_id = ${orgId} and status = 'completed' and purged_at is null
      order by created_at desc
-     offset ${maxKeep}`)) as unknown as {
-    rows: { id: string; object_key: string | null; file_name: string | null; byte_size: number | null }[];
-  };
+     offset ${maxKeep}`));
 
   for (const run of excess.rows) {
     if (run.object_key) {

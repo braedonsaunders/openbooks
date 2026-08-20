@@ -42,6 +42,21 @@ export async function registerNodeInstrumentation() {
     )
   })
 
+  // Timesheet approval routing is tenant-authored in Flows too. The engine
+  // decides WHO approves and when the gates resolve; this supplies what
+  // approval means for hours — stamping the approver across the week, or
+  // returning it with the approver's reason attached.
+  registerFlowApprovalReleaseHandler('timesheet_week', async ({
+    subjectId,
+    outcome,
+    comment,
+    ctx,
+  }) => {
+    if (!ctx.userId) throw new Error('timesheet approval needs an acting user')
+    const { releaseTimesheetWeekApproval } = await import('./lib/timesheet-approval-release')
+    await releaseTimesheetWeekApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
+  })
+
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')
     const meta = PDF_RECORD_TYPE_BY_KEY[subjectKind]

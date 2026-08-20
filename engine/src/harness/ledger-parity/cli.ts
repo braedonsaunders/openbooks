@@ -161,14 +161,14 @@ async function ensureOpenBooksTaxCode(
     withholdingAccountId?: string | null;
   },
 ): Promise<string> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string }>(sql`
     select id
       from tax_codes
      where org_id = ${manifest.openbooks.orgId}
        and code = ${input.code}
      order by created_at
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   let taxCodeId = existing.rows[0]?.id;
   if (!taxCodeId) {
     taxCodeId = randomUUID();
@@ -208,14 +208,14 @@ async function ensureOpenBooksTaxCode(
        where id = ${taxCodeId} and org_id = ${manifest.openbooks.orgId}
     `);
   }
-  const rates = (await db.execute(sql`
+  const rates = (await db.execute<{ id: string }>(sql`
     select id
       from tax_rates
      where org_id = ${manifest.openbooks.orgId}
        and tax_code_id = ${taxCodeId}
        and effective_from = '2026-01-01'
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!rates.rows[0]) {
     await db.execute(sql`
       insert into tax_rates
@@ -397,11 +397,11 @@ async function ensureTaxParityConfig(
     rate: "9.5",
     compoundOnPrevious: true,
   });
-  const groupRows = (await db.execute(sql`
+  const groupRows = (await db.execute<{ id: string }>(sql`
     select id from tax_groups
      where org_id = ${manifest.openbooks.orgId} and code = 'PARITY-COMPOUND'
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const compoundTaxGroupId = groupRows.rows[0]?.id ?? randomUUID();
   await db.execute(sql`
     insert into tax_groups (id, org_id, code, name, price_includes_tax, is_active)
@@ -471,14 +471,14 @@ async function ensureOpenBooksEmployeeAndCard(
 ): Promise<{ employeeId: string; paymentCardId: string }> {
   let employeeId = manifest.openbooks.employeeId;
   if (!employeeId) {
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string }>(sql`
       select p.id
         from parties p
         join employee_roles er on er.party_id = p.id
        where p.org_id = ${manifest.openbooks.orgId}
          and p.display_name = 'Parity Employee'
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     employeeId = existing.rows[0]?.id;
     if (!employeeId) {
       employeeId = randomUUID();
@@ -507,13 +507,13 @@ async function ensureOpenBooksEmployeeAndCard(
 
   let paymentCardId = manifest.openbooks.paymentCardId;
   if (!paymentCardId) {
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string }>(sql`
       select id
         from payment_cards
        where org_id = ${manifest.openbooks.orgId}
          and label = 'Parity Corporate Card'
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     paymentCardId = existing.rows[0]?.id;
     if (!paymentCardId) {
       paymentCardId = randomUUID();
@@ -539,11 +539,11 @@ async function ensureParityProjects(
 ): Promise<{ openbooksProjectId: string; erpnextProject: string }> {
   let openbooksProjectId = manifest.openbooks.projectId;
   if (!openbooksProjectId) {
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string }>(sql`
       select id from projects
        where org_id = ${manifest.openbooks.orgId} and name = 'Parity Project'
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     openbooksProjectId = existing.rows[0]?.id;
     if (!openbooksProjectId) {
       openbooksProjectId = randomUUID();
@@ -600,14 +600,14 @@ async function ensureInventoryParityConfig(
 }> {
   let openbooks = manifest.openbooks.inventory;
   if (!openbooks) {
-    const itemRows = (await db.execute(sql`
+    const itemRows = (await db.execute<{ id: string }>(sql`
       select i.id
         from items i
         join item_inventory_profiles p on p.item_id = i.id
        where i.org_id = ${manifest.openbooks.orgId}
          and i.code = 'PARITY-STOCK'
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     let itemId = itemRows.rows[0]?.id;
     if (!itemId) {
       itemId = randomUUID();
@@ -637,14 +637,14 @@ async function ensureInventoryParityConfig(
         `);
       });
     }
-    const locations = (await db.execute(sql`
+    const locations = (await db.execute<{ id: string }>(sql`
       select id
         from stock_locations
        where org_id = ${manifest.openbooks.orgId}
          and is_active
        order by code
        limit 2
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!locations.rows[0] || !locations.rows[1]) {
       throw new Error("OpenBooks parity tenant needs two stock locations");
     }
@@ -945,10 +945,10 @@ async function ensureAdvancedInventoryAccountMap(
   };
 }
 
-async function one<T = Record<string, unknown>>(
+async function one<T extends Record<string, unknown> = Record<string, unknown>>(
   query: ReturnType<typeof sql>,
-): Promise<T> {
-  const result = (await db.execute(query)) as unknown as { rows: T[] };
+) {
+  const result = (await db.execute<T>(query));
   if (!result.rows[0]) throw new Error("expected one row");
   return result.rows[0];
 }
@@ -1239,7 +1239,12 @@ async function openbooksVoucherSnapshot(
   checkpoint: string,
   options: { includeProject?: boolean; includeControlParty?: boolean } = {},
 ): Promise<CanonicalGlSnapshot> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      account_id: string;
+      amount: string;
+      project_id: string | null;
+      party_id: string | null;
+    }>(sql`
     select l.account_id, l.amount::text, l.project_id, l.party_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
@@ -1247,14 +1252,7 @@ async function openbooksVoucherSnapshot(
        and e.source_document_id = ${documentId}
        and e.status in ('posted', 'reversed')
      order by e.created_at, l.line_number
-  `)) as unknown as {
-    rows: {
-      account_id: string;
-      amount: string;
-      project_id: string | null;
-      party_id: string | null;
-    }[];
-  };
+  `));
   const lines: CanonicalGlLine[] = rows.rows.map((row) => {
     const mapped = manifest.accountMap.openbooks[row.account_id];
     if (!mapped)
@@ -1306,7 +1304,7 @@ async function openbooksEntriesSnapshot(
       lines: [],
     };
   }
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
     select l.account_id, l.amount::text, l.project_id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
@@ -1314,9 +1312,7 @@ async function openbooksEntriesSnapshot(
        and e.id = any(${`{${ids.join(",")}}`}::uuid[])
        and e.status in ('posted', 'reversed')
      order by e.created_at, l.line_number
-  `)) as unknown as {
-    rows: { account_id: string; amount: string; project_id: string | null }[];
-  };
+  `));
   const lines = rows.rows.map((row): CanonicalGlLine => {
     const mapped = manifest.accountMap.openbooks[row.account_id];
     if (!mapped)
@@ -4779,11 +4775,11 @@ async function ensureDepreciationParitySetup(
     name: string,
     type: string,
   ): Promise<string> => {
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string }>(sql`
       select id from accounts
        where org_id = ${manifest.openbooks.orgId} and number = ${number}
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (existing.rows[0]) return existing.rows[0].id;
     const id = randomUUID();
     await db.execute(sql`
@@ -5073,7 +5069,11 @@ async function runDepreciationParity(): Promise<void> {
       journal_entry?: string | null;
     }>;
   }>("Asset Depreciation Schedule", erpScheduleName);
-  const openbooksSchedule = (await db.execute(sql`
+  const openbooksSchedule = (await db.execute<{
+      schedule_date: string;
+      depreciation_amount: string;
+      accumulated_depreciation_amount: string;
+    }>(sql`
     select p.ends_on::text as schedule_date,
            line.planned_amount::text as depreciation_amount,
            sum(line.planned_amount) over (
@@ -5085,13 +5085,7 @@ async function runDepreciationParity(): Promise<void> {
      where schedule.asset_id = ${assetId}
        and schedule.book_id = ${manifest.openbooks.bookId}
      order by line.sequence
-  `)) as unknown as {
-    rows: Array<{
-      schedule_date: string;
-      depreciation_amount: string;
-      accumulated_depreciation_amount: string;
-    }>;
-  };
+  `));
   const normalizedErpSchedule = erpSchedule.depreciation_schedule.map(
     (row) => ({
       schedule_date: row.schedule_date,
@@ -5195,7 +5189,11 @@ async function runDepreciationParity(): Promise<void> {
     "erpnext.assets.doctype.asset.depreciation.make_depreciation_entry",
     { depr_schedule_name: erpScheduleName, date: "2026-09-30" },
   );
-  const finalEvidence = (await db.execute(sql`
+  const finalEvidence = (await db.execute<{
+      postings: number;
+      accumulated: string;
+      asset_status: string;
+    }>(sql`
     select count(*)::int as postings,
            coalesce(sum(posted_amount), 0)::text as accumulated,
            min(a.status) as asset_status
@@ -5204,13 +5202,7 @@ async function runDepreciationParity(): Promise<void> {
       join fixed_assets a on a.id = schedule.asset_id
      where schedule.asset_id = ${assetId}
        and line.posted_amount is not null
-  `)) as unknown as {
-    rows: Array<{
-      postings: number;
-      accumulated: string;
-      asset_status: string;
-    }>;
-  };
+  `));
   const erpFinal = await client.get<{
     depreciation_schedule: Array<{ journal_entry?: string | null }>;
   }>("Asset Depreciation Schedule", erpScheduleName);
@@ -6338,18 +6330,18 @@ async function runRevenueRecognitionParity(): Promise<void> {
     ),
   );
 
-  const obligation = (await db.execute(sql`
+  const obligation = (await db.execute<{ id: string }>(sql`
     select obligation.id
       from performance_obligations obligation
       join document_lines line on line.id = obligation.document_line_id
      where line.document_id = ${invoiceId}
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const obligationId = obligation.rows[0]?.id;
   if (!obligationId) {
     throw new Error("OpenBooks did not create a performance obligation");
   }
-  const schedule = (await db.execute(sql`
+  const schedule = (await db.execute<{ period_start: string; planned: string }>(sql`
     select period.starts_on::text as period_start,
            line.planned_amount::text as planned
       from recognition_schedule_lines line
@@ -6357,9 +6349,7 @@ async function runRevenueRecognitionParity(): Promise<void> {
       join accounting_periods period on period.id = line.period_id
      where schedule.obligation_id = ${obligationId}
      order by line.sequence
-  `)) as unknown as {
-    rows: { period_start: string; planned: string }[];
-  };
+  `));
   const expectedSchedule = [
     { period_start: "2026-07-01", planned: "100.0000" },
     { period_start: "2026-08-01", planned: "100.0000" },
@@ -6559,18 +6549,16 @@ async function runRevenueRecognitionParity(): Promise<void> {
   for (const period of [...periodRuns].reverse()) {
     await client.cancel("Process Deferred Accounting", period.pdaName);
   }
-  const recognitionReversals = (await db.execute(sql`
+  const recognitionReversals = (await db.execute<{
+      journal_entry_id: string;
+      reversal_journal_entry_id: string;
+    }>(sql`
     select line.journal_entry_id, line.reversal_journal_entry_id
       from recognition_schedule_lines line
       join recognition_schedules schedule on schedule.id = line.schedule_id
      where schedule.obligation_id = ${obligationId}
        and line.journal_entry_id is not null
-  `)) as unknown as {
-    rows: {
-      journal_entry_id: string;
-      reversal_journal_entry_id: string;
-    }[];
-  };
+  `));
   const reversalBySource = new Map(
     recognitionReversals.rows.map((row) => [
       row.journal_entry_id,
@@ -7142,11 +7130,11 @@ async function runProjectRecognitionParity(): Promise<void> {
     ),
   ]);
   await client.cancel("Journal Entry", erpLabor.name);
-  const laborReversal = (await db.execute(sql`
+  const laborReversal = (await db.execute<{ id: string }>(sql`
     select id from journal_entries
      where org_id = ${manifest.openbooks.orgId}
        and reverses_entry_id = ${laborEntryId}
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   assertComparison(
     `project-recognition-${marker}-labor-cancel`,
     await openbooksEntriesSnapshot(
@@ -7182,11 +7170,11 @@ async function runProjectRecognitionParity(): Promise<void> {
     ),
   ]);
   await client.cancel("Journal Entry", erpOverhead.name);
-  const overheadReversal = (await db.execute(sql`
+  const overheadReversal = (await db.execute<{ id: string }>(sql`
     select id from journal_entries
      where org_id = ${manifest.openbooks.orgId}
        and reverses_entry_id = ${overheadEntryId}
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   assertComparison(
     `project-recognition-${marker}-overhead-cancel`,
     await openbooksEntriesSnapshot(
@@ -7231,20 +7219,18 @@ async function runProjectRecognitionParity(): Promise<void> {
       { includeProject: true },
     ),
   );
-  const equipmentLineage = (await db.execute(sql`
+  const equipmentLineage = (await db.execute<{
+      reverses_entry_id: string | null;
+      equipment_unit_id: string | null;
+      amount: string;
+    }>(sql`
     select entry.reverses_entry_id, line.equipment_unit_id,
            line.amount::text
       from journal_entries entry
       join journal_lines line on line.entry_id = entry.id
      where entry.source_document_id = ${equipmentDocumentId}
      order by entry.created_at, line.line_number
-  `)) as unknown as {
-    rows: {
-      reverses_entry_id: string | null;
-      equipment_unit_id: string | null;
-      amount: string;
-    }[];
-  };
+  `));
   const sourceEquipment = equipmentLineage.rows
     .filter((row) => !row.reverses_entry_id)
     .map((row) => ({
@@ -7631,14 +7617,14 @@ async function runConsolidationParity(): Promise<void> {
     },
   );
   await client.submit("Journal Entry", erpElimReplacement.name);
-  const elimLineage = (await db.execute(sql`
+  const elimLineage = (await db.execute<{ id: string }>(sql`
     select id
       from journal_entries
      where org_id = ${manifest.openbooks.orgId}
        and subsidiary_id = ${eliminationId}
        and origin = 'intercompany'
      order by created_at
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   assertComparison(
     `consolidation-${marker}-elimination-rerun`,
     await openbooksEntriesSnapshot(
@@ -8970,7 +8956,7 @@ function runInventoryAdvancedNativeInvariants(): void {
 async function cleanupInterruptedTaxReturns(): Promise<void> {
   const manifest = readManifest();
   const client = new ErpNextParityClient(erpConfig());
-  const openbooks = (await db.execute(sql`
+  const openbooks = (await db.execute<{ id: string }>(sql`
     select id
       from documents
      where org_id = ${manifest.openbooks.orgId}
@@ -8978,7 +8964,7 @@ async function cleanupInterruptedTaxReturns(): Promise<void> {
        and status = 'posted'
        and document_number like 'PARITY-TAX-CUSTOMER_CREDIT-sales-tax-return-%'
      order by created_at
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   for (const document of openbooks.rows) {
     await requestDocumentVoid({
       documentId: document.id,

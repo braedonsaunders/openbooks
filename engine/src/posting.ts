@@ -168,16 +168,14 @@ async function resolveDeferralAccounts(
   runner: Pick<typeof db, "execute">,
   documentId: string,
 ): Promise<Map<string, string>> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ line_id: string; deferred_account_id: string }>(sql`
     select dl.id as line_id,
            coalesce(it.deferred_account_id, r.deferred_account_id) as deferred_account_id
       from document_lines dl
       join items it on it.id = dl.item_id and it.recognition_rule_id is not null
       join recognition_rules r on r.id = it.recognition_rule_id
      where dl.document_id = ${documentId}
-       and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`)) as unknown as {
-    rows: { line_id: string; deferred_account_id: string }[];
-  };
+       and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`));
   const map = new Map<string, string>();
   for (const row of r.rows) map.set(row.line_id, row.deferred_account_id);
   return map;
@@ -188,15 +186,13 @@ async function resolveTaxAccounts(
   runner: Pick<typeof db, "execute">,
   orgId: string,
 ): Promise<{ collected: Map<string, string>; paid: Map<string, string> }> {
-  const r = (await runner.execute(sql`
-    select id, collected_account_id, paid_account_id from tax_codes
-     where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`)) as unknown as {
-    rows: {
+  const r = (await runner.execute<{
       id: string;
       collected_account_id: string | null;
       paid_account_id: string | null;
-    }[];
-  };
+    }>(sql`
+    select id, collected_account_id, paid_account_id from tax_codes
+     where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`));
   const collected = new Map<string, string>();
   const paid = new Map<string, string>();
   for (const row of r.rows) {
@@ -211,7 +207,7 @@ async function resolveTaxComponents(
   runner: Pick<typeof db, "execute">,
   documentId: string,
 ): Promise<Map<string, TaxPostingComponent[]>> {
-  const result = (await runner.execute(sql`
+  const result = (await runner.execute<Record<string, any>>(sql`
     select c.document_line_id, c.tax_code_id, c.sequence, c.tax_amount::text,
            c.recoverable_amount::text, c.nonrecoverable_amount::text,
            c.calculation_type, c.collected_account_id, c.paid_account_id,
@@ -220,7 +216,7 @@ async function resolveTaxComponents(
       join document_lines dl on dl.id = c.document_line_id
      where dl.document_id = ${documentId}
      order by c.document_line_id, c.sequence
-  `)) as unknown as { rows: Record<string, any>[] };
+  `));
   const byLine = new Map<string, TaxPostingComponent[]>();
   for (const row of result.rows) {
     const lineId = String(row.document_line_id);
@@ -353,7 +349,13 @@ async function validateRequiredDimensions(
   lines: KernelLine[],
 ): Promise<void> {
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<{
+      id: string;
+      number: string | null;
+      name: string;
+      required_dimensions: string[];
+      segment_names: Record<string, string>;
+    }>(sql`
     select a.id, a.number, a.name, a.required_dimensions,
            coalesce(jsonb_object_agg(sd.key, sd.name) filter (where sd.key is not null), '{}'::jsonb) as segment_names
       from accounts a
@@ -361,15 +363,7 @@ async function validateRequiredDimensions(
      where a.org_id = ${orgId}
        and a.id = any(${`{${accountIds.join(",")}}`}::uuid[])
      group by a.id
-  `)) as unknown as {
-    rows: {
-      id: string;
-      number: string | null;
-      name: string;
-      required_dimensions: string[];
-      segment_names: Record<string, string>;
-    }[];
-  };
+  `));
   const byAccount = new Map(rows.rows.map((row) => [row.id, row]));
   const builtin: Record<string, keyof KernelLine> = {
     subsidiary: "subsidiaryId",
@@ -982,16 +976,14 @@ async function resolveOpenItemAccounts(
   // liability_current_other account, and an expense report's control line
   // must still be an open item there or it can never be settled through the
   // payment-application engine.
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and type in ('asset_receivable', 'liability_payable')
     union
     select (settings->'controlAccounts'->>'employeePayable')::uuid as id
       from orgs
      where id = ${orgId}
-       and settings->'controlAccounts'->>'employeePayable' is not null`)) as unknown as {
-    rows: { id: string }[];
-  };
+       and settings->'controlAccounts'->>'employeePayable' is not null`));
   return new Set(r.rows.map((x) => x.id));
 }
 
@@ -1029,7 +1021,7 @@ async function applySubsidiaries(
       if (targetCurrency === origin.baseCurrency) return doc.fxRate;
       const cached = rateCache.get(targetCurrency);
       if (cached) return cached;
-      const r = (await runner.execute(sql`
+      const r = (await runner.execute<{ rate: string }>(sql`
         select rate::text from (
           select rate, as_of from fx_rates
            where org_id = ${doc.orgId} and from_currency = ${doc.currency}
@@ -1040,9 +1032,7 @@ async function applySubsidiaries(
            where org_id = ${doc.orgId} and from_currency = ${targetCurrency}
              and to_currency = ${doc.currency} and rate_type = 'spot'
              and as_of <= ${postingDate}
-        ) candidates order by as_of desc limit 1`)) as unknown as {
-        rows: { rate: string }[];
-      };
+        ) candidates order by as_of desc limit 1`));
       const rate = r.rows[0]?.rate;
       if (!rate) {
         throw new SubsidiaryError(
@@ -1127,14 +1117,14 @@ async function resolvePostingPeriod(
   postingDate: string,
 ): Promise<{ id: string }> {
   const periodRes = doc.postingPeriodId
-    ? ((await runner.execute(sql`
+    ? ((await runner.execute<{ id: string }>(sql`
         select id
           from accounting_periods
          where id = ${doc.postingPeriodId}
            and org_id = ${doc.orgId}
          limit 1
-      `)) as unknown as { rows: { id: string }[] })
-    : ((await runner.execute(sql`
+      `)))
+    : ((await runner.execute<{ id: string }>(sql`
         select id
           from accounting_periods
          where org_id = ${doc.orgId}
@@ -1142,7 +1132,7 @@ async function resolvePostingPeriod(
            and ends_on >= ${postingDate}
            and is_adjustment = false
          limit 1
-      `)) as unknown as { rows: { id: string }[] });
+      `)));
   const period = periodRes.rows[0];
   if (!period) {
     throw new PostingError(
@@ -1381,13 +1371,13 @@ export async function postDocument(
     effectiveDoc.partyId &&
     effectiveDoc.kind === "customer_invoice"
   ) {
-    const hold = (await db.execute(sql`
+    const hold = (await db.execute<{ hold_reason: string | null }>(sql`
       select hold_reason
         from customer_roles
        where org_id = ${effectiveDoc.orgId} and party_id = ${effectiveDoc.partyId}
          and is_active and is_on_hold
        limit 1
-    `)) as unknown as { rows: { hold_reason: string | null }[] };
+    `));
     if (hold.rows[0]) {
       throw new PostingError(
         `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
@@ -1881,7 +1871,15 @@ export async function regenerateGlImpactTx(
     throw new PostingError("a source correction request identity is required");
   }
 
-  const control = (await tx.execute(sql`
+  const control = (await tx.execute<{
+      actor_valid: boolean;
+      already_reversed: boolean;
+      reconciled: boolean;
+      applied: boolean;
+      inventory: boolean;
+      revenue: boolean;
+      downstream: boolean;
+    }>(sql`
     select
       exists (
         select 1 from users
@@ -1940,17 +1938,7 @@ export async function regenerateGlImpactTx(
            and link.link_type <> 'pays'
            and downstream.status in ('approved', 'posted')
       ) as downstream
-  `)) as unknown as {
-    rows: Array<{
-      actor_valid: boolean;
-      already_reversed: boolean;
-      reconciled: boolean;
-      applied: boolean;
-      inventory: boolean;
-      revenue: boolean;
-      downstream: boolean;
-    }>;
-  };
+  `));
   const gates = control.rows[0];
   if (!gates?.actor_valid) {
     throw new PostingError(
@@ -2006,9 +1994,9 @@ export async function regenerateGlImpactTx(
         set_config('openbooks.connector_replay_request', ${correction.requestId}, true),
         set_config('openbooks.connector_replay_actor', ${correction.actorId}, true)
     `);
-    const authorization = (await tx.execute(sql`
+    const authorization = (await tx.execute<{ allowed: boolean }>(sql`
       select connector_historical_replay_authorized(${doc.orgId}) as allowed
-    `)) as unknown as { rows: Array<{ allowed: boolean }> };
+    `));
     if (authorization.rows[0]?.allowed !== true) {
       throw new PostingError(
         "closed-period connector replay is not authorized by the active sync run and connection policy",

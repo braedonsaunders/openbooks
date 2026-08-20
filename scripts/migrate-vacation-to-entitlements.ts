@@ -91,7 +91,7 @@ interface EmployeeReplay {
  * where the carry-in is zero either way.
  */
 export async function legacyVacationBalances(orgId: string): Promise<Map<string, string>> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ employee_party_id: string; balance: string }>(sql`
     with stub_years as (
       select s.employee_party_id, max(s.tax_year) as tax_year
         from pay_stubs s
@@ -129,7 +129,7 @@ export async function legacyVacationBalances(orgId: string): Promise<Map<string,
                        and r.run_status = 'committed' and c.system_key = 'vacation_payout'), 0)
       )::text as balance
       from employees e
-  `)) as unknown as { rows: { employee_party_id: string; balance: string }[] };
+  `));
   // Collapsing rows into a Map is what HID the duplicate-row defect: two rows
   // for one employee silently became "whichever Postgres returned last".
   // Never again — an ambiguous population is a failed migration, loudly.
@@ -162,33 +162,33 @@ async function ensureVacationPlan(orgId: string): Promise<string | null> {
   // which is why the tie-out this script exists for had never executed against
   // a real tenant. Take the OLDEST component of each system key instead
   // (deterministic; a pack seeds exactly one of each).
-  const components = (await db.execute(sql`
+  const components = (await db.execute<{ accrual_id: string | null; payout_id: string | null }>(sql`
     select
       (array_agg(id order by created_at, id)
          filter (where system_key = 'vacation_accrual'))[1] as accrual_id,
       (array_agg(id order by created_at, id)
          filter (where system_key = 'vacation_payout'))[1] as payout_id
       from pay_components where org_id = ${orgId}
-  `)) as unknown as { rows: { accrual_id: string | null; payout_id: string | null }[] };
+  `));
   const accrualComponentId = components.rows[0]?.accrual_id ?? null;
   const payoutComponentId = components.rows[0]?.payout_id ?? null;
 
-  const settings = (await db.execute(sql`
+  const settings = (await db.execute<{ account_id: string | null }>(sql`
     select settings#>>'{payroll,vacationPayableAccountId}' as account_id from orgs where id = ${orgId}
-  `)) as unknown as { rows: { account_id: string | null }[] };
+  `));
 
-  const modal = (await db.execute(sql`
+  const modal = (await db.execute<{ percent: string; n: number }>(sql`
     select vacation_percent::text as percent, count(*)::int as n
       from employee_payroll_profiles
      where org_id = ${orgId} and vacation_percent is not null and vacation_percent > 0
      group by vacation_percent
      order by n desc, vacation_percent asc
      limit 1
-  `)) as unknown as { rows: { percent: string; n: number }[] };
+  `));
   const accrualValue = modal.rows[0]?.percent ?? "4";
 
   if (!apply) return null;
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into entitlement_plans (org_id, code, name, unit, direction, accrual_method,
                                    accrual_value, accrual_component_id, payout_component_id,
                                    liability_account_id, cap_behavior, is_active)
@@ -201,7 +201,7 @@ async function ensureVacationPlan(orgId: string): Promise<string | null> {
            liability_account_id = coalesce(entitlement_plans.liability_account_id, excluded.liability_account_id),
            updated_at = now()
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return inserted.rows[0]!.id;
 }
 
@@ -262,12 +262,12 @@ async function replayLedger(orgId: string, planId: string): Promise<void> {
  * only definition of a plan balance there is.
  */
 async function replayedBalances(orgId: string, planId: string): Promise<Map<string, { balance: string; movements: number }>> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ employee_party_id: string; balance: string; movements: number }>(sql`
     select employee_party_id, sum(amount)::text as balance, count(*)::int as movements
       from entitlement_ledger
      where org_id = ${orgId} and plan_id = ${planId}
      group by employee_party_id
-  `)) as unknown as { rows: { employee_party_id: string; balance: string; movements: number }[] };
+  `));
   return new Map(rows.rows.map((r) => [
     r.employee_party_id,
     { balance: roundMoney(r.balance, 4), movements: r.movements },
@@ -280,7 +280,7 @@ async function replayedBalances(orgId: string, planId: string): Promise<Map<stri
  * is applied. Same three sources, same signs.
  */
 export async function projectedBalances(orgId: string): Promise<Map<string, { balance: string; movements: number }>> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ employee_party_id: string; balance: string; movements: number }>(sql`
     select employee_party_id, sum(amount)::text as balance, count(*)::int as movements from (
       select b.employee_party_id, b.vacation_balance as amount
         from payroll_opening_balances b
@@ -302,7 +302,7 @@ export async function projectedBalances(orgId: string): Promise<Map<string, { ba
        where s.org_id = ${orgId} and c.system_key = 'vacation_payout'
     ) movements
     group by employee_party_id
-  `)) as unknown as { rows: { employee_party_id: string; balance: string; movements: number }[] };
+  `));
   return new Map(rows.rows.map((r) => [
     r.employee_party_id,
     { balance: roundMoney(r.balance, 4), movements: r.movements },
@@ -311,10 +311,10 @@ export async function projectedBalances(orgId: string): Promise<Map<string, { ba
 
 async function employeeNames(orgId: string, ids: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; display_name: string }>(sql`
     select id, display_name from parties
      where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
-  `)) as unknown as { rows: { id: string; display_name: string }[] };
+  `));
   return new Map(rows.rows.map((r) => [r.id, r.display_name]));
 }
 
@@ -408,9 +408,9 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  const installed = ((await db.execute(sql`
+  const installed = ((await db.execute<{ ok: boolean }>(sql`
     select to_regclass('public.entitlement_plans') is not null as ok
-  `)) as unknown as { rows: { ok: boolean }[] }).rows[0]!.ok;
+  `))).rows[0]!.ok;
   if (apply && !installed) {
     console.error(
       "entitlement tables are not present — apply schema/migrations/generated/0003_payroll_entitlements.sql first",
@@ -428,9 +428,9 @@ async function main(): Promise<number> {
       // only the legacy payroll tables, so a dry run against a tenant that has
       // not been migrated still proves the replay is faithful.
       const existing = planId ?? (installed
-        ? ((await db.execute(sql`
+        ? ((await db.execute<{ id: string }>(sql`
             select id from entitlement_plans where org_id = ${org.id} and code = ${VACATION_PLAN_CODE}
-          `)) as unknown as { rows: { id: string }[] }).rows[0]?.id ?? null
+          `))).rows[0]?.id ?? null
         : null);
 
       const result = await verify(org.id, existing);

@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cmp, mul, mulRate } from '@openbooks/engine/src/money.ts'
+import { cmp, mul } from '@openbooks/engine/src/money.ts'
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/item-rate-pricing.ts'
 import { convertBillRate } from './item-rate-currency'
 
@@ -52,21 +52,21 @@ export async function resolveItemRate(input: {
   // Ordinary consumables/materials use the simple item Cost + Price. Only
   // items explicitly configured with a rate profile participate in dated,
   // customer/project/equipment rate books and package-tier pricing.
-  const profile = (await db.execute(sql`
+  const profile = (await db.execute<{ base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
     select base_unit, pricing_policy, invoice_presentation from item_rate_profiles
      where org_id = ${input.orgId} and item_id = ${input.itemId} and is_active
-  `)) as unknown as { rows: { base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }[] }
+  `))
   const p = profile.rows[0]
   if (!p) return null
 
-  const context = (await db.execute(sql`
+  const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null; target_currency:string; unit_rate_book_id: string | null }>(sql`
     select p.customer_id, p.starts_on, p.subsidiary_id,
            coalesce(s.base_currency,o.base_currency) as target_currency,
            (select rate_book_id from equipment_units
              where id = ${input.equipmentUnitId ?? null} and org_id = ${input.orgId}) as unit_rate_book_id
       from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `)) as unknown as { rows: { customer_id: string | null; starts_on: string | null; subsidiary_id: string | null; target_currency:string; unit_rate_book_id: string | null }[] }
+  `))
   const ctx = context.rows[0]
   if (!ctx) return null
   const projectStart = ctx.starts_on ?? input.onDate
@@ -76,7 +76,7 @@ export async function resolveItemRate(input: {
   // filters accept a null assignment (applies broadly) or an exact match to the
   // project's dimension, so the same customer can carry different books per
   // department/subsidiary/location/class over identical date ranges.
-  const candidates = (await db.execute(sql`
+  const candidates = (await db.execute<{ rate_book_id: string;rate_version_id:string|null; priority: number }>(sql`
     with scoped as (
       select a.rate_book_id, a.rate_version_id,
              case when a.project_id is not null then 1
@@ -104,10 +104,10 @@ export async function resolveItemRate(input: {
     select rate_book_id, rate_version_id, priority
       from scoped where rate_book_id is not null
      order by priority, dimension_specificity desc, effective_from desc nulls last, rate_book_id
-  `)) as unknown as { rows: { rate_book_id: string;rate_version_id:string|null; priority: number }[] }
+  `))
 
   for (const candidate of candidates.rows) {
-    const version = (await db.execute(sql`
+    const version = (await db.execute<{ id: string;currency:string }>(sql`
       select v.id,b.currency
         from item_rate_versions v
         join item_rate_books b on b.id = v.rate_book_id and b.is_active
@@ -116,18 +116,18 @@ export async function resolveItemRate(input: {
            (${candidate.rate_version_id}::uuid is null and v.effective_from <= ${input.onDate} and (v.effective_to is null or v.effective_to >= ${input.onDate})))
          and exists (select 1 from item_rate_lines l where l.version_id = v.id and l.item_id = ${input.itemId})
        order by v.effective_from desc limit 1
-    `)) as unknown as { rows: { id: string;currency:string }[] }
+    `))
     const rateVersionId = version.rows[0]?.id
     if (!rateVersionId) continue
     const sourceCurrency=version.rows[0]!.currency
     const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
     if(!fxRate)continue
-    const lines = (await db.execute(sql`
+    const lines = (await db.execute<any>(sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
        order by base_quantity, sort_order
-    `)) as unknown as { rows: any[] }
+    `))
     const tiers: RateTier[] = lines.rows.map((r) => ({
       id: r.id, unitCode: r.unit_code, unitName: r.unit_name,
       baseQuantity: String(r.base_quantity), costRate: r.cost_rate == null ? null : convertBillRate(String(r.cost_rate),fxRate),
@@ -191,7 +191,16 @@ export async function snapshotTimeBillRates(
   const resolved = new Map<string, string>()
   if (timeEntryIds.length === 0) return resolved
   const idArr = `{${timeEntryIds.join(',')}}`
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      id: string
+      item_id: string
+      project_id: string | null
+      time_type_id: string | null
+      worked_on: string
+      bill_multiplier: string
+      default_rate: string | null
+      target_currency: string
+    }>(sql`
     select te.id, te.item_id, te.project_id, te.time_type_id, te.worked_on,
            coalesce(tt.bill_multiplier, '1') as bill_multiplier,
            i.default_rate, coalesce(s.base_currency,o.base_currency) as target_currency
@@ -202,20 +211,9 @@ export async function snapshotTimeBillRates(
       left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=te.org_id
       join orgs o on o.id=te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
-       and te.bill_rate is null and te.is_billable and te.item_id is not null`)) as unknown as {
-    rows: {
-      id: string
-      item_id: string
-      project_id: string | null
-      time_type_id: string | null
-      worked_on: string
-      bill_multiplier: string
-      default_rate: string | null
-      target_currency: string
-    }[]
-  }
+       and te.bill_rate is null and te.is_billable and te.item_id is not null`))
   for (const te of rows.rows) {
-    const line = (await db.execute(sql`
+    const line = (await db.execute<{ rate_line_id:string; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null; rate_version_id:string; rate_book_id:string; source_currency:string }>(sql`
       with candidates as (
         select a.rate_book_id,a.rate_version_id, 1 as priority, a.effective_from
           from item_rate_book_assignments a
@@ -247,9 +245,7 @@ export async function snapshotTimeBillRates(
         join item_rate_books b on b.id=c.rate_book_id and b.is_active
        order by c.priority, c.effective_from desc nulls last, v.effective_from desc,
                 case when l.unit_code = 'hour' then 0 else 1 end, l.base_quantity
-       limit 1`)) as unknown as {
-      rows: { rate_line_id:string; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null; rate_version_id:string; rate_book_id:string; source_currency:string }[]
-    }
+       limit 1`))
     const hit = line.rows[0]
     const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined
     let sourceRate: string | null = null
@@ -260,9 +256,10 @@ export async function snapshotTimeBillRates(
         sourceRate = null
       }
     }
-    else if (hit?.bill_rate != null) sourceRate = mulRate(String(hit.bill_rate), String(te.bill_multiplier))
+    // Bill rate x time-type multiplier: both numeric(19,4), not an FX rate.
+    else if (hit?.bill_rate != null) sourceRate = mul(String(hit.bill_rate), String(te.bill_multiplier))
     const sourceCurrency = hit?.source_currency ?? te.target_currency
-    if (sourceRate == null && te.default_rate != null) sourceRate = mulRate(String(te.default_rate), String(te.bill_multiplier))
+    if (sourceRate == null && te.default_rate != null) sourceRate = mul(String(te.default_rate), String(te.bill_multiplier))
     if (sourceRate == null) continue
     const fxRate = await billRateFx(orgId,sourceCurrency,te.target_currency,te.worked_on)
     if (!fxRate) throw new Error(`No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`)
@@ -281,11 +278,11 @@ export async function snapshotTimeBillRates(
 
 async function billRateFx(orgId:string,from:string,to:string,onDate:string):Promise<string|null>{
   if(from===to)return '1'
-  const result=(await db.execute(sql`
+  const result=(await db.execute<{rate:string}>(sql`
     select rate::text from (
       select rate,as_of,0 priority from fx_rates where org_id=${orgId} and from_currency=${from} and to_currency=${to} and rate_type='spot' and as_of<=${onDate}
       union all
       select (1/rate)::numeric(19,10),as_of,1 from fx_rates where org_id=${orgId} and from_currency=${to} and to_currency=${from} and rate_type='spot' and as_of<=${onDate}
-    ) x order by as_of desc,priority limit 1`)) as unknown as {rows:{rate:string}[]}
+    ) x order by as_of desc,priority limit 1`))
   return result.rows[0]?.rate??null
 }

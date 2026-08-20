@@ -39,19 +39,20 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const rows = await listConnections(orgId);
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select id, connection_id as "connectionId", source, kind, status,
            started_at as "startedAt", finished_at as "finishedAt",
            synced_through as "syncedThrough", stats, progress, error_message as "errorMessage", triggered_by as "triggeredBy"
-      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`)) as unknown as {
-    rows: Record<string, unknown>[];
-  };
+      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`));
   // Configured currencies power any `optionsSource: 'currencies'` config field.
-  const currencies = (await db.execute(sql`
-    select code, name from currencies order by code`)) as unknown as {
-    rows: { code: string; name: string }[];
-  };
-  const qbdStatuses = (await db.execute(sql`
+  const currencies = (await db.execute<{ code: string; name: string }>(sql`
+    select code, name from currencies order by code`));
+  const qbdStatuses = (await db.execute<{
+      connectionId: string;
+      heartbeat: Date | null;
+      captureStatus: string | null;
+      captureProgress: Record<string, number> | null;
+    }>(sql`
     select c.id as "connectionId",
            (select max(s.last_seen_at) from qbd_sessions s where s.connection_id = c.id) as heartbeat,
            capture.status as "captureStatus", capture.progress as "captureProgress"
@@ -60,14 +61,7 @@ export async function GET() {
         select status, progress from qbd_captures qc
          where qc.connection_id = c.id order by qc.created_at desc limit 1
       ) capture on true
-     where c.org_id = ${orgId} and c.source = 'qbd'`)) as unknown as {
-    rows: Array<{
-      connectionId: string;
-      heartbeat: Date | null;
-      captureStatus: string | null;
-      captureProgress: Record<string, number> | null;
-    }>;
-  };
+     where c.org_id = ${orgId} and c.source = 'qbd'`));
   const qbdByConnection = new Map(
     qbdStatuses.rows.map((row) => [row.connectionId, row]),
   );
@@ -85,11 +79,9 @@ export async function GET() {
       health.attachments = run;
     runHealth.set(connectionId, health);
   }
-  const resolvedDeletions = (await db.execute(sql`
+  const resolvedDeletions = (await db.execute<{ connectionId: string; sourceRef: string }>(sql`
     select connection_id as "connectionId", source_ref as "sourceRef"
-      from source_deletion_resolutions where org_id = ${orgId}`)) as unknown as {
-    rows: { connectionId: string; sourceRef: string }[];
-  };
+      from source_deletion_resolutions where org_id = ${orgId}`));
   const resolvedKeys = new Set(
     resolvedDeletions.rows.map((row) => `${row.connectionId}:${row.sourceRef}`),
   );

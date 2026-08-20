@@ -29,7 +29,7 @@ export async function PUT(req: Request) {
       select 1 from list_views
        where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
          and (scope = 'org' or owner_id = ${user.id})
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!owned.rows[0]) return NextResponse.json({ error: "list view not found" }, { status: 404 });
   }
   await db.execute(sql`

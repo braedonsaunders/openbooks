@@ -47,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const status = ACTION_STATUS[action as keyof typeof ACTION_STATUS];
   const updated = await db.transaction(async (tx) => {
-    const changed = (await tx.execute(sql`
+    const changed = (await tx.execute<{ id: string }>(sql`
       update ai_work_items set
         status = ${status},
         resolved_at = case when ${status} = 'resolved' then now() else null end,
@@ -58,7 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         updated_at = now(), updated_by = ${authz.user.id}
        where id = ${id} and org_id = ${authz.user.orgId} and status = ${access.status}
        returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (changed.rows.length === 0) return false;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

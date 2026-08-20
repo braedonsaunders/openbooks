@@ -68,12 +68,12 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
            where org_id = ${orgId} and connection_id = ${connectionId}
              and kind = 'attachments' and status = 'running'
         `);
-        const started = (await db.execute(sql`
+        const started = (await db.execute<{ id: string }>(sql`
           insert into sync_runs (org_id, connection_id, source, kind, status, triggered_by, progress)
           values (${orgId}, ${connectionId}, ${conn.source}, 'attachments', 'running', ${triggeredBy ?? "worker"},
                   ${JSON.stringify({ phase: "attachments" })}::jsonb)
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const runId = started.rows[0].id;
         try {
           const summary = await importNetSuiteAttachments({
@@ -114,7 +114,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
            where org_id = ${orgId} and connection_id = ${connectionId}
              and kind = 'project_financials' and status = 'running'
         `);
-        const started = (await db.execute(sql`
+        const started = (await db.execute<{ id: string }>(sql`
           insert into sync_runs
             (org_id, connection_id, source, kind, status, triggered_by, progress)
           values
@@ -126,7 +126,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                  "Reconciling complete source time-entry billing state…",
              })}::jsonb)
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const runId = started.rows[0]!.id;
         try {
           const summary = await syncProjectFinancialInputs(source, {
@@ -166,7 +166,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
            where org_id = ${orgId} and connection_id = ${connectionId}
              and kind = 'full_preflight' and status = 'running'
         `);
-        const started = (await db.execute(sql`
+        const started = (await db.execute<{ id: string }>(sql`
           insert into sync_runs
             (org_id, connection_id, source, kind, status, triggered_by, progress)
           values
@@ -177,7 +177,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                message: "Comparing the complete source and target populations…",
              })}::jsonb)
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const runId = started.rows[0]!.id;
         try {
           const plan = await preflightFullSync(source, {

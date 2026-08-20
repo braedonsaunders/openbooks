@@ -130,10 +130,8 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
   // The shared fixture opens a single month. Recognition schedules, period-end
   // revaluation, and fiscal-year provision arithmetic all need a full year, so
   // open the remaining eleven months of 2026 on the same calendar.
-  const calendar = (await db.execute(sql`
-    select id from fiscal_calendars where org_id = ${scratch.orgId} limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const calendar = (await db.execute<{ id: string }>(sql`
+    select id from fiscal_calendars where org_id = ${scratch.orgId} limit 1`));
   const fiscalCalendarId = calendar.rows[0]!.id;
   for (let month = 1; month <= 12; month++) {
     if (month === 7) continue; // already created by the shared fixture

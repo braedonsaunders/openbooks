@@ -281,6 +281,12 @@ export interface RecordTypeMeta {
   listColumns: ListColumnMeta[]
   listFilters: ListFilterMeta[]
   /**
+   * Sort applied when neither the URL nor a saved view names one. Defaults to
+   * the first sortable column, ascending — right for name-ordered directories,
+   * wrong for dated ledgers where the newest record is the one you want.
+   */
+  defaultSort?: { sortKey: string; dir: 'asc' | 'desc' }
+  /**
    * Whether this record type has a customizable transaction FORM (header/line
    * layout). Defaults to true. Set false for record types whose list views are
    * customizable but whose editor is a bespoke flyout (e.g. payments), so the

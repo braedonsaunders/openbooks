@@ -22,7 +22,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export async function GET() {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.document_id, d.document_number, d.status as document_status, d.currency,
            r.pay_schedule_id, s.name as schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
@@ -32,7 +32,7 @@ export async function GET() {
       join documents d on d.id = r.document_id
       left join pay_schedules s on s.id = r.pay_schedule_id
      where r.org_id = ${gate.user.orgId}
-     order by r.pay_date desc, d.document_number desc`)) as unknown as { rows: Record<string, unknown>[] }
+     order by r.pay_date desc, d.document_number desc`))
   return NextResponse.json({ runs: runs.rows })
 }
 

@@ -21,15 +21,15 @@ export async function GET() {
   const orgId = gate.user.orgId;
   const [runs, years, rates, framework] = await Promise.all([
     listProvisionRuns(orgId),
-    db.execute(sql`
+    db.execute<{ fiscal_year: number }>(sql`
       select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc
-    `) as unknown as Promise<{ rows: { fiscal_year: number }[] }>,
+    `),
     db.execute(sql`
       select jurisdiction, rate_percent as "ratePercent", effective_from::text as "effectiveFrom",
              effective_to::text as "effectiveTo", subsidiary_id as "subsidiaryId"
         from income_tax_rates where org_id = ${orgId} and is_active
        order by effective_from desc
-    `) as unknown as Promise<{ rows: unknown[] }>,
+    `),
     orgTaxFramework(orgId),
   ]);
   return NextResponse.json({

@@ -87,7 +87,7 @@ export async function GET(req: Request) {
     // installed pack. Never a literal — the employer of record decides which
     // statutory engine runs, so it decides the default too. Null when nothing
     // answers; the operator then chooses explicitly.
-    const defaultCountryRes = (await db.execute(sql`
+    const defaultCountryRes = (await db.execute<{ country: string | null }>(sql`
       select coalesce(emp_sub.country, root_sub.country) as country
         from parties p
         left join subsidiaries emp_sub
@@ -96,12 +96,12 @@ export async function GET(req: Request) {
           on root_sub.org_id = p.org_id and root_sub.parent_id is null and root_sub.is_active
        where p.org_id = ${gate.user.orgId} and p.id = ${employee}
        order by root_sub.created_at limit 1
-    `)) as unknown as { rows: { country: string | null }[] }
+    `))
     const subsidiaryCountry = defaultCountryRes.rows[0]?.country ?? null
-    const installedRes = (await db.execute(sql`
+    const installedRes = (await db.execute<{ countries: unknown }>(sql`
       select coalesce(settings#>'{payroll,countries}', '[]'::jsonb) as countries
         from orgs where id = ${gate.user.orgId}
-    `)) as unknown as { rows: { countries: unknown }[] }
+    `))
     const installed = Array.isArray(installedRes.rows[0]?.countries)
       ? (installedRes.rows[0]!.countries as unknown[]).map(String).filter((c) => c in PAYROLL_COUNTRY_PACKS)
       : []
@@ -130,7 +130,7 @@ export async function GET(req: Request) {
       db.execute(sql`
         select id, name, frequency from pay_schedules
          where org_id = ${gate.user.orgId} and is_active order by name`),
-    ])) as unknown as [{ rows: unknown[] }, { rows: unknown[] }]
+    ]))
     return NextResponse.json({
       profile: profileRes.rows[0] ?? null,
       schedules: schedulesRes.rows,
@@ -139,7 +139,7 @@ export async function GET(req: Request) {
       defaultCountry,
     })
   }
-  const profiles = (await db.execute(sql`
+  const profiles = (await db.execute<Record<string, unknown>>(sql`
     select prof.id, prof.employee_party_id, p.display_name as employee_name,
            prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
            prof.labour_jurisdiction, prof.pay_basis,
@@ -157,7 +157,7 @@ export async function GET(req: Request) {
       left join pay_schedules s on s.id = prof.pay_schedule_id
       left join payroll_filing_accounts fa on fa.id = prof.filing_account_id
      where prof.org_id = ${gate.user.orgId}
-     order by p.display_name`)) as unknown as { rows: Record<string, unknown>[] }
+     order by p.display_name`))
   return NextResponse.json({
     profiles: profiles.rows,
     filingAccounts: await listFilingAccounts(gate.user.orgId),
@@ -289,7 +289,7 @@ export async function POST(req: Request) {
        where p.org_id = ${orgId} and p.id = ${body.employeePartyId} and p.is_active`),
     db.execute(sql`
       select 1 from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active`),
-  ])) as unknown as { rows: unknown[] }[]
+  ]))
   if (refs.some((result) => result.rows.length !== 1)) {
     return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
   }
@@ -299,7 +299,7 @@ export async function POST(req: Request) {
     const account = (await db.execute(sql`
       select 1 from payroll_filing_accounts
        where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
-    )) as unknown as { rows: unknown[] }
+    ))
     if (account.rows.length !== 1) {
       return NextResponse.json({ error: 'filing account is not available for this country' }, { status: 422 })
     }

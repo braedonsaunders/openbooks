@@ -10,10 +10,8 @@ import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`)) as unknown as {
-    rows: { bal: string }[];
-  };
+  const r = (await db.execute<{ bal: string }>(sql`
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
   return toUnits(r.rows[0]!.bal);
 }
 

@@ -13,16 +13,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
 
-  const run = (await db.execute(sql`
+  const run = (await db.execute<Record<string, unknown>>(sql`
     select r.*, a.number as bank_number, a.name as bank_name
       from payment_runs r
       left join accounts a on a.id = r.bank_account_id
      where r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!run.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const [instructions, readiness] = await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select i.id, i.amount, i.currency, i.status, p.display_name as payee,
              d.id as payment_document_id, d.document_number, d.status as payment_status
         from payment_instructions i
@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         left join documents d on d.id = i.payment_document_id
        where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
        order by p.display_name
-    `) as unknown as Promise<{ rows: Record<string, unknown>[] }>,
+    `),
     paymentRunReadiness(id, gate.user.orgId),
   ])
 

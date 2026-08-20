@@ -59,7 +59,7 @@ function grantAppliesTo(orgId: string, viewer: FileViewer): SQL {
   )`
 }
 
-export interface FolderNode {
+export type FolderNode = {
   id: string
   name: string
   parentId: string | null
@@ -71,9 +71,9 @@ export interface FolderNode {
   recordId: string | null
   childCount: number
   fileCount: number
-}
+};
 
-export interface FileMeta {
+export type FileMeta = {
   id: string
   folderId: string
   name: string
@@ -89,7 +89,7 @@ export interface FileMeta {
   updatedAt: string
   updatedBy: string | null
   folderName: string | null
-}
+};
 
 export interface FileDetail extends FileMeta {
   versions: FileVersion[]
@@ -148,7 +148,7 @@ async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<Read
   if (viewer.isAdmin) return { hiddenFolderIds: [], grantedFileIds: [] }
 
   // Private subtrees owned by others (hidden from the org-role baseline).
-  const hiddenRes = (await db.execute(sql`
+  const hiddenRes = (await db.execute<{ id: string }>(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -158,13 +158,13 @@ async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<Read
        where f.org_id = ${orgId}
     )
     select id from hidden_folders
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   const hidden = new Set(hiddenRes.rows.map((x) => x.id))
 
   // Folders granted to the caller (or a role they hold) re-open their whole
   // subtree; subtract them from the hidden set.
   if (hidden.size > 0) {
-    const grantedRes = (await db.execute(sql`
+    const grantedRes = (await db.execute<{ id: string }>(sql`
       with recursive granted as (
         select g.resource_id as id
           from resource_grants g
@@ -175,15 +175,15 @@ async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<Read
          where f.org_id = ${orgId}
       )
       select id from granted
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     for (const row of grantedRes.rows) hidden.delete(row.id)
   }
 
   // Files shared directly with the caller.
-  const fileGrants = (await db.execute(sql`
+  const fileGrants = (await db.execute<{ id: string }>(sql`
     select g.resource_id as id from resource_grants g
      where g.org_id = ${orgId} and g.resource_type = 'file' and ${grantAppliesTo(orgId, viewer)}
-  `)) as unknown as { rows: { id: string }[] }
+  `))
 
   return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.rows.map((x) => x.id) }
 }
@@ -233,7 +233,7 @@ export async function folderAccessLevel(
   folderId: string,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ ownsPrivate: boolean | null; hiddenByPrivate: boolean | null; grantRank: number }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -246,9 +246,7 @@ export async function folderAccessLevel(
       bool_or(a.is_private and a.owner_id is distinct from ${viewer.userId}) as "hiddenByPrivate",
       ${grantRankOverFolders(orgId, viewer, sql`select id from ancestors`)} as "grantRank"
       from ancestors a
-  `)) as unknown as {
-    rows: { ownsPrivate: boolean | null; hiddenByPrivate: boolean | null; grantRank: number }[]
-  }
+  `))
   const row = r.rows[0]
   if (!row) return 'none' // folder not found / not in org
   const grantLevel = ACCESS_BY_RANK[row.grantRank] ?? 'none'
@@ -266,14 +264,14 @@ export async function fileAccessLevel(
   fileId: string,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ folderId: string; grantRank: number }>(sql`
     select fi.folder_id as "folderId",
       (select coalesce(max(case g.access when 'manager' then 3 when 'editor' then 2 when 'viewer' then 1 else 0 end), 0)
          from resource_grants g
         where g.org_id = ${orgId} and g.resource_type = 'file' and g.resource_id = fi.id
           and ${grantAppliesTo(orgId, viewer)}) as "grantRank"
       from files fi where fi.id = ${fileId} and fi.org_id = ${orgId}
-  `)) as unknown as { rows: { folderId: string; grantRank: number }[] }
+  `))
   const row = r.rows[0]
   if (!row) return 'none'
   const fileGrant = ACCESS_BY_RANK[row.grantRank] ?? 'none'
@@ -286,13 +284,13 @@ export async function fileAccessLevel(
 export type ResourceType = 'folder' | 'file'
 export type PrincipalType = 'user' | 'role'
 
-export interface GrantRow {
+export type GrantRow = {
   id: string
   principalType: PrincipalType
   principalId: string
   principalName: string
   access: AccessLevel
-}
+};
 
 const ACCESS_VALUES: AccessLevel[] = ['viewer', 'editor', 'manager']
 export function isAccessLevel(v: unknown): v is AccessLevel {
@@ -305,7 +303,7 @@ export async function listGrants(
   resourceType: ResourceType,
   resourceId: string,
 ): Promise<GrantRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<GrantRow>(sql`
     select g.id, g.principal_type as "principalType", g.principal_id as "principalId", g.access,
            coalesce(u.name, u.email, ar.name, 'Unknown') as "principalName"
       from resource_grants g
@@ -313,7 +311,7 @@ export async function listGrants(
       left join app_roles ar on g.principal_type = 'role' and ar.id = g.principal_id and ar.org_id = ${orgId}
      where g.org_id = ${orgId} and g.resource_type = ${resourceType} and g.resource_id = ${resourceId}
      order by g.principal_type, "principalName"
-  `)) as unknown as { rows: GrantRow[] }
+  `))
   return r.rows
 }
 
@@ -339,9 +337,9 @@ export async function setGrant(input: {
 
 /** Remove a grant by id. Returns false if it did not exist in this org. */
 export async function removeGrant(orgId: string, grantId: string): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     delete from resource_grants where id = ${grantId} and org_id = ${orgId} returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -373,16 +371,16 @@ function deriveFileType(contentType: string): string {
  * first use. Returns the folder id.
  */
 export async function ensureAttachmentsRoot(orgId: string): Promise<string> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string }>(sql`
     select id from folders
      where org_id = ${orgId} and system_kind = 'attachments'
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (existing.rows.length > 0) return existing.rows[0].id
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
     values (${orgId}, 'Attachments', true, 'attachments', now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return ins.rows[0].id
 }
 
@@ -390,17 +388,17 @@ export async function ensureAttachmentsRoot(orgId: string): Promise<string> {
 export async function ensureApCaptureRoot(orgId: string, createdBy: string): Promise<string> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`ap-capture:${orgId}`}))`)
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (existing.rows[0]) return existing.rows[0].id
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, name, is_system, system_kind, is_private, owner_id,
                            created_by, updated_by, created_at, updated_at)
       values (${orgId}, 'AP Capture', true, 'ap_capture', false, null,
               ${createdBy}, ${createdBy}, now(), now())
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     return inserted.rows[0].id
   })
 }
@@ -422,17 +420,17 @@ async function ensureGroupFolder(
 ): Promise<string> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`)
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders
        where org_id = ${orgId} and parent_folder_id = ${rootId}
          and record_id is null and name = ${label}
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (existing.rows[0]) return existing.rows[0].id
-    const ins = (await tx.execute(sql`
+    const ins = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
       values (${orgId}, ${rootId}, ${label}, true, ${recordTable}, now(), now())
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     return ins.rows[0].id
   })
 }
@@ -441,9 +439,9 @@ async function ensureGroupFolder(
  *  else the titleized table name. Falls back to "Documents" for orphaned rows. */
 async function groupLabelFor(orgId: string, recordTable: string, recordId: string): Promise<string> {
   if (recordTable !== 'documents') return titleizeKind(recordTable)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ kind: string | null }>(sql`
     select kind from documents where id = ${recordId} and org_id = ${orgId}
-  `)) as unknown as { rows: { kind: string | null }[] }
+  `))
   const kind = r.rows[0]?.kind
   return kind ? titleizeKind(kind) : 'Documents'
 }
@@ -458,21 +456,21 @@ export async function ensureRecordFolder(
   recordTable: string,
   recordId: string,
 ): Promise<string> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string }>(sql`
     select id from folders
      where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
        and record_id is not null
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (existing.rows.length > 0) return existing.rows[0].id
   const rootId = await ensureAttachmentsRoot(orgId)
   const label = await groupLabelFor(orgId, recordTable, recordId)
   const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label)
   const name = `${recordTable} / ${recordId.slice(0, 8)}`
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
     values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return ins.rows[0].id
 }
 
@@ -494,7 +492,7 @@ export async function ensureRecordFolder(
  */
 export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<FolderNode[]> {
   const scope = await resolveReadScope(orgId, viewer)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<FolderNode>(sql`
     select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
@@ -518,7 +516,7 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
        and f.record_id is null
        and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
      order by f.is_system desc, f.name asc
-  `)) as unknown as { rows: FolderNode[] }
+  `))
   return r.rows
 }
 
@@ -531,7 +529,7 @@ export async function getFolderPath(
   orgId: string,
   folderId: string,
 ): Promise<{ id: string; name: string; systemKind: string | null }[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; name: string; systemKind: string | null }>(sql`
     with recursive chain as (
       select id, name, system_kind, parent_folder_id, 0 as depth
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -540,7 +538,7 @@ export async function getFolderPath(
         from folders f join chain c on f.id = c.parent_folder_id and f.org_id = ${orgId}
     )
     select id, name, system_kind as "systemKind" from chain order by depth desc
-  `)) as unknown as { rows: { id: string; name: string; systemKind: string | null }[] }
+  `))
   return r.rows
 }
 
@@ -548,7 +546,7 @@ export async function getFolder(
   orgId: string,
   id: string,
 ): Promise<(FolderNode & { ownerId: string | null }) | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<any>(sql`
     select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
@@ -557,7 +555,7 @@ export async function getFolder(
            (select count(*) from files fi where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
       from folders f
      where f.id = ${id} and f.org_id = ${orgId}
-  `)) as unknown as { rows: any[] }
+  `))
   return r.rows[0] ?? null
 }
 
@@ -569,14 +567,14 @@ export async function createFolder(input: {
   ownerId?: string
   createdBy: string
 }): Promise<string> {
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, parent_folder_id, name, is_private, owner_id,
                          created_by, updated_by, created_at, updated_at)
     values (${input.orgId}, ${input.parentId}, ${input.name},
             ${input.isPrivate ?? false}, ${input.ownerId ?? null},
             ${input.createdBy}, ${input.createdBy}, now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return ins.rows[0].id
 }
 
@@ -586,11 +584,11 @@ export async function renameFolder(
   name: string,
   updatedBy: string,
 ): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update folders set name = ${name}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and not is_system
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -604,11 +602,11 @@ export async function moveFolder(
   if (parentId === id) return false
   if (parentId) {
     // The new parent must exist inside this org (blocks cross-org reparenting).
-    const parent = (await db.execute(sql`
+    const parent = (await db.execute<any>(sql`
       select 1 from folders where id = ${parentId} and org_id = ${orgId}
-    `)) as unknown as { rows: any[] }
+    `))
     if (parent.rows.length === 0) return false
-    const cycle = (await db.execute(sql`
+    const cycle = (await db.execute<any>(sql`
       with recursive ancestors as (
         select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
         union
@@ -617,14 +615,14 @@ export async function moveFolder(
         where f.parent_folder_id is not null
       )
       select 1 from ancestors where parent_folder_id = ${id} limit 1
-    `)) as unknown as { rows: any[] }
+    `))
     if (cycle.rows.length > 0) return false
   }
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update folders set parent_folder_id = ${parentId}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId} and not is_system
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -646,11 +644,11 @@ export async function updateFolder(
     if (patch.isPrivate) setParts.push(sql`owner_id = coalesce(owner_id, ${updatedBy})`)
   }
   if (patch.isInactive !== undefined) setParts.push(sql`is_inactive = ${patch.isInactive}`)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update folders set ${sql.join(setParts, sql`, `)}
      where id = ${id} and org_id = ${orgId} and not is_system
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -706,7 +704,7 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
   if (folder.isSystem) return { ok: false, reason: 'system' }
 
   // Check for attached files in this folder (or descendants)
-  const attached = (await db.execute(sql`
+  const attached = (await db.execute<any>(sql`
     with recursive descendants as (
       select id from folders where id = ${id} and org_id = ${orgId}
       union
@@ -718,7 +716,7 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
       join descendants d on d.id = fi.folder_id
      where fa.org_id = ${orgId}
      limit 1
-  `)) as unknown as { rows: any[] }
+  `))
   if (attached.rows.length > 0) return { ok: false, reason: 'has attached files' }
 
   // Delete files (with their versions, blobs, and attachment links) and the
@@ -732,11 +730,11 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
         select f.id from folders f join descendants d on f.parent_folder_id = d.id and f.org_id = ${orgId}
       )
       select id from descendants`
-    const s3Versions = (await tx.execute(sql`
+    const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
       join files fi on fi.id = fv.file_id
       where fi.folder_id in (${descendants}) and fv.storage_kind = 's3'
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     await tx.execute(sql`
       delete from file_blobs where version_id in (
         select fv.id from file_versions fv
@@ -933,17 +931,17 @@ export async function listFolderContents(
     : sql`f.parent_folder_id is null`
 
   // Folder count first — it anchors the combined pagination math.
-  const folderCount = (await db.execute(sql`
+  const folderCount = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n
       from folders f
      where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
        and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
-  `)) as unknown as { rows: { n: number }[] }
+  `))
   const folderTotal = folderCount.rows[0]?.n ?? 0
 
   const folders =
     offset < folderTotal
-      ? ((await db.execute(sql`
+      ? ((await db.execute<FolderNode>(sql`
           select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
                  f.system_kind as "systemKind", f.is_private as "isPrivate",
                  f.is_inactive as "isInactive", f.record_table as "recordTable",
@@ -957,7 +955,7 @@ export async function listFolderContents(
              and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
            order by f.is_system desc, f.name asc
            limit ${limit} offset ${offset}
-        `)) as unknown as { rows: FolderNode[] }).rows
+        `))).rows
       : []
 
   // Files live in a real folder only; the virtual root shows folders alone.
@@ -982,7 +980,7 @@ export async function listFolderContents(
 
 export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
   const scope = await resolveReadScope(orgId, viewer)
-  const meta = (await db.execute(sql`
+  const meta = (await db.execute<any>(sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
            fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
@@ -993,7 +991,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
       left join folders fo on fo.id = fi.folder_id
      where fi.id = ${id} and fi.org_id = ${orgId}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
-  `)) as unknown as { rows: any[] }
+  `))
   if (meta.rows.length === 0) return null
   const f = meta.rows[0]
 
@@ -1037,7 +1035,7 @@ export async function createFile(input: {
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
   return db.transaction(async (tx) => {
-    const fileIns = (await tx.execute(sql`
+    const fileIns = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
                          size_bytes, storage_kind, content_hash, created_by, updated_by,
                          created_at, updated_at)
@@ -1045,15 +1043,15 @@ export async function createFile(input: {
               ${input.contentType}, ${input.bytes.length}, ${kind}, ${contentHash}, ${input.createdBy}, ${input.createdBy},
               now(), now())
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     const fileId = fileIns.rows[0].id
 
-    const verIns = (await tx.execute(sql`
+    const verIns = (await tx.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                   content_hash, created_by, created_at)
       values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash}, ${input.createdBy}, now())
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     const versionId = verIns.rows[0].id
 
     await tx.execute(sql`
@@ -1068,7 +1066,7 @@ export async function createFile(input: {
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes})
       `)
 
-    const meta = (await tx.execute(sql`
+    const meta = (await tx.execute<FileMeta>(sql`
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
              fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
              fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
@@ -1077,7 +1075,7 @@ export async function createFile(input: {
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
              fo.name as "folderName"
         from files fi left join folders fo on fo.id = fi.folder_id where fi.id = ${fileId}
-    `)) as unknown as { rows: FileMeta[] }
+    `))
     return meta.rows[0]
   })
 }
@@ -1096,25 +1094,25 @@ export async function replaceFile(input: {
 }): Promise<boolean> {
   return db.transaction(async (tx) => {
     const contentHash = createHash('sha256').update(input.bytes).digest('hex')
-    const current = (await tx.execute(sql`
+    const current = (await tx.execute<{ vid: string | null; max_ver: number | null }>(sql`
       select current_version_id as vid, (
         select max(version_number) from file_versions where file_id = ${input.fileId}
       ) as max_ver
         from files where id = ${input.fileId} and org_id = ${input.orgId}
           and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
         for update
-    `)) as unknown as { rows: { vid: string | null; max_ver: number | null }[] }
+    `))
     if (current.rows.length === 0) return false
     const nextVer = (current.rows[0].max_ver ?? 0) + 1
     const kind = activeStorageKind()
 
-    const verIns = (await tx.execute(sql`
+    const verIns = (await tx.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                   content_hash, created_by, created_at)
       values (${input.fileId}, ${nextVer}, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash},
               ${input.updatedBy}, now())
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     const versionId = verIns.rows[0].id
 
     if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
@@ -1143,13 +1141,13 @@ export async function renameFile(
   name: string,
   updatedBy: string,
 ): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update files set name = ${name}, extension = ${deriveExtension(name)},
                      updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -1160,13 +1158,13 @@ export async function moveFile(
   updatedBy: string,
 ): Promise<boolean> {
   // Destination folder must exist inside this org (blocks cross-org moves).
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
        and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -1175,22 +1173,22 @@ export async function moveFile(
  * evidence files are protected. Attachment links are kept (restore re-shows it).
  */
 export async function deleteFile(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update files set is_inactive = true, updated_at = now()
      where id = ${id} and org_id = ${orgId} and not is_inactive
        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
 /** Restore a trashed file. */
 export async function restoreFile(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     update files set is_inactive = false, updated_at = now()
      where id = ${id} and org_id = ${orgId} and is_inactive
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -1200,15 +1198,15 @@ export async function restoreFile(orgId: string, id: string): Promise<boolean> {
  */
 export async function purgeFile(orgId: string, id: string): Promise<boolean> {
   const deleted = await db.transaction(async (tx) => {
-    const owned = (await tx.execute(sql`
+    const owned = (await tx.execute<{ id: string }>(sql`
       select id from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
       for update
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (owned.rows.length === 0) return null
-    const s3Versions = (await tx.execute(sql`
+    const s3Versions = (await tx.execute<{ id: string }>(sql`
       select id from file_versions where file_id = ${id} and storage_kind = 's3'
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     await tx.execute(sql`
       delete from file_blobs where version_id in (select id from file_versions where file_id = ${id})
     `)
@@ -1232,7 +1230,7 @@ export async function getFileBlob(
   versionId?: string,
 ): Promise<{ filename: string; contentType: string; bytes: Buffer; versionId: string } | null> {
   const scope = await resolveReadScope(orgId, viewer)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ name: string; contentType: string; versionId: string; storageKind: string; bytes: Buffer | null }>(sql`
     select fi.name, fv.content_type as "contentType", fv.id as "versionId",
            fv.storage_kind as "storageKind", fb.bytes
       from files fi
@@ -1242,9 +1240,7 @@ export async function getFileBlob(
       left join file_blobs fb on fb.version_id = fv.id
      where fi.id = ${id} and fi.org_id = ${orgId}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
-  `)) as unknown as {
-    rows: { name: string; contentType: string; versionId: string; storageKind: string; bytes: Buffer | null }[]
-  }
+  `))
   if (r.rows.length === 0) return null
   const row = r.rows[0]
   const bytes = row.storageKind === 's3' ? await getS3Blob(row.versionId) : row.bytes
@@ -1256,7 +1252,7 @@ export async function getFileBlob(
 
 // --- file attachments (links to records) ------------------------------------
 
-export interface AttachedFile {
+export type AttachedFile = {
   id: string
   name: string
   fileType: string
@@ -1265,7 +1261,7 @@ export interface AttachedFile {
   createdAt: string
   createdBy: string | null
   attachmentId: string
-}
+};
 
 /** List files attached to a record (metadata only, no bytes). */
 export async function listAttachments(
@@ -1273,7 +1269,7 @@ export async function listAttachments(
   targetTable: string,
   targetId: string,
 ): Promise<AttachedFile[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<AttachedFile>(sql`
     select fi.id, fi.name, fi.file_type as "fileType", fi.content_type as "contentType",
            fi.size_bytes as "sizeBytes", fa.created_at as "createdAt",
            fa.created_by as "createdBy", fa.id as "attachmentId"
@@ -1281,7 +1277,7 @@ export async function listAttachments(
       join files fi on fi.id = fa.file_id
      where fa.org_id = ${orgId} and fa.target_table = ${targetTable} and fa.target_id = ${targetId}
      order by fa.created_at desc
-  `)) as unknown as { rows: AttachedFile[] }
+  `))
   return r.rows
 }
 
@@ -1311,12 +1307,12 @@ export async function uploadAndAttach(input: {
     bytes: input.bytes,
     createdBy: input.createdBy,
   })
-  const attIns = (await db.execute(sql`
+  const attIns = (await db.execute<{ id: string }>(sql`
     insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
     values (${input.orgId}, ${file.id}, ${input.targetTable}, ${input.targetId},
             ${input.createdBy}, now())
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return {
     id: file.id,
     name: file.name,
@@ -1337,21 +1333,21 @@ export async function attachExisting(input: {
   targetId: string
   createdBy: string
 }): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
     values (${input.orgId}, ${input.fileId}, ${input.targetTable}, ${input.targetId},
             ${input.createdBy}, now())
     on conflict (org_id, file_id, target_table, target_id) do nothing
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows[0]?.id ?? null
 }
 
 /** Detach a file from a record (does NOT delete the file). */
 export async function detachAttachment(orgId: string, attachmentId: string): Promise<boolean> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     delete from file_attachments where id = ${attachmentId} and org_id = ${orgId} returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -1360,8 +1356,8 @@ export async function getAttachmentTarget(
   orgId: string,
   attachmentId: string,
 ): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ target_table: string }>(sql`
     select target_table from file_attachments where id = ${attachmentId} and org_id = ${orgId}
-  `)) as unknown as { rows: { target_table: string }[] }
+  `))
   return r.rows[0]?.target_table ?? null
 }

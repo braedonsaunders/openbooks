@@ -101,14 +101,12 @@ const listSetupRecordsTool: AssistantToolDef = {
       ${a.query && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`;
     const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
     const [rowsRes, countRes] = await Promise.all([
-      db.execute(sql`
+      db.execute<Record<string, unknown>>(sql`
         select ${sql.raw(selectCols.join(", "))} from ${sql.raw(entity.table)} ${rowFilter}
          order by ${sql.raw(orderBy)}
-         limit ${limit}`) as unknown as Promise<{ rows: Record<string, unknown>[] }>,
-      db.execute(sql`
-        select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`) as unknown as Promise<{
-        rows: { n: number }[];
-      }>,
+         limit ${limit}`),
+      db.execute<{ n: number }>(sql`
+        select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
     ]);
     const total = Number(countRes.rows[0]?.n ?? 0);
     return {

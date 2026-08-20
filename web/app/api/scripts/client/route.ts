@@ -22,14 +22,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const kind = url.searchParams.get('documentKind') ?? ''
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; name: string; source: string }>(sql`
     select id, name, source
       from user_scripts
      where org_id = ${authz.user.orgId}
        and trigger_point = 'client'
        and is_active
        and (document_kind is null or document_kind = ${kind})
-     order by sort_order, name`)) as unknown as { rows: { id: string; name: string; source: string }[] }
+     order by sort_order, name`))
 
   return NextResponse.json({ scripts: r.rows })
 }

@@ -23,24 +23,22 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     sandboxId = created.sandboxId;
     sandboxOrgId = created.sandboxOrgId;
 
-    const state = (await db.execute(sql`
-      select sandbox.status, sandbox.storage_rows, org.env_kind, org.sandbox_of
-        from sandboxes sandbox
-        join orgs org on org.id = sandbox.org_id
-       where sandbox.id = ${sandboxId}`)) as unknown as {
-      rows: Array<{
+    const state = (await db.execute<{
         status: string;
         storage_rows: number;
         env_kind: string;
         sandbox_of: string;
-      }>;
-    };
+      }>(sql`
+      select sandbox.status, sandbox.storage_rows, org.env_kind, org.sandbox_of
+        from sandboxes sandbox
+        join orgs org on org.id = sandbox.org_id
+       where sandbox.id = ${sandboxId}`));
     assert.equal(state.rows[0]?.status, "ready");
     assert.ok(Number(state.rows[0]?.storage_rows) > 0);
     assert.equal(state.rows[0]?.env_kind, "sandbox");
     assert.equal(state.rows[0]?.sandbox_of, org.orgId);
 
-    const controls = (await db.execute(sql`
+    const controls = (await db.execute<{ key: string; account_id: string; org_id: string | null }>(sql`
       select control.key, control.value as account_id, account.org_id
         from orgs sandbox
         cross join lateral jsonb_each_text(
@@ -49,9 +47,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
         left join accounts account on account.id = control.value::uuid
        where sandbox.id = ${sandboxOrgId}
        order by control.key
-    `)) as unknown as {
-      rows: Array<{ key: string; account_id: string; org_id: string | null }>;
-    };
+    `));
     assert.ok(controls.rows.length >= 3);
     assert.ok(
       controls.rows.every(
@@ -61,7 +57,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       ),
     );
 
-    const segments = (await db.execute(sql`
+    const segments = (await db.execute<{ key: string; source_id: string; clone_id: string }>(sql`
       select source.key,
              source.id as source_id,
              clone.id as clone_id
@@ -70,24 +66,18 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
           on clone.key = source.key
          and clone.org_id = ${sandboxOrgId}
        where source.org_id = ${org.orgId}
-       order by source.key`)) as unknown as {
-      rows: Array<{ key: string; source_id: string; clone_id: string }>;
-    };
-    const sourceSegmentCount = (await db.execute(sql`
+       order by source.key`));
+    const sourceSegmentCount = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count
         from segment_definitions
-       where org_id = ${org.orgId}`)) as unknown as {
-      rows: Array<{ count: number }>;
-    };
+       where org_id = ${org.orgId}`));
     assert.equal(segments.rows.length, sourceSegmentCount.rows[0]?.count);
     assert.equal(new Set(segments.rows.map((row) => row.key)).size, segments.rows.length);
     assert.ok(segments.rows.every((row) => row.source_id !== row.clone_id));
 
     await refreshSandbox(sandboxId, { keepCustomizations: false });
-    const refreshed = (await db.execute(sql`
-      select status, last_error from sandboxes where id = ${sandboxId}`)) as unknown as {
-      rows: Array<{ status: string; last_error: string | null }>;
-    };
+    const refreshed = (await db.execute<{ status: string; last_error: string | null }>(sql`
+      select status, last_error from sandboxes where id = ${sandboxId}`));
     assert.deepEqual(refreshed.rows, [{ status: "ready", last_error: null }]);
     const refreshedControls = await db.execute(sql`
       select count(*)::int as count
@@ -107,22 +97,20 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
 
     await deleteSandbox(sandboxId);
     sandboxId = null;
-    const residue = (await db.execute(sql`
+    const residue = (await db.execute<{ orgs: number; segments: number; entries: number }>(sql`
       select
         (select count(*)::int from orgs where id = ${sandboxOrgId}) as orgs,
         (select count(*)::int from segment_definitions where org_id = ${sandboxOrgId}) as segments,
-        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as entries`)) as unknown as {
-      rows: Array<{ orgs: number; segments: number; entries: number }>;
-    };
+        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as entries`));
     assert.deepEqual(residue.rows, [{ orgs: 0, segments: 0, entries: 0 }]);
   } finally {
     if (sandboxId) {
       await deleteSandbox(sandboxId).catch(() => undefined);
     } else {
-      const failed = (await db.execute(sql`
+      const failed = (await db.execute<{ id: string }>(sql`
         select id from sandboxes
          where production_org_id = ${org.orgId}
-           and name = ${sandboxName}`)) as unknown as { rows: Array<{ id: string }> };
+           and name = ${sandboxName}`));
       for (const row of failed.rows) {
         await deleteSandbox(row.id).catch(() => undefined);
       }

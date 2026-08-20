@@ -71,21 +71,17 @@ export default async function LienWaiversPage({
       direction: direction === 'issued' ? 'issued' : direction === 'received' ? 'received' : null,
       status,
     }),
-    db.execute(sql`
+    db.execute<{ id: string; label: string }>(sql`
       select id, coalesce(code || ' · ' || name, name) as label from projects
-       where org_id = ${orgId} and is_active order by code nulls last, name limit 500`) as unknown as Promise<{
-      rows: { id: string; label: string }[]
-    }>,
-    db.execute(sql`
+       where org_id = ${orgId} and is_active order by code nulls last, name limit 500`),
+    db.execute<{ id: string; label: string; defaultType: string }>(sql`
       select p.id, p.display_name as label,
              coalesce(cls.default_lien_waiver_type, '') as "defaultType"
         from parties p
         join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
         left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.is_active
-       order by p.display_name limit 2000`) as unknown as Promise<{
-      rows: { id: string; label: string; defaultType: string }[]
-    }>,
+       order by p.display_name limit 2000`),
     complianceTabs('/compliance/lien-waivers', { projectsEnabled: true }),
   ])
 
@@ -93,14 +89,12 @@ export default async function LienWaiversPage({
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
-    ? ((await db.execute(sql`
+    ? ((await db.execute<{ id: string; label: string; amount: string; currency: string }>(sql`
         select id, document_number as label, coalesce(open_balance, total) as amount, currency
           from documents
          where org_id = ${orgId} and party_id = ${open.partyId} and project_id = ${open.projectId}
            and kind in ('vendor_bill', 'expense_report') and status = 'posted'
-         order by document_date desc limit 50`)) as unknown as {
-        rows: { id: string; label: string; amount: string; currency: string }[]
-      }).rows
+         order by document_date desc limit 50`))).rows
     : []
 
   const query = new URLSearchParams({

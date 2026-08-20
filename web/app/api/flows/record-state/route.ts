@@ -93,7 +93,7 @@ export async function GET(req: Request) {
   if (status === null) return NextResponse.json({ error: 'record not found' }, { status: 404 })
 
   const [gates, runs, roleRows] = await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select g.id, g.status, g.title, g.comment,
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
              g.decided_by as "decidedBy", g.decided_at as "decidedAt",
@@ -109,18 +109,18 @@ export async function GET(req: Request) {
         left join users ou on ou.id = g.on_behalf_of_user_id
        where g.org_id = ${orgId} and g.subject_kind = ${subjectKind} and g.subject_id = ${subjectId}
        order by g.created_at
-    `) as unknown as Promise<Rows<Record<string, unknown>>>,
-    db.execute(sql`
+    `),
+    db.execute<Record<string, unknown>>(sql`
       select r.id, r.started_at as "startedAt", u.name as "submitterName"
         from flow_runs r
         left join users u on u.id = r.created_by
        where r.org_id = ${orgId} and r.subject_kind = ${subjectKind}
          and r.subject_id = ${subjectId}
        order by r.started_at
-    `) as unknown as Promise<Rows<Record<string, unknown>>>,
-    db.execute(sql`
+    `),
+    db.execute<{ key: string; name: string }>(sql`
       select key, name from app_roles where org_id = ${orgId}
-    `) as unknown as Promise<Rows<{ key: string; name: string }>>,
+    `),
   ])
 
   const roleLabel = (key: string | null): string | null => {

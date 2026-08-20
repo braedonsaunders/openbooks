@@ -19,11 +19,9 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
   // actually needed before loading anything it would need to render. Fetching
   // the industry-switch probe and feature state up front spent that work on
   // every request of every already-onboarded org.
-  const org = (await db.execute(sql`
+  const org = (await db.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
     select name, legal_name, base_currency, country, settings
-      from orgs where id = ${orgId}`)) as unknown as {
-    rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[]
-  }
+      from orgs where id = ${orgId}`))
   const row = org.rows[0]
   const settings = row?.settings ?? {}
   const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined

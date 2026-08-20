@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "../engine/src/db.ts";
 
 async function rows(query: ReturnType<typeof sql>): Promise<unknown[]> {
-  return (await db.execute(query) as unknown as { rows: unknown[] }).rows;
+  return (await db.execute(query)).rows;
 }
 
 async function main(): Promise<void> {

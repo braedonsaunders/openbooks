@@ -19,11 +19,15 @@ export function CustomFieldInput({
   value,
   onChange,
   readOnly = false,
+  hideLabel = false,
 }: {
   def: CustomFieldDefClient
   value: unknown
   onChange: (value: unknown) => void
   readOnly?: boolean
+  /** Suppress the field's own label — for grid cells, where the column header
+   * already names the field and repeating it per row would be noise. */
+  hideLabel?: boolean
 }) {
   const tLabels = useTranslations('common.labels')
 
@@ -56,8 +60,8 @@ export function CustomFieldInput({
 
   if (isDisabled) {
     return (
-      <div className="space-y-1.5">
-        <FieldLabel help={def.config.helpText}>{def.label}</FieldLabel>
+      <div className={hideLabel ? undefined : 'space-y-1.5'}>
+        {hideLabel ? null : <FieldLabel help={def.config.helpText}>{def.label}</FieldLabel>}
         <p className="text-sm text-slate-600 dark:text-slate-400">
           {def.fieldType === 'boolean'
             ? value
@@ -72,11 +76,13 @@ export function CustomFieldInput({
   }
 
   return (
-    <div className="space-y-1.5">
-      <FieldLabel help={def.config.helpText}>
-        {def.label}
-        {def.isRequired ? <span className="text-red-500"> *</span> : null}
-      </FieldLabel>
+    <div className={hideLabel ? undefined : 'space-y-1.5'}>
+      {hideLabel ? null : (
+        <FieldLabel help={def.config.helpText}>
+          {def.label}
+          {def.isRequired ? <span className="text-red-500"> *</span> : null}
+        </FieldLabel>
+      )}
       {def.fieldType === 'long_text' ? (
         <Textarea
           value={(value as string) ?? ''}

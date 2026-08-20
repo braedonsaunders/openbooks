@@ -840,6 +840,7 @@
     "time_read": "View timesheets",
     "time_manage": "Enter and edit time",
     "time_approve": "Approve timesheets",
+    "time_reopen": "Reopen approved timesheets",
     "payroll_read": "View pay runs and stubs",
     "payroll_manage": "Configure payroll and employee profiles",
     "payroll_run": "Create, calculate, and commit pay runs",

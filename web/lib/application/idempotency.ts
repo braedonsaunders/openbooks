@@ -44,7 +44,7 @@ export async function executeIdempotent<T>(args: {
     throw error;
   }
   return withOrgTransaction(context.authz.user.orgId, async () => {
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into application_idempotency_keys
         (org_id, actor_id, source, operation, idempotency_key, request_hash,
          expires_at)
@@ -55,10 +55,10 @@ export async function executeIdempotent<T>(args: {
       on conflict (org_id, actor_id, source, operation, idempotency_key)
       do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     if (inserted.rows.length === 0) {
-      const prior = (await db.execute(sql`
+      const prior = (await db.execute<{ requestHash: string; response: T | null; completedAt: Date | null }>(sql`
         select request_hash as "requestHash", response, completed_at as "completedAt"
           from application_idempotency_keys
          where org_id = ${context.authz.user.orgId}
@@ -67,9 +67,7 @@ export async function executeIdempotent<T>(args: {
            and operation = ${args.operation}
            and idempotency_key = ${args.idempotencyKey}
          for update
-      `)) as unknown as {
-        rows: { requestHash: string; response: T | null; completedAt: Date | null }[];
-      };
+      `));
       const row = prior.rows[0];
       if (!row) throw conflict("idempotency state changed; retry the request");
       if (row.requestHash !== hash) {

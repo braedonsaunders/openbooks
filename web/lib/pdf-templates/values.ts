@@ -45,10 +45,10 @@ function fmtQty(v: unknown, locale: string): string {
 type OrgRow = { name: string; base_currency: string; brand_primary: string | null }
 
 async function orgRow(orgId: string): Promise<OrgRow> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<OrgRow>(sql`
     select name, base_currency, settings ->> 'brandPrimary' as brand_primary
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: OrgRow[] }
+  `))
   return r.rows[0] ?? { name: 'openbooks', base_currency: 'CAD', brand_primary: null }
 }
 
@@ -59,11 +59,11 @@ async function customFieldValues(
   custom: Record<string, unknown>,
   format: MoneyFormatter,
 ): Promise<Record<string, string>> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ key: string; field_type: string }>(sql`
     select key, field_type from custom_field_defs
      where org_id = ${orgId} and target_table = ${targetTable} and is_active
        and (target_kind is null ${targetKind ? sql`or target_kind = ${targetKind}` : sql``})
-  `)) as unknown as { rows: { key: string; field_type: string }[] }
+  `))
   const out: Record<string, string> = {}
   for (const def of r.rows) {
     const v = custom?.[def.key]
@@ -87,7 +87,7 @@ async function loadDocumentValues(
   orgId: string,
   id: string,
 ): Promise<PdfRecordValues | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, any>>(sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
            case when d.status = 'posted' then d.total - ap.applied end as balance_due
@@ -104,7 +104,7 @@ async function loadDocumentValues(
          where jl.entry_id = d.posted_entry_id and jl.is_open_item
       ) ap on true
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const doc = r.rows[0]
   if (!doc) return null
 
@@ -112,7 +112,7 @@ async function loadDocumentValues(
   const format = createMoneyFormatter(locale, String(doc.currency ?? 'USD'))
   const { money } = format
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, any>>(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
            i.name as item_name
@@ -121,7 +121,7 @@ async function loadDocumentValues(
       left join items i on i.id = l.item_id
      where l.document_id = ${id}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
 
   const address = [
     doc.line1,
@@ -172,23 +172,23 @@ async function loadDocumentValues(
 }
 
 async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, any>>(sql`
     select e.* from journal_entries e where e.id = ${id} and e.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const entry = r.rows[0]
   if (!entry) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, org.base_currency)
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, any>>(sql`
     select l.line_number, l.amount, l.memo,
            acc.number as account_number, acc.name as account_name
       from journal_lines l
       left join accounts acc on acc.id = l.account_id
      where l.entry_id = ${id}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
 
   let debits = 0
   let credits = 0
@@ -224,7 +224,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
 
 /** Load + format the merge values for one record. Null when not found. */
 async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, any>>(sql`
     select s.*, r.period_start, r.period_end, d.document_number,
            p.display_name as employee_name, p.email as employee_email
       from pay_stubs s
@@ -232,29 +232,29 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
       join documents d on d.id = r.document_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.id = ${id} and s.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const stub = r.rows[0]
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, any>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
 
   // YTD across committed runs up to and including this stub's pay date.
-  const ytd = (await db.execute(sql`
+  const ytd = (await db.execute<{ gross: string; net: string; tax: string }>(sql`
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum((s.factors->>'T')::numeric + coalesce((s.factors->>'TB')::numeric, 0)), 0) as tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
        and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
-  `)) as unknown as { rows: { gross: string; net: string; tax: string }[] }
+  `))
 
   const byKind = (kind: string) => lines.rows
     .filter((l) => l.kind === kind)
@@ -304,7 +304,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
  * that the ledger cannot match. `issuePayRunCheques` allocates first.
  */
 async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, any>>(sql`
     select s.*, r.period_start, r.period_end, d.document_number,
            p.display_name as employee_name,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country
@@ -318,19 +318,19 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
        and s.cheque_number is not null
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const stub = r.rows[0]
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, any>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const byKind = (kind: string) => lines.rows
     .filter((l) => l.kind === kind)
     .map((l) => ({
@@ -493,9 +493,9 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     return rowVals
   })
 
-  const party = (await db.execute(sql`
+  const party = (await db.execute<{ display_name: string | null; email: string | null; phone: string | null }>(sql`
     select display_name, email, phone from parties where id = (select party_id from documents where id = ${id})
-  `)) as unknown as { rows: { display_name: string | null; email: string | null; phone: string | null }[] }
+  `))
 
   const totalHours = ticket.entries.reduce((a, e) => a + (Number(e.hours) || 0), 0)
   const dayLabel = (dayIso: string) => {
@@ -547,28 +547,28 @@ export async function findSamplePdfRecordId(recordType: string, orgId: string): 
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
   if (meta.key === 'journal_entry') {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       select id from journal_entries where org_id = ${orgId} order by created_at desc limit 1
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     return r.rows[0]?.id ?? null
   }
   if (meta.key === 'pay_stub') {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       select id from pay_stubs where org_id = ${orgId} order by created_at desc limit 1
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     return r.rows[0]?.id ?? null
   }
   if (meta.key === 'payroll_cheque') {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       select id from pay_stubs where org_id = ${orgId} and cheque_number is not null
        order by created_at desc limit 1
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     return r.rows[0]?.id ?? null
   }
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     select id from documents where org_id = ${orgId} and kind = ${meta.docKind}
      order by created_at desc limit 1
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows[0]?.id ?? null
 }
 
@@ -576,11 +576,11 @@ export async function findSamplePdfRecordId(recordType: string, orgId: string): 
 export async function customMergeFields(recordType: string, orgId: string): Promise<PdfMergeField[]> {
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta || !meta.docKind) return []
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ key: string; label: string }>(sql`
     select key, label from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents' and is_active
        and (target_kind is null or target_kind = ${meta.docKind})
      order by sort_order, label
-  `)) as unknown as { rows: { key: string; label: string }[] }
+  `))
   return r.rows.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }))
 }

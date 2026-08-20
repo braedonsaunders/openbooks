@@ -86,7 +86,7 @@ export async function requestDocumentVoid(input: {
       );
     }
 
-    const reserved = (await db.execute(sql`
+    const reserved = (await db.execute<{ id: string }>(sql`
       update documents
          set void_reason = ${reason},
              void_requested_at = now(),
@@ -98,7 +98,7 @@ export async function requestDocumentVoid(input: {
          and status in ('approved', 'posted')
          and void_requested_at is null
        returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!reserved.rows[0]) {
       throw new DocumentVoidError(
         `${doc.documentNumber} changed while the void request was being created; reload and try again`,
@@ -164,12 +164,12 @@ export async function completeRequestedDocumentVoid(
       kind: string;
       previousStatus: string;
     } = await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<Record<string, unknown>>(sql`
         select *
           from documents
          where id = ${documentId} and org_id = ${orgId}
          for update
-      `)) as unknown as { rows: Array<Record<string, unknown>> };
+      `));
       const doc = locked.rows[0];
       if (!doc) throw new DocumentVoidError("document not found");
       if (doc.status === "voided") {
@@ -199,7 +199,7 @@ export async function completeRequestedDocumentVoid(
              select id from journal_lines where entry_id = ${entryId}
            )
            limit 1
-        `)) as unknown as { rows: unknown[] };
+        `));
         if (reconciled.rows.length > 0) {
           throw new DocumentVoidError(
             "this transaction is bank-reconciled — remove the reconciliation match before voiding",
@@ -213,13 +213,13 @@ export async function completeRequestedDocumentVoid(
                select id from journal_lines where entry_id = ${entryId}
              )
            limit 1
-        `)) as unknown as { rows: unknown[] };
+        `));
         if (incoming.rows.length > 0) {
           throw new DocumentVoidError(
             "this transaction has live payments or credits applied to it — unapply them before voiding",
           );
         }
-        const downstream = (await tx.execute(sql`
+        const downstream = (await tx.execute<{ document_number: string }>(sql`
           select d2.document_number
             from document_links dl
             join documents d2 on d2.id = dl.to_document_id
@@ -227,13 +227,13 @@ export async function completeRequestedDocumentVoid(
              and d2.status in ('approved', 'posted')
              and dl.link_type <> 'pays'
            limit 1
-        `)) as unknown as { rows: { document_number: string }[] };
+        `));
         if (downstream.rows[0]) {
           throw new DocumentVoidError(
             `this transaction feeds ${downstream.rows[0].document_number} — reverse the downstream transaction first`,
           );
         }
-        const dependentSubledger = (await tx.execute(sql`
+        const dependentSubledger = (await tx.execute<{ inventory: boolean; revenue: boolean }>(sql`
           select
             exists (
               select 1
@@ -250,24 +250,24 @@ export async function completeRequestedDocumentVoid(
                )
                  and obligation.status <> 'cancelled'
             ) as revenue
-        `)) as unknown as { rows: { inventory: boolean; revenue: boolean }[] };
+        `));
         if (dependentSubledger.rows[0]?.inventory || dependentSubledger.rows[0]?.revenue) {
           throw new DocumentVoidError(
             "this transaction has inventory or revenue-recognition subledger activity — use the dedicated return/cancellation workflow",
           );
         }
 
-        const entryResult = (await tx.execute(sql`
+        const entryResult = (await tx.execute<Record<string, unknown>>(sql`
           select * from journal_entries
            where id = ${entryId} and org_id = ${orgId}
            for update
-        `)) as unknown as { rows: Array<Record<string, unknown>> };
+        `));
         const entry = entryResult.rows[0];
         if (!entry || entry.status !== "posted") {
           throw new DocumentVoidError("the source journal entry is not posted");
         }
         const reversalDate = String(doc.void_reversal_date);
-        const period = (await tx.execute(sql`
+        const period = (await tx.execute<{ id: string }>(sql`
           select id
             from accounting_periods
            where org_id = ${orgId}
@@ -275,7 +275,7 @@ export async function completeRequestedDocumentVoid(
              and ends_on >= ${reversalDate}
            order by is_adjustment, starts_on
            limit 1
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (!period.rows[0]) {
           throw new DocumentVoidError(`no accounting period covers ${reversalDate}`);
         }
@@ -291,14 +291,14 @@ export async function completeRequestedDocumentVoid(
              s.subsidiary_id, 'gl'
            )
            limit 1
-        `)) as unknown as { rows: unknown[] };
+        `));
         if (blocked.rows.length > 0) {
           throw new DocumentVoidError(
             `the reversal period for ${reversalDate} is closed for GL posting`,
           );
         }
 
-        const outgoingFx = (await tx.execute(sql`
+        const outgoingFx = (await tx.execute<{ id: string }>(sql`
           select distinct a.fx_gain_loss_entry_id as id
             from applications a
            where a.unapplied_at is null
@@ -306,7 +306,7 @@ export async function completeRequestedDocumentVoid(
              and a.from_line_id in (
                select id from journal_lines where entry_id = ${entryId}
              )
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         await tx.execute(sql`
           update applications
              set unapplied_at = now(), updated_at = now(),
@@ -321,11 +321,11 @@ export async function completeRequestedDocumentVoid(
           sourceEntryId: string,
           suffix: string,
         ): Promise<string> => {
-          const sourceResult = (await tx.execute(sql`
+          const sourceResult = (await tx.execute<Record<string, unknown>>(sql`
             select * from journal_entries
              where id = ${sourceEntryId} and org_id = ${orgId}
              for update
-          `)) as unknown as { rows: Array<Record<string, unknown>> };
+          `));
           const source = sourceResult.rows[0];
           if (!source || source.status !== "posted") {
             throw new DocumentVoidError("linked posted entry is missing or already reversed");
@@ -484,13 +484,13 @@ async function releaseVoidedPayRun(
   orgId: string,
   documentId: string,
 ): Promise<void> {
-  const run = (await tx.execute(sql`
+  const run = (await tx.execute<{ document_id: string }>(sql`
     update pay_runs
        set run_status = 'voided', updated_at = now()
      where org_id = ${orgId} and document_id = ${documentId}
        and run_status <> 'voided'
      returning document_id
-  `)) as unknown as { rows: { document_id: string }[] };
+  `));
   if (run.rows.length === 0) return; // already released (idempotent replay)
 
   await tx.execute(sql`

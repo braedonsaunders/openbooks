@@ -33,18 +33,18 @@ const COLS = sql`
 
 export async function listPdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
   const filter = recordType ? sql` and record_type = ${recordType}` : sql``
-  const r = (await db.execute(sql`
+  const r = (await db.execute<PdfTemplateRow>(sql`
     select ${COLS} from pdf_templates
      where org_id = ${orgId}${filter}
      order by record_type, is_default desc, name
-  `)) as unknown as { rows: PdfTemplateRow[] }
+  `))
   return r.rows
 }
 
 export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<PdfTemplateRow>(sql`
     select ${COLS} from pdf_templates where org_id = ${orgId} and id = ${id}
-  `)) as unknown as { rows: PdfTemplateRow[] }
+  `))
   return r.rows[0] ?? null
 }
 
@@ -77,18 +77,18 @@ export async function resolvePdfTemplate(
     return null
   }
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<PdfTemplateRow>(sql`
     select ${COLS} from pdf_templates
      where org_id = ${orgId} and record_type = ${recordType} and is_active
      order by is_default desc, name limit 1
-  `)) as unknown as { rows: PdfTemplateRow[] }
+  `))
   const found = r.rows.find((t) => t.isDefault) ?? r.rows[0]
   if (found) return found
 
   // Built-in fallback: compile the starter on the fly with the org accent.
-  const org = (await db.execute(sql`
+  const org = (await db.execute<{ brand_primary: string | null }>(sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${orgId}
-  `)) as unknown as { rows: { brand_primary: string | null }[] }
+  `))
   const starter = starterTemplate(meta, org.rows[0]?.brand_primary)
   const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
   return {

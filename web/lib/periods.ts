@@ -40,12 +40,12 @@ async function accountingPeriodWindow(
   today: string,
   orgId: string,
 ): Promise<DateRange | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ name: string; starts_on: string; ends_on: string }>(sql`
     select name, starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
      order by starts_on
-  `)) as unknown as { rows: { name: string; starts_on: string; ends_on: string }[] }
+  `))
   const rows = r.rows
   if (!rows.length) return null
   // Index of the period containing today, else the latest one that has started.

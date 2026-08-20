@@ -3,7 +3,8 @@ import { db, inDbTransaction } from "./db.ts";
 import {
   add,
   cmp,
-  divRate,
+  div,
+  mul,
   mulPercent,
   mulRate,
   neg,
@@ -61,11 +62,9 @@ export const DEFAULT_LABOR_COSTING: LaborCostingSettings = {
 export async function laborCostingSettings(
   orgId: string,
 ): Promise<LaborCostingSettings> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ c: Partial<LaborCostingSettings> | null }>(
     sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
-  )) as unknown as {
-    rows: { c: Partial<LaborCostingSettings> | null }[];
-  };
+  ));
   const c = r.rows[0]?.c ?? {};
   return {
     mode: c.mode === "post" ? "post" : "off",
@@ -114,18 +113,16 @@ export async function resolveWage(
     departmentId === undefined ||
     subsidiaryId === undefined
   ) {
-    const t = (await db.execute(sql`
-      select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
-        from employee_roles er
-        join parties p on p.id = er.party_id and p.org_id = er.org_id
-       where er.org_id = ${orgId} and er.party_id = ${employeePartyId}`)) as unknown as {
-      rows: {
+    const t = (await db.execute<{
         job_title: string | null;
         trade_id: string | null;
         department_id: string | null;
         subsidiary_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
+        from employee_roles er
+        join parties p on p.id = er.party_id and p.org_id = er.org_id
+       where er.org_id = ${orgId} and er.party_id = ${employeePartyId}`));
     const employee = t.rows[0];
     jobTitle =
       jobTitle === undefined ? (employee?.job_title ?? null) : jobTitle;
@@ -139,7 +136,14 @@ export async function resolveWage(
         ? (employee?.subsidiary_id ?? null)
         : subsidiaryId;
   }
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      id: string;
+      rate: string;
+      basis: string;
+      annual_hours: string;
+      currency: string;
+      scope: ResolvedWage["scope"];
+    }>(sql`
     select id, rate, basis, annual_hours, currency,
            case when employee_party_id is not null then 'employee'
                 when job_title is not null then 'job_title'
@@ -163,21 +167,12 @@ export async function resolveWage(
                    when department_id is not null then 3
                    when subsidiary_id is not null then 4 else 5 end,
               effective_from desc
-     limit 1`)) as unknown as {
-    rows: {
-      id: string;
-      rate: string;
-      basis: string;
-      annual_hours: string;
-      currency: string;
-      scope: ResolvedWage["scope"];
-    }[];
-  };
+     limit 1`));
   const row = r.rows[0];
   if (!row) return null;
   const wage =
     row.basis === "year"
-      ? divRate(
+      ? div(
           String(row.rate),
           cmp(String(row.annual_hours), "0") > 0
             ? String(row.annual_hours)
@@ -220,7 +215,7 @@ export async function laborFxRate(
   workedOn: string,
 ): Promise<string | null> {
   if (from === to) return "1";
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ rate: string }>(sql`
     select rate::text from (
       select rate, as_of, 0 as priority from fx_rates
        where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
@@ -229,9 +224,7 @@ export async function laborFxRate(
       select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${workedOn}
-    ) candidates order by as_of desc, priority asc limit 1`)) as unknown as {
-    rows: { rate: string }[];
-  };
+    ) candidates order by as_of desc, priority asc limit 1`));
   return result.rows[0]?.rate ?? null;
 }
 
@@ -246,7 +239,9 @@ export function computeCostRate(
   settings: Pick<LaborCostingSettings, "hoursPerDay" | "components">,
   opts: { workerCompPercent?: number | string } = {},
 ): string {
-  const base = mulRate(wage, costMultiplier);
+  // Wage x time-type multiplier: both numeric(19,4) money-scale values, not
+  // an FX conversion. mulRate additionally rejected a zero multiplier.
+  const base = mul(wage, costMultiplier);
   let rate = base;
   for (const c of settings.components) {
     if (c.kind === "worker_comp") {
@@ -277,12 +272,12 @@ export function computeCostRate(
     } else if (c.kind === "per_hour") {
       rate = add(
         rate,
-        c.scaleWithOvertime ? mulRate(value, costMultiplier) : value,
+        c.scaleWithOvertime ? mul(value, costMultiplier) : value,
       );
     } else if (c.kind === "per_day") {
       const perDay =
         settings.hoursPerDay > 0
-          ? divRate(value, String(settings.hoursPerDay))
+          ? div(value, String(settings.hoursPerDay))
           : "0.0000";
       rate = add(rate, perDay);
     }
@@ -305,7 +300,19 @@ export async function snapshotLaborCostRates(
   const idArr = `{${timeEntryIds.join(",")}}`;
   // Approval executes this helper inside a withOrg transaction, which pins one
   // PostgreSQL client. Do not dispatch parallel queries on that client.
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      id: string;
+      employee_party_id: string;
+      worked_on: string;
+      cost_multiplier: string;
+      job_title: string | null;
+      trade_id: string | null;
+      department_id: string | null;
+      subsidiary_id: string | null;
+      target_currency: string | null;
+      target_subsidiary_id: string | null;
+      worker_comp_percent: string | null;
+    }>(sql`
     select te.id, te.employee_party_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
            er.job_title, er.trade_id, er.department_id, employee.subsidiary_id,
@@ -320,27 +327,11 @@ export async function snapshotLaborCostRates(
       left join projects project on project.id = te.project_id and project.org_id = te.org_id
       left join subsidiaries project_sub on project_sub.id = project.subsidiary_id and project_sub.org_id = te.org_id
       left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id
-     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`)) as unknown as {
-    rows: {
-      id: string;
-      employee_party_id: string;
-      worked_on: string;
-      cost_multiplier: string;
-      job_title: string | null;
-      trade_id: string | null;
-      department_id: string | null;
-      subsidiary_id: string | null;
-      target_currency: string | null;
-      target_subsidiary_id: string | null;
-      worker_comp_percent: string | null;
-    }[];
-  };
-  const org = (await db.execute(sql`
+     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`));
+  const org = (await db.execute<{ base_currency: string; root_subsidiary_id: string | null }>(sql`
       select o.base_currency,
              (select id from subsidiaries where org_id = o.id and parent_id is null and is_active limit 1) as root_subsidiary_id
-        from orgs o where o.id = ${orgId}`)) as unknown as {
-    rows: { base_currency: string; root_subsidiary_id: string | null }[];
-  };
+        from orgs o where o.id = ${orgId}`));
   const orgCurrency = org.rows[0]?.base_currency;
   if (!orgCurrency)
     throw new Error("organization base currency is not configured");
@@ -458,7 +449,7 @@ async function laborClearingReconciliationFrom(
 ): Promise<ClearingReconciliation> {
   // Reversed originals AND their posted mirrors are both included everywhere so
   // reversal pairs cancel instead of double- or half-counting.
-  const sums = (await executor.execute(sql`
+  const sums = (await executor.execute<{ standard_posted: string; payroll_posted: string }>(sql`
     select
       coalesce(-sum(l.amount) filter (where e.origin = 'labor_burden'), 0) as standard_posted,
       coalesce(sum(l.amount) filter (where e.origin is distinct from 'labor_burden'
@@ -467,18 +458,14 @@ async function laborClearingReconciliationFrom(
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and l.subsidiary_id = ${subsidiaryId}
-       and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`)) as unknown as {
-    rows: { standard_posted: string; payroll_posted: string }[];
-  };
-  const open = (await executor.execute(sql`
+       and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`));
+  const open = (await executor.execute<{ balance: string }>(sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
-       and l.subsidiary_id = ${subsidiaryId}`)) as unknown as {
-    rows: { balance: string }[];
-  };
-  const perProject = (await executor.execute(sql`
+       and l.subsidiary_id = ${subsidiaryId}`));
+  const perProject = (await executor.execute<{ project_id: string; name: string; standard: string }>(sql`
     select l.project_id, p.name, sum(l.amount) as standard
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
@@ -489,15 +476,11 @@ async function laborClearingReconciliationFrom(
      group by l.project_id, p.name
      having sum(l.amount) <> 0
      order by sum(l.amount) desc
-     limit 25`)) as unknown as {
-    rows: { project_id: string; name: string; standard: string }[];
-  };
-  const subsidiary = (await executor.execute(sql`
+     limit 25`));
+  const subsidiary = (await executor.execute<{ base_currency: string }>(sql`
     select base_currency
       from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`)) as unknown as {
-    rows: { base_currency: string }[];
-  };
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`));
   const currency = subsidiary.rows[0]?.base_currency;
   if (!currency)
     throw new Error("labor reconciliation subsidiary is not available");
@@ -565,17 +548,15 @@ export async function postPayrollVariance(opts: {
     // The organization row is the stable serialization point even before the
     // first variance journal exists. It also freezes both account mappings for
     // the complete reverse/recompute/repost unit.
-    const config = (await tx.execute(sql`
+    const config = (await tx.execute<{
+        labor_clearing: string | null;
+        payroll_variance: string | null;
+      }>(sql`
       select settings->'controlAccounts'->>'laborClearing' as labor_clearing,
              settings->'controlAccounts'->>'payrollVariance' as payroll_variance
         from orgs
        where id = ${orgId}
-       for update`)) as unknown as {
-      rows: {
-        labor_clearing: string | null;
-        payroll_variance: string | null;
-      }[];
-    };
+       for update`));
     const laborClearing = config.rows[0]?.labor_clearing;
     const varianceAccount = config.rows[0]?.payroll_variance;
     if (!laborClearing || !varianceAccount) {
@@ -584,7 +565,7 @@ export async function postPayrollVariance(opts: {
       );
     }
 
-    const prior = (await tx.execute(sql`
+    const prior = (await tx.execute<{ id: string }>(sql`
       select id
         from journal_entries
        where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
@@ -592,7 +573,7 @@ export async function postPayrollVariance(opts: {
          and entry_number = ${entryNumber}
        order by created_at desc, id desc
        limit 1
-       for update`)) as unknown as { rows: { id: string }[] };
+       for update`));
     if (prior.rows[0]) {
       const reversal = await reverseProjectGlEntryWithinTransaction(
         tx,

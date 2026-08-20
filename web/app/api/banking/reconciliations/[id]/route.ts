@@ -22,14 +22,14 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    const rec = (await db.execute(sql`
+    const rec = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_by, r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
         join accounts a on a.id = r.account_id
        where r.id = ${id} and r.org_id = ${user.orgId}
-    `)) as unknown as { rows: Record<string, unknown>[] }
+    `))
     if (!rec.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const totals = await reconciliationTotals(id, { orgId: user.orgId, userId: user.id })
     return NextResponse.json({ reconciliation: rec.rows[0], totals })
@@ -53,14 +53,14 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.statementBalance !== undefined && canonicalDecimal(body.statementBalance, 4) === null) {
       throw new BankingError('Statement balance must be a number')
     }
-    const updated = (await db.execute(sql`
+    const updated = (await db.execute<{ id: string }>(sql`
       update reconciliations
          set through_date = coalesce(${body.throughDate ?? null}, through_date),
              statement_balance = coalesce(${body.statementBalance ?? null}, statement_balance),
              updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId} and status <> 'signed_off'
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (!updated.rows[0]) {
       return NextResponse.json({ error: 'not found or already signed off' }, { status: 404 })
     }

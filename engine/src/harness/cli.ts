@@ -14,7 +14,7 @@ import { runScenario } from "./scenario.ts";
  */
 
 const argOrg = process.argv[2];
-const orgId = argOrg ?? ((await db.execute(sql`select id from orgs order by created_at limit 1`)) as unknown as { rows: { id: string }[] }).rows[0]?.id;
+const orgId = argOrg ?? ((await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`))).rows[0]?.id;
 if (!orgId) { console.error("no org"); process.exit(1); }
 
 let gitSha: string | null = null;

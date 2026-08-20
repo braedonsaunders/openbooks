@@ -68,17 +68,15 @@ export async function POST(req: Request) {
   if (!body.throughDate) return NextResponse.json({ error: 'throughDate is required' }, { status: 400 })
 
   const [org] = (
-    (await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-      rows: { base_currency: string }[]
-    }
+    (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
   ).rows
-  const project = (await db.execute(sql`
+  const project = (await db.execute<{ id: string; class_default: string | null }>(sql`
     select p.id, cls.default_lien_waiver_type as class_default
       from projects p
       left join vendor_roles vr on vr.org_id = p.org_id and vr.party_id = ${body.partyId}
       left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${body.projectId}
-  `)) as unknown as { rows: { id: string; class_default: string | null }[] }
+  `))
   if (project.rows.length === 0) return NextResponse.json({ error: 'project not found' }, { status: 404 })
 
   const waiverType = body.waiverType ?? project.rows[0]!.class_default ?? 'unconditional_progress'
@@ -91,12 +89,12 @@ export async function POST(req: Request) {
   let amount = body.amount ?? null
   let currency = body.currency ?? org?.base_currency ?? 'USD'
   if (body.billDocumentId && isUuid(body.billDocumentId)) {
-    const bill = (await db.execute(sql`
+    const bill = (await db.execute<{ amount: string; currency: string; party_id: string | null }>(sql`
       select coalesce(open_balance, total) as amount, currency, party_id
         from documents
        where org_id = ${orgId} and id = ${body.billDocumentId}
          and kind in ('vendor_bill', 'expense_report')
-    `)) as unknown as { rows: { amount: string; currency: string; party_id: string | null }[] }
+    `))
     const row = bill.rows[0]
     if (!row) return NextResponse.json({ error: 'bill not found' }, { status: 404 })
     if (row.party_id !== body.partyId) {
@@ -109,7 +107,7 @@ export async function POST(req: Request) {
 
   try {
     const waiverNumber = await nextNumber(orgId, 'lien_waiver', 'LW-')
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into lien_waivers
         (org_id, waiver_number, direction, party_id, project_id, waiver_type, status,
          through_date, amount, currency, jurisdiction, bill_document_id, pay_application_id,
@@ -119,7 +117,7 @@ export async function POST(req: Request) {
               ${body.jurisdiction ?? null}, ${body.billDocumentId ?? null},
               ${body.payApplicationId ?? null}, ${body.notes ?? null}, ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     const id = inserted.rows[0]!.id
     await db.execute(sql`
       insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)

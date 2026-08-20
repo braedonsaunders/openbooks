@@ -11,10 +11,10 @@ import { ConditionBuilder } from '../../../../components/conditions/ConditionBui
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
 import { LivePreview } from '../../../../components/live-preview/LivePreview'
 import type { ConditionGroup, FieldDef } from '../../../../lib/conditions'
-interface Opt {
+type Opt = {
   value: string
   label: string
-}
+};
 interface AccountOpt {
   id: string
   label: string

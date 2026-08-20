@@ -48,7 +48,7 @@ export interface TaxQuoteResult {
   provider: TaxRateProviderKey;
 }
 
-export interface TaxRateProviderConfigRow {
+export type TaxRateProviderConfigRow = {
   id: string;
   orgId: string;
   provider: TaxRateProviderKey;
@@ -60,7 +60,7 @@ export interface TaxRateProviderConfigRow {
   lastAttemptAt: Date | null;
   lastSuccessAt: Date | null;
   lastError: string | null;
-}
+};
 
 const CONFIG_COLS = sql`
   id, org_id as "orgId", provider, display_name as "displayName", is_enabled as "isEnabled",
@@ -68,9 +68,9 @@ const CONFIG_COLS = sql`
   last_attempt_at as "lastAttemptAt", last_success_at as "lastSuccessAt", last_error as "lastError"`;
 
 export async function readTaxRateProviderConfig(orgId: string): Promise<TaxRateProviderConfigRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<TaxRateProviderConfigRow>(sql`
     select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} limit 1
-  `)) as unknown as { rows: TaxRateProviderConfigRow[] };
+  `));
   return r.rows[0] ?? null;
 }
 
@@ -346,7 +346,7 @@ export async function quoteExternalTax(
     }
 
     const quotedOn = req.quotedOn ?? new Date().toISOString().slice(0, 10);
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into tax_rate_quotes
         (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
          taxable_amount, tax_amount, components, external_ref, raw_payload, created_by, updated_by)
@@ -356,7 +356,7 @@ export async function quoteExternalTax(
               ${result.externalRef}, ${result.raw ? JSON.stringify(result.raw) : null}::jsonb,
               ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     await db.execute(sql`
       update tax_rate_provider_configs set last_success_at = now(), last_error = null where id = ${cfg.id}
@@ -438,12 +438,12 @@ export async function provisionLocaleDepth(
   const bands = LOCALE_RATE_BANDS[packCode] ?? [];
   let bandsCreated = 0;
   for (const b of bands) {
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into tax_codes (org_id, code, name, country, applies_to, is_active, created_by, updated_by)
       select ${orgId}, ${b.code}, ${b.name}, ${country}, 'both', true, ${actorId}, ${actorId}
        where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${b.code})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const codeId = inserted.rows[0]?.id;
     if (codeId) {
       bandsCreated++;
@@ -452,14 +452,14 @@ export async function provisionLocaleDepth(
         values (${orgId}, ${codeId}, ${b.ratePercent}, '2000-01-01', ${actorId}, ${actorId})
       `);
     } else {
-      const existing = (await db.execute(sql`
+      const existing = (await db.execute<{ id: string }>(sql`
         select id from tax_codes where org_id = ${orgId} and code = ${b.code} limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const id = existing.rows[0]?.id;
       if (id) {
         const has = (await db.execute(sql`
           select 1 from tax_rates where org_id = ${orgId} and tax_code_id = ${id} limit 1
-        `)) as unknown as { rows: unknown[] };
+        `));
         if (!has.rows.length) {
           await db.execute(sql`
             insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)

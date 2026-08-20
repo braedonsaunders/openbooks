@@ -52,21 +52,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (parsed.rows.length === 0) return NextResponse.json({ error: 'file_has_no_rows' }, { status: 422 })
   if (parsed.rows.length > MAX_ROWS) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
 
-  const scenarioResult = (await db.execute(sql`
+  const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
     select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { fiscal_year: number; status: string; revision: number }[] }
+  `))
   const scenario = scenarioResult.rows[0]
   if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
 
   const [accountsResult, periodsResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
-    db.execute(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),
-    db.execute(sql`select id, name as key, name from accounting_periods where org_id = ${user.orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment`),
-    db.execute(sql`select id, coalesce(code, '') as key, name from departments where org_id = ${user.orgId} and is_active`),
-    db.execute(sql`select id, coalesce(code, '') as key, name from projects where org_id = ${user.orgId} and is_active`),
-    db.execute(sql`select id, coalesce(code, '') as key, name from locations where org_id = ${user.orgId} and is_active`),
-    db.execute(sql`select id, coalesce(code, '') as key, name from classes where org_id = ${user.orgId} and is_active`),
-  ])) as unknown as { rows: Lookup[] }[]
+    db.execute<Lookup>(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),
+    db.execute<Lookup>(sql`select id, name as key, name from accounting_periods where org_id = ${user.orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment`),
+    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from departments where org_id = ${user.orgId} and is_active`),
+    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from projects where org_id = ${user.orgId} and is_active`),
+    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from locations where org_id = ${user.orgId} and is_active`),
+    db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from classes where org_id = ${user.orgId} and is_active`),
+  ]))
   const accounts = lookup(accountsResult.rows)
   const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
   const periods = lookup(periodsResult.rows)
@@ -136,9 +136,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<{ status: string; revision: number }>(sql`
         select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-      `)) as unknown as { rows: { status: string; revision: number }[] }
+      `))
       const current = locked.rows[0]
       if (!current) throw new BudgetMutationError('not_found', 404)
       if (current.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)

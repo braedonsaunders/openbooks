@@ -4,6 +4,46 @@ OpenBooks follows [Semantic Versioning](https://semver.org/) while its public
 API and deployment format stabilize. Alpha releases may contain breaking
 changes; each release documents required operator action.
 
+## [0.1.0-alpha.4] - 2026-08-20
+
+### Time and timesheets
+
+- Timesheet weeks have a lifecycle. Approved time stays read-only, but a week
+  can be reopened while nothing downstream has consumed its hours; the reasons
+  it cannot be (invoiced, paid, costed) are named rather than implied. Weeks
+  carry their own record, with rejection reasons and amendment links.
+- Whether hours require approval before they can be billed or paid is now
+  organization policy rather than an assumption, and approval routing runs
+  through flows, so approver, order, and quorum are configuration.
+
+### Payments
+
+- Fixed: the NACHA and SEPA direct-debit writers accepted a half-configured
+  originator. They checked only that each required field was non-empty, while
+  the credit rails additionally reject unfinished `FILL-ME` placeholders and an
+  ODFI routing number that is not exactly nine digits. Because the writer
+  slices that number to eight characters, an over-long value produced a
+  well-formed file addressed to the wrong originating institution. Both debit
+  rails now parse their originator to the same standard as the credit rails.
+
+### Integrations
+
+- NetSuite accounts can map their own job billing types instead of inheriting a
+  single tenant-wide convention.
+
+### Internal
+
+- Raw SQL now carries its row type as a type argument (`db.execute<Row>(…)`)
+  instead of asserting the shape back afterwards. 2,381 laundering casts across
+  504 files were removed, along with a dozen ad-hoc "anything with `.execute`"
+  parameter types that discarded the row type at the boundary; they share one
+  `SqlExecutor` seam. Type-level only — no runtime behaviour changed.
+
+### Operator action
+
+- None. The schema gains `timesheet_weeks` plus two nullable columns on time
+  entries; existing weeks derive their state on first use.
+
 ## [0.1.0-alpha.3] - 2026-08-04
 
 The first public community preview of OpenBooks.
@@ -83,4 +123,5 @@ The first public community preview of OpenBooks.
 - Before using OpenBooks as a system of record, complete a restore rehearsal and
   the validation steps in the upgrade and backup runbooks.
 
+[0.1.0-alpha.4]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.3

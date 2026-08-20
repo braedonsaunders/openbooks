@@ -200,12 +200,12 @@ async function main(): Promise<void> {
         .join(", ")}`,
     );
   }
-  const target = (await db.execute(sql`
+  const target = (await db.execute<{ id: string; source_ref: string }>(sql`
     select id, custom ->> ${source.refKey} as source_ref
       from projects
      where org_id = ${orgId}
        and custom ->> ${source.refKey} is not null
-  `)) as unknown as { rows: { id: string; source_ref: string }[] };
+  `));
   const targetByRef = new Map(
     target.rows.map((project) => [project.source_ref, project.id]),
   );

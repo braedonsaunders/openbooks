@@ -1673,10 +1673,10 @@ export async function packSlotState(
     .map((country) => PAYROLL_COUNTRY_PACKS[country])
     .filter((pack): pack is PayrollCountryPack => Boolean(pack));
   if (packs.length === 0) return [];
-  const components = (await db.execute(sql`
+  const components = (await db.execute<{ code: string; liability_account_id: string | null }>(sql`
     select code, liability_account_id from pay_components
      where org_id = ${orgId} and system_key is not null
-  `)) as unknown as { rows: { code: string; liability_account_id: string | null }[] };
+  `));
   const byCode = new Map(components.rows.map((c) => [c.code, c.liability_account_id]));
   return packs.map((pack) => ({
     country: pack.country,
@@ -1710,15 +1710,15 @@ export async function uninstallPayrollPack(
   if (!pack) throw new PayrollPackError(`unknown payroll country pack ${country}`);
 
   const [profiles, stubRefs] = (await Promise.all([
-    db.execute(sql`
+    db.execute<{ n: number }>(sql`
       select count(*)::int as n from employee_payroll_profiles
        where org_id = ${orgId} and country = ${country} and is_active`),
-    db.execute(sql`
+    db.execute<{ n: number }>(sql`
       select count(distinct l.stub_id)::int as n
         from pay_stub_lines l
         join pay_components c on c.id = l.component_id
        where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`),
-  ])) as unknown as { rows: { n: number }[] }[];
+  ]));
 
   const blockers: string[] = [];
   const profileCount = Number(profiles.rows[0]?.n ?? 0);
@@ -1737,10 +1737,10 @@ export async function uninstallPayrollPack(
     // Draft (uncommitted) stubs could still reference the components between
     // the check above and this delete; the FK makes that a loud failure, not
     // a silent orphan.
-    const removed = (await tx.execute(sql`
+    const removed = (await tx.execute<{ id: string }>(sql`
       delete from pay_components
        where org_id = ${orgId} and country = ${country} and system_key is not null
-       returning id`)) as unknown as { rows: { id: string }[] };
+       returning id`));
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(

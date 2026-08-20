@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { cmp, sum } from "./money.ts";
 import {
   extractAzureInvoice,
@@ -37,13 +37,13 @@ function issue(code: string, severity: "blocking" | "warning", extra: Partial<Ca
 }
 
 async function loadCaptureBlob(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string }> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ version_id: string; storage_kind: string; content_type: string; bytes: Buffer | null }>(sql`
     select fv.id as version_id, fv.storage_kind, fv.content_type, fb.bytes
       from files f
       join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${fileId} and not f.is_inactive
-  `)) as unknown as { rows: { version_id: string; storage_kind: string; content_type: string; bytes: Buffer | null }[] };
+  `));
   const row = result.rows[0];
   if (!row) throw new Error("Capture source file is missing");
   const bytes = row.storage_kind === "s3" ? await getS3Blob(row.version_id) : row.bytes;
@@ -54,7 +54,7 @@ async function loadCaptureBlob(orgId: string, fileId: string): Promise<{ bytes: 
 async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise<string | null> {
   if (capture.vendorTaxId) {
     const taxKey = normalizedKey(capture.vendorTaxId);
-    const tax = (await db.execute(sql`
+    const tax = (await db.execute<{ id: string }>(sql`
       select distinct p.id
         from parties p
         join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
@@ -62,19 +62,19 @@ async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise
        where p.org_id = ${orgId} and p.is_active
          and regexp_replace(lower(tax_id.value), '[^a-z0-9]', '', 'g') = ${taxKey}
        limit 2
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (tax.rows.length === 1) return tax.rows[0].id;
   }
   if (!capture.vendorName) return null;
   const alias = normalizedKey(capture.vendorName);
-  const learned = (await db.execute(sql`
+  const learned = (await db.execute<{ id: string | null }>(sql`
     select output->>'partyId' as id from ap_capture_rules
      where org_id = ${orgId} and rule_kind = 'vendor_alias' and is_active
        and match->>'alias' = ${alias}
      order by confirmation_count desc limit 2
-  `)) as unknown as { rows: { id: string | null }[] };
+  `));
   if (learned.rows.length === 1 && learned.rows[0].id) return learned.rows[0].id;
-  const exact = (await db.execute(sql`
+  const exact = (await db.execute<{ id: string }>(sql`
     select p.id from parties p
     join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
     where p.org_id = ${orgId} and p.is_active
@@ -83,7 +83,7 @@ async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise
         or regexp_replace(lower(coalesce(p.legal_name, '')), '[^a-z0-9]', '', 'g') = ${alias}
       )
     limit 2
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return exact.rows.length === 1 ? exact.rows[0].id : null;
 }
 
@@ -93,14 +93,14 @@ async function resolvePurchaseOrder(
   vendorId: string | null,
 ): Promise<string | null> {
   if (!capture.purchaseOrderNumber) return null;
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string }>(sql`
     select id from documents
      where org_id = ${orgId} and kind = 'purchase_order' and status = 'approved'
        and (document_number = ${capture.purchaseOrderNumber} or reference_number = ${capture.purchaseOrderNumber})
        and (${vendorId}::uuid is null or party_id = ${vendorId})
        and (${capture.currency}::text is null or currency = ${capture.currency})
      limit 2
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return result.rows.length === 1 ? result.rows[0].id : null;
 }
 
@@ -124,14 +124,14 @@ async function mapLines(
 ): Promise<{ lines: CaptureLine[]; issues: CaptureIssue[] }> {
   const issues: CaptureIssue[] = [];
   if (purchaseOrderId) {
-    const source = (await db.execute(sql`
+    const source = (await db.execute<PoLine>(sql`
       select dl.id, dl.item_id, coalesce(dl.account_id, i.expense_account_id) as account_id,
              i.code as item_code, dl.description,
              dl.quantity, dl.quantity_billed, dl.quantity_fulfilled, i.kind as item_kind
         from document_lines dl left join items i on i.id = dl.item_id
        where dl.org_id = ${orgId} and dl.document_id = ${purchaseOrderId}
        order by dl.line_number
-    `)) as unknown as { rows: PoLine[] };
+    `));
     const used = new Set<string>();
     const lines = capture.lines.map((line, lineIndex) => {
       const key = line.productCode ? normalizedKey(line.productCode) : "";
@@ -164,27 +164,27 @@ async function mapLines(
   }
 
   const defaultAccount = vendorId
-    ? ((await db.execute(sql`
+    ? ((await db.execute<{ id: string | null }>(sql`
         select default_expense_account_id as id from vendor_roles
          where org_id = ${orgId} and party_id = ${vendorId} and is_active
-      `)) as unknown as { rows: { id: string | null }[] }).rows[0]?.id ?? null
+      `))).rows[0]?.id ?? null
     : null;
   const requestedItemIds = [...new Set(capture.lines.map((line) => line.itemId).filter((id): id is string => Boolean(id)))];
   const itemResult = requestedItemIds.length
-    ? (await db.execute(sql`
+    ? (await db.execute<{ id: string; expense_account_id: string | null }>(sql`
         select id, expense_account_id from items
          where org_id = ${orgId} and is_active
            and id in (${sql.join(requestedItemIds.map((id) => sql`${id}`), sql`, `)})
-      `)) as unknown as { rows: { id: string; expense_account_id: string | null }[] }
+      `))
     : { rows: [] };
   const itemAccounts = new Map(itemResult.rows.map((row) => [row.id, row.expense_account_id]));
   const learnedResult = vendorId
-    ? (await db.execute(sql`
+    ? (await db.execute<{ description: string; account_id: string }>(sql`
         select match->>'description' as description, output->>'accountId' as account_id
           from ap_capture_rules
          where org_id = ${orgId} and rule_kind = 'vendor_account' and is_active
            and match->>'partyId' = ${vendorId}
-      `)) as unknown as { rows: { description: string; account_id: string }[] }
+      `))
     : { rows: [] };
   const learnedAccounts = new Map(learnedResult.rows.map((row) => [row.description, row.account_id]));
   const requestedAccountIds = [...new Set([
@@ -194,11 +194,11 @@ async function mapLines(
     ...learnedResult.rows.map((row) => row.account_id),
   ].filter((id): id is string => Boolean(id)))];
   const accountResult = requestedAccountIds.length
-    ? (await db.execute(sql`
+    ? (await db.execute<{ id: string }>(sql`
         select id from accounts
          where org_id = ${orgId} and is_active and not is_summary
            and id in (${sql.join(requestedAccountIds.map((id) => sql`${id}`), sql`, `)})
-      `)) as unknown as { rows: { id: string }[] }
+      `))
     : { rows: [] };
   const validAccounts = new Set(accountResult.rows.map((row) => row.id));
   const lines: CaptureLine[] = [];
@@ -237,19 +237,19 @@ export async function resolveAndValidateCapture(input: {
     const valid = (await db.execute(sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${vendorId} and p.is_active and vr.is_active
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!valid.rows[0]) vendorId = null;
   }
   let purchaseOrderId = input.purchaseOrderId === undefined
     ? await resolvePurchaseOrder(input.orgId, input.normalized, vendorId)
     : input.purchaseOrderId;
   if (purchaseOrderId) {
-    const valid = (await db.execute(sql`
+    const valid = (await db.execute<{ party_id: string | null; currency: string }>(sql`
       select party_id, currency from documents where org_id = ${input.orgId} and id = ${purchaseOrderId}
         and kind = 'purchase_order' and status = 'approved'
         and (${vendorId}::uuid is null or party_id = ${vendorId})
         and (${input.normalized.currency}::text is null or currency = ${input.normalized.currency})
-    `)) as unknown as { rows: { party_id: string | null; currency: string }[] };
+    `));
     if (!valid.rows[0]) purchaseOrderId = null;
     else if (!vendorId && valid.rows[0].party_id) vendorId = valid.rows[0].party_id;
   }
@@ -260,7 +260,7 @@ export async function resolveAndValidateCapture(input: {
   if (input.normalized.purchaseOrderNumber && !purchaseOrderId) {
     issues.push(issue("purchase_order_unresolved", "blocking", { field: "purchaseOrderNumber" }));
   }
-  const duplicateResult = (await db.execute(sql`
+  const duplicateResult = (await db.execute<{ "?column?": number }>(sql`
     select 1 from ap_capture_items ci
      where ci.org_id = ${input.orgId} and ci.id <> ${input.captureItemId}
        and ci.status not in ('rejected','failed')
@@ -277,29 +277,29 @@ export async function resolveAndValidateCapture(input: {
        and regexp_replace(lower(nullif(d.reference_number,'')), '[^a-z0-9]', '', 'g')
            = regexp_replace(lower(${normalized.invoiceNumber}), '[^a-z0-9]', '', 'g')
     limit 1
-  `)) as unknown as { rows: { "?column?": number }[] };
+  `));
   const duplicate = duplicateResult.rows.length > 0;
   if (duplicate) issues.push(issue("possible_duplicate", "blocking", { field: "invoiceNumber" }));
   return { normalized, vendorId, purchaseOrderId, issues, duplicate };
 }
 
 export async function processCaptureItem(input: { orgId: string; captureItemId: string; actorId?: string }): Promise<void> {
-  const claimed = (await db.execute(sql`
+  const claimed = (await db.execute<CaptureRow>(sql`
     update ap_capture_items set status = 'extracting', attempts = attempts + 1,
            last_error = null, updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${input.captureItemId} and status in ('queued','failed')
     returning *
-  `)) as unknown as { rows: CaptureRow[] };
+  `));
   const item = claimed.rows[0];
   if (!item) return;
   const settings = await getDocumentCaptureRuntimeConfig(input.orgId);
   const attempt = Number((item as unknown as { attempts: number }).attempts);
-  const run = (await db.execute(sql`
+  const run = (await db.execute<{ id: string }>(sql`
     insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
     values (${input.orgId}, ${item.id}, ${attempt}, 'azure_document_intelligence',
             ${settings?.model ?? "prebuilt-invoice"}, '2024-11-30', ${input.actorId ?? item.created_by})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const runId = run.rows[0].id;
   try {
     if (!settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
@@ -375,22 +375,22 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
   }
 }
 
-async function nextDocumentNumber(tx: any, orgId: string, kind: string, subsidiaryId: string | null): Promise<string> {
+async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string, subsidiaryId: string | null): Promise<string> {
   const prefix = kind === "vendor_credit" ? "VCRED-" : "BILL-";
   const configured = subsidiaryId
     ? ((await tx.execute(sql`
         select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
           and subsidiary_id = ${subsidiaryId} limit 1
-      `)) as unknown as { rows: unknown[] }).rows.length > 0
+      `))).rows.length > 0
     : false;
   const sequenceSubsidiaryId = configured ? subsidiaryId : null;
-  const result = (await tx.execute(sql`
+  const result = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const row = result.rows[0];
   return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
 }
@@ -403,13 +403,13 @@ export async function materializeCapture(input: {
   actorId: string | null;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const result = await db.transaction(async (tx) => {
-    const loaded = (await tx.execute(sql`
+    const loaded = (await tx.execute<CaptureRow>(sql`
       select * from ap_capture_items where org_id = ${input.orgId} and id = ${input.captureItemId} for update
-    `)) as unknown as { rows: CaptureRow[] };
+    `));
     const item = loaded.rows[0];
     if (!item) throw new CaptureMaterializationError("Capture item not found");
     if (item.document_id) {
-      const existing = (await tx.execute(sql`select document_number from documents where id = ${item.document_id}`)) as unknown as { rows: { document_number: string }[] };
+      const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id}`));
       return { documentId: item.document_id, documentNumber: existing.rows[0]?.document_number ?? "" };
     }
     if (!['ready', 'needs_review'].includes(item.status)) {
@@ -428,13 +428,13 @@ export async function materializeCapture(input: {
     const validVendor = (await tx.execute(sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${vendorId} and p.is_active and vr.is_active
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!validVendor.rows[0]) throw new CaptureMaterializationError("The selected vendor is no longer active");
     const accountIds = [...new Set(capture.lines.map((line) => line.accountId).filter((id): id is string => Boolean(id)))];
-    const validAccounts = (await tx.execute(sql`
+    const validAccounts = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${input.orgId} and is_active and not is_summary
         and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (validAccounts.rows.length !== accountIds.length) {
       throw new CaptureMaterializationError("One or more selected accounts are no longer postable");
     }
@@ -449,13 +449,13 @@ export async function materializeCapture(input: {
          and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g')
              = regexp_replace(lower(${capture.invoiceNumber}), '[^a-z0-9]', '', 'g')
       limit 1
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (duplicate.rows[0]) throw new CaptureMaterializationError("A draft or posted document already uses this source or vendor invoice number");
     const issues = validateNormalizedCapture(capture);
     if (issues.some((value) => value.severity === "blocking")) {
       throw new CaptureMaterializationError("Resolve the capture math errors before creating a draft");
     }
-    const org = (await tx.execute(sql`
+    const org = (await tx.execute<{ org_currency: string | null; subsidiary_id: string | null; subsidiary_currency: string | null }>(sql`
       select o.base_currency as org_currency, s.id as subsidiary_id,
              s.base_currency as subsidiary_currency
         from orgs o left join lateral (
@@ -463,7 +463,7 @@ export async function materializeCapture(input: {
            where org_id = o.id and parent_id is null and is_active
            limit 1
         ) s on true where o.id = ${input.orgId}
-    `)) as unknown as { rows: { org_currency: string | null; subsidiary_id: string | null; subsidiary_currency: string | null }[] };
+    `));
     const company = org.rows[0];
     if (!company) throw new CaptureMaterializationError("The company no longer exists");
     const subsidiaryId = company.subsidiary_id;
@@ -475,7 +475,7 @@ export async function materializeCapture(input: {
       throw new CaptureMaterializationError("The company has no configured base currency");
     }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind, subsidiaryId);
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, reference_number, memo,
                              subtotal, tax_total, total, created_by, updated_by)
@@ -486,7 +486,7 @@ export async function materializeCapture(input: {
               ${capture.taxTotal ?? sum(capture.lines.map((line) => line.taxAmount))},
               ${capture.total}, ${input.actorId}, ${input.actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const documentId = inserted.rows[0].id;
     for (let index = 0; index < capture.lines.length; index += 1) {
       const line = capture.lines[index];
@@ -501,7 +501,7 @@ export async function materializeCapture(input: {
                 ${input.actorId}, ${input.actorId})
       `);
       if (line.purchaseOrderLineId) {
-        const advanced = (await tx.execute(sql`
+        const advanced = (await tx.execute<{ id: string }>(sql`
           update document_lines dl set quantity_billed = dl.quantity_billed + ${line.quantity},
                  updated_at = now(), updated_by = ${input.actorId}
            where dl.id = ${line.purchaseOrderLineId} and dl.org_id = ${input.orgId}
@@ -512,7 +512,7 @@ export async function materializeCapture(input: {
                   and (i.kind = 'service' or dl.quantity_fulfilled - dl.quantity_billed >= ${line.quantity})
              ))
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (!advanced.rows[0]) throw new CaptureMaterializationError(`Purchase order line ${index + 1} is no longer billable`);
       }
     }
@@ -540,10 +540,10 @@ export async function materializeCapture(input: {
     `);
     if (capture.vendorName) {
       const alias = normalizedKey(capture.vendorName);
-      const existing = (await tx.execute(sql`
+      const existing = (await tx.execute<{ id: string }>(sql`
         select id from ap_capture_rules where org_id = ${input.orgId} and rule_kind = 'vendor_alias'
           and match->>'alias' = ${alias} and output->>'partyId' = ${vendorId} for update
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (existing.rows[0]) {
         await tx.execute(sql`
           update ap_capture_rules set confirmation_count = confirmation_count + 1,
@@ -563,11 +563,11 @@ export async function materializeCapture(input: {
       for (const line of capture.lines) {
         if (!line.accountId || !line.description) continue;
         const description = normalizedKey(line.description);
-        const existing = (await tx.execute(sql`
+        const existing = (await tx.execute<{ id: string }>(sql`
           select id from ap_capture_rules where org_id = ${input.orgId} and rule_kind = 'vendor_account'
             and match->>'partyId' = ${vendorId} and match->>'description' = ${description}
             and output->>'accountId' = ${line.accountId} for update
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (existing.rows[0]) {
           await tx.execute(sql`
             update ap_capture_rules set confirmation_count = confirmation_count + 1,
@@ -588,7 +588,7 @@ export async function materializeCapture(input: {
     }
     return { documentId, documentNumber };
   });
-  const kind = (await db.execute(sql`select kind from documents where id = ${result.documentId}`)) as unknown as { rows: { kind: string }[] };
+  const kind = (await db.execute<{ kind: string }>(sql`select kind from documents where id = ${result.documentId}`));
   await runRecordFlows(
     { kind: "on_create", source: "api" },
     kind.rows[0]?.kind ?? "vendor_bill",

@@ -84,12 +84,12 @@ export async function saveBudgetCells(input: {
   }
 
   return db.transaction(async (tx) => {
-    const locked = (await tx.execute(sql`
+    const locked = (await tx.execute<{ status: string; revision: number; fiscal_year: number }>(sql`
       select id, status, revision, fiscal_year
         from budget_scenarios
        where id = ${input.scenarioId} and org_id = ${input.orgId}
        for update
-    `)) as unknown as { rows: { status: string; revision: number; fiscal_year: number }[] }
+    `))
     const scenario = locked.rows[0]
     if (!scenario) throw new BudgetMutationError('not_found', 404)
     if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
@@ -98,17 +98,17 @@ export async function saveBudgetCells(input: {
     const accountIds = normalized.map((cell) => cell.accountId)
     const periodIds = normalized.map((cell) => cell.periodId)
     const [accounts, periods] = (await Promise.all([
-      tx.execute(sql`
+      tx.execute<{ id: string }>(sql`
         select id from accounts
          where org_id = ${input.orgId} and id = any(${uuidArray(accountIds)}::uuid[])
            and is_active and not is_summary
       `),
-      tx.execute(sql`
+      tx.execute<{ id: string }>(sql`
         select id from accounting_periods
          where org_id = ${input.orgId} and id = any(${uuidArray(periodIds)}::uuid[])
            and fiscal_year = ${scenario.fiscal_year} and not is_adjustment
       `),
-    ])) as unknown as [{ rows: { id: string }[] }, { rows: { id: string }[] }]
+    ]))
     if (new Set(accounts.rows.map((row) => row.id)).size !== new Set(accountIds).size) {
       throw new BudgetMutationError('invalid_account')
     }
@@ -124,31 +124,31 @@ export async function saveBudgetCells(input: {
     }
     const dimensionQueries = [
       dimensionIds.departmentId.length
-        ? tx.execute(sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`)
-        : Promise.resolve({ rows: [] }),
+        ? tx.execute<{ id: string }>(sql`select id from departments where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.departmentId)}::uuid[])`)
+        : Promise.resolve({ rows: [] as { id: string }[] }),
       dimensionIds.projectId.length
-        ? tx.execute(sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`)
-        : Promise.resolve({ rows: [] }),
+        ? tx.execute<{ id: string }>(sql`select id from projects where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.projectId)}::uuid[])`)
+        : Promise.resolve({ rows: [] as { id: string }[] }),
       dimensionIds.locationId.length
-        ? tx.execute(sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`)
-        : Promise.resolve({ rows: [] }),
+        ? tx.execute<{ id: string }>(sql`select id from locations where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.locationId)}::uuid[])`)
+        : Promise.resolve({ rows: [] as { id: string }[] }),
       dimensionIds.classId.length
-        ? tx.execute(sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`)
-        : Promise.resolve({ rows: [] }),
+        ? tx.execute<{ id: string }>(sql`select id from classes where org_id = ${input.orgId} and id = any(${uuidArray(dimensionIds.classId)}::uuid[])`)
+        : Promise.resolve({ rows: [] as { id: string }[] }),
     ]
-    const dimensionResults = (await Promise.all(dimensionQueries)) as unknown as { rows: { id: string }[] }[]
+    const dimensionResults = await Promise.all(dimensionQueries)
     const dimensionExpected = [dimensionIds.departmentId, dimensionIds.projectId, dimensionIds.locationId, dimensionIds.classId]
     dimensionResults.forEach((result, index) => {
       if (result.rows.length !== dimensionExpected[index]!.length) throw new BudgetMutationError('invalid_dimension')
     })
 
-    const beforeRows = (await tx.execute(sql`
+    const beforeRows = (await tx.execute<Record<string, any>>(sql`
       select account_id, period_id, department_id, project_id, location_id, class_id, amount::text, note
         from budget_lines
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
          and account_id = any(${uuidArray(accountIds)}::uuid[])
          and period_id = any(${uuidArray(periodIds)}::uuid[])
-    `)) as unknown as { rows: Record<string, any>[] }
+    `))
     const before = new Map(
       beforeRows.rows.map((row) => [
         cellKey({

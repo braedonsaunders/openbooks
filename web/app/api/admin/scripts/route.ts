@@ -40,12 +40,12 @@ export async function POST(req: Request) {
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
   const nextRunAt = cron && body.isActive !== false ? computeNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
     values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
             ${cron}, ${nextRunAt}, ${Math.min(Number(body.timeoutMs) || 2000, 10_000)}, ${Number(body.sortOrder) || 100}, ${body.isActive !== false})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }
 

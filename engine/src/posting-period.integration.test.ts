@@ -15,11 +15,11 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const calendar = (await db.execute(sql`
+      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `)) as unknown as { rows: { fiscal_calendar_id: string }[] };
+      `));
       const adjustmentPeriodId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -66,13 +66,11 @@ test(
           bank: org.accounts.bank,
         },
       });
-      const entry = (await db.execute(sql`
+      const entry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
         select period_id, posting_date::text
           from journal_entries
          where id = ${entryId}
-      `)) as unknown as {
-        rows: { period_id: string; posting_date: string }[];
-      };
+      `));
 
       assert.equal(entry.rows[0]!.period_id, adjustmentPeriodId);
       assert.equal(entry.rows[0]!.posting_date, "2026-06-30");
@@ -88,11 +86,11 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const calendar = (await db.execute(sql`
+      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `)) as unknown as { rows: { fiscal_calendar_id: string }[] };
+      `));
       await db.execute(sql`
         update accounting_periods
            set custom = '{"nsId":"duplicate-period"}'::jsonb

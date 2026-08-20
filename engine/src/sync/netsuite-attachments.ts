@@ -178,20 +178,20 @@ async function resolveContext(options: ImportOptions): Promise<{
   bridge: { script: string; deploy: string };
   soapEndpointVersion: string;
 }> {
-  const orgResult = (await db.execute(sql`
+  const orgResult = (await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
-  `)) as unknown as { rows: { id: string; name: string }[] };
+  `));
   if (orgResult.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
   const orgId = orgResult.rows[0].id;
 
-  const connectionResult = (await db.execute(sql`
+  const connectionResult = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string | null }>(sql`
     select id, config, secrets
       from connections
      where org_id = ${orgId} and source = 'netsuite'
        ${options.connectionId ? sql`and id = ${options.connectionId}` : sql``}
      order by (status = 'active') desc, created_at desc
      limit 1
-  `)) as unknown as { rows: { id: string; config: Record<string, unknown>; secrets: string | null }[] };
+  `));
   const connection = connectionResult.rows[0];
   if (!connection) throw new Error("tenant does not have a NetSuite connection");
   const secret = unsealJson<Partial<NetSuiteCreds>>(connection.secrets);
@@ -202,9 +202,9 @@ async function resolveContext(options: ImportOptions): Promise<{
   const host = String(connection.config.host ?? "");
   if (!account || !host) throw new Error("tenant NetSuite connection is missing account or host configuration");
 
-  const actorResult = (await db.execute(sql`
+  const actorResult = (await db.execute<{ id: string }>(sql`
     select id from users where org_id = ${orgId} and role = 'admin' and is_active order by created_at limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!actorResult.rows[0]) throw new Error("tenant needs an active admin user to own imported file audit rows");
   return {
     orgId,
@@ -229,13 +229,13 @@ async function sourceDocuments(orgId: string, limit?: number): Promise<{
   documents: SourceDocument[];
   withoutSourceId: number;
 }> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId} and kind in ('vendor_bill', 'expense_report')
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
-  `)) as unknown as { rows: { id: string; kind: SourceKind; nsId: string | null }[] };
+  `));
   return {
     documents: result.rows.filter((row): row is SourceDocument => Boolean(row.nsId)),
     withoutSourceId: result.rows.filter((row) => !row.nsId).length,
@@ -276,16 +276,14 @@ async function targetedAttachmentInventory(
     sourceTransactionIds.map((sourceId) => sql`${sourceId}`),
     sql`, `,
   );
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string; kind: SourceKind; nsId: string | null }>(sql`
     select id, kind, custom->>'nsId' as "nsId"
       from documents
      where org_id = ${orgId}
        and kind in ('vendor_bill', 'expense_report')
        and custom->>'nsId' in (${sourceIdsSql})
      order by kind, id
-  `)) as unknown as {
-    rows: Array<{ id: string; kind: SourceKind; nsId: string | null }>;
-  };
+  `));
   const documents = result.rows.filter(
     (row): row is SourceDocument => Boolean(row.nsId),
   );
@@ -425,47 +423,47 @@ async function ensureRecordFolder(
   documentId: string,
 ): Promise<string> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments:${orgId}:${documentId}`}))`);
-  const existing = (await tx.execute(sql`
+  const existing = (await tx.execute<{ id: string }>(sql`
     select id from folders where org_id = ${orgId} and record_table = 'documents' and record_id = ${documentId}
       and record_id is not null
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (existing.rows[0]) return existing.rows[0].id;
 
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attachments-root:${orgId}`}))`);
-  let root = (await tx.execute(sql`
+  let root = (await tx.execute<{ id: string }>(sql`
     select id from folders where org_id = ${orgId} and system_kind = 'attachments' limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!root.rows[0]) {
-    root = (await tx.execute(sql`
+    root = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
       values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
   }
   const rootId = root.rows[0].id;
 
   // Nest the per-record leaf under a kind group folder so the cabinet never
   // enumerates tens of thousands of flat attachment folders.
-  const kindRow = (await tx.execute(sql`
+  const kindRow = (await tx.execute<{ kind: string | null }>(sql`
     select kind from documents where id = ${documentId} and org_id = ${orgId}
-  `)) as unknown as { rows: { kind: string | null }[] };
+  `));
   const label = kindRow.rows[0]?.kind ? titleizeKind(kindRow.rows[0].kind) : "Documents";
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`attach-group:${orgId}:${label}`}))`);
-  let group = (await tx.execute(sql`
+  let group = (await tx.execute<{ id: string }>(sql`
     select id from folders
      where org_id = ${orgId} and parent_folder_id = ${rootId} and record_id is null and name = ${label}
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!group.rows[0]) {
-    group = (await tx.execute(sql`
+    group = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
       values (${orgId}, ${rootId}, ${label}, true, 'documents', now(), now()) returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
   }
 
-  const inserted = (await tx.execute(sql`
+  const inserted = (await tx.execute<{ id: string }>(sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
     values (${orgId}, ${group.rows[0].id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return inserted.rows[0].id;
 }
 
@@ -486,13 +484,13 @@ async function persistFile(input: {
   const filename = safeFilename(input.source.name, input.source.id);
   const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
   return db.transaction(async (tx) => {
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string; contentHash: string | null; maxVersion: number }>(sql`
       select id, content_hash as "contentHash",
              (select coalesce(max(version_number), 0) from file_versions where file_id = files.id) as "maxVersion"
         from files
        where org_id = ${input.orgId} and source_system = ${SOURCE_SYSTEM} and source_id = ${input.source.id}
        for update
-    `)) as unknown as { rows: { id: string; contentHash: string | null; maxVersion: number }[] };
+    `));
 
     let fileId = existing.rows[0]?.id;
     let created = false;
@@ -543,12 +541,12 @@ async function persistFile(input: {
 
     let createdLinks = 0;
     for (const documentId of input.targetDocumentIds) {
-      const linked = (await tx.execute(sql`
+      const linked = (await tx.execute<{ id: string }>(sql`
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
         values (${input.orgId}, ${fileId}, 'documents', ${documentId}, ${input.actorId}, now())
         on conflict (org_id, file_id, target_table, target_id) do nothing
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       createdLinks += linked.rows.length;
     }
     return { fileId, created, versioned, unchanged: !created && unchanged, createdLinks };
@@ -563,17 +561,7 @@ async function verifyImport(
   const sourceFileIds = Array.from(fileToDocuments.keys());
   if (sourceFileIds.length === 0) return;
   const sourceIdsSql = sql.join(sourceFileIds.map((fileId) => sql`${fileId}`), sql`, `);
-  const filesResult = (await db.execute(sql`
-    select f.source_id as "sourceId", f.id, f.current_version_id as "currentVersionId",
-           f.storage_kind as "storageKind", f.size_bytes as "sizeBytes",
-           f.content_hash as "contentHash", fv.storage_kind as "versionStorageKind",
-           fv.size_bytes as "versionSizeBytes", fv.content_hash as "versionContentHash"
-      from files f
-      left join file_versions fv on fv.id = f.current_version_id
-     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
-       and f.source_id in (${sourceIdsSql})
-  `)) as unknown as {
-    rows: {
+  const filesResult = (await db.execute<{
       sourceId: string;
       id: string;
       currentVersionId: string | null;
@@ -583,8 +571,16 @@ async function verifyImport(
       versionStorageKind: string | null;
       versionSizeBytes: number | null;
       versionContentHash: string | null;
-    }[];
-  };
+    }>(sql`
+    select f.source_id as "sourceId", f.id, f.current_version_id as "currentVersionId",
+           f.storage_kind as "storageKind", f.size_bytes as "sizeBytes",
+           f.content_hash as "contentHash", fv.storage_kind as "versionStorageKind",
+           fv.size_bytes as "versionSizeBytes", fv.content_hash as "versionContentHash"
+      from files f
+      left join file_versions fv on fv.id = f.current_version_id
+     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
+       and f.source_id in (${sourceIdsSql})
+  `));
   const filesBySourceId = new Map(filesResult.rows.map((row) => [row.sourceId, row]));
 
   for (const sourceFileId of sourceFileIds) {
@@ -609,14 +605,14 @@ async function verifyImport(
     }
   }
 
-  const linksResult = (await db.execute(sql`
+  const linksResult = (await db.execute<{ sourceId: string; targetId: string }>(sql`
     select f.source_id as "sourceId", fa.target_id as "targetId"
       from files f
       join file_attachments fa
         on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = 'documents'
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
        and f.source_id in (${sourceIdsSql})
-  `)) as unknown as { rows: { sourceId: string; targetId: string }[] };
+  `));
   const actualLinks = new Set(
     linksResult.rows.map((row) => `${row.sourceId}\0${row.targetId}`),
   );
@@ -752,7 +748,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       sql`, `,
     )})`
     : sql``;
-  const imported = (await db.execute(sql`
+  const imported = (await db.execute<{ sourceId: string; sourceModifiedAt: string | null; versionCreatedAt: string | null }>(sql`
     select f.source_id as "sourceId",
            f.source_modified_at as "sourceModifiedAt",
            fv.created_at as "versionCreatedAt"
@@ -760,7 +756,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       left join file_versions fv on fv.id = f.current_version_id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id is not null
        ${requestedIdsSql}
-  `)) as unknown as { rows: { sourceId: string; sourceModifiedAt: string | null; versionCreatedAt: string | null }[] };
+  `));
   const importedById = new Map(imported.rows.map((row) => [row.sourceId, {
     modifiedMs: row.sourceModifiedAt ? Date.parse(row.sourceModifiedAt) : null,
     versionCreatedMs: row.versionCreatedAt ? Date.parse(row.versionCreatedAt) : null,
@@ -819,7 +815,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
         from (values ${batch.join(",")}) as v(sid, did)
         join files f on f.org_id = '${orgId}' and f.source_system = '${SOURCE_SYSTEM}' and f.source_id = v.sid
       on conflict (org_id, file_id, target_table, target_id) do nothing
-    `))) as unknown as { rowCount?: number };
+    `)));
     summary.createdLinks += res.rowCount ?? 0;
   }
 

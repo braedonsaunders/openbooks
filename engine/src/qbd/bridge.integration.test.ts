@@ -15,7 +15,7 @@ import {
 const DB = Boolean(env.OPENBOOKS_DB_URL && env.OPENBOOKS_DATA_KEY);
 
 test("Web Connector bridge authenticates, atomically claims, hashes, and releases a response", { skip: !DB }, async () => {
-  const orgs = (await db.execute(sql`select id from orgs order by created_at limit 1`)) as unknown as { rows: { id: string }[] };
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
   const orgId = orgs.rows[0]?.id;
   if (!orgId) return;
   const password = "bridge-test-password-123";
@@ -49,18 +49,16 @@ test("Web Connector bridge authenticates, atomically claims, hashes, and release
     const progress = await acceptWebConnectorResponse(auth.ticket, response, "", "");
     assert.ok(progress > 0 && progress < 100);
 
-    const stored = (await db.execute(sql`
+    const stored = (await db.execute<{ status: string; xml: string | null; hash: string | null }>(sql`
       select status, response_xml as xml, response_sha256 as hash
-        from qbd_requests where capture_id = ${captureId} and family = 'company'`)) as unknown as {
-      rows: { status: string; xml: string | null; hash: string | null }[];
-    };
+        from qbd_requests where capture_id = ${captureId} and family = 'company'`));
     assert.equal(stored.rows[0]?.status, "complete");
     assert.equal(stored.rows[0]?.xml, response);
     assert.match(stored.rows[0]?.hash ?? "", /^[0-9a-f]{64}$/);
 
     await closeWebConnectorSession(auth.ticket);
     await releaseCapture(orgId, captureId);
-    const released = (await db.execute(sql`select response_xml as xml from qbd_requests where capture_id = ${captureId} and family = 'company'`)) as unknown as { rows: { xml: string | null }[] };
+    const released = (await db.execute<{ xml: string | null }>(sql`select response_xml as xml from qbd_requests where capture_id = ${captureId} and family = 'company'`));
     assert.equal(released.rows[0]?.xml, null);
   } finally {
     await db.execute(sql`delete from connections where id = ${connection.id}`);

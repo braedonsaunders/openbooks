@@ -15,7 +15,7 @@ const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "cus
  */
 export async function GET() {
   const authz = await requirePermission("documents.manage");
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
            rs.auto_post as "autoPost", rs.is_active as "isActive", rs.run_count as "runCount",
            rs.last_run_at as "lastRunAt", rs.last_document_id as "lastDocumentId", rs.last_error as "lastError",
@@ -26,7 +26,7 @@ export async function GET() {
       left join parties p on p.id = d.party_id and p.org_id = rs.org_id
      where rs.org_id = ${authz.user.orgId}
      order by rs.is_active desc, rs.next_run_on
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return NextResponse.json({ schedules: rows.rows });
 }
 
@@ -54,24 +54,24 @@ export async function POST(req: Request) {
   }
 
   // Resolve by id or by the human document number (the UI hands a number).
-  const tpl = (await db.execute(
+  const tpl = (await db.execute<{ id: string }>(
     body.templateDocumentId
       ? sql`select id from documents where id = ${body.templateDocumentId} and org_id = ${authz.user.orgId}`
       : sql`select id from documents where document_number = ${body.templateDocumentNumber} and org_id = ${authz.user.orgId} limit 1`,
-  )) as unknown as { rows: { id: string }[] };
+  ));
   if (!tpl.rows.length) {
     return NextResponse.json({ error: "template document not found" }, { status: 404 });
   }
   const templateDocumentId = tpl.rows[0]!.id;
 
   const nextRunOn = body.nextRunOn ?? new Date().toISOString().slice(0, 10);
-  const created = (await db.execute(sql`
+  const created = (await db.execute<{ id: string }>(sql`
     insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
                                      auto_post, name, created_by, updated_by)
     values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
             ${nextRunOn}, ${body.endsOn ?? null}, ${body.autoPost ?? false}, ${body.name ?? null},
             ${authz.user.id}, ${authz.user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return NextResponse.json({ id: created.rows[0]!.id }, { status: 201 });
 }

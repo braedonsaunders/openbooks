@@ -47,7 +47,7 @@ export default async function PayRunPage({
   const sp = await searchParams
   const t = await getTranslations('payroll')
 
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<RunHeader>(sql`
     select r.document_id, d.document_number, d.status as document_status, d.currency,
            d.posted_entry_id, s.name as schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
@@ -56,7 +56,7 @@ export default async function PayRunPage({
       from pay_runs r
       join documents d on d.id = r.document_id
       left join pay_schedules s on s.id = r.pay_schedule_id
-     where r.org_id = ${orgId} and r.document_id = ${id}`)) as unknown as { rows: RunHeader[] }
+     where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]
   if (!run) notFound()
 
@@ -66,7 +66,7 @@ export default async function PayRunPage({
   const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId)
 
   const [stubsRes, linesRes, rosterRes, prevRes, remitRes] = (await Promise.all([
-    db.execute(sql`
+    db.execute<StubRow>(sql`
       select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
              st.gross, st.net_pay, st.employer_cost, st.vacation_accrued,
              st.pensionable_earnings, st.insurable_earnings, st.factors
@@ -74,7 +74,7 @@ export default async function PayRunPage({
         join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
        where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
        order by p.display_name`),
-    db.execute(sql`
+    db.execute<(StubRow['lines'])[number]>(sql`
       select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
              c.code as component_code, pr.name as project_name, dep.name as department_name
         from pay_stub_lines l
@@ -87,7 +87,7 @@ export default async function PayRunPage({
     // Step 1 roster: everyone the schedule would include, with approved hours
     // in the period and a wage-configured flag (one-table doctrine —
     // labor_cost_rates, employee scope, effective at the pay date).
-    db.execute(sql`
+    db.execute<RosterRow>(sql`
       select p.id as employee_party_id, p.display_name as name, prof.pay_basis,
              coalesce(te.hours, 0)::text as approved_hours,
              -- Every dimension the roster carries, so the scope filters are a
@@ -135,7 +135,7 @@ export default async function PayRunPage({
        order by p.display_name`),
     // Variance baseline: each employee's most recent committed stub before
     // this run (net pay delta drives the ±15% review flag).
-    db.execute(sql`
+    db.execute<{ employee_party_id: string; net_pay: string; pay_date: string }>(sql`
       select distinct on (st.employee_party_id)
              st.employee_party_id, st.net_pay, st.pay_date::text as pay_date
         from pay_stubs st
@@ -145,7 +145,7 @@ export default async function PayRunPage({
        order by st.employee_party_id, st.pay_date desc, st.created_at desc`),
     // Finish-step remittance summary: the committed projection's credit legs
     // grouped by account (net pay owed + statutory/withholding liabilities).
-    db.execute(sql`
+    db.execute<RemittanceRow>(sql`
       select trim(concat_ws(' · ', a.number, a.name)) as account_label,
              sum(dl.amount)::text as amount
         from document_lines dl
@@ -154,13 +154,7 @@ export default async function PayRunPage({
        group by a.id, a.number, a.name
        having sum(dl.amount) < 0
        order by sum(dl.amount)`),
-  ])) as unknown as [
-    { rows: StubRow[] },
-    { rows: StubRow['lines'] },
-    { rows: RosterRow[] },
-    { rows: { employee_party_id: string; net_pay: string; pay_date: string }[] },
-    { rows: RemittanceRow[] },
-  ]
+  ]))
 
   const linesByStub = new Map<string, StubRow['lines']>()
   for (const line of linesRes.rows) {
@@ -174,7 +168,7 @@ export default async function PayRunPage({
   for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
 
   const [adjustmentsRes, adjustableRes] = (await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount::text, a.hours::text,
              a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
         from pay_run_adjustments a
@@ -182,12 +176,12 @@ export default async function PayRunPage({
         left join pay_components c on c.id = a.component_id
        where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
        order by p.display_name, a.created_at`),
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, code, name, kind from pay_components
        where org_id = ${orgId} and is_active
          and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
        order by sequence, code`),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }]
+  ]))
 
   // A termination run's Finish step owns the pack-declared SEPARATION
   // filings (the ROE): due within days of the interruption of earnings, so
@@ -220,15 +214,15 @@ export default async function PayRunPage({
           ? 'review'
           : 'period'
 
-  const registerReport = ((await db.execute(sql`
+  const registerReport = ((await db.execute<{ id: string }>(sql`
     select id from report_definitions
      where org_id = ${orgId} and slug = 'payroll-register' limit 1
-  `)) as unknown as { rows: { id: string }[] }).rows[0] ?? null
+  `))).rows[0] ?? null
 
-  const bankAccounts = ((await db.execute(sql`
+  const bankAccounts = ((await db.execute<{ id: string; label: string }>(sql`
     select id, concat_ws(' · ', number, name) as label from accounts
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
-     order by number nulls last, name`)) as unknown as { rows: { id: string; label: string }[] }).rows
+     order by number nulls last, name`))).rows
 
   // Readiness, staleness, funding and the per-employee diff are engine-owned
   // (one source of truth for what blocks a run, what it costs, and what moved).

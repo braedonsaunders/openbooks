@@ -60,7 +60,15 @@ export async function recordProjectOverheadAdjustment(
 
   return db.transaction(async (tx) => {
     if (sourceSystem && sourceRef) {
-      const prior = (await tx.execute(sql`
+      const prior = (await tx.execute<{
+          id: string;
+          project_id: string;
+          adjustment_date: string;
+          amount: string;
+          reason: string;
+          reverses_adjustment_id: string | null;
+          evidence_matches: boolean;
+        }>(sql`
         select id, project_id, adjustment_date::text as adjustment_date,
                amount::text, reason, reverses_adjustment_id,
                evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
@@ -69,17 +77,7 @@ export async function recordProjectOverheadAdjustment(
            and source_system = ${sourceSystem}
            and source_ref = ${sourceRef}
          for update
-      `)) as unknown as {
-        rows: {
-          id: string;
-          project_id: string;
-          adjustment_date: string;
-          amount: string;
-          reason: string;
-          reverses_adjustment_id: string | null;
-          evidence_matches: boolean;
-        }[];
-      };
+      `));
       const existing = prior.rows[0];
       if (existing) {
         const equivalent =
@@ -99,7 +97,7 @@ export async function recordProjectOverheadAdjustment(
       }
     }
 
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into project_overhead_adjustments (
         org_id, project_id, adjustment_date, amount, reason,
         source_system, source_ref, reverses_adjustment_id, evidence,
@@ -112,7 +110,7 @@ export async function recordProjectOverheadAdjustment(
         ${input.actorId ?? null}, ${input.actorId ?? null}
       )
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const id = inserted.rows[0]!.id;
     await tx.execute(sql`
       insert into audit_log (
@@ -148,17 +146,15 @@ export async function reverseProjectOverheadAdjustment(input: {
   sourceSystem?: string | null;
   sourceRef?: string | null;
 }): Promise<ProjectOverheadAdjustmentRecord> {
-  const original = (await db.execute(sql`
-    select project_id, amount::text, evidence
-      from project_overhead_adjustments
-     where org_id = ${input.orgId} and id = ${input.adjustmentId}
-  `)) as unknown as {
-    rows: {
+  const original = (await db.execute<{
       project_id: string;
       amount: string;
       evidence: Record<string, unknown>;
-    }[];
-  };
+    }>(sql`
+    select project_id, amount::text, evidence
+      from project_overhead_adjustments
+     where org_id = ${input.orgId} and id = ${input.adjustmentId}
+  `));
   const row = original.rows[0];
   if (!row) throw new Error("overhead adjustment not found");
   return recordProjectOverheadAdjustment({

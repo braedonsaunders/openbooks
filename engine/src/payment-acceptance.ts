@@ -323,8 +323,7 @@ export const ACCEPTANCE_ADAPTERS: Record<AcceptanceProvider, PaymentProviderAdap
 // ---------------------------------------------------------------------------
 // Config + surcharge resolution
 // ---------------------------------------------------------------------------
-
-interface ProviderConfigRow {
+type ProviderConfigRow = {
   id: string;
   provider: string;
   display_name: string;
@@ -335,16 +334,16 @@ interface ProviderConfigRow {
   settings: Record<string, unknown>;
   surcharge_rule_id: string | null;
   secrets: string | null;
-}
+};
 
 async function loadProviderConfig(orgId: string, provider: AcceptanceProvider): Promise<ProviderConfigRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ProviderConfigRow>(sql`
     select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
            publishable_key, settings, surcharge_rule_id, secrets
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
      limit 1
-  `)) as unknown as { rows: ProviderConfigRow[] };
+  `));
   return r.rows[0] ?? null;
 }
 
@@ -387,7 +386,7 @@ export async function resolveSurcharge(
   orgId: string,
   opts: { provider: AcceptanceProvider; amount: string; onDate: string; configuredRuleId?: string | null },
 ): Promise<SurchargeResolution> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }>(sql`
     select id, calculation, percent, fixed_amount, cap_amount, fee_income_account_id
       from payment_surcharge_rules
      where org_id = ${orgId} and is_active
@@ -398,9 +397,7 @@ export async function resolveSurcharge(
                    when provider = ${opts.provider} then 1 else 2 end,
               effective_from desc
      limit 1
-  `)) as unknown as {
-    rows: { id: string; calculation: string; percent: string | null; fixed_amount: string | null; cap_amount: string | null; fee_income_account_id: string }[];
-  };
+  `));
   const rule = r.rows[0];
   if (!rule) return { amount: "0", ruleId: null, feeIncomeAccountId: null };
   return { amount: computeSurcharge(opts.amount, rule), ruleId: rule.id, feeIncomeAccountId: rule.fee_income_account_id };
@@ -410,7 +407,7 @@ export async function resolveSurcharge(
 // Payment links
 // ---------------------------------------------------------------------------
 
-export interface PaymentLinkView {
+export type PaymentLinkView = {
   id: string;
   token: string;
   documentId: string;
@@ -423,17 +420,17 @@ export interface PaymentLinkView {
   memo: string | null;
   paidPaymentDocumentId: string | null;
   createdAt: string;
-}
+};
 
 export async function listPaymentLinks(orgId: string, documentId: string): Promise<PaymentLinkView[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<PaymentLinkView>(sql`
     select id, token, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
            currency, status, expires_on::text as "expiresOn", memo,
            paid_payment_document_id as "paidPaymentDocumentId", created_at as "createdAt"
       from payment_links
      where org_id = ${orgId} and document_id = ${documentId}
      order by created_at desc
-  `)) as unknown as { rows: PaymentLinkView[] };
+  `));
   return r.rows;
 }
 
@@ -443,12 +440,10 @@ export async function createPaymentLink(
   input: { documentId: string; provider: AcceptanceProvider; bankAccountId?: string | null; expiresOn?: string | null; memo?: string | null },
 ): Promise<PaymentLinkView> {
   return await withOrg(orgId, async () => {
-    const docs = (await db.execute(sql`
+    const docs = (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string; currency: string; document_number: string; open_balance: string }>(sql`
       select id, kind, status, party_id, subsidiary_id, currency, document_number, open_balance
         from documents where id = ${input.documentId} and org_id = ${orgId}
-    `)) as unknown as {
-      rows: { id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string; currency: string; document_number: string; open_balance: string }[];
-    };
+    `));
     const doc = docs.rows[0];
     if (!doc) throw new PaymentAcceptanceError("invoice not found");
     if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
@@ -471,7 +466,7 @@ export async function createPaymentLink(
     });
 
     const token = randomBytes(24).toString("base64url");
-    const id = (await db.execute(sql`
+    const id = (await db.execute<{ id: string }>(sql`
       insert into payment_links
         (org_id, token, document_id, party_id, subsidiary_id, provider, bank_account_id,
          amount, surcharge_amount, currency, status, expires_on, memo, created_by, updated_by)
@@ -479,7 +474,7 @@ export async function createPaymentLink(
               ${doc.open_balance}, ${surcharge.amount}, ${doc.currency}, 'active', ${input.expiresOn ?? null},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_links', ${id.rows[0].id}, 'insert',
@@ -493,11 +488,11 @@ export async function createPaymentLink(
 
 export async function voidPaymentLink(orgId: string, actorId: string, linkId: string): Promise<void> {
   await withOrg(orgId, async () => {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       update payment_links set status = 'void', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${linkId} and status = 'active'
        returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!r.rows[0]) throw new PaymentAcceptanceError("payment link not found or not active");
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -560,13 +555,13 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
       await db.execute(sql`update payment_links set status = 'expired', updated_at = now() where id = ${link.id} and status = 'active'`);
       return null;
     }
-    const ctx = (await db.execute(sql`
+    const ctx = (await db.execute<{ orgName: string; documentNumber: string; partyName: string; openBalance: string }>(sql`
       select o.name as "orgName", d.document_number as "documentNumber", p.name as "partyName",
              d.open_balance as "openBalance"
         from orgs o, documents d, parties p
        where o.id = ${link.orgId} and d.id = ${link.documentId} and d.org_id = ${link.orgId}
          and p.id = ${link.partyId} and p.org_id = ${link.orgId}
-    `)) as unknown as { rows: { orgName: string; documentNumber: string; partyName: string; openBalance: string }[] };
+    `));
     const row = ctx.rows[0];
     if (!row) return null;
     const config = await loadProviderConfig(link.orgId, link.provider);
@@ -601,9 +596,9 @@ export async function createCheckoutSession(
   if (!link) throw new PaymentAcceptanceError("payment link not found");
   if (link.status !== "active") throw new PaymentAcceptanceError(`payment link is ${link.status}`);
   return await withOrg(link.orgId, async () => {
-    const doc = (await db.execute(sql`
+    const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
       select document_number, open_balance from documents where id = ${link.documentId} and org_id = ${link.orgId}
-    `)) as unknown as { rows: { document_number: string; open_balance: string }[] };
+    `));
     if (!doc.rows[0]) throw new PaymentAcceptanceError("invoice not found");
     const openBalance = doc.rows[0].open_balance;
     if (cmp(openBalance, "0.005") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
@@ -618,11 +613,11 @@ export async function createCheckoutSession(
     });
 
     // Reuse a live initiated attempt (same provider object) when amounts match.
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string; external_ref: string; event_payload: { redirectUrl?: string; invoiceAmount?: string; surchargeAmount?: string } | null }>(sql`
       select id, external_ref, event_payload from payment_attempts
        where org_id = ${link.orgId} and link_id = ${link.id} and provider = ${link.provider} and status = 'initiated'
        order by created_at desc limit 1
-    `)) as unknown as { rows: { id: string; external_ref: string; event_payload: { redirectUrl?: string; invoiceAmount?: string; surchargeAmount?: string } | null }[] };
+    `));
     const open = existing.rows[0];
     if (open?.event_payload?.redirectUrl && open.event_payload.invoiceAmount === openBalance && open.event_payload.surchargeAmount === surcharge.amount) {
       return { redirectUrl: open.event_payload.redirectUrl };
@@ -694,19 +689,19 @@ async function processWebhookEvent(
   event: WebhookEvent,
 ): Promise<string> {
   // Resolve the attempt: by provider object id first, then by link token.
-  let attempt = (await db.execute(sql`
+  let attempt = (await db.execute<{ id: string; link_id: string; status: string }>(sql`
     select id, link_id, status from payment_attempts
      where org_id = ${orgId} and provider = ${provider} and external_ref = ${event.externalRef}
      order by created_at desc limit 1
-  `)) as unknown as { rows: { id: string; link_id: string; status: string }[] };
+  `));
   if (!attempt.rows[0] && event.linkToken) {
-    attempt = (await db.execute(sql`
+    attempt = (await db.execute<{ id: string; link_id: string; status: string }>(sql`
       select a.id, a.link_id, a.status from payment_attempts a
         join payment_links l on l.id = a.link_id and l.org_id = a.org_id
        where a.org_id = ${orgId} and a.provider = ${provider} and l.token = ${event.linkToken}
          and a.status = 'initiated'
        order by a.created_at desc limit 1
-    `)) as unknown as { rows: { id: string; link_id: string; status: string }[] };
+    `));
   }
   const found = attempt.rows[0];
   if (!found) return "unknown_attempt";
@@ -714,7 +709,7 @@ async function processWebhookEvent(
   // Atomic claim: exactly one concurrent delivery transitions the attempt.
   let claim: { rows: { id: string }[] };
   try {
-    claim = (await db.execute(sql`
+    claim = (await db.execute<{ id: string }>(sql`
       update payment_attempts
          set status = ${event.status === "succeeded" ? "initiated" : event.status},
              external_ref = ${event.externalRef},
@@ -722,7 +717,7 @@ async function processWebhookEvent(
              updated_at = now()
        where id = ${found.id} and status = 'initiated'
        returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
   } catch (err) {
     // Re-keying to the provider object id hit an already-processed delivery.
     if ((err as { code?: string }).code === "23505") return "duplicate";
@@ -752,26 +747,24 @@ async function processWebhookEvent(
  * and post through the kernel. Idempotent via the attempt claim above.
  */
 async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      id: string; amount: string | null; surcharge_amount: string | null;
+      event_payload: { feeIncomeAccountId?: string } | null;
+      link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
+      link_created_by: string | null;
+    }>(sql`
     select a.id, a.amount, a.surcharge_amount, a.event_payload,
            l.id as link_id, l.document_id, l.party_id, l.subsidiary_id, l.bank_account_id, l.currency, l.created_by as link_created_by
       from payment_attempts a
       join payment_links l on l.id = a.link_id and l.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${attemptId}
-  `)) as unknown as {
-    rows: {
-      id: string; amount: string | null; surcharge_amount: string | null;
-      event_payload: { feeIncomeAccountId?: string } | null;
-      link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
-      link_created_by: string | null;
-    }[];
-  };
+  `));
   const a = rows.rows[0];
   if (!a) throw new PaymentAcceptanceError("attempt not found");
 
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
     select id, document_number, open_balance from documents where id = ${a.document_id} and org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; document_number: string; open_balance: string }[] };
+  `));
   const invoice = doc.rows[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
   if (cmp(invoice.open_balance, "0.005") <= 0) {
@@ -846,7 +839,17 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
 export async function finalizePaymentAcceptanceForDocument(
   paymentDocumentId: string,
 ): Promise<void> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{
+      attempt_id: string;
+      org_id: string;
+      amount: string | null;
+      surcharge_amount: string | null;
+      link_id: string;
+      invoice_id: string;
+      invoice_number: string;
+      open_balance: string;
+      posted_entry_id: string;
+    }>(sql`
     select attempt.id as attempt_id,
            attempt.org_id,
            attempt.amount,
@@ -867,29 +870,17 @@ export async function finalizePaymentAcceptanceForDocument(
        and attempt.status = 'initiated'
        and payment.status = 'posted'
      for update of attempt
-  `)) as unknown as {
-    rows: {
-      attempt_id: string;
-      org_id: string;
-      amount: string | null;
-      surcharge_amount: string | null;
-      link_id: string;
-      invoice_id: string;
-      invoice_number: string;
-      open_balance: string;
-      posted_entry_id: string;
-    }[];
-  };
+  `));
   const row = result.rows[0];
   if (!row) return;
-  const closed = (await db.execute(sql`
+  const closed = (await db.execute<{ id: string }>(sql`
     update payment_attempts
        set status = 'succeeded',
            journal_entry_id = ${row.posted_entry_id},
            updated_at = now()
      where id = ${row.attempt_id} and status = 'initiated'
      returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!closed.rows[0]) return;
   if (cmp(row.open_balance ?? "0", "0.005") <= 0) {
     await db.execute(sql`

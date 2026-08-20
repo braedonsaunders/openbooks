@@ -997,10 +997,17 @@ const TIMESHEET_WEEK: RecordTypeMeta = {
   labelKey: "customization.recordTypes.timesheet_week",
   category: "entity",
   supportsForms: false,
-  customFieldTable: "timesheet_weeks",
-  customFieldLineTable: null,
+  // A week is an aggregate over time_entries, not a record, so it has no header
+  // of its own to extend; tenant fields belong on the LINE and render as grid
+  // columns in the flyout. (customFieldTable used to name 'timesheet_weeks' —
+  // a table that has never existed, so those defs could never be stored.)
+  customFieldTable: undefined,
+  customFieldLineTable: "time_entries",
   headerFields: [],
   lineFields: [],
+  // Timesheets are read newest-first; the employee directory ordering that the
+  // first-sortable-column default produces buries the current week.
+  defaultSort: { sortKey: "week", dir: "desc" },
   listColumns: [
     { key: "employee_name", labelKey: "common.labels.employee", kind: "reference", sortable: true, sortKey: "employee", locked: true },
     { key: "week_start", labelKey: "timesheets.list.week", kind: "date", sortable: true, sortKey: "week" },

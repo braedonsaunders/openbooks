@@ -52,11 +52,11 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
 
     const first = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(first.lineCount, 2);
-    const firstLines = (await db.execute(sql`
+    const firstLines = (await db.execute<{ number: string; amount: string }>(sql`
       select a.number, l.amount
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${first.entryId}
-       order by a.number`)) as unknown as { rows: { number: string; amount: string }[] };
+       order by a.number`));
     assert.deepEqual(firstLines.rows, [
       { number: "1100", amount: "-120.0000" },
       { number: "2000", amount: "120.0000" },
@@ -65,7 +65,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
     const second = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(second.lineCount, 2);
     assert.notEqual(second.entryId, first.entryId);
-    const proof = (await db.execute(sql`
+    const proof = (await db.execute<{ reversals: number; effective_balance: string; ar_elimination: string; ap_elimination: string }>(sql`
       select
         count(distinct e.id) filter (where reverses_entry_id = ${first.entryId} and status = 'posted')::int as reversals,
         coalesce(sum(l.amount), 0)::text as effective_balance,
@@ -74,9 +74,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       from journal_entries e
       join journal_lines l on l.entry_id = e.id
       where e.org_id = ${org.orgId} and e.subsidiary_id = ${eliminationSubsidiaryId}
-        and e.status in ('posted', 'reversed') and e.origin = 'intercompany'`)) as unknown as {
-      rows: { reversals: number; effective_balance: string; ar_elimination: string; ap_elimination: string }[];
-    };
+        and e.status in ('posted', 'reversed') and e.origin = 'intercompany'`));
     assert.deepEqual(proof.rows[0], {
       reversals: 1,
       effective_balance: "0.0000",
@@ -102,10 +100,10 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       runAutoElimination(org.orgId, org.periodId, actorId),
       /residual 0\.0001/,
     );
-    const afterFailure = (await db.execute(sql`
+    const afterFailure = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
-         and origin = 'intercompany' and status in ('posted', 'reversed')`)) as unknown as { rows: { n: number }[] };
+         and origin = 'intercompany' and status in ('posted', 'reversed')`));
     assert.equal(afterFailure.rows[0]!.n, 3);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -147,11 +145,11 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
     const capital = randomUUID();
     const profit = randomUUID();
     const adjustmentProfit = randomUUID();
-    const calendar = (await db.execute(sql`
+    const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
       select fiscal_calendar_id
         from accounting_periods
        where id = ${org.periodId}
-    `)) as unknown as { rows: { fiscal_calendar_id: string }[] };
+    `));
     const adjustmentPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods
@@ -207,13 +205,13 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
       actorId,
     );
     assert.equal(first.entryIds.length, 2);
-    const firstBalances = (await db.execute(sql`
+    const firstBalances = (await db.execute<{ number: string; amount: string }>(sql`
       select a.number,coalesce(sum(l.amount),0)::text amount
         from journal_lines l join journal_entries e on e.id=l.entry_id
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${first.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `)) as unknown as { rows: { number: string; amount: string }[] };
+    `));
     assert.deepEqual(firstBalances.rows, [
       { number: "1400", amount: "-900.0000" },
       { number: "1500", amount: "100.0000" },
@@ -224,7 +222,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
     const firstUnbalanced = (await db.execute(sql`
       select entry_id from journal_lines where entry_id=any(${`{${first.entryIds.join(",")}}`}::uuid[])
        group by entry_id having sum(amount)<>0
-    `)) as unknown as { rows: unknown[] };
+    `));
     assert.equal(firstUnbalanced.rows.length, 0);
 
     const second = await runOwnershipConsolidation(
@@ -233,7 +231,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
       actorId,
     );
     assert.equal(second.entryIds.length, 4);
-    const rerun = (await db.execute(sql`
+    const rerun = (await db.execute<{ reversals: number; replacements: number; balance: string }>(sql`
       select
         count(distinct e.id) filter (where oce.kind='reversal')::int reversals,
         count(distinct e.id) filter (where oce.kind<>'reversal')::int replacements,
@@ -242,7 +240,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
        join journal_entries e on e.id=oce.journal_entry_id
        join journal_lines l on l.entry_id=e.id
       where oce.run_id=${second.runId}
-    `)) as unknown as { rows: { reversals: number; replacements: number; balance: string }[] };
+    `));
     assert.deepEqual(rerun.rows[0], { reversals: 2, replacements: 2, balance: "0.0000" });
 
     await assert.rejects(

@@ -105,21 +105,21 @@ async function loadContext(data: {
   const select = sql`p.name as period_name, p.starts_on, p.ends_on, b.name as book_name,
            pkg.name as package_name, pkg.reports, pkg.recipients, pkg.delivery, o.name as org_name`;
   const rows = runId
-    ? ((await db.execute(sql`
+    ? ((await db.execute<PackageContext>(sql`
         select ${select}
           from close_runs r
           join accounting_periods p on p.id = r.period_id
           join accounting_books b on b.id = r.book_id
           join close_reporting_packages pkg on pkg.id = ${packageId} and pkg.org_id = ${orgId}
           join orgs o on o.id = r.org_id
-         where r.id = ${runId} and r.org_id = ${orgId}`)) as unknown as { rows: PackageContext[] }).rows
-    : ((await db.execute(sql`
+         where r.id = ${runId} and r.org_id = ${orgId}`))).rows
+    : ((await db.execute<PackageContext>(sql`
         select ${select}
           from accounting_periods p
           join accounting_books b on b.id = ${bookId} and b.org_id = ${orgId}
           join close_reporting_packages pkg on pkg.id = ${packageId} and pkg.org_id = ${orgId}
           join orgs o on o.id = ${orgId}
-         where p.id = ${periodId} and p.org_id = ${orgId}`)) as unknown as { rows: PackageContext[] }).rows;
+         where p.id = ${periodId} and p.org_id = ${orgId}`))).rows;
   return rows[0];
 }
 
@@ -153,11 +153,9 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
 
       // Guarantee every catalog slug (statements + built-ins) resolves to an id.
       await ensureReportDefinitions(orgId);
-      const defs = (await db.execute(sql`
+      const defs = (await db.execute<{ slug: string; id: string; name: string }>(sql`
         select slug, id, name from report_definitions
-         where org_id = ${orgId} and slug in (${sql.join(specs.map((spec) => sql`${spec.slug}`), sql`, `)})`)) as unknown as {
-        rows: Array<{ slug: string; id: string; name: string }>;
-      };
+         where org_id = ${orgId} and slug in (${sql.join(specs.map((spec) => sql`${spec.slug}`), sql`, `)})`));
       const defBySlug = new Map(defs.rows.map((def) => [def.slug, def]));
 
       const xlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";

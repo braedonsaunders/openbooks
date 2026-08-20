@@ -52,6 +52,23 @@
     "lineItemAria": "Item da linha {line}",
     "lineBillableAria": "Faturável da linha {line}",
     "lineHoursAria": "Horas de {day} da linha {line}",
-    "removeLineAria": "Remover linha {line}"
+    "removeLineAria": "Remover linha {line}",
+    "reject": "Rejeitar",
+    "rejectTitle": "Rejeitar esta folha de horas",
+    "rejectReasonLabel": "Motivo",
+    "rejectPlaceholder": "O que precisa mudar antes da aprovação?",
+    "rejectedToast": "Folha de horas rejeitada",
+    "rejectedBecause": "Rejeitada: {reason}",
+    "reopen": "Reabrir",
+    "reopenTitle": "Reabrir esta folha de horas?",
+    "reopenMessage": "A semana volta a rascunho e a aprovação é limpa, portanto precisará ser aprovada novamente.",
+    "reopenedToast": "Folha de horas reaberta",
+    "lockedBecause": "Esta semana não pode mais ser reaberta — {count} lançamentos já estão {reasons}.",
+    "lockReason": {
+      "invoiced": "faturados ao cliente",
+      "paid": "pagos em uma folha",
+      "costed": "lançados no razão",
+      "ticketed": "em um boletim de campo"
+    }
   }
 }

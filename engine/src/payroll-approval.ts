@@ -75,7 +75,7 @@ export async function payRunApprovalState(
   orgId: string,
   documentId: string,
 ): Promise<PayRunApprovalState> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ status: string; submitted: boolean; open_gates: number; policies: number }>(sql`
     select d.status,
            d.submitted_at is not null as submitted,
            (select count(*)::int from flow_gates g
@@ -86,9 +86,7 @@ export async function payRunApprovalState(
                and f.enabled and ${GATING_ON_SUBMIT_FLOW}) as policies
       from documents d
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
-  `)) as unknown as {
-    rows: { status: string; submitted: boolean; open_gates: number; policies: number }[];
-  };
+  `));
   const row = rows.rows[0];
   if (!row) throw new PayrollError("pay run not found");
   const outstandingGates = Number(row.open_gates ?? 0);

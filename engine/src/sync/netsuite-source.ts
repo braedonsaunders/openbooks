@@ -60,10 +60,18 @@ const NS_ITEM_KIND: Record<string, string> = {
   Kit: "kit",
 };
 
-// NetSuite jobbillingtype → openbooks projects.billing_method enum.
+// NetSuite jobbillingtype → openbooks project-type key, by NetSuite's own
+// stock meaning of the enum. An account that overloads a member to mean
+// something else maps it on its connection via `projectBillingTypes` — the
+// stock reading is the default, never a particular customer's convention.
 const NS_BILLING: Record<string, string> = {
   TM: "time_and_materials", FBI: "fixed_price", FBM: "fixed_price",
 };
+
+/** Project-type keys a source billing type may resolve to. */
+const PROJECT_TYPE_KEYS = [
+  "time_and_materials", "fixed_price", "cost_plus", "not_to_exceed",
+] as const;
 const NETSUITE_ID_WINDOW = 5_000;
 
 /**
@@ -93,6 +101,13 @@ export interface NetSuiteAccountMappings {
    * different custom fields for this provenance. */
   timeEntryFieldTicketNumberField?: string;
   projectStatuses?: Record<string, "active" | "awarded" | "substantially_complete" | "closed" | "cancelled">;
+  /** Overrides for `jobbillingtype` → project type, keyed by the source code.
+   * NetSuite's stock enum offers only time-and-materials and two fixed-bid
+   * members, so an account that runs budget / do-not-exceed work commonly
+   * overloads one of the fixed-bid members for it. That is an account
+   * convention, not a NetSuite semantic, so it is tenant-owned: without an
+   * entry here the stock reading in NS_BILLING applies. */
+  projectBillingTypes?: Record<string, (typeof PROJECT_TYPE_KEYS)[number]>;
 }
 
 /**
@@ -208,6 +223,15 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
         }
         return [key.toLowerCase(), normalized];
       })) as NetSuiteAccountMappings["projectStatuses"];
+  const projectBillingTypes = raw.projectBillingTypes == null
+    ? undefined
+    : Object.fromEntries(Object.entries(raw.projectBillingTypes as Record<string, unknown>).map(([key, target]) => {
+        const normalized = String(target);
+        if (!(PROJECT_TYPE_KEYS as readonly string[]).includes(normalized)) {
+          throw new Error(`NetSuite project billing type mapping ${key} has invalid target ${normalized}`);
+        }
+        return [key.toUpperCase(), normalized];
+      })) as NetSuiteAccountMappings["projectBillingTypes"];
   return {
     projectForemanField: safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
     lineMarkupField: safeSuiteScriptId(raw.lineMarkupField, "lineMarkupField") ?? undefined,
@@ -226,6 +250,7 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
         "timeEntryFieldTicketNumberField",
       ) ?? undefined,
     projectStatuses,
+    projectBillingTypes,
   };
 }
 
@@ -642,7 +667,8 @@ export class NetSuiteSource implements MigrationSource {
         billingMethod:
           project.fields.billingMethod === "time_and_materials" ||
           project.fields.billingMethod === "fixed_price" ||
-          project.fields.billingMethod === "cost_plus"
+          project.fields.billingMethod === "cost_plus" ||
+          project.fields.billingMethod === "not_to_exceed"
             ? project.fields.billingMethod
             : null,
         contractValue:
@@ -781,7 +807,7 @@ export class NetSuiteSource implements MigrationSource {
         name: String(j.companyname ?? j.entityid ?? `Job ${j.id}`).slice(0, 500),
         isActive: !isT(j.isinactive),
         status: this.projectStatus(j),
-        billingMethod: NS_BILLING[String(j.jobbillingtype)] ?? null,
+        billingMethod: this.projectBillingType(j.jobbillingtype),
         // NetSuite `jobprice` — the fixed-bid contract price. T&M/cost-billed
         // jobs price from billable work, so 0/blank stays unset.
         contractValue: moneyValue(priceByRef.get(String(j.id))),
@@ -1039,6 +1065,14 @@ export class NetSuiteSource implements MigrationSource {
       for (const partition of partitions) rows.push(...(exported.get(partition.id) ?? []));
     }
     return rows.map(normalizeNetSuiteTimeEntry);
+  }
+
+  /** The project type a source `jobbillingtype` resolves to: the account's own
+   * override when it has one, otherwise NetSuite's stock reading. */
+  private projectBillingType(value: unknown): string | null {
+    const code = String(value ?? "").trim().toUpperCase();
+    if (!code) return null;
+    return this.mappings.projectBillingTypes?.[code] ?? NS_BILLING[code] ?? null;
   }
 
   private projectStatus(row: Record<string, string>): string {

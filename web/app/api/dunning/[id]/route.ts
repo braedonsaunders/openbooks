@@ -39,7 +39,7 @@ function validStages(raw: unknown): StageInput[] | null {
 async function owned(orgId: string, id: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from dunning_policies where id = ${id} and org_id = ${orgId}`,
-  )) as unknown as { rows: unknown[] };
+  ));
   return r.rows.length > 0;
 }
 

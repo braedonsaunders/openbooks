@@ -53,13 +53,13 @@ export type ExportData = {
 
 export async function orgBranding(orgId?: string): Promise<PdfBranding & { reportPdfStyle: StatementPdfStyle; baseCurrency: string }> {
   const activeOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ name: string; base_currency: string; brand_primary: string | null; report_pdf_style: string | null }>(sql`
     select name, base_currency,
            settings ->> 'brandPrimary' as brand_primary,
            settings ->> 'reportPdfStyle' as report_pdf_style
       from orgs
      where id = ${activeOrgId}
-  `)) as unknown as { rows: { name: string; base_currency: string; brand_primary: string | null; report_pdf_style: string | null }[] }
+  `))
   const row = r.rows[0]
   return {
     orgName: row?.name ?? 'openbooks',

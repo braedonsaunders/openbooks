@@ -23,7 +23,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      waiver_number: string
+      waiver_type: LienWaiverType
+      direction: 'received' | 'issued'
+      through_date: string
+      amount: string
+      currency: string
+      jurisdiction: string | null
+      notes: string | null
+      signed_by_name: string | null
+      signed_by_title: string | null
+      signed_at: string | null
+      notarized: boolean
+      signature: { method?: string; attestedAt?: string } | null
+      claimant_name: string
+      project_name: string
+      project_address: string | null
+      owner_name: string | null
+      bill_number: string | null
+      org_name: string
+    }>(sql`
     select lw.waiver_number, lw.waiver_type, lw.direction, lw.through_date, lw.amount,
            lw.currency, lw.jurisdiction, lw.notes, lw.signed_by_name, lw.signed_by_title,
            lw.signed_at, lw.notarized, lw.signature,
@@ -45,29 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
          order by is_default_shipping desc, created_at limit 1
       ) addr on true
      where lw.org_id = ${orgId} and lw.id = ${id}
-  `)) as unknown as {
-    rows: {
-      waiver_number: string
-      waiver_type: LienWaiverType
-      direction: 'received' | 'issued'
-      through_date: string
-      amount: string
-      currency: string
-      jurisdiction: string | null
-      notes: string | null
-      signed_by_name: string | null
-      signed_by_title: string | null
-      signed_at: string | null
-      notarized: boolean
-      signature: { method?: string; attestedAt?: string } | null
-      claimant_name: string
-      project_name: string
-      project_address: string | null
-      owner_name: string | null
-      bill_number: string | null
-      org_name: string
-    }[]
-  }
+  `))
   const w = r.rows[0]
   if (!w) return NextResponse.json({ error: 'not found' }, { status: 404 })
 

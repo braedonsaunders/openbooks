@@ -9,9 +9,9 @@ import type { PageLayoutPrefs } from '@openbooks/schema'
  * /api/me/page-layout. Absent row = product default layout.
  */
 export async function userPageLayout(userId: string, page: string): Promise<PageLayoutPrefs> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ layout: PageLayoutPrefs }>(sql`
     select layout from user_page_layouts where user_id = ${userId} and page = ${page} limit 1
-  `)) as unknown as { rows: { layout: PageLayoutPrefs }[] }
+  `))
   const layout = r.rows[0]?.layout
   return layout && typeof layout === 'object' ? layout : {}
 }

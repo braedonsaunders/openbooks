@@ -24,12 +24,12 @@ export async function POST(req: Request) {
   }
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
     values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
             ${JSON.stringify(built.outcome)}::jsonb, ${Number(body.priority) || 100}, ${body.isActive !== false}, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }
 

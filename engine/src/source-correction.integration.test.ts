@@ -67,11 +67,11 @@ test(
       const originalEntryId = await postDocument(documentId, deps, {
         audit: { actorId, source: "test" },
       });
-      const originalOpenLine = (await db.execute(sql`
+      const originalOpenLine = (await db.execute<{ id: string }>(sql`
         select id
           from journal_lines
          where entry_id = ${originalEntryId} and is_open_item
-      `)) as unknown as { rows: Array<{ id: string }> };
+      `));
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -135,7 +135,18 @@ test(
       assert.equal(first.changed, true);
       assert.ok(first.entryId);
 
-      const chain = (await db.execute(sql`
+      const chain = (await db.execute<{
+          posted_entry_id: string;
+          original_status: string;
+          original_period_id: string;
+          reversal_entry_id: string;
+          reversal_status: string;
+          reversal_period_id: string;
+          reverses_entry_id: string;
+          replacement_status: string;
+          replacement_period_id: string;
+          replacement_posting_date: string;
+        }>(sql`
         select document.posted_entry_id,
                original.status as original_status,
                original.period_id as original_period_id,
@@ -153,20 +164,7 @@ test(
           join journal_entries replacement
             on replacement.id = document.posted_entry_id
          where document.id = ${documentId}
-      `)) as unknown as {
-        rows: Array<{
-          posted_entry_id: string;
-          original_status: string;
-          original_period_id: string;
-          reversal_entry_id: string;
-          reversal_status: string;
-          reversal_period_id: string;
-          reverses_entry_id: string;
-          replacement_status: string;
-          replacement_period_id: string;
-          replacement_posting_date: string;
-        }>;
-      };
+      `));
       assert.deepEqual(chain.rows, [
         {
           posted_entry_id: first.entryId,
@@ -182,7 +180,7 @@ test(
         },
       ]);
 
-      const byPeriod = (await db.execute(sql`
+      const byPeriod = (await db.execute<{ period_id: string; account_id: string; amount: string }>(sql`
         select entry.period_id, line.account_id, sum(line.amount)::text as amount
           from journal_entries entry
           join journal_lines line on line.entry_id = entry.id
@@ -191,9 +189,7 @@ test(
          )
          group by entry.period_id, line.account_id
          order by entry.period_id, line.account_id
-      `)) as unknown as {
-        rows: Array<{ period_id: string; account_id: string; amount: string }>;
-      };
+      `));
       assert.deepEqual(
         byPeriod.rows.filter((row) => row.period_id === org.periodId),
         [
@@ -217,7 +213,14 @@ test(
         ].sort((left, right) => left.account_id.localeCompare(right.account_id)),
       );
 
-      const audit = (await db.execute(sql`
+      const audit = (await db.execute<{
+          mode: string;
+          original_entry_id: string;
+          reversal_entry_id: string;
+          replacement_entry_id: string;
+          actor_id: string;
+          request_id: string;
+        }>(sql`
         select changes->>'mode' as mode,
                changes->>'originalEntryId' as original_entry_id,
                changes->>'reversalEntryId' as reversal_entry_id,
@@ -227,16 +230,7 @@ test(
          where org_id = ${org.orgId}
            and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `)) as unknown as {
-        rows: Array<{
-          mode: string;
-          original_entry_id: string;
-          reversal_entry_id: string;
-          replacement_entry_id: string;
-          actor_id: string;
-          request_id: string;
-        }>;
-      };
+      `));
       assert.deepEqual(audit.rows, [
         {
           mode: "append_only_source_correction",
@@ -248,7 +242,12 @@ test(
         },
       ]);
 
-      const applications = (await db.execute(sql`
+      const applications = (await db.execute<{
+          id: string;
+          unapplied: boolean;
+          from_entry_id: string;
+          to_entry_id: string;
+        }>(sql`
         select application.id, application.unapplied_at is not null as unapplied,
                from_line.entry_id as from_entry_id,
                to_line.entry_id as to_entry_id
@@ -262,14 +261,7 @@ test(
               and application.from_line_id = ${settlementLineId}
             )
          order by application.created_at, application.id
-      `)) as unknown as {
-        rows: Array<{
-          id: string;
-          unapplied: boolean;
-          from_entry_id: string;
-          to_entry_id: string;
-        }>;
-      };
+      `));
       assert.equal(applications.rows.length, 2);
       assert.deepEqual(applications.rows[0], {
         id: applicationId,
@@ -413,15 +405,13 @@ test(
       assert.equal(corrected.changed, true);
       assert.ok(corrected.entryId);
 
-      const locks = (await db.execute(sql`
+      const locks = (await db.execute<{ module: string; state: string; reason: string }>(sql`
         select module, state, reason
           from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module in ('ap', 'gl')
          order by module
-      `)) as unknown as {
-        rows: Array<{ module: string; state: string; reason: string }>;
-      };
+      `));
       assert.deepEqual(locks.rows, [
         {
           module: "ap",
@@ -434,16 +424,14 @@ test(
           reason: "Controller-completed month close",
         },
       ]);
-      const replayAudit = (await db.execute(sql`
+      const replayAudit = (await db.execute<{ mode: string; locks_preserved: boolean }>(sql`
         select changes->'historicalReplay'->>'mode' as mode,
                (changes->'historicalReplay'->>'periodLocksPreserved')::boolean
                  as locks_preserved
           from audit_log
          where org_id = ${org.orgId} and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `)) as unknown as {
-        rows: Array<{ mode: string; locks_preserved: boolean }>;
-      };
+      `));
       assert.deepEqual(replayAudit.rows, [
         {
           mode: "authenticated_connector_historical_replay",
@@ -451,7 +439,7 @@ test(
         },
       ]);
 
-      const beforeFailedReplay = (await db.execute(sql`
+      const beforeFailedReplay = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -463,9 +451,7 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `)) as unknown as {
-        rows: Array<{ amount: string; entries: number; cogs_total: string }>;
-      };
+      `));
       await assert.rejects(
         db.transaction(async (tx) => {
           await tx.execute(
@@ -490,7 +476,7 @@ test(
         }),
         /not authorized by the active sync run/,
       );
-      const afterFailedReplay = (await db.execute(sql`
+      const afterFailedReplay = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -502,9 +488,7 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `)) as unknown as {
-        rows: Array<{ amount: string; entries: number; cogs_total: string }>;
-      };
+      `));
       assert.deepEqual(afterFailedReplay.rows, beforeFailedReplay.rows);
 
       const convergedRetry = await db.transaction(async (tx) => {
@@ -529,7 +513,7 @@ test(
         });
       });
       assert.equal(convergedRetry.changed, true);
-      const afterConvergedRetry = (await db.execute(sql`
+      const afterConvergedRetry = (await db.execute<{ amount: string; entries: number; cogs_total: string }>(sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -541,9 +525,7 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `)) as unknown as {
-        rows: Array<{ amount: string; entries: number; cogs_total: string }>;
-      };
+      `));
       assert.deepEqual(afterConvergedRetry.rows, [
         { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
       ]);

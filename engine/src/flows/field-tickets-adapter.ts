@@ -87,7 +87,7 @@ type FieldTicketRow = {
 };
 
 async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<FieldTicketRow>(sql`
     select d.id, d.org_id, d.document_number, d.status, d.project_id,
            p.code as project_code, p.name as project_name,
            d.party_id, customer.display_name as customer_name,
@@ -114,7 +114,7 @@ async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
       left join projects p on p.id = d.project_id and p.org_id = d.org_id
       left join parties customer on customer.id = d.party_id and customer.org_id = d.org_id
      where d.id = ${subjectId} and d.kind = 'field_ticket'
-  `)) as unknown as { rows: FieldTicketRow[] };
+  `));
   return result.rows[0] ?? null;
 }
 
@@ -126,7 +126,7 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter = {
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const ticket = await loadTicket(subjectId);
     if (!ticket) return null;
-    const entries = (await db.execute(sql`
+    const entries = (await db.execute<Record<string, unknown>>(sql`
       select te.employee_party_id as "employeePartyId",
              te.worked_on::text as "workedOn", te.hours::text,
              te.time_type_id as "timeTypeId", te.item_id as "itemId",
@@ -134,7 +134,7 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter = {
         from time_entries te
        where te.org_id = ${ticket.org_id} and te.field_ticket_id = ${ticket.id}
        order by te.worked_on, te.employee_party_id, te.id
-    `)) as unknown as { rows: Array<Record<string, unknown>> };
+    `));
     return {
       values: {
         id: ticket.id,

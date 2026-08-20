@@ -58,20 +58,16 @@ export async function POST(req: Request) {
 
     const filing = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`tax-filing:${gate.user.orgId}:${body.code}:${body.from}:${body.to}`}))`)
-      const form = (await tx.execute(sql`
+      const form = (await tx.execute<{ country: string | null }>(sql`
         select country from tax_return_forms
-         where org_id = ${gate.user.orgId} and code = ${body.code} limit 1`)) as unknown as {
-        rows: { country: string | null }[]
-      }
-      const versions = (await tx.execute(sql`
+         where org_id = ${gate.user.orgId} and code = ${body.code} limit 1`))
+      const versions = (await tx.execute<{ version: number }>(sql`
         select coalesce(max(version), 0)::int + 1 as version
           from tax_filings
          where org_id = ${gate.user.orgId} and form_code = ${body.code}
-           and period_from = ${body.from} and period_to = ${body.to}`)) as unknown as {
-        rows: { version: number }[]
-      }
+           and period_from = ${body.from} and period_to = ${body.to}`))
       const version = Number(versions.rows[0]?.version ?? 1)
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string; version: number }>(sql`
         insert into tax_filings
           (org_id, form_code, form_name, country, period_from, period_to, version,
            status, submission_channel, boxes, adjustments, snapshot_hash,
@@ -80,7 +76,7 @@ export async function POST(req: Request) {
                 ${result.from}, ${result.to}, ${version}, 'prepared', ${result.submissionChannel},
                 ${JSON.stringify(snapshot.boxes)}::jsonb, ${JSON.stringify(normalizedAdjustments)}::jsonb,
                 ${snapshotHash}, ${gate.user.id}, ${gate.user.id})
-        returning id, version`)) as unknown as { rows: { id: string; version: number }[] }
+        returning id, version`))
       const row = inserted.rows[0]
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

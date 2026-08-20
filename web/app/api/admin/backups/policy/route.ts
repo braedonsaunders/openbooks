@@ -59,18 +59,16 @@ export async function PUT(req: Request) {
   };
   const nextRunAt = enabled ? computeNextRunAt(shape, new Date()).toISOString() : null;
 
-  const existing = (await db.execute(sql`
-    select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-      from backup_policies where org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const existing = (await db.execute<{
       enabled: boolean;
       frequency: string;
       hour_utc: number;
       day_of_week: number;
       day_of_month: number;
       max_keep: number;
-    }[];
-  };
+    }>(sql`
+    select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
+      from backup_policies where org_id = ${orgId}`));
   const before = existing.rows[0];
 
   await db.execute(sql`

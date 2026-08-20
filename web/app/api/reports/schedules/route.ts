@@ -25,7 +25,7 @@ export async function GET(req: Request) {
      where org_id = ${user.orgId}
        ${definitionId ? sql`and definition_id = ${definitionId}` : sql``}
      order by next_run_at
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({
     schedules: rows.rows,
     canSchedule: can(gate, 'reports.schedule') || can(gate, '*'),
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
             ${nextRunAt.toISOString()}, ${body.active !== false}, ${user.id}, ${user.id})
     returning id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
               timezone, recipient_emails, next_run_at, active
-  `)) as unknown as { rows: unknown[] }
+  `))
 
   return NextResponse.json({ schedule: inserted.rows[0] }, { status: 201 })
 }

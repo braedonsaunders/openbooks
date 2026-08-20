@@ -29,14 +29,14 @@ export default async function BankingImports({
   const features = await resolvedFeatureState(authz.user.orgId)
   const feedsEnabled = featureEnabled(features, 'bankFeeds')
   const feeds = feedsEnabled
-    ? ((await db.execute(sql`
+    ? ((await db.execute<any>(sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_error, c.is_active,
                a.number as account_number, a.name as account_name
           from bank_feed_connections c
           join accounts a on a.id = c.account_id and a.org_id = c.org_id
          where c.org_id = ${authz.user.orgId} and c.provider in ('plaid','gocardless','truelayer')
          order by c.created_at desc
-      `)) as unknown as { rows: any[] }).rows
+      `))).rows
     : []
 
   return (

@@ -23,7 +23,7 @@ const KNOWN_TARGETS: Record<string, Record<string, number>> = {
 }
 
 async function measuresForNsId(nsId: string) {
-  const p = (await db.execute(sql`select id, org_id, code, name from projects where custom->>'nsId' = ${nsId} limit 1`)) as unknown as { rows: { id: string; org_id: string; code: string; name: string }[] }
+  const p = (await db.execute<{ id: string; org_id: string; code: string; name: string }>(sql`select id, org_id, code, name from projects where custom->>'nsId' = ${nsId} limit 1`))
   if (!p.rows[0]) return null
   const { id, org_id } = p.rows[0]
   const type = await loadProjectType(org_id, id)

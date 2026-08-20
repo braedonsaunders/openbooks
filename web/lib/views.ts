@@ -50,12 +50,12 @@ async function userVisibility(orgId: string, userId: string, perms: Set<string>)
   const isAdmin = perms.has('*')
   let roleKeys: string[] = []
   if (!isAdmin) {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ key: string }>(sql`
       select r.key
         from role_assignments a
         join app_roles r on r.id = a.role_id
        where a.user_id = ${userId} and a.org_id = ${orgId}
-    `)) as unknown as { rows: { key: string }[] }
+    `))
     roleKeys = r.rows.map((x) => x.key)
   }
   return { roleKeys, isAdmin }
@@ -93,14 +93,14 @@ export async function loadViews(
   perms: Set<string>,
 ): Promise<ViewRow[]> {
   const vis = await userVisibility(orgId, userId, perms)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ViewRow>(sql`
     select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
            sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
       from saved_views sv
      where sv.org_id = ${orgId}
        and (${visiblePredicate(userId, vis)})
      order by sv.updated_at desc
-  `)) as unknown as { rows: ViewRow[] }
+  `))
   return r.rows.map(normalize)
 }
 
@@ -111,14 +111,14 @@ export async function loadView(
   perms: Set<string>,
 ): Promise<ViewRow | null> {
   const vis = await userVisibility(orgId, userId, perms)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ViewRow>(sql`
     select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
            sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
       from saved_views sv
      where sv.org_id = ${orgId} and sv.id = ${id}
        and (${visiblePredicate(userId, vis)})
      limit 1
-  `)) as unknown as { rows: ViewRow[] }
+  `))
   return r.rows[0] ? normalize(r.rows[0]) : null
 }
 
@@ -134,7 +134,7 @@ async function assertCanMutate(
     select 1 from saved_views
      where org_id = ${orgId} and id = ${id} and owner_id = ${userId}
      limit 1
-  `)) as unknown as { rows: unknown[] }
+  `))
   return r.rows.length > 0
 }
 
@@ -146,12 +146,12 @@ export async function createView(args: {
   const name = args.name?.trim() || 'Untitled view'
   const slug = await uniqueViewSlug(args.orgId, slugifyViewName(name))
   const query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; slug: string }>(sql`
     insert into saved_views (org_id, slug, name, query, scope, owner_id, created_by, updated_by)
     values (${args.orgId}, ${slug}, ${name}, ${query as unknown as Record<string, unknown>}, 'private',
             ${args.userId}, ${args.userId}, ${args.userId})
     returning id, slug
-  `)) as unknown as { rows: { id: string; slug: string }[] }
+  `))
   return r.rows[0]!
 }
 
@@ -275,7 +275,7 @@ export async function uniqueViewSlug(orgId: string, desired: string, excludeId?:
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (clash.rows.length === 0) return slug
     slug = `${desired}-${n}`
   }

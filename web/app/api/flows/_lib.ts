@@ -5,20 +5,20 @@ import { GateError } from '@openbooks/engine/src/flows/index.ts'
 
 /** Shared helpers for the /api/flows/* gate endpoints. */
 
-export interface GateHeader {
+export type GateHeader = {
   id: string
   org_id: string
   status: string
   assignee_user_id: string | null
   assignee_role: string | null
-}
+};
 
 /** Load a gate header scoped to the caller's org (null = not found for them). */
 export async function loadGateHeader(gateId: string, orgId: string): Promise<GateHeader | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<GateHeader>(sql`
     select id, org_id, status, assignee_user_id, assignee_role
       from flow_gates where id = ${gateId} and org_id = ${orgId}
-  `)) as unknown as { rows: GateHeader[] }
+  `))
   return r.rows[0] ?? null
 }
 

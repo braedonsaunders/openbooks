@@ -111,10 +111,10 @@ test(
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute(sql`
+      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
         select id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { id: string; factors: Record<string, string> }[] }).rows[0]!;
+      `))).rows[0]!;
 
       // WCB: cap binds → assessable 2000 of 2400 gross, premium 2% = 40.00.
       assert.equal(stub.factors.WCB_EARN, "2000.0000");
@@ -123,29 +123,29 @@ test(
       assert.equal(stub.factors.EHT_EARN, "2400.0000");
       assert.equal(stub.factors.EHT, "27.3000");
 
-      const wcbLines = (await db.execute(sql`
+      const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from pay_stub_lines
          where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'
-         order by project_id`)) as unknown as { rows: { amount: string; project_id: string | null }[] };
+         order by project_id`));
       // Proportional to earnings: each job carried half the gross → 20.00 each.
       assert.equal(wcbLines.rows.length, 2);
       assert.ok(wcbLines.rows.every((l) => l.project_id !== null));
       assert.deepEqual(wcbLines.rows.map((l) => l.amount).sort(), ["20.0000", "20.0000"]);
       assert.equal(sum(wcbLines.rows.map((l) => l.amount)), "40.0000");
 
-      const ehtLines = (await db.execute(sql`
+      const ehtLines = (await db.execute<{ amount: string }>(sql`
         select amount from pay_stub_lines
          where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'Employer Health Tax'
-      `)) as unknown as { rows: { amount: string }[] };
+      `));
       assert.equal(ehtLines.rows.length, 1);
       assert.equal(ehtLines.rows[0]!.amount, "27.3000");
 
       // Commit: balanced projection, WCB/EHT credit their slot accounts.
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const lines = (await db.execute(sql`
+      const lines = (await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
         select account_id, amount, project_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)) as unknown as { rows: { account_id: string; amount: string; project_id: string | null }[] };
+      `));
       assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
       const wcbLeg = lines.rows.filter((l) => l.account_id === wcbPayable);
       assert.equal(sum(wcbLeg.map((l) => l.amount)), neg("40.0000"));
@@ -165,10 +165,10 @@ test(
                 'unbilled', 'actual', ${actorId}, ${actorId})`);
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
       await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-      const stub2 = ((await db.execute(sql`
+      const stub2 = ((await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-      `)) as unknown as { rows: { factors: Record<string, string> }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(stub2.factors.WCB ?? "0", "0");
       // 600 × 1.95% — exemption already used by the committed run.
       assert.equal(stub2.factors.EHT, "11.7000");

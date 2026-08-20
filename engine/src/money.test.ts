@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, formatMoney, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, toUnits } from "./money.ts";
+import { abs, div, divRate, formatMoney, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -58,4 +58,47 @@ test("roundMoney and formatMoney round exact ledger units without binary drift",
 test("decimal factors preserve ten-place rates and combine before rounding", () => {
   assert.equal(mulDecimal("900719925474099.1250", "0.13"), "117093590311632.8863");
   assert.equal(mulDecimalFactors("10000", ["0.3", "0.5"]), "1500.0000");
+});
+
+test("div is the non-FX counterpart to divRate", () => {
+  assert.equal(div("100.0000", "8"), "12.5000");
+  assert.equal(div("1", "3"), "0.3333");
+  assert.equal(div("2", "3"), "0.6667"); // halves away from zero
+  // A negative divisor is a real quantity (a credit line), unlike an FX rate.
+  assert.equal(div("100.0000", "-8"), "-12.5000");
+  assert.equal(div("-100.0000", "8"), "-12.5000");
+  assert.equal(div("0", "8"), "0.0000");
+  // Quantities carry eight decimals; a four-decimal divisor would truncate.
+  assert.equal(div("100", "0.00000001"), divRate("100", "0.00000001"));
+  assert.equal(div("12.3456", "1.00000001"), divRate("12.3456", "1.00000001"));
+});
+
+test("div matches divRate exactly wherever divRate is legal", () => {
+  for (const [a, b] of [
+    ["100", "3"], ["0.0001", "7"], ["-250.5000", "1.25"],
+    ["999999.9999", "0.0001"], ["12.3456", "2.50000000"],
+  ]) {
+    assert.equal(div(a, b), divRate(a, b), `${a} / ${b}`);
+  }
+});
+
+test("div rejects only zero, and says what actually went wrong", () => {
+  // divRate would call this an FX-rate fault; a zero quantity is not currency.
+  assert.throws(() => div("100", "0"), /cannot divide "100" by zero/);
+  assert.throws(() => div("100", "0.0000"), /by zero/);
+});
+
+test("div then mul returns the original within one rounding step", () => {
+  // Compared in exact ledger units — a money test must not measure itself with
+  // binary floats. Re-multiplying a rounded share can be off by at most half a
+  // unit per whole of the divisor.
+  for (const [amount, divisor] of [["100", "3"], ["7.5000", "4"], ["0.0001", "7"], ["-100", "3"]]) {
+    const back = mul(div(amount, divisor), divisor);
+    const drift = toUnits(back) - toUnits(amount);
+    const bound = (toUnits(divisor) + 2n * 10_000n) / (2n * 10_000n);
+    assert.ok(
+      (drift < 0n ? -drift : drift) <= bound,
+      `${amount}/${divisor} drifted ${drift} units (bound ${bound})`,
+    );
+  }
 });

@@ -344,10 +344,10 @@ test(
 
       // Every write is audited with before/after — a statutory rate change is
       // material configuration.
-      const audit = (await db.execute(sql`
+      const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'payroll_statutory_rates'
-         order by at`)) as unknown as { rows: { action: string; changes: Record<string, unknown> }[] };
+         order by at`));
       assert.equal(audit.rows.filter((r) => r.action === "insert").length, 4);
       const update = audit.rows.find((r) => r.action === "update")!;
       assert.equal((update.changes.before as Record<string, string>).rate, "0.0106");

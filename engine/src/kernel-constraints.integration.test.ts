@@ -77,9 +77,9 @@ test("moving a line cannot strand its old entry unbalanced and then post it", { 
       },
     );
 
-    const state = (await db.execute(sql`
+    const state = (await db.execute<{ status: string; balance: string }>(sql`
       select status, (select sum(amount) from journal_lines where entry_id = ${a})::text as balance
-        from journal_entries where id = ${a}`)) as unknown as { rows: { status: string; balance: string }[] };
+        from journal_entries where id = ${a}`));
     assert.deepEqual(state.rows[0], { status: "draft", balance: "0.0000" });
   } finally {
     await dropScratchOrg(org.orgId);

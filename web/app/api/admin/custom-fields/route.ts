@@ -80,15 +80,15 @@ export async function POST(req: Request) {
      where org_id = ${user.orgId} and target_table = ${body.targetTable}
        and coalesce(target_kind, '') = coalesce(${body.targetKind ?? null}, '')
        and key = ${body.key}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (dup.rows.length > 0) return NextResponse.json({ error: 'a field with that key already exists on that target' }, { status: 409 })
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, sort_order)
     values (${user.orgId}, ${body.targetTable}, ${body.targetKind ?? null}, ${body.key}, ${body.label},
             ${body.fieldType}, ${JSON.stringify(body.config ?? {})}, ${body.isRequired === true}, ${Number(body.sortOrder ?? 0)})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }
 

@@ -44,19 +44,19 @@ export * from './banking-rules-core'
  * container shared by Match Bank Data, rules, and reconciliation sign-off.
  */
 export async function ensureOpenReconciliation(orgId: string, userId: string, accountId: string): Promise<string> {
-  const open = (await db.execute(sql`
+  const open = (await db.execute<{ id: string }>(sql`
     select id from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status <> 'signed_off'
      order by created_at desc limit 1
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (open.rows[0]) return open.rows[0].id
-  const latest = (await db.execute(sql`
+  const latest = (await db.execute<{ through_date: string | null; closing: string | null }>(sql`
     select max(statement_date) as through_date,
            (select closing_balance from bank_statements
              where account_id = ${accountId} and org_id = ${orgId}
              order by statement_date desc, imported_at desc limit 1) as closing
       from bank_statements where account_id = ${accountId} and org_id = ${orgId}
-  `)) as unknown as { rows: { through_date: string | null; closing: string | null }[] }
+  `))
   const throughDate = latest.rows[0]?.through_date ?? new Date().toISOString().slice(0, 10)
   const statementBalance = latest.rows[0]?.closing ?? '0'
   const rec = await startReconciliation({ accountId, throughDate, statementBalance }, { orgId, userId })
@@ -76,12 +76,12 @@ export interface ApplyResult {
 }
 
 async function loadActiveRules(orgId: string): Promise<RuleRow[]> {
-  const res = (await db.execute(sql`
+  const res = (await db.execute<RuleRow>(sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules
      where org_id = ${orgId} and is_active
      order by priority asc, created_at asc
-  `)) as unknown as { rows: RuleRow[] }
+  `))
   return res.rows
 }
 
@@ -91,13 +91,13 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
     typeof windowDays === 'number'
       ? sql` and l.posted_on >= (current_date - ${windowDays}::int)`
       : sql``
-  const res = (await db.execute(sql`
+  const res = (await db.execute<BankLine>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id
      where s.account_id = ${accountId} and s.org_id = ${orgId}${statusClause}${windowClause}
      order by l.posted_on desc, l.line_number
-  `)) as unknown as { rows: BankLine[] }
+  `))
   return res.rows
 }
 
@@ -161,18 +161,18 @@ export async function applyRuleToLine(
   opts: { statementLineId: string; ruleId: string; reconciliationId?: string },
 ): Promise<void> {
   const ctx = { orgId, userId }
-  const ruleRes = (await db.execute(sql`
+  const ruleRes = (await db.execute<RuleRow>(sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules where id = ${opts.ruleId} and org_id = ${orgId}
-  `)) as unknown as { rows: RuleRow[] }
+  `))
   const rule = ruleRes.rows[0]
   if (!rule) throw new Error('Rule not found')
-  const lineRes = (await db.execute(sql`
+  const lineRes = (await db.execute<(BankLine & { account_id: string })>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `)) as unknown as { rows: (BankLine & { account_id: string })[] }
+  `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
   if (rule.outcome.action === 'exclude') {
@@ -410,11 +410,11 @@ export async function createCategorizingJournal(
   }
   const entryId = await postDocument(doc!.id, deps)
 
-  const jl = (await db.execute(sql`
+  const jl = (await db.execute<{ id: string }>(sql`
     select id from journal_lines
      where entry_id = ${entryId} and account_id = ${opts.bankAccountId} and org_id = ${orgId}
      limit 1
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (!jl.rows[0]) throw new Error('categorizing journal did not post a bank line')
   return jl.rows[0].id
 }
@@ -430,14 +430,12 @@ export async function addJournalMatchFromLine(
   opts: { statementLineId: string; offsetAccountId: string; reconciliationId: string },
 ): Promise<void> {
   const ctx = { orgId, userId }
-  const lineRes = (await db.execute(sql`
+  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string }>(sql`
     select l.posted_on, l.amount, l.description, l.currency, s.account_id
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `)) as unknown as {
-    rows: { posted_on: string; amount: string; description: string | null; currency: string; account_id: string }[]
-  }
+  `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
   const bankJournalLineId = await createCategorizingJournal(orgId, userId, {

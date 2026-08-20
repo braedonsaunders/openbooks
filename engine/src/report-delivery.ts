@@ -31,7 +31,7 @@ type CadenceRow = {
  */
 export async function materializeDueReportRuns(now = new Date(), limit = 50): Promise<string[]> {
   return db.transaction(async (tx) => {
-    const due = (await tx.execute(sql`
+    const due = (await tx.execute<CadenceRow>(sql`
       select id, org_id, definition_id, cadence, day_of_week, day_of_month,
              hour, minute, timezone, recipient_emails, filters, next_run_at
         from report_schedules
@@ -39,7 +39,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
        order by next_run_at
        for update skip locked
        limit ${Math.max(1, Math.min(limit, 500))}
-    `)) as unknown as { rows: CadenceRow[] };
+    `));
     const runIds: string[] = [];
     for (const schedule of due.rows) {
       const scheduledFor = new Date(schedule.next_run_at);
@@ -51,7 +51,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
         minute: schedule.minute,
         timezone: schedule.timezone,
       }, scheduledFor);
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into report_runs
           (org_id, schedule_id, definition_id, trigger, status, scheduled_for,
            recipient_emails, filters, next_attempt_at)
@@ -62,7 +62,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
           where schedule_id is not null and scheduled_for is not null
         do nothing
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (inserted.rows[0]) runIds.push(inserted.rows[0].id);
       await tx.execute(sql`
         update report_schedules set next_run_at=${next}, updated_at=now()
@@ -82,7 +82,7 @@ export async function dispatchQueuedReportRuns(
     update report_runs set status='queued', locked_at=null, next_attempt_at=${now}, updated_at=now()
      where trigger='scheduled' and status='running' and locked_at < ${new Date(now.getTime() - STALE_RUN_MS)}
   `);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; org_id: string; definition_id: string; schedule_id: string; dispatch_count: number }>(sql`
     select id, org_id, definition_id, schedule_id, dispatch_count
       from report_runs
      where trigger='scheduled'
@@ -91,7 +91,7 @@ export async function dispatchQueuedReportRuns(
        and coalesce(next_attempt_at, created_at) <= ${now}
      order by coalesce(next_attempt_at, created_at)
      limit 100
-  `)) as unknown as { rows: { id: string; org_id: string; definition_id: string; schedule_id: string; dispatch_count: number }[] };
+  `));
   let dispatched = 0;
   for (const row of rows.rows) {
     const jobId = `report-run|${row.id}|${row.dispatch_count}`;
@@ -112,25 +112,25 @@ export type ReportRenderer = (orgId: string, definitionId: string, runId: string
 
 /** Render once, retain immutable bytes/hash, and create recipient outbox rows atomically. */
 export async function processScheduledReportRun(runId: string, render: ReportRenderer): Promise<{ skipped?: true; deliveries?: number }> {
-  const claimed = (await db.execute(sql`
+  const claimed = (await db.execute<{ org_id: string; definition_id: string; recipient_emails: string[]; attempt_count: number }>(sql`
     update report_runs
        set status='running', attempt_count=attempt_count+1, started_at=coalesce(started_at,now()),
            locked_at=now(), error=null, updated_at=now()
      where id=${runId} and trigger='scheduled' and status in ('queued','failed')
        and attempt_count < ${MAX_RUN_ATTEMPTS}
      returning org_id, definition_id, recipient_emails, attempt_count
-  `)) as unknown as { rows: { org_id: string; definition_id: string; recipient_emails: string[]; attempt_count: number }[] };
+  `));
   const row = claimed.rows[0];
   if (!row) {
-    const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`)) as unknown as { rows: unknown[] };
+    const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`));
     return complete.rows[0] ? { skipped: true } : { skipped: true };
   }
 
   try {
-    const meta = (await db.execute(sql`
+    const meta = (await db.execute<{ report_name: string }>(sql`
       select rd.name as report_name from report_definitions rd
        where rd.id=${row.definition_id} and rd.org_id=${row.org_id}
-    `)) as unknown as { rows: { report_name: string }[] };
+    `));
     if (!meta.rows[0]) throw new Error("scheduled report definition is unavailable");
     const pdf = await render(row.org_id, row.definition_id, runId);
     if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
@@ -176,7 +176,10 @@ export async function dispatchReportDeliveries(
   enqueue: (data: EnqueueEmailData, options?: { jobId?: string }) => Promise<unknown> = enqueueEmail,
   now = new Date(),
 ): Promise<number> {
-  const due = (await db.execute(sql`
+  const due = (await db.execute<{
+    id: string; org_id: string; run_id: string; recipient: string; dispatch_count: number;
+    filename: string; content_type: string; bytes: Buffer; report_name: string; org_name: string;
+  }>(sql`
     select d.id, d.org_id, d.run_id, d.recipient, d.dispatch_count,
            a.filename, a.content_type, a.bytes, rd.name as report_name, o.name as org_name
       from report_delivery_outbox d
@@ -188,10 +191,7 @@ export async function dispatchReportDeliveries(
        and d.attempt_count < ${MAX_DELIVERY_ATTEMPTS}
      order by d.next_attempt_at
      limit 100
-  `)) as unknown as { rows: {
-    id: string; org_id: string; run_id: string; recipient: string; dispatch_count: number;
-    filename: string; content_type: string; bytes: Buffer; report_name: string; org_name: string;
-  }[] };
+  `));
   let dispatched = 0;
   for (const row of due.rows) {
     const mail = scheduledReportEmail({ orgName: row.org_name, reportName: row.report_name, attachmentName: row.filename });

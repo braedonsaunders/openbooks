@@ -27,13 +27,12 @@ import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbo
  * bills; side='ar' → customer receipt applying open invoices. Drafts
  * autosave; "Pay & post" / "Receive & post" is the explicit kernel action.
  */
-
-interface Opt {
+type Opt = {
   id: string
   display_name?: string
   number?: string | null
   name?: string
-}
+};
 
 export interface OpenItemClient {
   lineId: string

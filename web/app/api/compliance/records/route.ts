@@ -48,13 +48,13 @@ export async function POST(req: Request) {
   // The requirement must belong to this org, and to the vendor's class — a
   // certificate against an inapplicable policy would never be evaluated and
   // would quietly read as "on file".
-  const applicable = (await db.execute(sql`
+  const applicable = (await db.execute<{ id: string; requires_expiry: boolean }>(sql`
     select req.id, req.requires_expiry
       from compliance_requirements req
       join vendor_roles vr on vr.org_id = req.org_id and vr.party_id = ${body.partyId}
      where req.org_id = ${orgId} and req.id = ${body.requirementId} and req.is_active
        and (req.class_id is null or req.class_id = vr.compliance_class_id)
-  `)) as unknown as { rows: { id: string; requires_expiry: boolean }[] }
+  `))
   const requirement = applicable.rows[0]
   if (!requirement) {
     return NextResponse.json(
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
 
   try {
     const id = await db.transaction(async (tx) => {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into compliance_records
           (org_id, party_id, requirement_id, project_id, status, issuer_name, policy_number,
            effective_from, expires_on, coverage_amount, aggregate_amount, coverage_currency,
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
                 ${body.primaryNoncontributory === true}, ${body.notes ?? null},
                 ${actorId}, ${actorId})
         returning id
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       const newId = inserted.rows[0]!.id
       if (body.supersedesId && isUuid(body.supersedesId)) {
         // Renewal: the prior certificate keeps its dates and verification trail

@@ -52,6 +52,23 @@
     "lineItemAria": "第 {line} 行项目条目",
     "lineBillableAria": "第 {line} 行可计费",
     "lineHoursAria": "第 {line} 行 {day} 工时",
-    "removeLineAria": "删除第 {line} 行"
+    "removeLineAria": "删除第 {line} 行",
+    "reject": "拒绝",
+    "rejectTitle": "拒绝此工时表",
+    "rejectReasonLabel": "原因",
+    "rejectPlaceholder": "批准前需要修改什么？",
+    "rejectedToast": "已拒绝工时表",
+    "rejectedBecause": "已拒绝：{reason}",
+    "reopen": "重新打开",
+    "reopenTitle": "重新打开此工时表？",
+    "reopenMessage": "该周将回到草稿状态并清除批准，需要重新批准。",
+    "reopenedToast": "已重新打开工时表",
+    "lockedBecause": "该周无法再重新打开 — {count} 条记录已{reasons}。",
+    "lockReason": {
+      "invoiced": "向客户开票",
+      "paid": "通过薪资支付",
+      "costed": "过账到总账",
+      "ticketed": "包含在现场工单中"
+    }
   }
 }

@@ -28,12 +28,12 @@ export async function GET(req: Request) {
   const source = url.searchParams.get('source')
 
   if (source === 'gl_accounts') {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and not is_summary
        order by number nulls last, name
        limit 5000
-    `)) as unknown as { rows: { id: string; number: string | null; name: string }[] }
+    `))
     return NextResponse.json({
       options: r.rows.map((a) => ({
         value: a.id,
@@ -56,12 +56,12 @@ export async function GET(req: Request) {
           : kind === 'employee'
             ? sql` and exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active)`
             : sql``
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string; display_name: string; short_code: string | null }>(sql`
       select p.id, p.display_name, p.short_code from parties p
        where p.org_id = ${orgId} and p.is_active${roleFilter}
        order by p.display_name
        limit 5000
-    `)) as unknown as { rows: { id: string; display_name: string; short_code: string | null }[] }
+    `))
     return NextResponse.json({
       options: r.rows.map((p) => ({
         value: p.id,

@@ -20,7 +20,7 @@ function sumBase(rows: OpenDocument[], kind: OpenDocument["kind"], overdueOnly =
 }
 
 test("dashboard financial totals match exact per-document FX conversion", { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgs = (await db.execute(sql`select id from orgs order by id`)) as unknown as { rows: Array<{ id: string }> };
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by id`));
 
   for (const org of orgs.rows) {
     const [actualResult, documentsResult, cashResult] = await Promise.all([

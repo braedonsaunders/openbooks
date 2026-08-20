@@ -153,12 +153,10 @@ async function replayCommercial(world: SimOrg, event: CommercialEvent, opts: Rep
 
 /** The control-side open-item line a payment allocation targets. */
 async function openItemLine(world: SimOrg, documentId: string): Promise<string> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string }>(sql`
     select l.id from journal_lines l
       join documents d on d.posted_entry_id = l.entry_id
-     where d.id = ${documentId} and d.org_id = ${world.orgId} and l.is_open_item`)) as unknown as {
-    rows: { id: string }[];
-  };
+     where d.id = ${documentId} and d.org_id = ${world.orgId} and l.is_open_item`));
   if (rows.rows.length !== 1) {
     throw new Error(`expected exactly one open-item line for document ${documentId}, found ${rows.rows.length}`);
   }

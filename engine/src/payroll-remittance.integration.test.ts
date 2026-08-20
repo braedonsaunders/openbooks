@@ -80,9 +80,9 @@ test(
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const stub = ((await db.execute(sql`
+      const stub = ((await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { gross: string; factors: Record<string, string> }[] }).rows[0]!;
+      `))).rows[0]!;
 
       // Summary: one CRA group; vacation accrual excluded; totals reconcile.
       const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
@@ -104,9 +104,9 @@ test(
       const bill = await createRemittanceBill(org.orgId, actorId, {
         partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31",
       });
-      const billDoc = ((await db.execute(sql`
+      const billDoc = ((await db.execute<Record<string, any>>(sql`
         select status, total, due_date, custom from documents where id = ${bill.documentId}
-      `)) as unknown as { rows: Record<string, any>[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(billDoc.status, "draft");
       assert.equal(cmp(billDoc.total, cra.total), 0);
       // The 15th of the following month, moved off the weekend: August 15 2026
@@ -114,9 +114,9 @@ test(
       // time if it is received on the next business day. Before the statutory
       // holiday calendar existed this stamped the Saturday.
       assert.equal(billDoc.due_date, "2026-08-17");
-      const billLines = ((await db.execute(sql`
+      const billLines = ((await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines where document_id = ${bill.documentId}
-      `)) as unknown as { rows: { account_id: string; amount: string }[] }).rows;
+      `))).rows;
       assert.ok(billLines.every((l) => l.account_id === craPayable));
       assert.equal(cmp(sum(billLines.map((l) => l.amount)), cra.total), 0);
 
@@ -134,19 +134,19 @@ test(
       const payment = await recordPayRunPayment({
         orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
       });
-      const stubNet = ((await db.execute(sql`
+      const stubNet = ((await db.execute<{ net_pay: string }>(sql`
         select net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { net_pay: string }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(cmp(payment.total, stubNet.net_pay), 0);
-      const paidRun = ((await db.execute(sql`
+      const paidRun = ((await db.execute<{ paid_at: string | null; paid_entry_id: string | null }>(sql`
         select paid_at, paid_entry_id from pay_runs where document_id = ${run.documentId}
-      `)) as unknown as { rows: { paid_at: string | null; paid_entry_id: string | null }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.ok(paidRun.paid_at && paidRun.paid_entry_id);
-      const settlement = ((await db.execute(sql`
+      const settlement = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from applications a
           join journal_lines jl on jl.id = a.from_line_id
          where jl.entry_id = ${paidRun.paid_entry_id}
-      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      `))).rows[0]!;
       assert.equal(settlement.n, 1); // one employee, one applied open item
       await assert.rejects(
         recordPayRunPayment({

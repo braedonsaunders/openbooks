@@ -43,7 +43,7 @@ export async function recordPayRunPayment(input: {
   }
 
   return await db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
+    const runRows = (await tx.execute<Record<string, string | null>>(sql`
       select r.run_status, r.paid_at, r.pay_date, d.status as doc_status, d.posted_entry_id,
              d.document_number, d.subsidiary_id, d.currency, e.book_id
         from pay_runs r
@@ -51,7 +51,7 @@ export async function recordPayRunPayment(input: {
         left join journal_entries e on e.id = d.posted_entry_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r
-    `)) as unknown as { rows: Record<string, string | null>[] };
+    `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.paid_at) throw new PayrollError("this pay run is already recorded as paid");
@@ -59,14 +59,14 @@ export async function recordPayRunPayment(input: {
       throw new PayrollError("post the pay run before recording its payment");
     }
 
-    const bank = (await tx.execute(sql`
+    const bank = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${orgId} and id = ${input.bankAccountId}
         and type = 'asset_bank' and is_active
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
 
     // The run's per-employee net-pay open items (credits on the payable).
-    const openItems = (await tx.execute(sql`
+    const openItems = (await tx.execute<{ id: string; party_id: string; amount: string; subsidiary_id: string; currency: string }>(sql`
       select jl.id, jl.party_id, jl.amount, jl.subsidiary_id, jl.currency
         from journal_lines jl
        where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
@@ -74,9 +74,7 @@ export async function recordPayRunPayment(input: {
          and jl.amount < 0
        order by jl.line_number
        for update
-    `)) as unknown as {
-      rows: { id: string; party_id: string; amount: string; subsidiary_id: string; currency: string }[];
-    };
+    `));
     if (openItems.rows.length === 0) {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
@@ -84,26 +82,24 @@ export async function recordPayRunPayment(input: {
     // How each employee is actually paid, so the settlement line can carry the
     // cheque number and the caller can report the rail split. An open item with
     // no stub (a hand-built run) simply carries no rail annotation.
-    const railRows = (await tx.execute(sql`
+    const railRows = (await tx.execute<{ employee_party_id: string; payment_method: string | null; cheque_number: string | null }>(sql`
       select s.employee_party_id, s.payment_method, s.cheque_number
         from pay_stubs s
        where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-    `)) as unknown as {
-      rows: { employee_party_id: string; payment_method: string | null; cheque_number: string | null }[];
-    };
+    `));
     const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
 
     const paidOn = input.paidOn ?? run.pay_date!;
-    const period = (await tx.execute(sql`
+    const period = (await tx.execute<{ id: string }>(sql`
       select id from accounting_periods
        where org_id = ${orgId} and is_adjustment = false
          and starts_on <= ${paidOn} and ends_on >= ${paidOn}
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!period.rows[0]) throw new PayrollError(`no accounting period covers ${paidOn}`);
 
     const entryNumber = `PAYD-${run.document_number}-${randomUUID().slice(0, 6)}`;
-    const entry = (await tx.execute(sql`
+    const entry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date,
                                    period_id, memo, status, origin, source_document_id,
                                    created_by, updated_by)
@@ -111,7 +107,7 @@ export async function recordPayRunPayment(input: {
               ${period.rows[0].id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
               ${documentId}, ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const entryId = entry.rows[0]!.id;
 
     let lineNumber = 1;
@@ -128,14 +124,14 @@ export async function recordPayRunPayment(input: {
       const memo = paid?.cheque_number
         ? `Net pay ${run.document_number} · cheque ${paid.cheque_number}`
         : `Net pay ${run.document_number}`;
-      const line = (await tx.execute(sql`
+      const line = (await tx.execute<{ id: string }>(sql`
         insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
                                    amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
         values (${orgId}, ${entryId}, ${lineNumber++}, ${netPayable}, ${item.subsidiary_id},
                 ${debit}, ${item.currency}, ${debit}, 1, ${item.party_id}, true,
                 ${memo})
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       settlements.push({ fromLineId: line.rows[0]!.id, toLineId: item.id, amount: debit, currency: item.currency });
     }
     await tx.execute(sql`

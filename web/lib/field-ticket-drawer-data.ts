@@ -39,7 +39,7 @@ export async function loadFieldTicketDrawerData({
   const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
   const [employees, laborItems, timeTypes, catalogItems, projects, projectTasks, equipmentUnits, resolvedForm] =
     (await Promise.all([
-      db.execute(sql`
+      db.execute<(FieldTicketDrawerProps['employees'])[number]>(sql`
         select p.id, p.display_name as name from parties p
          where p.org_id = ${orgId} and p.is_active
            and exists (
@@ -47,11 +47,11 @@ export async function loadFieldTicketDrawerData({
               where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
            )
          order by p.display_name`),
-      db.execute(sql`
+      db.execute<(FieldTicketDrawerProps['laborItems'])[number]>(sql`
         select id, name from items
          where org_id = ${orgId} and is_active and kind in ('labor', 'service')
          order by name`),
-      db.execute(sql`
+      db.execute<(FieldTicketDrawerProps['timeTypes'])[number]>(sql`
         select tt.id, tt.name, tt.bill_multiplier
           from time_types tt
          where tt.org_id = ${orgId}
@@ -76,12 +76,12 @@ export async function loadFieldTicketDrawerData({
              )
            )
          order by tt.bill_multiplier, tt.name`),
-      db.execute(sql`
+      db.execute<(FieldTicketDrawerProps['catalogItems'])[number]>(sql`
         select id, name, kind, default_rate from items
          where org_id = ${orgId} and is_active
            and kind in ('equipment_charge', 'non_inventory', 'other_charge', 'inventory', 'service')
          order by kind, name`),
-      db.execute(sql`
+      db.execute<(FieldTicketDrawerProps['projects'])[number]>(sql`
         select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
                cust.display_name as "customerName",
                coalesce((
@@ -106,14 +106,14 @@ export async function loadFieldTicketDrawerData({
          order by p.name
          limit 2000`),
       ticket.projectId
-        ? db.execute(sql`
+        ? db.execute<(FieldTicketDrawerProps['projectTasks'])[number]>(sql`
             select id, code, name, status, estimated_hours as "estimatedHours"
               from project_tasks
              where org_id = ${orgId} and project_id = ${ticket.projectId}
              order by code nulls last, name`)
         : Promise.resolve({ rows: [] }),
       equipmentEnabled
-        ? db.execute(sql`
+        ? db.execute<(FieldTicketDrawerProps['equipmentUnits'])[number]>(sql`
             select id, name, unit_number as "unitNumber", charge_item_id as "chargeItemId"
               from equipment_units
              where org_id = ${orgId} and status = 'active' and charge_item_id is not null
@@ -128,16 +128,7 @@ export async function loadFieldTicketDrawerData({
         lineDefs: [],
         explicitLayoutId: formLayoutId,
       }),
-    ])) as unknown as [
-      { rows: FieldTicketDrawerProps['employees'] },
-      { rows: FieldTicketDrawerProps['laborItems'] },
-      { rows: FieldTicketDrawerProps['timeTypes'] },
-      { rows: FieldTicketDrawerProps['catalogItems'] },
-      { rows: FieldTicketDrawerProps['projects'] },
-      { rows: FieldTicketDrawerProps['projectTasks'] },
-      { rows: FieldTicketDrawerProps['equipmentUnits'] },
-      Awaited<ReturnType<typeof resolveFormLayout>>,
-    ]
+    ]))
 
   return {
     ticket,

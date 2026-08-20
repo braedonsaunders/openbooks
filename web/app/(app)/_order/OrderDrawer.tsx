@@ -23,8 +23,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 import { cmp, fromUnits, mul, toUnits } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
-
-interface Opt {
+type Opt = {
   id: string
   display_name?: string
   number?: string
@@ -37,7 +36,7 @@ interface Opt {
   tax_code_id?: string | null
   unit?: string | null
   tax_components?: TaxComponentConfig[]
-}
+};
 interface LineRow extends Record<string, unknown> {
   itemId: string
   accountId: string

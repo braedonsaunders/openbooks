@@ -26,11 +26,11 @@ export async function orgFiscalContext(
 
 export async function fiscalStartMonth(orgId?: string): Promise<number> {
   const activeOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute(
+  const r = (await db.execute<{ m: number }>(
     sql`select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m
           from orgs
          where id = ${activeOrgId}`,
-  )) as unknown as { rows: { m: number }[] }
+  ))
   const m = r.rows[0]?.m ?? 1
   return m >= 1 && m <= 12 ? m : 1
 }

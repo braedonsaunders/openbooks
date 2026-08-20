@@ -59,12 +59,12 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&a
 
 /** Read a stored file's bytes (db blob or S3), by file id. */
 async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ content_type: string; version_id: string | null; bytes: Buffer | null }>(sql`
     select fi.content_type, fi.current_version_id as version_id, fb.bytes
       from files fi
       left join file_blobs fb on fb.version_id = fi.current_version_id
      where fi.id = ${fileId} and fi.org_id = ${orgId}
-  `)) as unknown as { rows: { content_type: string; version_id: string | null; bytes: Buffer | null }[] }
+  `))
   const row = r.rows[0]
   if (!row) return null
   if (row.bytes) return { bytes: Buffer.from(row.bytes), contentType: row.content_type }
@@ -99,7 +99,7 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
 /** Render the costed-timesheet page (billed time with cost + bill columns). */
 async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
   const { money } = format
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<any>(sql`
     select te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.cost_rate, te.bill_rate,
            te.hours * coalesce(te.cost_rate, 0) as cost_amount,
@@ -110,7 +110,7 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
       left join items i on i.id = te.item_id
      where dl.document_id = ${documentId} and te.org_id = ${orgId}
      order by te.worked_on, employee
-  `)) as unknown as { rows: any[] }
+  `))
   if (rows.rows.length === 0) return null
 
   const totals = rows.rows.reduce(
@@ -160,11 +160,11 @@ export async function assembleInvoiceBackup(
   documentId: string,
   backupType: BackupType = 'costed_timesheets',
 ): Promise<AssembleResult> {
-  const invRes = (await db.execute(sql`
+  const invRes = (await db.execute<{ document_number: string; currency: string; project_name: string }>(sql`
     select d.document_number, d.currency, coalesce(p.name, '') as project_name
       from documents d left join projects p on p.id = d.project_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
-  `)) as unknown as { rows: { document_number: string; currency: string; project_name: string }[] }
+  `))
   const inv = invRes.rows[0]
   if (!inv) throw new Error('Invoice not found')
   const format = await getMoneyFormatter(orgId, inv.currency)
@@ -193,13 +193,13 @@ export async function assembleInvoiceBackup(
       // Signed field tickets whose hours this invoice billed — the T&M
       // substantiation packet. Each distinct ticket renders once via the org's
       // ticket template (signature included when present).
-      const tickets = (await db.execute(sql`
+      const tickets = (await db.execute<{ field_ticket_id: string }>(sql`
         select distinct te.field_ticket_id
           from document_lines inv_line
           join time_entries te on te.invoiced_by_line_id = inv_line.id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
            and te.field_ticket_id is not null
-      `)) as unknown as { rows: { field_ticket_id: string }[] }
+      `))
       if (tickets.rows.length > 0) {
         const tpl = await resolvePdfTemplate(orgId, 'field_ticket', null)
         if (tpl) {
@@ -214,12 +214,12 @@ export async function assembleInvoiceBackup(
       }
     } else if (kind === 'attachments') {
       // Source cost documents this invoice billed → their attachments.
-      const sources = (await db.execute(sql`
+      const sources = (await db.execute<{ document_id: string }>(sql`
         select distinct src.document_id
           from document_lines inv_line
           join document_lines src on src.billed_by_line_id = inv_line.id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
-      `)) as unknown as { rows: { document_id: string }[] }
+      `))
       for (const s of sources.rows) {
         const atts = await listAttachments(orgId, 'documents', s.document_id)
         for (const att of atts) {
@@ -241,9 +241,9 @@ export async function assembleInvoiceBackup(
   const pageCount = out.getPageCount()
 
   // Replace any prior backup file for this invoice, then store + record.
-  const prior = (await db.execute(sql`
+  const prior = (await db.execute<{ file_id: string }>(sql`
     select file_id from invoice_backups where org_id = ${orgId} and document_id = ${documentId}
-  `)) as unknown as { rows: { file_id: string }[] }
+  `))
   const stored = await uploadAndAttach({
     orgId,
     targetTable: 'documents',
@@ -271,10 +271,10 @@ export async function assembleInvoiceBackup(
 
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
 export async function loadInvoiceBackup(orgId: string, documentId: string): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ file_id: string; name: string }>(sql`
     select ib.file_id, fi.name from invoice_backups ib join files fi on fi.id = ib.file_id
      where ib.org_id = ${orgId} and ib.document_id = ${documentId}
-  `)) as unknown as { rows: { file_id: string; name: string }[] }
+  `))
   const row = r.rows[0]
   if (!row) return null
   const file = await readFileBytes(orgId, row.file_id)

@@ -52,8 +52,7 @@ function page(title: string, bodyHtml: string, status = 200): NextResponse {
 </html>`
   return new NextResponse(html, { status, headers: { 'content-type': 'text/html; charset=utf-8' } })
 }
-
-interface GateSummary {
+type GateSummary = {
   id: string
   orgId: string
   title: string
@@ -66,10 +65,10 @@ interface GateSummary {
   currency: string | null
   document_date: string | null
   party_name: string | null
-}
+};
 
 async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<GateSummary>(sql`
     select g.id, g.org_id as "orgId", g.title, g.status, g.subject_kind,
            du.name as decided_by_name,
            d.document_number, d.kind as doc_kind, d.total, d.currency,
@@ -79,7 +78,7 @@ async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
       left join documents d on d.id = g.subject_id
       left join parties p on p.id = d.party_id
      where g.id = ${gateId}
-  `)) as unknown as { rows: GateSummary[] }
+  `))
   return r.rows[0] ?? null
 }
 

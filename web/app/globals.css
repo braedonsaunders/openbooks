@@ -382,10 +382,16 @@
   display: none !important;
 }
 
-/* One-time entrance: the card settles up into place under the book. */
+/* One-time entrance: the card settles up into place under the book.
+   Deliberately animates transform ONLY. Fading opacity from 0 made the sign-in
+   form's visibility depend on the animation actually advancing; when the
+   document timeline had not started (with `fill-mode: both` pinning the 0%
+   keyframe) the form stayed invisible until a manual refresh. Movement is the
+   flourish, so a dropped or stalled animation now costs the slide, not the
+   ability to sign in. */
 @keyframes login-rise-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { transform: translateY(16px); }
+  to   { transform: translateY(0); }
 }
 .login-rise-in { animation: login-rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
 

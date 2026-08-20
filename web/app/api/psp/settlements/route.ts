@@ -30,14 +30,14 @@ export async function GET() {
              memo, line_count as "lineCount"
         from psp_settlement_batches where org_id = ${orgId}
        order by settlement_date desc, created_at desc limit 50
-    `) as unknown as Promise<{ rows: unknown[] }>,
+    `),
     db.execute(sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
              default_bank_account_id as "defaultBankAccountId",
              default_fee_account_id as "defaultFeeAccountId",
              default_clearing_account_id as "defaultClearingAccountId"
         from psp_provider_configs where org_id = ${orgId}
-    `) as unknown as Promise<{ rows: unknown[] }>,
+    `),
   ]);
   return NextResponse.json({ batches: batches.rows, configs: configs.rows });
 }

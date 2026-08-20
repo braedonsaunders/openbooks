@@ -229,9 +229,38 @@ function LoginForm() {
 export default function Login() {
   return (
     <main className="grid h-full min-h-screen place-items-center bg-gradient-to-b from-white to-slate-100 p-4 pt-32 dark:from-slate-950 dark:to-slate-900">
-      <Suspense>
+      {/* LoginForm reads useSearchParams, so it suspends on the CSR bailout.
+          Without a fallback that boundary renders NOTHING, leaving a bare
+          gradient until hydration finishes. Draw the same shell meanwhile so
+          the page never appears half-loaded. */}
+      <Suspense fallback={<LoginShell />}>
         <LoginForm />
       </Suspense>
     </main>
+  )
+}
+
+/** Static twin of LoginForm's chrome, shown while the form boundary resolves. */
+function LoginShell() {
+  return (
+    <div className="relative w-full max-w-sm">
+      <div className="pointer-events-none absolute inset-x-0 -top-[8.5rem] z-20 flex justify-center">
+        <HeroBook className="h-56 w-auto drop-shadow-sm" />
+      </div>
+      <Card className="w-full rounded-3xl border-slate-200/80 shadow-xl shadow-slate-900/5 dark:border-slate-800 dark:shadow-black/30">
+        <CardContent className="px-8 pb-8 pt-24">
+          <div className="mb-7 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              open<span className="text-teal-600 dark:text-teal-400">books</span>
+            </h1>
+          </div>
+          <div className="space-y-4" aria-hidden>
+            <div className="h-11 rounded-md bg-slate-100 dark:bg-slate-800" />
+            <div className="h-11 rounded-md bg-slate-100 dark:bg-slate-800" />
+            <div className="h-11 rounded-md bg-slate-200 dark:bg-slate-700" />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

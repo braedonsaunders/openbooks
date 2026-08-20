@@ -69,18 +69,18 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     ${params.q ? sql`and (w.finding_type ilike ${`%${params.q}%`} or w.summary::text ilike ${`%${params.q}%`})` : sql``}`
 
   const [rows, totalResult, counts, statusCounts, severityCounts] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, any>>(sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status, w.confidence::text,
              w.materiality::text, w.summary, w.first_detected_at, w.last_detected_at
         from ai_work_items w where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`}, w.id
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `),
-    db.execute(sql`select count(*) as n from ai_work_items w where ${where}`),
-    db.execute(sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`),
-    db.execute(sql`select status, count(*) as n from ai_work_items w where ${base} group by status`),
-    db.execute(sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`),
-  ])) as unknown as { rows: Record<string, any>[] }[]
+    db.execute<Record<string, any>>(sql`select count(*) as n from ai_work_items w where ${where}`),
+    db.execute<Record<string, any>>(sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`),
+    db.execute<Record<string, any>>(sql`select status, count(*) as n from ai_work_items w where ${base} group by status`),
+    db.execute<Record<string, any>>(sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`),
+  ]))
   const total = Number(totalResult.rows[0]?.n ?? 0)
   const reportBase = sql`r.org_id = ${authz.user.orgId} and r.agent_key in ${readableSql}
     and r.status = 'completed' and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'`
@@ -92,32 +92,32 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
       or r.stats->'enrichment'->'narrative'->>'periodLabel' ilike ${`%${reportQ}%`}
     )` : sql``}`
   const [reportRows, reportTotalResult, reportAgentCounts] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, any>>(sql`
       select r.id, r.agent_key, r.stats->'enrichment'->'narrative' as narrative, r.finished_at
         from ai_agent_runs r where ${reportWhere}
        order by r.finished_at desc, r.id desc
        limit ${reportPerPage} offset ${(reportPage - 1) * reportPerPage}
     `),
-    db.execute(sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`),
-    db.execute(sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`),
-  ])) as unknown as { rows: Record<string, any>[] }[]
+    db.execute<Record<string, any>>(sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`),
+    db.execute<Record<string, any>>(sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`),
+  ]))
   const reportTotal = Number(reportTotalResult.rows[0]?.n ?? 0)
   const itemId = pickString(sp.item)
   let selected: ContinuousCloseWorkItem | null = null
   if (itemId && isUuid(itemId)) {
-    const detail = (await db.execute(sql`
+    const detail = (await db.execute<Record<string, any>>(sql`
       select w.*, f.rating
         from ai_work_items w
         left join ai_work_item_feedback f on f.work_item_id = w.id and f.user_id = ${authz.user.id}
        where w.id = ${itemId} and w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}
-    `)) as unknown as { rows: Record<string, any>[] }
+    `))
     const row = detail.rows[0]
     if (row) {
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<Record<string, any>>(sql`
         select id, kind, source_type, source_id, data
           from ai_work_item_evidence where work_item_id = ${itemId} and org_id = ${authz.user.orgId}
          order by created_at, id
-      `)) as unknown as { rows: Record<string, any>[] }
+      `))
       selected = {
         id: row.id,
         agentKey: row.agent_key,
@@ -139,12 +139,12 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
   const reportId = pickString(sp.report)
   let selectedNarrative: Record<string, any> | null = null
   if (reportId && isUuid(reportId)) {
-    const detail = (await db.execute(sql`
+    const detail = (await db.execute<Record<string, any>>(sql`
       select id, agent_key, stats->'enrichment'->'narrative' as narrative, finished_at
         from ai_agent_runs
        where id = ${reportId} and org_id = ${authz.user.orgId} and agent_key in ${readableSql}
          and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
-    `)) as unknown as { rows: Record<string, any>[] }
+    `))
     selectedNarrative = detail.rows[0] ?? null
   }
 

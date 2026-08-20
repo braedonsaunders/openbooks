@@ -43,21 +43,21 @@ export async function requestPasswordReset(
   await withBypass(async () => {
     // Same single-identity rule as login: never guess between two active
     // home identities for one address.
-    const users = (await db.execute(sql`
+    const users = (await db.execute<{ id: string; org_id: string; name: string | null; email: string }>(sql`
       select u.id, u.org_id, u.name, u.email
         from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where lower(u.email) = ${email} and u.is_active
        order by u.created_at
        limit 2
-    `)) as unknown as { rows: { id: string; org_id: string; name: string | null; email: string }[] };
+    `));
     const user = users.rows.length === 1 ? users.rows[0]! : null;
     if (!user) return;
 
-    const recent = (await db.execute(sql`
+    const recent = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from auth_password_resets
        where user_id = ${user.id} and created_at > now() - interval '1 hour'
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     if (recent.rows[0]!.n >= REQUESTS_PER_HOUR) return;
 
     // A fresh request supersedes outstanding links.
@@ -130,14 +130,14 @@ export async function completePasswordReset(
   const newHash = await hashPassword(newPassword);
 
   return withBypass(async () => {
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{ id: string; user_id: string }>(sql`
       select r.id, r.user_id
         from auth_password_resets r
         join users u on u.id = r.user_id and u.is_active
        where r.token_hash = ${tokenHash(rawToken)}
          and r.used_at is null and r.expires_at > now()
        for update of r
-    `)) as unknown as { rows: { id: string; user_id: string }[] };
+    `));
     const reset = rows.rows[0];
     if (!reset) return { ok: false, reason: "invalid_token" as const };
 

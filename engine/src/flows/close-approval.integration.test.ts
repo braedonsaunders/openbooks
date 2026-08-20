@@ -38,7 +38,7 @@ async function withCloseRun(
     `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.submitterId);
     await db.execute(sql`delete from flows where org_id = ${fixture.orgId} and subject_kind = 'close_run'`);
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -46,7 +46,7 @@ async function withCloseRun(
               ${defaults.reportingPackageId}, 'in_progress', 'review', '2026-08-05',
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await fn(fixture, actors, inserted.rows[0]!.id);
   } finally {
     await db.transaction(async (tx) => {
@@ -81,12 +81,10 @@ async function closeStatus(runId: string): Promise<{
   approvedBy: string | null;
   approvedAt: Date | null;
 }> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ status: string; approvedBy: string | null; approvedAt: Date | null }>(sql`
     select status, approved_by as "approvedBy", approved_at as "approvedAt"
       from close_runs where id = ${runId}
-  `)) as unknown as {
-    rows: { status: string; approvedBy: string | null; approvedAt: Date | null }[];
-  };
+  `));
   return result.rows[0]!;
 }
 
@@ -108,10 +106,10 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
     assert.equal(submitted.approvals, 1);
     assert.equal((await closeStatus(runId)).status, "review");
 
-    const gates = (await db.execute(sql`
+    const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `)) as unknown as { rows: { id: string; assigneeUserId: string }[] };
+    `));
     assert.equal(gates.rows.some((gate) => gate.assigneeUserId === actors.submitterId), false);
 
     const independentGate = gates.rows.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
@@ -121,10 +119,10 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
     assert.equal(approved.approvedBy, actors.approver1Id);
     assert.ok(approved.approvedAt);
 
-    const signoffs = (await db.execute(sql`
+    const signoffs = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from close_signoffs
        where run_id = ${runId} and decision = 'approved'
-    `)) as unknown as { rows: { count: number }[] };
+    `));
     assert.equal(signoffs.rows[0]!.count, 1);
 
     await seedDraftDocument(fixture.orgId, {
@@ -153,10 +151,10 @@ test("a close flow can require four independent approvals", { skip: !DB }, async
     const submitted = await requestCloseApproval(fixture.orgId, runId, actors.submitterId);
     assert.equal(submitted.approvals, 4);
 
-    const gates = (await db.execute(sql`
+    const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `)) as unknown as { rows: { id: string; assigneeUserId: string }[] };
+    `));
     for (const approverId of approvers) {
       const gate = gates.rows.find((row) => row.assigneeUserId === approverId)!;
       await decideGate({ gateId: gate.id, decision: "approved", userId: approverId });

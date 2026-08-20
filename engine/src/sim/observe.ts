@@ -9,8 +9,8 @@ import type { SimOrg } from "./world.ts";
  * None of these mutate; they are the "screens" the team looks at.
  */
 
-async function rows<T = Record<string, unknown>>(q: ReturnType<typeof sql>): Promise<T[]> {
-  const r = (await db.execute(q)) as unknown as { rows: T[] };
+async function rows<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
+  const r = (await db.execute<T>(q));
   return r.rows;
 }
 

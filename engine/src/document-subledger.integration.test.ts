@@ -12,10 +12,8 @@ import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtur
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  const r = (await db.execute(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`)) as unknown as {
-    rows: { bal: string }[];
-  };
+  const r = (await db.execute<{ bal: string }>(sql`
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
   return r.rows[0].bal;
 }
 
@@ -128,14 +126,14 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     // Invoice posted to DEFERRED revenue (item carries a recognition rule).
     assert.equal(toUnits(await glBalance(org.orgId, org.accounts.deferred)), toUnits("-1200"));
 
-    const obligations = (await db.execute(sql`
+    const obligations = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from performance_obligations
        where org_id = ${org.orgId}
          and document_line_id in (
            select id from document_lines where document_id = ${subId}
          )
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     assert.equal(obligations.rows[0]?.n, 1);
 
     // Only July has an accounting period in the fixture → one $100 schedule line.
@@ -150,7 +148,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     ); // 1200 / 12, exactly once
     assert.equal(toUnits(await glBalance(org.orgId, org.accounts.recognized)), toUnits("-100"));
     assert.equal(toUnits(await glBalance(org.orgId, org.accounts.deferred)), toUnits("-1100")); // 1200 − 100 drained
-    const recognitionDimensions = (await db.execute(sql`
+    const recognitionDimensions = (await db.execute<{ project_id: string | null; location_id: string | null }>(sql`
       select distinct jl.project_id, jl.location_id
         from performance_obligations o
         join recognition_schedules s on s.obligation_id = o.id
@@ -158,9 +156,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
        where o.org_id = ${org.orgId} and o.document_line_id in (
          select id from document_lines where document_id = ${subId}
-       )`)) as unknown as {
-      rows: { project_id: string | null; location_id: string | null }[];
-    };
+       )`));
     assert.deepEqual(recognitionDimensions.rows, [{
       project_id: projectId,
       location_id: org.locationId,
@@ -179,11 +175,9 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
         (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
       values (${overrideProjectId}, ${org.orgId}, ${org.subsidiaryId}, 'REVREC-OVERRIDE',
               'Revenue recognition override', ${org.customerId}, 'active', true, '{}'::jsonb)`);
-    const secondLocation = (await db.execute(sql`
+    const secondLocation = (await db.execute<{ location_id: string }>(sql`
       select location_id from stock_locations
-       where id = ${org.stockLocationId2} and org_id = ${org.orgId}`)) as unknown as {
-      rows: { location_id: string }[];
-    };
+       where id = ${org.stockLocationId2} and org_id = ${org.orgId}`));
     const overrideLocationId = secondLocation.rows[0].location_id;
     const overrideInvoiceId = await draftDoc(org, "customer_invoice", "INV-3", {
       itemId: org.items.service,
@@ -198,7 +192,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
       lineLocationId: overrideLocationId,
     });
     await postDocument(overrideInvoiceId, deps);
-    const overrideObligation = (await db.execute(sql`
+    const overrideObligation = (await db.execute<{ id: string }>(sql`
       select id
         from performance_obligations
        where org_id = ${org.orgId}
@@ -206,7 +200,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
            select id from document_lines where document_id = ${overrideInvoiceId}
          )
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     assert.ok(overrideObligation.rows[0]?.id);
     const overrideRun = await runRevenueRecognition(
       org.orgId,
@@ -215,14 +209,12 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
       overrideObligation.rows[0]!.id,
     );
     assert.equal(overrideRun.posted, 1);
-    const overrideDimensions = (await db.execute(sql`
+    const overrideDimensions = (await db.execute<{ project_id: string | null; location_id: string | null }>(sql`
       select distinct jl.project_id, jl.location_id
         from recognition_schedule_lines rsl
         join recognition_schedules s on s.id = rsl.schedule_id
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
-       where s.obligation_id = ${overrideObligation.rows[0]!.id}`)) as unknown as {
-      rows: { project_id: string | null; location_id: string | null }[];
-    };
+       where s.obligation_id = ${overrideObligation.rows[0]!.id}`));
     assert.deepEqual(overrideDimensions.rows, [{
       project_id: overrideProjectId,
       location_id: overrideLocationId,
@@ -230,9 +222,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
 
     // Every posted entry balances.
     const bad = (await db.execute(sql`
-      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`)) as unknown as {
-      rows: unknown[];
-    };
+      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`));
     assert.equal(bad.rows.length, 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -279,26 +269,22 @@ test("percent-complete recognition posts current-period catch-ups and remains op
     const first = await runRevenueRecognition(org.orgId, "2026-07-15", null, obligationId);
     assert.equal(first.posted, 1);
     assert.equal(toUnits(first.totalAmount), toUnits("250"));
-    let state = (await db.execute(sql`
+    let state = (await db.execute<{ status: string; posting_date: string }>(sql`
       select o.status, e.posting_date::text as posting_date
         from performance_obligations o
         join recognition_schedules s on s.obligation_id = o.id
         join recognition_schedule_lines l on l.schedule_id = s.id
         join journal_entries e on e.id = l.journal_entry_id
-       where o.id = ${obligationId} and l.sequence = 1`)) as unknown as {
-      rows: { status: string; posting_date: string }[];
-    };
+       where o.id = ${obligationId} and l.sequence = 1`));
     assert.deepEqual(state.rows[0], {
       status: "open",
       posting_date: "2026-07-15",
     });
-    const firstDimensions = (await db.execute(sql`
+    const firstDimensions = (await db.execute<{ project_id: string | null }>(sql`
       select distinct jl.project_id
         from recognition_schedule_lines rsl
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
-       where rsl.schedule_id = ${scheduleId} and rsl.sequence = 1`)) as unknown as {
-      rows: { project_id: string | null }[];
-    };
+       where rsl.schedule_id = ${scheduleId} and rsl.sequence = 1`));
     assert.deepEqual(firstDimensions.rows, [{ project_id: projectId }]);
 
     await db.execute(sql`
@@ -310,15 +296,13 @@ test("percent-complete recognition posts current-period catch-ups and remains op
     const final = await runRevenueRecognition(org.orgId, "2026-07-20", null, obligationId);
     assert.equal(final.posted, 1);
     assert.equal(toUnits(final.totalAmount), toUnits("750"));
-    state = (await db.execute(sql`
+    state = (await db.execute<{ status: string; posting_date: string }>(sql`
       select o.status, e.posting_date::text as posting_date
         from performance_obligations o
         join recognition_schedules s on s.obligation_id = o.id
         join recognition_schedule_lines l on l.schedule_id = s.id
         join journal_entries e on e.id = l.journal_entry_id
-       where o.id = ${obligationId} and l.sequence = 2`)) as unknown as {
-      rows: { status: string; posting_date: string }[];
-    };
+       where o.id = ${obligationId} and l.sequence = 2`));
     assert.deepEqual(state.rows[0], {
       status: "satisfied",
       posting_date: "2026-07-20",
@@ -330,9 +314,7 @@ test("percent-complete recognition posts current-period catch-ups and remains op
     assert.equal(rerun.posted, 0);
     const unbalanced = (await db.execute(sql`
       select entry_id from journal_lines where org_id = ${org.orgId}
-       group by entry_id having sum(amount) <> 0`)) as unknown as {
-      rows: unknown[];
-    };
+       group by entry_id having sum(amount) <> 0`));
     assert.equal(unbalanced.rows.length, 0);
   } finally {
     await dropScratchOrg(org.orgId);

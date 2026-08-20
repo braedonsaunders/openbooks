@@ -33,11 +33,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ pinned: false })
   }
 
-  const next = (await db.execute(sql`
+  const next = (await db.execute<{ n: number }>(sql`
     select coalesce(max(sort_order), -1) + 1 as n
       from insight_dashboard_pins
      where org_id = ${user.orgId} and user_id = ${user.id}
-  `)) as unknown as { rows: { n: number }[] }
+  `))
 
   await db
     .insert(insightDashboardPins)

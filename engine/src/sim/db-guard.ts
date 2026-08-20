@@ -72,9 +72,9 @@ export function assertSimEnabled(): void {
  * under the caller's context; assumes bypass/org scope is already established.
  */
 export async function assertSimOrg(orgId: string): Promise<void> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ name: string; tagged: boolean }>(sql`
     select name, coalesce((settings->>'simHarness')::boolean, false) as tagged
-      from orgs where id = ${orgId}`)) as unknown as { rows: { name: string; tagged: boolean }[] };
+      from orgs where id = ${orgId}`));
   const row = r.rows[0];
   if (!row) throw new Error(`org ${orgId} not found`);
   if (!row.tagged) {

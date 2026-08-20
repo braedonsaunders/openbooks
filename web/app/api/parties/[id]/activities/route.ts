@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!isUuid(id)) return NextResponse.json({}, { status: 404 })
 
   const party = (await db.execute(sql`
-    select 1 from parties where id=${id} and org_id=${gate.user.orgId} limit 1`)) as unknown as { rows: unknown[] }
+    select 1 from parties where id=${id} and org_id=${gate.user.orgId} limit 1`))
   if (!party.rows[0]) return NextResponse.json({}, { status: 404 })
 
   const url = new URL(request.url)
@@ -41,13 +41,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ${status ? sql`and a.status=${status}` : sql``}`
 
   const [rows, total, filters] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select a.id,a.kind,a.status,a.subject,coalesce(a.starts_at,a.due_at,a.created_at) activity_date
         from crm_activities a where ${where}
        order by coalesce(a.starts_at,a.due_at,a.created_at) desc,a.created_at desc
        limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
-    db.execute(sql`select count(*)::int count from crm_activities a where ${where}`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`select count(*)::int count from crm_activities a where ${where}`),
+    db.execute<Record<string, unknown>>(sql`
       select array_remove(array_agg(distinct a.kind order by a.kind),null) kinds,
              array_remove(array_agg(distinct a.status order by a.status),null) statuses
         from crm_activities a
@@ -57,7 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
             where l.org_id=a.org_id and l.activity_id=a.id
               and l.subject_kind='account' and l.subject_id=${id}
          )`),
-  ])) as unknown as { rows: Record<string, unknown>[] }[]
+  ]))
 
   return NextResponse.json({
     rows: rows.rows,

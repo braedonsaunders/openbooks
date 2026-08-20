@@ -37,11 +37,11 @@ export async function POST(
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const found = (await db.execute(sql`
+  const found = (await db.execute<{ kind: string }>(sql`
     select kind
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
-  `)) as unknown as { rows: { kind: string }[] }
+  `))
   const doc = found.rows[0]
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const permission = voidPermission(doc.kind)

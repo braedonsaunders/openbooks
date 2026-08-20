@@ -13,7 +13,7 @@ export interface AccountPayload {
 
 /** Tenant-scoped account payload used by both the list flyout and API. */
 export async function loadAccount(id: string, orgId: string): Promise<AccountPayload | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, unknown>>(sql`
     select a.*,
            case when parent.id is null then null else concat_ws(' ', parent.number, parent.name) end as parent_name,
            s.name as subsidiary_name,
@@ -26,7 +26,7 @@ export async function loadAccount(id: string, orgId: string): Promise<AccountPay
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
      where a.id = ${id} and a.org_id = ${orgId}
-  `)) as unknown as { rows: Array<Record<string, unknown>> }
+  `))
   const row = result.rows[0]
   if (!row) return null
   const { parent_name, subsidiary_name, has_transactions, child_count, active_child_count, ...account } = row

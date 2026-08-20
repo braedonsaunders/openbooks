@@ -27,11 +27,11 @@ export async function POST(
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const found = (await db.execute(sql`
+  const found = (await db.execute<{ kind: string; status: string }>(sql`
     select kind, status
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
-  `)) as unknown as { rows: { kind: string; status: string }[] }
+  `))
   const source = found.rows[0]
   if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!DOC_KINDS[source.kind]) {

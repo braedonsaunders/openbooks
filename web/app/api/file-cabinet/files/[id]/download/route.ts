@@ -34,7 +34,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            ? sql`and a.subsidiary_id=any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
            : sql``}
        limit 1
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (!attachedAsset.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // The attachment relation above limits this exception to evidence on an
     // asset the caller can see; it does not grant cabinet-wide visibility.

@@ -584,9 +584,15 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
 export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
   if (!meta) throw new Error(`unknown record type: ${recordType}`)
-  // Prefer date-desc (transaction date or created-at) for lists; otherwise the
-  // first sortable column.
+  // A record type's declared defaultSort wins; else date-desc (transaction date
+  // or created-at); else the first sortable column. Without the declared case,
+  // dated aggregates fall back to their first column — e.g. timesheet weeks
+  // ordered by employee name, which buries the current week.
+  const declared = meta.defaultSort
+    ? meta.listColumns.find((c) => c.sortable && c.sortKey === meta.defaultSort!.sortKey)
+    : undefined
   const sortable =
+    declared ??
     meta.listColumns.find((c) => c.sortable && (c.sortKey === "date" || c.sortKey === "created" || c.sortKey === "close")) ??
     meta.listColumns.find((c) => c.sortable)
   return {
@@ -600,7 +606,12 @@ export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
     })),
     filters: [],
     sort: sortable
-      ? { column: sortable.key, dir: ["date", "created", "close"].includes(sortable.sortKey ?? "") ? "desc" : "asc" }
+      ? {
+          column: sortable.key,
+          dir: declared
+            ? declared === sortable ? meta.defaultSort!.dir : "asc"
+            : ["date", "created", "close"].includes(sortable.sortKey ?? "") ? "desc" : "asc",
+        }
       : null,
     perPage: DEFAULT_PER_PAGE,
   }

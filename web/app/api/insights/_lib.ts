@@ -52,11 +52,11 @@ export type CardRow = {
 }
 
 export async function loadCard(id: string, orgId: string): Promise<CardRow | null> {
-  const res = (await db.execute(sql`
+  const res = (await db.execute<CardRow>(sql`
     select id, name, description, query, viz_type, viz_settings, status, allowed_roles, updated_at
       from insight_cards
      where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: CardRow[] }
+  `))
   return res.rows[0] ?? null
 }
 
@@ -71,11 +71,11 @@ export type DashboardRow = {
 }
 
 export async function loadDashboard(id: string, orgId: string): Promise<DashboardRow | null> {
-  const res = (await db.execute(sql`
+  const res = (await db.execute<DashboardRow>(sql`
     select id, name, description, layout, status, allowed_roles, updated_at
       from insight_dashboards
      where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: DashboardRow[] }
+  `))
   return res.rows[0] ?? null
 }
 
@@ -108,12 +108,12 @@ export async function loadDashboardEmbed(
   const cardIds = [...new Set(dashboard.layout.map((w) => w.cardId))]
   if (cardIds.length === 0) return { dashboard, cards: [], layout: [] }
 
-  const res = (await db.execute(sql`
+  const res = (await db.execute<DashboardCard>(sql`
     select id, name, description, query, viz_type, viz_settings, status
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${cardIds.join(',')}}`}::uuid[])
        ${publishedOnly ? sql`and status = 'published'` : sql``}
-  `)) as unknown as { rows: DashboardCard[] }
+  `))
 
   const present = new Set(res.rows.map((r) => r.id))
   const layout = dashboard.layout.filter((w) => present.has(w.cardId))
@@ -144,7 +144,7 @@ export async function resolveHomeDashboard(
   // One query resolves all three tiers: the user's personal pointer, their role
   // default, and the system default — restricted to PUBLISHED boards so a draft
   // can't become someone's home. We keep the highest-priority present.
-  const res = (await db.execute(sql`
+  const res = (await db.execute<{ id: string; source: HomeResolution['source'] }>(sql`
     with u as (select home_dashboard_id from users where id = ${userId} and org_id = ${orgId})
     select d.id,
            case
@@ -168,7 +168,7 @@ export async function resolveHomeDashboard(
        )
      order by priority asc
      limit 1
-  `)) as unknown as { rows: { id: string; source: HomeResolution['source'] }[] }
+  `))
 
   const row = res.rows[0]
   return row ? { dashboardId: row.id, source: row.source } : null

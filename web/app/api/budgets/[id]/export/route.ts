@@ -17,11 +17,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const format = new URL(req.url).searchParams.get('format') ?? 'xlsx'
   if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
 
-  const scenario = (await db.execute(sql`
+  const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
     select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
-  `)) as unknown as { rows: { name: string; fiscal_year: number }[] }
+  `))
   if (!scenario.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, any>>(sql`
     select a.number, a.name as account_name, p.name as period,
            d.code as department, pr.code as project, loc.code as location, c.code as class,
            (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
@@ -34,7 +34,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       left join classes c on c.id = bl.class_id
      where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
      order by a.number nulls last, a.name, p.period_number, d.code, pr.code, loc.code, c.code
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
 
   const result: ReportRunResult = {
     groups: [{

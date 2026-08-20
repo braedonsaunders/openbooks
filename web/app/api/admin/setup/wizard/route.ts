@@ -68,7 +68,7 @@ export async function PUT(req: Request) {
   }
   const knownCurrency = (await db.execute(
     sql`select 1 from currencies where code = ${inputCurrency} limit 1`,
-  )) as unknown as { rows: unknown[] }
+  ))
   if (!knownCurrency.rows[0]) {
     return NextResponse.json(
       {
@@ -120,16 +120,14 @@ export async function PUT(req: Request) {
   // calendar.
   const accountingFoundationMutable = await canSwitchIndustry(orgId)
   if (!accountingFoundationMutable) {
-    const existing = (await db.execute(sql`
-      select base_currency, settings->>'industry' as industry,
-             coalesce((settings->>'fiscalYearStartMonth')::int, 1) as fiscal_year_start_month
-        from orgs where id = ${orgId}`)) as unknown as {
-      rows: {
+    const existing = (await db.execute<{
         base_currency: string
         industry: string | null
         fiscal_year_start_month: number
-      }[]
-    }
+      }>(sql`
+      select base_currency, settings->>'industry' as industry,
+             coalesce((settings->>'fiscalYearStartMonth')::int, 1) as fiscal_year_start_month
+        from orgs where id = ${orgId}`))
     const current = existing.rows[0]
     if (!current) {
       return NextResponse.json({ error: 'org-not-found' }, { status: 404 })
@@ -170,11 +168,9 @@ export async function PUT(req: Request) {
   await db.transaction(async (tx) => {
     // Lock the org row and load current state.
     const cur = (
-      (await tx.execute(sql`
+      (await tx.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
         select name, legal_name, base_currency, country, settings
-          from orgs where id = ${orgId} for update`)) as unknown as {
-        rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[]
-      }
+          from orgs where id = ${orgId} for update`))
     ).rows[0]
     if (!cur) throw new Error('org not found')
 
@@ -230,7 +226,7 @@ export async function PUT(req: Request) {
     // Existing posted books may be classified for the first time, but their
     // established chart and control-account mapping remain untouched.
     if (industry && industryChanged && accountingFoundationMutable) {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string; number: string }>(sql`
         with ins as (
           insert into accounts (id, org_id, number, name, type, is_summary, is_active, currency_restriction, reconcilable, required_dimensions, created_at, created_by, updated_at, updated_by)
           select uuid_generate_v7(), ${orgId}::uuid, t.number, t.name, t.type::text, t.is_summary, true,
@@ -254,7 +250,7 @@ export async function PUT(req: Request) {
         select id, number from accounts where org_id = ${orgId} and number in (${sql.join(
           industry.coa.map((a) => sql`${a.number}`),
           sql`, `,
-        )})`)) as unknown as { rows: { id: string; number: string }[] }
+        )})`))
 
       // Build number→id map.
       const acctMap = new Map(inserted.rows.map((r) => [r.number, r.id]))
@@ -387,23 +383,21 @@ export async function PUT(req: Request) {
     // explicitly enables and creates a multi-entity structure. Multi-entity
     // roots are intentionally left alone because the group name and parent
     // legal entity can legitimately differ.
-    const singleRoot = (await tx.execute(sql`
-      select s.id, s.name, s.legal_name, s.base_currency, s.country,
-             (select count(*)::int from subsidiaries x
-               where x.org_id = ${orgId} and x.is_active and not x.is_elimination) as entity_count
-        from subsidiaries s
-       where s.org_id = ${orgId} and s.parent_id is null
-       for update
-    `)) as unknown as {
-      rows: {
+    const singleRoot = (await tx.execute<{
         id: string
         name: string
         legal_name: string | null
         base_currency: string
         country: string
         entity_count: number
-      }[]
-    }
+      }>(sql`
+      select s.id, s.name, s.legal_name, s.base_currency, s.country,
+             (select count(*)::int from subsidiaries x
+               where x.org_id = ${orgId} and x.is_active and not x.is_elimination) as entity_count
+        from subsidiaries s
+       where s.org_id = ${orgId} and s.parent_id is null
+       for update
+    `))
     const root = singleRoot.rows[0]
     if (root && root.entity_count === 1) {
       const nextName = inputName.trim()
@@ -467,9 +461,9 @@ export async function POST(req: Request) {
   const { orgId, id: actorId } = gate.user
 
   await db.transaction(async (tx) => {
-    const current = (await tx.execute(sql`
+    const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
       select settings from orgs where id = ${orgId} for update
-    `)) as unknown as { rows: { settings: Record<string, unknown> }[] }
+    `))
     const settings = current.rows[0]?.settings
     if (!settings) {
       throw new Error('org not found')

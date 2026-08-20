@@ -39,23 +39,22 @@ export interface PayRunEvidence {
   /** What made it into the package, for the audit note and the UI. */
   parts: string[]
 }
-
-interface RunHeader {
+type RunHeader = {
   document_number: string
   period_start: string
   period_end: string
   pay_date: string
   run_status: string
-}
+};
 
 async function loadRun(orgId: string, documentId: string): Promise<RunHeader> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<RunHeader>(sql`
     select d.document_number, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date, r.run_status
       from pay_runs r
       join documents d on d.id = r.document_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as { rows: RunHeader[] }
+  `))
   const run = r.rows[0]
   if (!run) throw new PayrollError('pay run not found')
   return run
@@ -112,10 +111,10 @@ export async function assemblePayRunEvidence(
   const branding = await orgBranding(orgId)
   const { page, showSummary } = resolveLayout(null)
 
-  const definitions = (await db.execute(sql`
+  const definitions = (await db.execute<{ slug: string; id: string; name: string }>(sql`
     select slug, id, name from report_definitions
      where org_id = ${orgId} and slug = any(${`{${EVIDENCE_SLUGS.join(',')}}`}::text[])
-  `)) as unknown as { rows: { slug: string; id: string; name: string }[] }
+  `))
 
   const parts: string[] = []
   const pdfs: Buffer[] = []

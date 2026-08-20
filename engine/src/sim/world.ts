@@ -326,12 +326,12 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     const mkUser = async (name: string, role: string): Promise<string> => {
       const id = randomUUID();
       await db.transaction(async (tx) => {
-        const assignedRole = (await tx.execute(sql`
+        const assignedRole = (await tx.execute<{ id: string }>(sql`
           insert into app_roles (org_id, key, name, is_built_in, permissions)
           values (${orgId}, ${role}, ${role.replaceAll('_', ' ')}, false, '[]'::jsonb)
           on conflict (org_id, key) do update set updated_at = now()
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', true)
@@ -390,10 +390,8 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     const engagements: SimOrg["engagements"] = [];
     const perCustomer = profile.engagementsPerCustomer ?? 0;
     if (accounts.laborWip && accounts.laborClearing && perCustomer > 0) {
-      const tmTypeRow = (await db.execute(sql`
-        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`)) as unknown as {
-        rows: { id: string }[];
-      };
+      const tmTypeRow = (await db.execute<{ id: string }>(sql`
+        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`));
       const tmType = tmTypeRow.rows[0];
       let n = 0;
       if (tmType) {
@@ -419,10 +417,8 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     if (accounts.laborWip && accounts.laborClearing && profile.jobPortfolio?.length) {
       const custByName = new Map(customers.map((c) => [c.name, c]));
       const typeByKey = new Map(
-        ((await db.execute(sql`
-          select id, key from project_types where org_id = ${orgId} and is_active`)) as unknown as {
-          rows: { id: string; key: string }[];
-        }).rows.map((t) => [t.key, t.id]),
+        ((await db.execute<{ id: string; key: string }>(sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`))).rows.map((t) => [t.key, t.id]),
       );
       for (const spec of profile.jobPortfolio) {
         const customer = custByName.get(spec.customer);
@@ -580,7 +576,7 @@ export async function wipeSimOrg(orgId: string): Promise<void> {
     // Their rows are immutable history and orphan harmlessly (no inbound FKs;
     // their own FKs are deferrable). An org with close/payment history therefore
     // cannot be hard-wiped — which is correct — but debris orgs have no such rows.
-    const tbls = (await db.execute(sql`
+    const tbls = (await db.execute<{ table_name: string }>(sql`
       select c.table_name from information_schema.columns c
        where c.table_schema = 'public' and c.column_name = 'org_id' and c.table_name <> 'orgs'
          and c.table_name not in (
@@ -589,9 +585,7 @@ export async function wipeSimOrg(orgId: string): Promise<void> {
              join pg_class cl on cl.oid = tg.tgrelid
              join pg_proc pr on pr.oid = tg.tgfoid
             where not tg.tgisinternal and pg_get_functiondef(pr.oid) ilike '%append-only%'
-         )`)) as unknown as {
-      rows: { table_name: string }[];
-    };
+         )`));
     let remaining = tbls.rows.map((r) => r.table_name);
     for (let pass = 0; pass < 15 && remaining.length > 0; pass++) {
       const stillBlocked: string[] = [];
