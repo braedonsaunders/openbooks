@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { BOOK_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import {
   boolean,
   check,
@@ -59,7 +60,7 @@ export const assetCategories = pgTable("asset_categories", {
   defaultLifeMonths: integer("default_life_months"),
   /** First-period convention: full_month (default), mid_month, half_year. */
   defaultConvention: text("default_convention", {
-    enum: ["full_month", "mid_month", "half_year"],
+    enum: BOOK_DEPRECIATION_CONVENTIONS,
   }).notNull().default("full_month"),
   /** e.g. CCA class for Canadian tax book: { "ca_cca_class": "10", "ca_cca_rate": 30 } */
   taxAttributes: jsonb("tax_attributes").notNull().default({}),
@@ -102,7 +103,7 @@ export const fixedAssets = pgTable(
     usefulLifeMonths: integer("useful_life_months"),
     depreciationRatePercent: money("depreciation_rate_percent"),
     depreciationConvention: text("depreciation_convention", {
-      enum: ["full_month", "mid_month", "half_year"],
+      enum: BOOK_DEPRECIATION_CONVENTIONS,
     }),
     /** Expected lifetime output for units-of-production depreciation. */
     depreciationUnitsTotal: money("depreciation_units_total"),
@@ -297,7 +298,7 @@ export const depreciationBookPolicies = pgTable(
     lifeMonths: integer("life_months"),
     ratePercent: money("rate_percent"),
     unitsTotal: money("units_total"),
-    convention: text("convention", { enum: ["full_month", "mid_month", "half_year"] }).notNull().default("full_month"),
+    convention: text("convention", { enum: BOOK_DEPRECIATION_CONVENTIONS }).notNull().default("full_month"),
     ...auditColumns,
   },
   (t) => [
