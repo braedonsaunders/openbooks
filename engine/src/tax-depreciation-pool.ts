@@ -25,6 +25,7 @@
  */
 
 import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { taxConventionHalfMonths } from "./depreciation-conventions.ts";
 
 type ExactDecimal = string | number;
 
@@ -308,12 +309,14 @@ function macrsSchedule(args: {
   return out;
 }
 
-function conventionFraction(convention: MacrsYearInput["convention"], month: number, kind: "placed" | "disposed"): bigint {
-  if (convention === "half_year") return 12n;
-  if (convention === "mid_month") return BigInt(kind === "placed" ? 25 - month * 2 : month * 2 - 1);
-  const quarter = Math.ceil(month / 3);
-  return BigInt(kind === "placed" ? 27 - quarter * 6 : quarter * 6 - 3);
-}
+/**
+ * Half-months of the tax year in service under a MACRS convention.
+ *
+ * The definition is shared with the book engine (depreciation-conventions.ts),
+ * which derives its own monthly window from the same table. Restating it here
+ * is what let the two engines disagree about `half_year` in the first place.
+ */
+const conventionFraction = taxConventionHalfMonths;
 
 function parseIsoDate(value: string): { year: number; month: number } | null {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
