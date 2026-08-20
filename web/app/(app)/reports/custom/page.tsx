@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { REPORT_ENTITY_MAP, type ReportCustomQuery } from '@openbooks/reports'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
@@ -90,7 +90,24 @@ export default async function CustomReports({
       : d.description
   }
 
-  const where = sql`org_id = ${authz.user.orgId}
+  // Entities this reader may not run. The catalog page lists names, slugs and
+  // the stored PLAN, so an unfiltered list leaks the shape of payroll reporting
+  // — and the ids every execution path keys on — to anyone holding reports.read.
+  // Filtered in SQL rather than after the fact so the kind counts and the
+  // pagination totals describe what is actually shown.
+  const deniedEntities = Object.values(REPORT_ENTITY_MAP)
+    .filter((entity) => entity.requiredPermission && !can(authz, entity.requiredPermission))
+    .map((entity) => entity.key)
+
+  // Applied to the list AND to the kind counts: a count is a disclosure too, and
+  // a total that includes reports the reader cannot see makes the empty state
+  // and the pagination lie about what is there.
+  const visible =
+    deniedEntities.length > 0
+      ? sql` and (query is null or coalesce(query->>'entity', '') <> all(${`{${deniedEntities.join(',')}}`}::text[]))`
+      : sql``
+
+  const where = sql`org_id = ${authz.user.orgId}${visible}
     ${kind && kind !== 'all' ? sql` and kind = ${kind}` : sql``}
     ${params.q ? sql` and (name ilike ${'%' + params.q + '%'} or description ilike ${'%' + params.q + '%'})` : sql``}`
 
@@ -104,7 +121,7 @@ export default async function CustomReports({
     `),
     db.execute<{ kind: string; n: string }>(sql`
       select kind, count(*) as n from report_definitions
-       where org_id = ${authz.user.orgId} group by kind
+       where org_id = ${authz.user.orgId}${visible} group by kind
     `),
     db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`),
   ])

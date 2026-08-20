@@ -2,12 +2,16 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz } from "../../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../../../../../../lib/continuous-close";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isFeatureEnabled(authz.user.orgId, 'continuousClose'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 });
+  }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const access = await loadWorkItemAccess(authz.user.orgId, id);

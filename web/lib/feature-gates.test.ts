@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import test from 'node:test'
 
 /**
@@ -8,89 +8,172 @@ import test from 'node:test'
  * rule — feature dependencies are enforced at the domain/service and API
  * boundaries, "not only by hiding UI".
  *
- * Nav hiding is the easy half and the half that gets written. Equipment,
- * Expenses and Budgets each declared `navModules` and shipped with NO
- * server-side gate at all: turning them off removed the menu entry while the
- * page still rendered and its APIs still accepted writes.
+ * An earlier version of this test asked only whether a feature key appeared in
+ * SOME gate call anywhere under web/. That is far too weak, and it produced
+ * exactly the false confidence it was written to prevent: `apps` counted as
+ * gated because /apps had a layout gate, while /admin/apps and all nine
+ * /api/apps routes stayed permission-only. A test that reports "gated" for an
+ * ungated surface is worse than no test.
  *
- * This test holds the other half. A feature that hides nav must also be
- * enforced somewhere on the server — via `requireFeatureEnabled`/`guardFeaturePermission`, a
- * bespoke gate (`projects-gate.ts`), or a direct `isFeatureEnabled` check.
+ * So coverage is checked PER SURFACE:
+ *   - every route a feature's nav modules link to must be gated by its own
+ *     page/layout or by an ancestor layout inside the (app) segment;
+ *   - every API route handler serving a feature must consult a gate.
  */
 
-/**
- * The registry, read as source. `features.ts` is `server-only`, which throws
- * outside a Next render, so importing FEATURES here is not an option.
- */
-function featuresDeclaringNav(): string[] {
-  const source = readFileSync(new URL('./features.ts', import.meta.url), 'utf8')
+const WEB = new URL('../', import.meta.url)
+const APP_SEGMENT = 'app/(app)'
+
+const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(/
+
+const read = (path: string) => readFileSync(new URL(path, WEB), 'utf8')
+const exists = (path: string) => existsSync(new URL(path, WEB))
+
+/** The feature registry, parsed from source (`features.ts` is server-only). */
+function featuresWithNav(): Array<{ key: string; navModules: string[] }> {
+  const source = read('lib/features.ts')
   const list = source.slice(
     source.indexOf('export const FEATURES'),
     source.indexOf('\n]', source.indexOf('export const FEATURES')),
   )
-  const keys: string[] = []
-  for (const entry of list.matchAll(/\{ key: '([A-Za-z]+)'[^}]*\}/g)) {
-    if (entry[0].includes('navModules:')) keys.push(entry[1])
+  const out: Array<{ key: string; navModules: string[] }> = []
+  for (const entry of list.matchAll(/\{ key: '(\w+)'[^}]*\}/g)) {
+    const nav = /navModules: \[([^\]]*)\]/.exec(entry[0])
+    if (!nav) continue
+    out.push({ key: entry[1], navModules: [...nav[1].matchAll(/'([\w-]+)'/g)].map((m) => m[1]) })
   }
-  assert.ok(keys.length > 0, 'could not parse the feature registry')
-  return keys
+  assert.ok(out.length > 0, 'could not parse the feature registry')
+  return out
 }
 
-/** Every feature key named in a server-side gate call anywhere under web/. */
-function gatedFeatureKeys(): Set<string> {
-  // Walk the source tree rather than shelling out to `git grep`: an untracked
-  // new layout.tsx is still a real gate, and this must not depend on the file
-  // having been staged.
-  const keys = new Set<string>()
-  const call =
-    /(?:requireFeatureEnabled|guardFeaturePermission|isFeatureEnabled|featureEnabled)\([^)]*?'([A-Za-z]+)'/g
-  const root = new URL('../', import.meta.url)
-  const walk = (dir: URL): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.next') continue
-      const child = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, dir)
-      if (entry.isDirectory()) walk(child)
-      else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
-        for (const match of readFileSync(child, 'utf8').matchAll(call)) keys.add(match[1])
-      }
-    }
-  }
-  walk(new URL('app/', root))
-  walk(new URL('lib/', root))
-  return keys
+/** nav module key → href, from the nav registry. */
+function navHrefs(): Record<string, string> {
+  const source = read('lib/nav/registry.ts')
+  return Object.fromEntries(
+    [...source.matchAll(/key: '([\w-]+)',\s*\n\s*href: '([^']+)'/g)].map((m) => [m[1], m[2]]),
+  )
 }
 
 /**
- * Features deliberately without their own server gate, with the reason. Adding
- * to this list is a decision that should be argued for in review, which is the
- * point of making it explicit rather than letting silence pass.
+ * Is the route this href resolves to gated — by its own page/layout, or by any
+ * ancestor layout still inside the (app) segment? Returns null when the href
+ * has no directory (external or dynamic), which the caller reports separately.
  */
+function routeGateState(href: string): 'gated' | 'ungated' | null {
+  const segments = href.split('?')[0].split('/').filter(Boolean)
+  let dir = `${APP_SEGMENT}/`
+  if (!exists(dir)) return null
+  const candidates: string[] = []
+  for (const segment of segments) {
+    const next = `${dir}${segment}/`
+    if (!exists(next)) return null
+    dir = next
+    candidates.push(`${dir}layout.tsx`)
+  }
+  candidates.push(`${dir}page.tsx`)
+  // An ancestor layout gate covers everything beneath it.
+  for (const file of candidates) {
+    if (exists(file) && GATE.test(read(file))) return 'gated'
+  }
+  return exists(`${dir}page.tsx`) ? 'ungated' : null
+}
+
+/**
+ * API surfaces per feature. Not derivable from nav, so it is explicit — and
+ * being explicit is the point: adding a module's API without listing it here is
+ * the omission that let /api/apps ship ungated.
+ */
+const FEATURE_API_DIRS: Record<string, string[]> = {
+  apps: ['app/api/apps'],
+  continuousClose: ['app/api/continuous-close'],
+  equipment: ['app/api/equipment'],
+  expenses: ['app/api/expenses'],
+  budgets: ['app/api/budgets'],
+  projects: ['app/api/projects'],
+  timeTracking: ['app/api/timesheets'],
+}
+
+function routeFilesUnder(dir: string): string[] {
+  const out: string[] = []
+  const walk = (relative: string) => {
+    const url = new URL(`${relative}/`, WEB)
+    for (const entry of readdirSync(url, { withFileTypes: true })) {
+      const child = `${relative}/${entry.name}`
+      if (entry.isDirectory()) walk(child)
+      else if (entry.name === 'route.ts') out.push(child)
+    }
+  }
+  if (exists(`${dir}/`) && statSync(new URL(`${dir}/`, WEB)).isDirectory()) walk(dir)
+  return out
+}
+
+/** Features deliberately without a gate of their own, with the reason. */
 const UNGATED_BY_DESIGN: Record<string, string> = {
-  // Banking's surfaces are gated per-capability (bankFeeds, imports); the parent
-  // key only groups the nav modules.
   banking: 'nav grouping only — capabilities gate individually (bankFeeds)',
 }
 
-test('every feature that hides nav is also enforced on the server', () => {
-  const gated = gatedFeatureKeys()
-  const missing = featuresDeclaringNav().filter(
-    (key) => !gated.has(key) && !(key in UNGATED_BY_DESIGN),
-  )
-
+test('every route a feature links to is gated by its own page or an ancestor layout', () => {
+  const hrefs = navHrefs()
+  const ungated: string[] = []
+  for (const { key, navModules } of featuresWithNav()) {
+    if (key in UNGATED_BY_DESIGN) continue
+    for (const moduleKey of navModules) {
+      const href = hrefs[moduleKey]
+      if (!href || !href.startsWith('/')) continue
+      if (routeGateState(href) === 'ungated') ungated.push(`${key} → ${href}`)
+    }
+  }
   assert.deepEqual(
-    missing,
+    ungated,
     [],
-    `these features hide nav but have no server-side gate, so "off" is cosmetic — ` +
-      `their pages still render and their APIs still accept writes: ${missing.join(', ')}. ` +
-      'Add requireFeatureEnabled() to the page and guardFeaturePermission() to each API handler.',
+    'these routes render with the feature off, so "disabled" is cosmetic:\n  ' +
+      ungated.join('\n  ') +
+      '\nAdd requireFeatureEnabled() to the page, or a layout gate on the segment.',
   )
 })
 
-test('the three modules this test was written for are gated', () => {
-  // Pinned by name: a future refactor of the scan above must not quietly stop
-  // covering the cases that motivated it.
-  const gated = gatedFeatureKeys()
-  for (const key of ['equipment', 'expenses', 'budgets']) {
-    assert.ok(gated.has(key), `${key} lost its server-side feature gate`)
+test('every API route serving a feature consults a gate', () => {
+  const ungated: string[] = []
+  for (const [key, dirs] of Object.entries(FEATURE_API_DIRS)) {
+    for (const dir of dirs) {
+      const files = routeFilesUnder(dir)
+      assert.ok(files.length > 0, `${key}: no route handlers found under ${dir} — stale mapping?`)
+      for (const file of files) {
+        if (!GATE.test(read(file))) ungated.push(`${key} → ${file}`)
+      }
+    }
   }
+  assert.deepEqual(
+    ungated,
+    [],
+    'these API handlers accept requests with the feature off:\n  ' +
+      ungated.join('\n  ') +
+      '\nUse guardFeaturePermission(permission, featureKey).',
+  )
+})
+
+test('the surfaces this test was written for are covered', () => {
+  // Pinned by name so a future refactor of the scans above cannot quietly stop
+  // covering the cases that motivated them.
+  assert.equal(routeGateState('/admin/apps'), 'gated')
+  assert.equal(routeGateState('/apps'), 'gated')
+  assert.equal(routeGateState('/continuous-close'), 'gated')
+  assert.equal(routeGateState('/expenses/reports'), 'gated')
+  for (const file of routeFilesUnder('app/api/apps')) {
+    assert.match(read(file), GATE, `${file} lost its feature gate`)
+  }
+})
+
+test('the report catalog page filters entities the reader cannot run', () => {
+  // The list exposes names, slugs and the stored PLAN, and the counts expose
+  // how many exist. Both are disclosures; both are filtered.
+  const page = read('app/(app)/reports/custom/page.tsx')
+  assert.match(page, /requiredPermission && !can\(authz/)
+  assert.match(page, /const visible =/)
+  const countsQuery = page.slice(page.indexOf('select kind, count(*)'))
+  assert.match(
+    countsQuery.slice(0, 200),
+    /\$\{visible\}/,
+    'the kind counts must apply the same entity filter as the list',
+  )
 })

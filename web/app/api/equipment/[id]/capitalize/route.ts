@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
 
 export const runtime = 'nodejs'
@@ -13,7 +13,7 @@ export const runtime = 'nodejs'
  * category (which drives the depreciation method and tax class) on the asset.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const { orgId, id: userId } = gate.user

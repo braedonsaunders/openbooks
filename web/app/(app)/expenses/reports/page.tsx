@@ -6,6 +6,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { RecordListView } from '../../../../components/record-list-view'
 import { buildListDrawerHref, isUuid, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { ExpenseActions } from '../ExpenseActions'
 import { ExpenseDrawer } from '../ExpenseDrawer'
 import { NewExpenseButton } from '../NewExpenseButton'
@@ -26,6 +27,7 @@ export default async function Expenses({
 }) {
   const t = await getTranslations('expenses')
   const authz = await requirePermission('expenses.read')
+  await requireFeatureEnabled(authz.user.orgId, 'expenses')
   const canSubmit = can(authz, 'expenses.create')
   const canPost = can(authz, 'ap.post')
   const sp = await searchParams

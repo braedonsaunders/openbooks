@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseImportFile } from '../../../../../lib/data-io/parse'
 import type { ImportFormat } from '../../../../../lib/data-io/types'
@@ -34,7 +34,7 @@ function first(row: Record<string, unknown>, ...headers: string[]) {
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.manage')
+  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params

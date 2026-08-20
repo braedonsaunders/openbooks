@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { deleteApp, getAppByKey, setAppStatus } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
 
 /** GET — App details (any user who may use apps). */
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.use')
+  const gate = await guardFeaturePermission('apps.use', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const app = await getAppByKey(gate.user.orgId, key)
@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
 
 /** PATCH — enable/disable an App. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const body = (await req.json().catch(() => ({}))) as { status?: string }
@@ -29,7 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ key: s
 
 /** DELETE — uninstall an App (cascades versions, files, storage, run log). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   await deleteApp(gate.user.orgId, key)

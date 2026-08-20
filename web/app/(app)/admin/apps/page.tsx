@@ -10,6 +10,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
 import { isAppPublished, listAppFiles } from '../../../../lib/apps/store'
 import type { AppManifest } from '../../../../lib/apps/manifest'
@@ -24,6 +25,9 @@ export default async function AppsAdminPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('apps.manage')
+  // /admin/apps is a separate route segment from /apps, so the apps layout
+  // gate does not cover it. A disabled module must not keep an admin door open.
+  await requireFeatureEnabled(authz.user.orgId, 'apps')
   const tHub = await getTranslations('admin.hub')
   const tApps = await getTranslations('apps')
   const tAdminApps = await getTranslations('apps.admin')

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { listListings, publishApp, installFromListing, AppError } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
 
 /** GET — browse marketplace listings (deployment-wide). */
 export async function GET() {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { listings, total } = await listListings({ page: 1, perPage: 100 })
   return NextResponse.json({ listings, total, orgId: gate.user.orgId })
@@ -18,7 +18,7 @@ export async function GET() {
  *   { action: 'install', listingId }  install a listing into this org
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as { action?: string; key?: string; listingId?: string }
   try {

@@ -16,6 +16,7 @@ import {
 import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import {
   loadLienWaivers,
   requireLienWaiverFeature,
@@ -56,6 +57,7 @@ export default async function LienWaiversPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('compliance.read')
+  await requireFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
   const orgId = authz.user.orgId
   await requireLienWaiverFeature(orgId)
   const t = await getTranslations('compliance')
