@@ -49,6 +49,23 @@ This is more than a general ledger with a few add-ons. Customer invoices,
 vendor bills, projects and job costing, inventory, assets, banking, reporting,
 approvals, and audit history operate as one connected business system.
 
+## Try this first
+
+OpenBooks is alpha. Do not cut over production books. Do this instead:
+
+1. `./scripts/compose-up.sh` and open http://localhost:4780 (needs Git and
+   Docker with Docker Compose)
+2. Walk the screenshots below
+3. Re-run the published trust corpus: read [TRUST.md](TRUST.md), then, with
+   Node.js 24 installed, run `npm ci` once and
+   `npm -w engine run conformance -- report`. Ledger-tier cases post through a
+   real database; without `OPENBOOKS_DB_URL` they report as “not run” rather
+   than passing.
+
+> [!NOTE]
+> Public since 5 August 2026 at `0.1.0-alpha.3`. Public git age is not build
+> age. OpenBooks was a private system of record before it was opened.
+
 ## See OpenBooks in action
 
 <p align="center">
@@ -763,13 +780,11 @@ Copyright © 2026 OpenBooks contributors.
 ---
 
 <p align="center">
-  <a href="https://star-history.com/#braedonsaunders/openbooks&Date">
-    <img alt="OpenBooks star history" src="https://api.star-history.com/svg?repos=braedonsaunders/openbooks&type=Date" width="600" />
-  </a>
-</p>
-
-<p align="center">
   <em>The open business suite. Run on open books.</em><br />
   If OpenBooks is useful or interesting, star the repository and join the
   discussion.
 </p>
+
+## Also in this suite
+
+OpenBooks is the books. [BeaconHS](https://github.com/braedonsaunders/beaconhs) is safety. [BidWright](https://github.com/braedonsaunders/bidwright) is estimating. Built to work together for project-based companies. Same design language. Same self-host posture. Each repo is still its own install today.
