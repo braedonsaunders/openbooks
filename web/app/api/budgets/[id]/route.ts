@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { BUDGET_KINDS, loadBudgetScenario } from '../../../../lib/budgets'
 import { BudgetMutationError } from '../../../../lib/budget-mutations'
@@ -9,7 +9,7 @@ import { BudgetMutationError } from '../../../../lib/budget-mutations'
 export const runtime = 'nodejs'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.read')
+  const gate = await guardFeaturePermission('budgets.read', 'budgets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return scenario ? NextResponse.json(scenario) : NextResponse.json({ error: 'not_found' }, { status: 404 })
 }
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.manage')
+  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
@@ -109,7 +109,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.manage')
+  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params

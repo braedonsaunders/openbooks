@@ -4,7 +4,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseBillingProvenance } from "./billing-provenance.ts";
+import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
 
 /**
  * Physical deletion is intentionally limited to drafts. Once a document has
@@ -51,6 +51,9 @@ export async function deleteDocument(
 
     if (doc.kind === "customer_invoice") {
       await releaseBillingProvenance(tx, doc.orgId, documentId);
+    }
+    if (doc.kind === "vendor_bill") {
+      await releaseVendorBillProvenance(tx, doc.orgId, documentId);
     }
     await tx.execute(
       sql`delete from document_links where from_document_id = ${documentId} or to_document_id = ${documentId}`,

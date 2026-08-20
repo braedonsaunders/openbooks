@@ -5,6 +5,7 @@ import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
 import { can, requirePermission } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../lib/list-params'
 import { loadBudgetBooksAndYears, loadBudgetWorkspace, type BudgetDimensions } from '../../../lib/budgets'
 import { NewBudgetButton } from './NewBudgetButton'
@@ -15,6 +16,8 @@ export const dynamic = 'force-dynamic'
 export default async function BudgetsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const t = await getTranslations('budgets')
   const authz = await requirePermission('budgets.read')
+  await requireFeatureEnabled(authz.user.orgId, 'budgets')
+  
   const orgId = authz.user.orgId
   const canManage = can(authz, 'budgets.manage')
   const sp = await searchParams

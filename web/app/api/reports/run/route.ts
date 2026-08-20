@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { validateCustomQuery } from '@openbooks/reports'
-import { REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { can, guardPermission } from '../../../../lib/authz'
+import { guardPermission } from '../../../../lib/authz'
+import { guardReportEntity } from '../../../../lib/report-authz'
 import {
   REPORT_MAX_ROWS,
   REPORT_PREVIEW_ROWS,
@@ -29,14 +29,10 @@ export async function POST(req: Request) {
   const { user } = gate
 
   // Sensitive entities (payroll wages) carry their own permission on top of
-  // reports.read — enforced here for both saved definitions and ad-hoc plans.
-  const entityGate = (entityKey: unknown): NextResponse | null => {
-    const entity = typeof entityKey === 'string' ? REPORT_ENTITY_MAP[entityKey] : undefined
-    if (entity?.requiredPermission && !can(gate, entity.requiredPermission)) {
-      return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
-    }
-    return null
-  }
+  // reports.read. The gate itself lives in lib/report-authz so the runner, the
+  // export, the drill and the definition list cannot drift apart.
+  const entityGate = (entityKey: unknown): NextResponse | null =>
+    guardReportEntity(gate, { entity: entityKey })
 
   const body = (await req.json()) as {
     query?: unknown

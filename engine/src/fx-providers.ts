@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypassContext, withOrgContext } from "./db.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 
@@ -447,7 +447,12 @@ export async function runFxProvider(
 
 /** Scheduler scan with compare-and-swap claims; safe across multiple servers. */
 export async function runDueFxProviders(now = new Date()): Promise<number> {
-  const due = (await db.execute<FxProviderConfigRow>(sql`
+  // Discovering due feeds spans organizations, so it crosses an explicit
+  // trusted boundary; the sync itself then runs inside its own tenant. A
+  // scheduler tick holds no request store, and without these the connection
+  // layer denies by default — the scan would find nothing, silently.
+  const due = await withBypassContext(() =>
+    db.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs
      where is_enabled and schedule <> 'manual' and next_sync_at <= ${now}
        and exists (
@@ -460,13 +465,14 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
   let claimedCount = 0;
   for (const config of due.rows) {
     const next = computeNextSyncAt(config.schedule, config.syncHourUtc, now);
-    const claim = (await db.execute(sql`
+    const claim = await withBypassContext(() =>
+      db.execute(sql`
       update fx_provider_configs set next_sync_at = ${next}
        where id = ${config.id} and next_sync_at = ${config.nextSyncAt}
     `));
     if (!claim.rowCount) continue;
     claimedCount++;
-    try { await runFxProvider(config.orgId, "scheduler", undefined, now); }
+    try { await withOrgContext(config.orgId, () => runFxProvider(config.orgId, "scheduler", undefined, now)); }
     catch (error) { console.error(`[fx-provider] ${config.id} sync failed:`, error); }
   }
   return claimedCount;

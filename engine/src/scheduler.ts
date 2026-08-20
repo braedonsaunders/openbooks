@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypassContext, withOrgContext } from "./db.ts";
 import { runScheduledScript, computeNextRunAt } from "./scripting.ts";
 
 /**
@@ -39,7 +39,15 @@ export async function tick(): Promise<void> {
   try {
     // NOTE: this org-less scan needs a supporting index on user_scripts with
     // column order (trigger_point, is_active, next_run_at).
-    const due = (await db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date }>(sql`
+    //
+    // "Org-less" is a statement about SCOPE, not authority: the scan and its
+    // claim cross an explicit trusted boundary, and the script itself runs
+    // inside its own tenant. This tick is a bare timer callback with no request
+    // store, so without that boundary the connection layer applies its
+    // deny-by-default GUCs and the scan returns zero rows and no error — every
+    // scheduled script would silently stop firing.
+    const due = await withBypassContext(() =>
+      db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date }>(sql`
       select script.id, script.org_id as "orgId", script.cron, script.next_run_at as "nextRunAt"
         from user_scripts script
         join orgs organization on organization.id = script.org_id
@@ -56,7 +64,8 @@ export async function tick(): Promise<void> {
       // WHERE next_run_at = $old guard means only one claimer wins; if the
       // process dies mid-run the script stays scheduled for its next tick.
       const next = s.cron ? computeNextRunAt(s.cron) : null;
-      const claimed = (await db.execute(sql`
+      const claimed = await withBypassContext(() =>
+        db.execute(sql`
         update user_scripts set next_run_at = ${next}
          where id = ${s.id} and next_run_at = ${s.nextRunAt}
       `));
@@ -73,7 +82,7 @@ export async function tick(): Promise<void> {
         } catch {
           /* Redis unavailable — fall through to inline */
         }
-        if (!enqueued) await runScheduledScript(s.id, s.orgId);
+        if (!enqueued) await withOrgContext(s.orgId, () => runScheduledScript(s.id, s.orgId));
       } catch (e) {
         // runScheduledScript writes its own script_runs row for script
         // failures; this catches host-side failures (db insert etc.).

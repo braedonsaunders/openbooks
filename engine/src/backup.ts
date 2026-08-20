@@ -14,7 +14,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { sql } from "drizzle-orm";
-import { db, longPool } from "./db.ts";
+import { db, longPool, withBypassContext, withOrgContext } from "./db.ts";
 import { getS3Client, s3Bucket, s3Enabled } from "./file-storage.ts";
 import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
 import {
@@ -413,7 +413,11 @@ export async function auditBackupEvent(args: {
  */
 export async function executeBackupRun(runId: string): Promise<void> {
   assertUuid(runId);
-  const claimed = (await db.execute<{ id: string; org_id: string; kind: string; actor_id: string | null }>(sql`
+  // A queued run names its tenant, but this worker cannot know it until the row
+  // is claimed — so the claim is the ONE statement that crosses a trusted
+  // boundary. Everything after it runs inside that tenant's own RLS scope.
+  const claimed = await withBypassContext(() =>
+    db.execute<{ id: string; org_id: string; kind: string; actor_id: string | null }>(sql`
     update backup_runs
        set status = 'running', started_at = now(), updated_at = now()
      where id = ${runId} and status = 'queued'
@@ -428,10 +432,12 @@ export async function executeBackupRun(runId: string): Promise<void> {
   const heartbeatTimer = setInterval(() => {
     if (heartbeatBusy) return;
     heartbeatBusy = true;
-    void db.execute(sql`
+    // The timer was armed before the tenant scope below was entered, so this
+    // callback carries no context of its own and must re-enter it explicitly.
+    void withOrgContext(run.org_id, () => db.execute(sql`
       update backup_runs set updated_at = now()
        where id = ${run.id} and status = 'running'
-    `).catch((error) => {
+    `)).catch((error) => {
       console.error(`[backup] run ${run.id}: heartbeat failed:`, (error as Error).message);
     }).finally(() => {
       heartbeatBusy = false;
@@ -440,6 +446,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
   heartbeatTimer.unref?.();
 
   try {
+  await withOrgContext(run.org_id, async () => {
   let objectKey: string | null = null;
   let fileName: string | null = null;
   let stats: BackupExportStats | null = null;
@@ -600,6 +607,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
       changes: { event: "backup_retention_failed", kind: run.kind, error: (error as Error).message.slice(0, 2000) },
     });
   }
+  });
   } finally {
     clearInterval(heartbeatTimer);
   }

@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: Request) {
-  const gate = await guardPermission('budgets.manage')
+  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>

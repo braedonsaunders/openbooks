@@ -1744,8 +1744,17 @@ async function calculateStub(
 
   const earningsBase = () =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+  // Hours ACTUALLY WORKED — earning lines only, matching cappableHourLines and
+  // the hourLines the per-hour fringe allocates across.
+  //
+  // A per-hour fringe writes its own lines carrying the hours it was assessed
+  // on, so summing "any line with hours" made each fringe compound the ones
+  // before it: with a pension and a health-and-welfare fringe on a 40-hour week,
+  // pension computed on 40 hours and H&W then computed on 80. Two or more
+  // per-hour fringes is the ordinary case in union construction, and the error
+  // grew with every additional one.
   const totalHours = () =>
-    sum(lines.filter((l) => l.hours).map((l) => l.hours!));
+    sum(lines.filter((l) => l.kind === "earning" && l.hours).map((l) => l.hours!));
 
   /**
    * The current earnings collapsed to one bucket per project/department — the

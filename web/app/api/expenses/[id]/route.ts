@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -13,7 +13,7 @@ import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 export const runtime = 'nodejs'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('expenses.read')
+  const gate = await guardFeaturePermission('expenses.read', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const report = await loadExpenseReport(id, gate.user.orgId)
@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * submitted evidence; corrections are represented by a separate report.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('expenses.create')
+  const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
@@ -177,7 +177,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 /** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('expenses.create')
+  const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const owned = (await db.execute(

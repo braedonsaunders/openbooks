@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import { db } from "../db.ts";
+import { db, withBypassContext } from "../db.ts";
 
 /**
  * Sandbox refresh scanner — polls every 5 min for ready sandboxes whose
@@ -30,19 +30,24 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    const due = (await db.execute(sql`
+    // A timer tick carries no request context, so this cross-tenant scan and
+    // its claim must cross an explicit trusted boundary — otherwise RLS denies
+    // by default and the scanner silently sees no sandboxes at all.
+    const due = (await withBypassContext(() =>
+      db.execute(sql`
       select id, refresh_schedule as "cadence", refresh_keep_customizations as "keep",
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
-       limit 50`)) as any;
+       limit 50`))) as any;
 
     for (const s of due.rows as any[]) {
       const window = CADENCE_MS[s.cadence];
       if (!window || s.ageSec * 1000 < window) continue;
       // Claim: flip ready→refreshing so only one scanner fires it.
-      const claimed = (await db.execute(sql`
-        update sandboxes set status = 'refreshing' where id = ${s.id} and status = 'ready'`)) as any;
+      const claimed = (await withBypassContext(() =>
+        db.execute(sql`
+        update sandboxes set status = 'refreshing' where id = ${s.id} and status = 'ready'`))) as any;
       if (!claimed.rowCount) continue;
       // Hand back to 'ready' is done by the refresh op; enqueue it.
       await enqueueSandboxOp(
