@@ -85,8 +85,13 @@ export interface ScheduleInput {
    * to the straight-line-equivalent rate (1 / life-years).
    */
   ratePercent?: string | null;
-  /** First-period convention: full_month (default), or mid_month / half_year
-   *  which prorate the first period (and extend the schedule by one). */
+  /**
+   * First-period convention: full_month (default), mid_month, or half_year.
+   *
+   * mid_month halves the first MONTH and extends the schedule by one month;
+   * half_year halves the first YEAR — twelve monthly periods — and extends it
+   * by six. See conventionFraction.
+   */
   convention?: "full_month" | "mid_month" | "half_year" | null;
 }
 
@@ -150,6 +155,36 @@ function addMonths(monthStartDate: string, n: number): string {
   return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
 }
 
+/** Periods per year in this engine — one schedule line per calendar month. */
+const PERIODS_PER_YEAR = 12;
+
+/**
+ * Translate a first-period convention into the reduced-charge window.
+ *
+ * The distinction that matters is the WIDTH of the reduction, because this
+ * engine's period is a month:
+ *
+ *   - mid_month   — half of the first MONTH. One period at half charge.
+ *   - half_year   — half of the first YEAR. Twelve periods at half charge, so
+ *                   year one carries six months of expense.
+ *
+ * Both were previously mapped to "half of period one", which for half-year
+ * meant year one recognised about 11.5 months of expense instead of six and the
+ * schedule was extended by a single month, dumping the entire deferred
+ * half-year into a final spike. The tax engine (CCA and friends) has always
+ * modelled this correctly through its own `firstYearFraction`; this brings the
+ * book engine in line with it.
+ */
+function conventionFraction(
+  convention: string | null | undefined,
+): { firstPeriodFraction: string; firstFractionPeriods: number } {
+  if (convention === "mid_month") return { firstPeriodFraction: "0.5", firstFractionPeriods: 1 };
+  if (convention === "half_year") {
+    return { firstPeriodFraction: "0.5", firstFractionPeriods: PERIODS_PER_YEAR };
+  }
+  return { firstPeriodFraction: "1", firstFractionPeriods: 1 };
+}
+
 /**
  * Compute the monthly depreciation plan for an asset. Every method depreciates
  * from the in-service month forward, one entry per calendar month, and never
@@ -159,8 +194,7 @@ function addMonths(monthStartDate: string, n: number): string {
 export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
   const life = Math.max(1, Math.trunc(input.lifeMonths));
   const { formula, rateTable } = formulaForMethod(input.method, input.ratePercent, life);
-  const firstPeriodFraction =
-    input.convention === "mid_month" || input.convention === "half_year" ? "0.5" : "1";
+  const { firstPeriodFraction, firstFractionPeriods } = conventionFraction(input.convention);
   const rows = computeScheduleByFormula({
     cost: input.cost,
     salvage: input.salvage,
@@ -168,6 +202,7 @@ export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
     formula,
     rateTable,
     firstPeriodFraction,
+    firstFractionPeriods,
   });
   const start = monthStart(input.inServiceOn);
   return rows.map((r) => ({
@@ -316,7 +351,7 @@ export async function buildScheduleWithRunner(
     select id, formula, end_of_life from depreciation_methods
      where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1`));
   if (depreciationMethodId && !custom2.rows[0]) throw new Error("configured depreciation formula is inactive or unavailable");
-  const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? "0.5" : "1";
+  const { firstPeriodFraction, firstFractionPeriods } = conventionFraction(convention);
 
   let plan: ScheduleLinePlan[] = [];
   if (custom2.rows[0]) {
@@ -328,6 +363,7 @@ export async function buildScheduleWithRunner(
       formula: custom2.rows[0].formula,
       endOfLife: custom2.rows[0].end_of_life,
       firstPeriodFraction,
+      firstFractionPeriods,
     }).map((r) => ({
       sequence: r.sequence,
       periodMonth: addMonths(start, r.sequence),
