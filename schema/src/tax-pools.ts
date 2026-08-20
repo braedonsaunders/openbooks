@@ -1,4 +1,5 @@
 import { boolean, date, index, integer, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { TAX_DEPRECIATION_CONVENTIONS } from "./depreciation-conventions";
 import { auditColumns, id, money, orgRef } from "./helpers";
 import { fxRate } from "./helpers";
 
@@ -110,7 +111,7 @@ export const taxPoolClasses = pgTable(
     depreciationSystem: text("depreciation_system", { enum: ["gds", "ads"] }),
     macrsMethod: text("macrs_method", { enum: ["200_db", "150_db", "straight_line"] }),
     recoveryPeriodYears: fxRate("recovery_period_years"),
-    convention: text("convention", { enum: ["half_year", "mid_quarter", "mid_month"] }),
+    convention: text("convention", { enum: TAX_DEPRECIATION_CONVENTIONS }),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },

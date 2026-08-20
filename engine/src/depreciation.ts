@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
+import { bookConventionWindow } from "./depreciation-conventions.ts";
+import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
@@ -155,34 +157,18 @@ function addMonths(monthStartDate: string, n: number): string {
   return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
 }
 
-/** Periods per year in this engine — one schedule line per calendar month. */
-const PERIODS_PER_YEAR = 12;
-
 /**
- * Translate a first-period convention into the reduced-charge window.
+ * The reduced-charge window for a convention.
  *
- * The distinction that matters is the WIDTH of the reduction, because this
- * engine's period is a month:
- *
- *   - mid_month   — half of the first MONTH. One period at half charge.
- *   - half_year   — half of the first YEAR. Twelve periods at half charge, so
- *                   year one carries six months of expense.
- *
- * Both were previously mapped to "half of period one", which for half-year
- * meant year one recognised about 11.5 months of expense instead of six and the
- * schedule was extended by a single month, dumping the entire deferred
- * half-year into a final spike. The tax engine (CCA and friends) has always
- * modelled this correctly through its own `firstYearFraction`; this brings the
- * book engine in line with it.
+ * Delegates to the SHARED definition (engine/src/depreciation-conventions.ts)
+ * rather than restating it. This engine and the tax engine used to each decide
+ * what `half_year` meant and disagreed: half of one monthly period here, half
+ * of a year there. The shared table is now the only place that answer exists.
  */
 function conventionFraction(
   convention: string | null | undefined,
 ): { firstPeriodFraction: string; firstFractionPeriods: number } {
-  if (convention === "mid_month") return { firstPeriodFraction: "0.5", firstFractionPeriods: 1 };
-  if (convention === "half_year") {
-    return { firstPeriodFraction: "0.5", firstFractionPeriods: PERIODS_PER_YEAR };
-  }
-  return { firstPeriodFraction: "1", firstFractionPeriods: 1 };
+  return bookConventionWindow(convention as BookDepreciationConvention | null | undefined);
 }
 
 /**
