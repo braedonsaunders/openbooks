@@ -370,6 +370,29 @@ export async function applyDocumentEdit(
   }
   const { orgId, userId } = ctx
 
+  // Optimistic concurrency. The drawer sends documents.updated_at with every
+  // save; enforcing it here — in the shared service rather than one route —
+  // means the UI, the REST API, MCP and the assistant all inherit the check.
+  //
+  // The token was declared on DocumentEditInput and read by nobody, so two
+  // editors on the same draft silently overwrote each other's lines: the second
+  // save replaced the whole line set from a grid rendered before the first save
+  // existed. `parties/[id]` has compared this for its own records all along.
+  //
+  // Enforced only when supplied. Making it mandatory would break API clients
+  // that never had to send it; a caller that omits it keeps last-write-wins,
+  // which is the behaviour it already had.
+  if (body.expectedUpdatedAt !== undefined && current.updatedAt !== undefined) {
+    const expected = new Date(body.expectedUpdatedAt).getTime()
+    const actual = new Date(current.updatedAt).getTime()
+    if (!Number.isFinite(expected) || expected !== actual) {
+      throw new DocumentEditError(
+        409,
+        'this document changed after you opened it; reload and review the latest revision',
+      )
+    }
+  }
+
   // Kinds with a party role (vendor/customer) must keep a party — an explicit
   // null would strand the document without the entity its posting depends on.
   if (cfg.partyRole && body.partyId === null) {

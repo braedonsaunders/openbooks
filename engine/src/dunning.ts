@@ -111,6 +111,14 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
 
         // Overdue open documents of the policy's kind, with the live balance due
         // reconstructed from un-reversed applications against the open-item leg.
+        //
+        // `target_transaction_amount`, NOT `amount`: `documents.total` is in the
+        // document's TRANSACTION currency while `applications.amount` is the
+        // base-currency carrying amount. Subtracting one from the other produced
+        // a meaningless number for every FX invoice — suppressing genuinely
+        // overdue invoices, chasing fully-paid ones, and mailing the customer a
+        // balance that matched neither currency. The transaction leg is the one
+        // denominated in the same currency as the total.
         const docs = (await db.execute<{
             id: string;
             documentNumber: string;
@@ -129,7 +137,7 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             from documents d
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
             left join lateral (
-              select coalesce(sum(a.amount), 0) as applied
+              select coalesce(sum(a.target_transaction_amount), 0) as applied
                 from journal_lines jl
                 join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
                where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
@@ -164,6 +172,26 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           const body = renderTemplate(stage.bodyTemplate, vars);
           const to = doc.partyEmail;
 
+          // Serialize concurrent ticks over THIS ladder rung before doing
+          // anything observable. `dunning_log` is append-only (dunning_log_guard)
+          // and its status CHECK admits no in-flight state, so the log itself
+          // cannot serve as a claim; the advisory lock does, and it costs no
+          // schema change. It is held until this org's transaction commits, at
+          // which point the loser's re-read below sees the winner's row.
+          //
+          // Without it the enqueue happened before the log insert, so two ticks
+          // could both enqueue the same notice and only then race to record it —
+          // the customer received the letter twice.
+          await db.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`dunning:${doc.id}:${stage.id}`}, 0))`,
+          );
+          const alreadyLogged = (await db.execute(sql`
+            select 1 from dunning_log
+             where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
+             limit 1
+          `));
+          if (alreadyLogged.rows.length > 0) continue;
+
           let status: "sent" | "failed" | "skipped" = "sent";
           let detail: string | null = null;
           if (!to) {
@@ -186,15 +214,29 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             }
           }
 
-          // The unique (document, stage) index is the idempotency guard: if a
-          // concurrent tick already logged this stage, the insert no-ops.
-          await db.execute(sql`
-            insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
-                                     amount_due, currency_code, channel, status, detail)
-            values (${orgId}, ${doc.id}, ${policy.id}, ${stage.id}, ${doc.partyId}, ${to},
-                    ${doc.balanceDue}, ${doc.currency}, 'email', ${status}, ${detail})
-            on conflict (document_id, stage_id) do nothing
-          `);
+          // Record the notice ONLY when it actually went out. The log is the
+          // record of what the customer was sent, and it doubles as the "this
+          // rung has fired" marker via its unique (document, stage) index.
+          //
+          // Writing a 'failed' or 'skipped' row into that same slot therefore
+          // retired the rung permanently: one transient queue error, or one
+          // customer who happened to have no billing email on file the first
+          // time the stage came due, and that step of the collections ladder
+          // never ran again — silently, for the life of the invoice. Leaving
+          // the slot empty lets a later tick retry once the cause is fixed.
+          if (status === "sent") {
+            await db.execute(sql`
+              insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
+                                       amount_due, currency_code, channel, status, detail)
+              values (${orgId}, ${doc.id}, ${policy.id}, ${stage.id}, ${doc.partyId}, ${to},
+                      ${doc.balanceDue}, ${doc.currency}, 'email', 'sent', null)
+              on conflict (document_id, stage_id) do nothing
+            `);
+          } else {
+            console.warn(
+              `[dunning] ${doc.documentNumber} stage ${stage.id} not sent (${status}): ${detail ?? "unknown"} — will retry on a later tick`,
+            );
+          }
 
           if (status === "sent") result.sent += 1;
           else if (status === "failed") result.failed += 1;

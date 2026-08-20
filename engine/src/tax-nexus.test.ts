@@ -31,13 +31,72 @@ test("annual and semiannual periods span the right months", () => {
   ]);
 });
 
-test("periods only include those opening within the range", () => {
-  // Range starts mid-Q1: the Jan period opened before the range, so it's skipped.
+test("a period that straddles the start of the range is still an obligation", () => {
+  // Range starts mid-Q1. The Jan–Mar quarter opened before the range, but the
+  // range's own activity from 15 Feb onwards is reported ON that quarter's
+  // return — filing periods are fixed by the jurisdiction and do not shift to
+  // suit a registration date. Skipping it left that activity with no return.
   const periods = filingPeriods("quarterly", "2026-02-15", "2026-08-01");
   assert.deepEqual(periods, [
+    { periodStart: "2026-01-01", periodEnd: "2026-03-31" },
     { periodStart: "2026-04-01", periodEnd: "2026-06-30" },
     { periodStart: "2026-07-01", periodEnd: "2026-09-30" },
   ]);
+});
+
+test("a mid-period registration reports the straddling quarter, but only its registered days", () => {
+  const registrations: NexusRegistration[] = [
+    {
+      jurisdictionId: "j-gb",
+      jurisdictionName: "United Kingdom",
+      jurisdictionCode: "GB",
+      country: "GB",
+      filingFrequency: "quarterly",
+      returnFormCode: "GB_VAT100",
+      registrationNumber: "GB999999973",
+      effectiveFrom: "2026-05-01",
+      effectiveTo: null,
+    },
+  ];
+  const calendar = buildFilingCalendar(registrations, "2026-01-01", "2026-12-31");
+  // Q2 (Apr–Jun) through Q4: three obligations, not two. Losing Q2 would mean
+  // May and June never appeared on any return.
+  assert.deepEqual(
+    calendar.map((o) => o.periodStart),
+    ["2026-04-01", "2026-07-01", "2026-10-01"],
+  );
+  // Q2's return covers only 1 May onwards — April predates the registration.
+  assert.equal(calendar[0].periodStart, "2026-04-01");
+  assert.equal(calendar[0].reportableFrom, "2026-05-01");
+  assert.equal(calendar[0].reportableTo, "2026-06-30");
+  // A fully-covered period reports its whole span.
+  assert.equal(calendar[1].reportableFrom, "2026-07-01");
+  assert.equal(calendar[1].reportableTo, "2026-09-30");
+});
+
+test("a mid-period de-registration stops reporting on the day it ends", () => {
+  const registrations: NexusRegistration[] = [
+    {
+      jurisdictionId: "j-gb",
+      jurisdictionName: "United Kingdom",
+      jurisdictionCode: "GB",
+      country: "GB",
+      filingFrequency: "quarterly",
+      returnFormCode: "GB_VAT100",
+      registrationNumber: "GB999999973",
+      effectiveFrom: null,
+      effectiveTo: "2026-04-15",
+    },
+  ];
+  const calendar = buildFilingCalendar(registrations, "2026-01-01", "2026-12-31");
+  assert.deepEqual(
+    calendar.map((o) => o.periodStart),
+    ["2026-01-01", "2026-04-01"],
+  );
+  // The final return covers 1–15 April only; activity after de-registration
+  // must not be swept into it.
+  assert.equal(calendar[1].reportableFrom, "2026-04-01");
+  assert.equal(calendar[1].reportableTo, "2026-04-15");
 });
 
 test("empty/invalid ranges yield no periods", () => {

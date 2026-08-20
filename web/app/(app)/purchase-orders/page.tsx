@@ -80,6 +80,7 @@ export default async function PurchaseOrders({
       {openOrder && pickers ? (
         <OrderDrawer
           order={openOrder as any}
+          key={(openOrder as any).doc.id}
           initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           kind={KIND}
           parties={pickers[0].rows}

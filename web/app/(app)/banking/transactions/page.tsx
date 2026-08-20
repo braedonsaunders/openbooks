@@ -135,6 +135,7 @@ export default async function BankingTransactions({
         drawer={openDoc && pickers && cfg ? (
           <DocumentDrawer
             payload={openDoc as any}
+            key={(openDoc as any).doc.id}
             config={cfg}
             basePath={basePath}
             initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
