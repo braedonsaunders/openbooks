@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { installApp, listApps, AppError, type UploadBundle } from '@/lib/apps/store'
 import { parseZipBundle, ZipBundleError } from '@/lib/apps/zip'
 
@@ -9,7 +9,7 @@ const MAX_ZIP_BYTES = 10 * 1024 * 1024 // 10 MB compressed
 
 /** GET — list installed Apps for the org (admin). */
 export async function GET() {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const apps = await listApps(gate.user.orgId)
   return NextResponse.json({ apps })
@@ -21,7 +21,7 @@ export async function GET() {
  *   multipart/form-data file=<bundle.zip>             (the admin UI upload)
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
 
   let body: UploadBundle

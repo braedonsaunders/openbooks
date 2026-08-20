@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
-import { can, guardPermission } from '../../../../../lib/authz'
+import { can } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.read')
+  const gate = await guardFeaturePermission('budgets.read', 'budgets')
   if (gate instanceof NextResponse) return gate
   if (!can(gate, 'data.export')) return NextResponse.json({ error: 'missing permission: data.export' }, { status: 403 })
   const { id } = await params

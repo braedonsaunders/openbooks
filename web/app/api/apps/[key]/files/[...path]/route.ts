@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { readAppFile, writeAppFile, deleteAppFile, AppError } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
@@ -10,7 +10,7 @@ function joined(path: string[]): string {
 
 /** GET — one file's content (the editor pane). */
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string; path: string[] }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key, path } = await params
   try {
@@ -24,7 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
 
 /** PUT — save edited text content. */
 export async function PUT(req: Request, { params }: { params: Promise<{ key: string; path: string[] }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key, path } = await params
   const body = (await req.json().catch(() => ({}))) as { content?: string }
@@ -40,7 +40,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ key: str
 
 /** DELETE — remove a file (entry + endpoint files are protected). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ key: string; path: string[] }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key, path } = await params
   try {

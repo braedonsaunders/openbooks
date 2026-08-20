@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { can, guardPermission } from '@/lib/authz'
+import { can } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { runBridgeMethod } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
@@ -12,7 +13,7 @@ export const runtime = 'nodejs'
  * org-scoped adapters wired in runBridgeMethod.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.use')
+  const gate = await guardFeaturePermission('apps.use', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const body = (await req.json().catch(() => ({}))) as { method?: string; payload?: unknown }

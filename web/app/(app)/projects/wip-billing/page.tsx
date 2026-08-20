@@ -1,5 +1,6 @@
 import { PageHeader } from '@openbooks/ui'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { listPrebills, listWipProjects, loadPrebill, wipAnalytics } from '../../../../lib/wip-billing'
 import { requireWipBillingFeature } from '../../../../lib/wip-billing-gate'
@@ -14,6 +15,7 @@ export default async function WipBillingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('projects.read')
+  await requireFeatureEnabled(authz.user.orgId, 'wipBilling')
   await requireWipBillingFeature(authz.user.orgId)
   const sp = await searchParams
   const selectedId = pickString(sp.prebill)

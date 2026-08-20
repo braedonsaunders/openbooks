@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { getFrontendBundle, AppError } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
@@ -10,7 +10,7 @@ export const runtime = 'nodejs'
  * fetches this same-origin, then renders it into an opaque-origin sandbox.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.use')
+  const gate = await guardFeaturePermission('apps.use', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   try {

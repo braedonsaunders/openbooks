@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { updateAppMeta, AppError, type AppMetaUpdate } from '@/lib/apps/store'
 
 export const runtime = 'nodejs'
@@ -10,7 +10,7 @@ export const runtime = 'nodejs'
  * users never touch JSON.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const body = (await req.json().catch(() => null)) as AppMetaUpdate | null

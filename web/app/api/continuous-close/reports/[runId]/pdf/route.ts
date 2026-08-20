@@ -3,7 +3,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { readableContinuousCloseAgents } from '../../../../../../lib/continuous-close'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { exportDataToPdf, orgBranding, type ExportData } from '../../../../../../lib/report-pdf'
@@ -12,7 +12,7 @@ import { isUuid } from '../../../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ runId: string }> }) {
-  const gate = await guardPermission('assistant.use')
+  const gate = await guardFeaturePermission('assistant.use', 'continuousClose')
   if (gate instanceof NextResponse) return gate
   const { runId } = await params
   if (!isUuid(runId)) return NextResponse.json({ error: 'invalid_report' }, { status: 422 })

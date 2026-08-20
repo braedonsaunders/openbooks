@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from '../../../../../lib/budget-mutations'
 
 export const runtime = 'nodejs'
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.manage')
+  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })

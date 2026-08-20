@@ -129,26 +129,35 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             partyName: string | null;
             partyEmail: string | null;
             balanceDue: string;
+            balanceDueBase: string;
           }>(sql`
           select d.id, d.document_number as "documentNumber", d.due_date as "dueDate",
                  d.currency, d.total, p.id as "partyId", p.display_name as "partyName",
                  p.email as "partyEmail",
-                 (d.total - coalesce(ap.applied, 0)) as "balanceDue"
+                 (d.total - coalesce(ap.applied, 0)) as "balanceDue",
+                 -- The policy's minimum is a bare numeric with no currency of
+                 -- its own, so it can only mean the org's base currency. The
+                 -- customer-facing balance stays in the document's currency;
+                 -- the THRESHOLD is compared against the base-carrying amount,
+                 -- or a €50 policy would silently mean ¥50 on a yen invoice.
+                 (round(d.total * d.fx_rate, 4) - coalesce(ap.applied_base, 0)) as "balanceDueBase"
             from documents d
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
             left join lateral (
-              select coalesce(sum(a.target_transaction_amount), 0) as applied
+              select coalesce(sum(a.target_transaction_amount), 0) as applied,
+                     coalesce(sum(a.amount), 0) as applied_base
                 from journal_lines jl
                 join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
                where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
             ) ap on true
            where d.org_id = ${orgId} and d.kind = ${policy.appliesToKind}
              and d.status = 'posted' and d.due_date is not null and d.due_date < ${today}
+           order by d.id
         `));
 
         for (const doc of docs.rows) {
           result.scanned += 1;
-          if (cmp(doc.balanceDue, policy.minBalance) <= 0) continue;
+          if (cmp(doc.balanceDueBase, policy.minBalance) <= 0) continue;
           const daysOverdue = daysBetween(doc.dueDate, today);
           if (daysOverdue < policy.gracePeriodDays) continue;
 
@@ -178,6 +187,12 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           // cannot serve as a claim; the advisory lock does, and it costs no
           // schema change. It is held until this org's transaction commits, at
           // which point the loser's re-read below sees the winner's row.
+          //
+          // These locks accumulate across the org's whole tick, so the document
+          // scan above is ORDERED BY d.id: two ticks that took them in whatever
+          // order the planner happened to return would acquire the same set in
+          // different sequences and deadlock. A total order makes that
+          // impossible — one tick simply waits.
           //
           // Without it the enqueue happened before the log insert, so two ticks
           // could both enqueue the same notice and only then race to record it —

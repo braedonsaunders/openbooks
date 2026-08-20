@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 import { listAppFiles, writeAppFile, AppError } from '@/lib/apps/store'
 import { contentTypeFor } from '@/lib/apps/manifest'
 
@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 
 /** GET — list the active version's files (the file browser's tree). */
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   try {
@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ key: st
  *   multipart/form-data   file=<upload>, dir=<prefix>   (Upload into a folder)
  */
 export async function POST(req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const gate = await guardPermission('apps.manage')
+  const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const contentType = req.headers.get('content-type') ?? ''

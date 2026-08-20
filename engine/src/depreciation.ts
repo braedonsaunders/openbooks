@@ -403,10 +403,32 @@ export async function buildScheduleWithRunner(
     }
 
     // preserve posted lines; drop only the unposted plan and rewrite it
-    const posted = (await tx.execute<{ period_id: string }>(sql`
-      select period_id from depreciation_schedule_lines
+    const posted = (await tx.execute<{ period_id: string; posted_amount: string }>(sql`
+      select period_id, posted_amount from depreciation_schedule_lines
        where schedule_id = ${scheduleId} and posted_amount is not null`));
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
+
+    // What is actually left to depreciate, measured against what was POSTED
+    // rather than against what the new plan assumes was posted.
+    //
+    // The rebuild recomputes the whole plan from the current basis and then
+    // skips periods that already posted — which silently assumes those periods
+    // posted the amounts the NEW plan says they did. Whenever that is false the
+    // lifetime total stops equalling (cost − salvage): change an asset's cost,
+    // life or convention mid-life and the remaining plan is computed as though
+    // history had always used the new value. Correcting the half-year convention
+    // is one such change, so an asset that posted months under the old reading
+    // would otherwise be planned to depreciate well past its basis.
+    //
+    // Clamping here keeps the invariant the module header promises. It does not
+    // repair the periods already posted — that is a controlled adjustment, not
+    // something a rebuild may do silently — but it stops the schedule from
+    // planning value the asset does not have.
+    const depreciableBase = add(asset.acquisition_cost, neg(asset.salvage_value));
+    const postedTotal = posted.rows.reduce((total, row) => add(total, row.posted_amount), "0");
+    const remainingBase = cmp(depreciableBase, postedTotal) > 0
+      ? add(depreciableBase, neg(postedTotal))
+      : "0";
 
     if (depreciationMethodId || (method !== "manual" && method !== "units_of_production")) {
       await tx.execute(sql`
@@ -416,6 +438,7 @@ export async function buildScheduleWithRunner(
 
     const skippedMonths: string[] = [];
     let lineCount = 0;
+    let plannedSoFar = "0";
     for (const p of plan) {
       const periodId = await periodForDate(tx, orgId, p.periodMonth);
       if (!periodId) {
@@ -423,10 +446,14 @@ export async function buildScheduleWithRunner(
         continue;
       }
       if (postedPeriods.has(periodId)) continue; // already posted — keep as is
+      const roomLeft = add(remainingBase, neg(plannedSoFar));
+      if (cmp(roomLeft, "0") <= 0) break; // basis exhausted by what already posted
+      const amount = cmp(p.planned, roomLeft) > 0 ? roomLeft : p.planned;
       await tx.execute(sql`
         insert into depreciation_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, source, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${p.planned}, 'formula', ${actorId}, ${actorId})`);
+        values (${orgId}, ${scheduleId}, ${periodId}, ${p.sequence}, ${amount}, 'formula', ${actorId}, ${actorId})`);
+      plannedSoFar = add(plannedSoFar, amount);
       lineCount++;
     }
     return { scheduleId, lineCount, skippedMonths };

@@ -3,12 +3,12 @@ import {
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
 } from "@openbooks/engine/src/continuous-close.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const gate = await guardPermission("admin.ai.manage");
+  const gate = await guardFeaturePermission("admin.ai.manage", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   let body: Record<string, unknown>;
   try {

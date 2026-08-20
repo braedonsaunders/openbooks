@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { can, guardPermission } from '../../../../../lib/authz'
+import { can } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { BudgetMutationError } from '../../../../../lib/budget-mutations'
 
@@ -20,7 +21,7 @@ function dims(body: Record<string, unknown>) {
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('budgets.read')
+  const gate = await guardFeaturePermission('budgets.read', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
