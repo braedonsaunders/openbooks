@@ -64,10 +64,16 @@ export const FEATURES: FeatureDef[] = [
   // schedules must be configured).
   { key: 'payroll', defaultEnabled: false, category: 'operations', navModules: ['payroll'], recommends: ['timeTracking'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
-  // Project scheduling: critical-path Gantt, work-breakdown outline, working
-  // calendars, baselines and resource levelling. Off by default — a schedule is
-  // a planning instrument, not an accounting one, and orgs that only job-cost
-  // projects should not carry it. Subordinate to the Projects parent gate.
+  // Project scheduling: critical-path Gantt, working calendars, baselines and
+  // resource levelling. Off by default — a schedule is a planning instrument,
+  // not an accounting one, and orgs that only job-cost projects should not
+  // carry it. Subordinate to the Projects parent gate.
+  //
+  // The work-breakdown outline is NOT part of this gate, despite once being
+  // described here as if it were. It is core Projects: the tasks it edits are
+  // the job's own structure, `/api/projects/[id]/tasks` gates on Projects
+  // accordingly, and the tab stays available to every org that runs projects.
+  // Only the Schedule subtab and /api/project-schedule sit behind this key.
   { key: 'projectScheduling', defaultEnabled: false, category: 'operations', parentKey: 'projects' },
   // Vendor-side project commitments and AP progress billing. Purchase orders
   // and compliance make the workflow richer but are not required to account
