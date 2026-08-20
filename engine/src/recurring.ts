@@ -95,16 +95,16 @@ async function nextNumber(orgId: string, kind: string, subsidiaryId: string | nu
     ? ((await db.execute(sql`
         select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
           and subsidiary_id = ${subsidiaryId} limit 1
-      `)) as unknown as { rows: unknown[] }).rows.length > 0
+      `))).rows.length > 0
     : false;
   const seqSub = configured ? subsidiaryId : null;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${seqSub}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const s = r.rows[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
@@ -125,9 +125,9 @@ function defaultPrefix(kind: string): string {
 }
 
 async function controlDeps(orgId: string): Promise<PostingDeps> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ c: Record<string, string> | null }>(
     sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { c: Record<string, string> | null }[] };
+  ));
   const c = r.rows[0]?.c ?? {};
   return {
     control: {
@@ -160,16 +160,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
   const result: RecurringRunResult = { generated: 0, posted: 0, failed: 0, documents: [] };
 
   const due = await withBypass(async () => {
-    return (await db.execute(sql`
-      select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
-             rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
-             rs.auto_post as "autoPost"
-        from recurring_schedules rs
-        join orgs o on o.id = rs.org_id and o.env_kind = 'production'
-       where rs.is_active and rs.next_run_on <= ${today}
-       order by rs.next_run_on
-    `)) as unknown as {
-      rows: {
+    return (await db.execute<{
         id: string;
         orgId: string;
         templateId: string;
@@ -178,8 +169,15 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         nextRunOn: string;
         endsOn: string | null;
         autoPost: boolean;
-      }[];
-    };
+      }>(sql`
+      select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
+             rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
+             rs.auto_post as "autoPost"
+        from recurring_schedules rs
+        join orgs o on o.id = rs.org_id and o.env_kind = 'production'
+       where rs.is_active and rs.next_run_on <= ${today}
+       order by rs.next_run_on
+    `));
   });
 
   for (const s of due.rows) {
@@ -191,14 +189,14 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     // Claim the occurrence: only the tick that flips next_run_on off its current
     // value proceeds. Deactivate in the same statement if this was the last one.
     const claimed = await withBypass(async () => {
-      return (await db.execute(sql`
+      return (await db.execute<{ id: string }>(sql`
         update recurring_schedules
            set next_run_on = ${advanced},
                is_active = ${stillActive},
                last_run_at = now()
          where id = ${s.id} and next_run_on = ${occurrenceDate}
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
     });
     if (!claimed.rows.length) continue; // another tick won it
 
@@ -240,10 +238,10 @@ export async function runScheduleNow(
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
   const today = asOf ?? toIso(new Date());
   const s = await withBypass(async () => {
-    return (await db.execute(sql`
+    return (await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
       select org_id as "orgId", template_document_id as "templateId", auto_post as "autoPost"
         from recurring_schedules where id = ${scheduleId}
-    `)) as unknown as { rows: { orgId: string; templateId: string; autoPost: boolean }[] };
+    `));
   });
   const row = s.rows[0];
   if (!row) throw new Error("recurring schedule not found");
@@ -266,9 +264,9 @@ async function generateFromTemplate(
   documentDate: string,
   autoPost: boolean,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
-  const tplRes = (await db.execute(sql`
+  const tplRes = (await db.execute<Record<string, any>>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, any>[] };
+  `));
   const tpl = tplRes.rows[0];
   if (!tpl) throw new Error("recurring template document not found");
 
@@ -277,7 +275,7 @@ async function generateFromTemplate(
   const dueDate = termDays != null ? addDays(documentDate, termDays) : null;
 
   const documentNumber = await nextNumber(orgId, tpl.kind, tpl.subsidiary_id ?? null);
-  const created = (await db.execute(sql`
+  const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                            due_date, currency, status, project_id, department_id, location_id, class_id,
                            billing_method, reference_number, memo, subtotal, tax_total, total, created_by)
@@ -286,13 +284,13 @@ async function generateFromTemplate(
             ${tpl.department_id}, ${tpl.location_id}, ${tpl.class_id}, ${tpl.billing_method},
             ${tpl.reference_number}, ${tpl.memo}, '0', '0', '0', ${tpl.created_by})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const newId = created.rows[0]!.id;
 
-  const lineRes = (await db.execute(sql`
+  const lineRes = (await db.execute<Record<string, any>>(sql`
     select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
      order by line_number
-  `)) as unknown as { rows: Record<string, any>[] };
+  `));
 
   const amounts: string[] = [];
   const taxes: string[] = [];

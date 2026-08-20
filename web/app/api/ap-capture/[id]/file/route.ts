@@ -11,9 +11,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('ap.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const capture = (await db.execute(sql`
+  const capture = (await db.execute<{ file_id: string }>(sql`
     select file_id from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
-  `)) as unknown as { rows: { file_id: string }[] }
+  `))
   const fileId = capture.rows[0]?.file_id
   if (!fileId) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const blob = await getFileBlob(gate.user.orgId, fileId, {

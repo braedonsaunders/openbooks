@@ -49,12 +49,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
   }
 
-  const before = (await db.execute(sql`
+  const before = (await db.execute<Record<string, unknown>>(sql`
     select id, status, party_id, requirement_id, created_by, effective_from, expires_on,
            coverage_amount, aggregate_amount, coverage_currency, additional_insured,
            waiver_of_subrogation, primary_noncontributory, issuer_name, policy_number
       from compliance_records where org_id = ${orgId} and id = ${id}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   const record = before.rows[0]
   if (!record) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (record.status === 'superseded') {

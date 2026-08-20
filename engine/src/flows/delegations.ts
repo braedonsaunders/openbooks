@@ -60,13 +60,13 @@ export async function activeDelegationPrincipals(
   orgId: string,
   delegateUserId: string,
 ): Promise<ResolvedUser[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ResolvedUser>(sql`
     select distinct u.id, u.name, u.email
       from approval_delegations d
       join users u on u.id = d.from_user_id and u.org_id = d.org_id and u.is_active
      where d.org_id = ${orgId} and d.to_user_id = ${delegateUserId}
        and d.revoked_at is null and now() between d.starts_at and d.ends_at
-  `)) as unknown as { rows: ResolvedUser[] };
+  `));
   return r.rows;
 }
 
@@ -86,7 +86,7 @@ export interface DelegationView {
 
 /** My active + upcoming (not revoked, not ended) delegations, both directions. */
 export async function listUserDelegations(orgId: string, userId: string): Promise<DelegationView[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     select d.id, d.from_user_id as "fromUserId", fu.name as "fromUserName",
            d.to_user_id as "toUserId", tu.name as "toUserName",
            d.starts_at as "startsAt", d.ends_at as "endsAt", d.reason,
@@ -98,7 +98,7 @@ export async function listUserDelegations(orgId: string, userId: string): Promis
        and (d.from_user_id = ${userId} or d.to_user_id = ${userId})
        and d.revoked_at is null and d.ends_at >= now()
      order by d.starts_at
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return r.rows.map((row) => ({
     id: String(row.id),
     fromUserId: String(row.fromUserId),

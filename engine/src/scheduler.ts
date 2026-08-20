@@ -39,7 +39,7 @@ export async function tick(): Promise<void> {
   try {
     // NOTE: this org-less scan needs a supporting index on user_scripts with
     // column order (trigger_point, is_active, next_run_at).
-    const due = (await db.execute(sql`
+    const due = (await db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date }>(sql`
       select script.id, script.org_id as "orgId", script.cron, script.next_run_at as "nextRunAt"
         from user_scripts script
         join orgs organization on organization.id = script.org_id
@@ -49,7 +49,7 @@ export async function tick(): Promise<void> {
          and organization.env_kind = 'production'
          and organization.settings #>> '{features,scripts}' = 'true'
        order by next_run_at
-    `)) as unknown as { rows: { id: string; orgId: string; cron: string | null; nextRunAt: Date }[] };
+    `));
 
     for (const s of due.rows) {
       // Claim the run by advancing next_run_at in the same statement. The
@@ -59,7 +59,7 @@ export async function tick(): Promise<void> {
       const claimed = (await db.execute(sql`
         update user_scripts set next_run_at = ${next}
          where id = ${s.id} and next_run_at = ${s.nextRunAt}
-      `)) as unknown as { rowCount?: number };
+      `));
       if (!claimed.rowCount) continue; // someone else claimed it (or it changed)
 
       try {

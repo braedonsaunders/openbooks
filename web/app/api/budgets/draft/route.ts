@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const kind = BUDGET_KINDS.includes(body.kind as any) ? (body.kind as string) : 'budget'
   const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId) ? body.sourceScenarioId : null
 
-  const defaults = (await db.execute(sql`
+  const defaults = (await db.execute<{ book_id: string | null; fiscal_year: number | null }>(sql`
     select
       (select id from accounting_books
         where org_id = ${user.orgId} and is_active
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
           order by starts_on desc limit 1),
         (select max(fiscal_year) from accounting_periods where org_id = ${user.orgId})
       ) as fiscal_year
-  `)) as unknown as { rows: { book_id: string | null; fiscal_year: number | null }[] }
+  `))
   const bookId = requestedBook ?? defaults.rows[0]?.book_id
   const fiscalYear = Number.isInteger(requestedYear) && requestedYear >= 1900 && requestedYear <= 9999
     ? requestedYear
@@ -40,11 +40,11 @@ export async function POST(req: Request) {
 
   const valid = (await db.execute(sql`
     select 1 from accounting_books where id = ${bookId} and org_id = ${user.orgId} and is_active
-  `)) as unknown as { rows: unknown[] }
+  `))
   const havePeriods = (await db.execute(sql`
     select 1 from accounting_periods
      where org_id = ${user.orgId} and fiscal_year = ${fiscalYear} and not is_adjustment limit 1
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!valid.rows[0] || !havePeriods.rows[0]) {
     return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
   }
@@ -55,27 +55,27 @@ export async function POST(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${bookId}:${fiscalYear}:${kind}`}, 0))`)
-      const names = (await tx.execute(sql`
+      const names = (await tx.execute<{ name: string }>(sql`
         select name from budget_scenarios
          where org_id = ${user.orgId} and book_id = ${bookId} and fiscal_year = ${fiscalYear} and kind = ${kind}
            and (name = ${baseName} or name like ${`${baseName} (%`})
-      `)) as unknown as { rows: { name: string }[] }
+      `))
       const used = new Set(names.rows.map((row) => row.name))
       let name = baseName
       for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
 
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string; revision: number }>(sql`
         insert into budget_scenarios
           (org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
         values (${user.orgId}, ${bookId}, ${fiscalYear}, ${name}, ${kind}, 'draft', ${user.id}, ${user.id})
         returning id, revision
-      `)) as unknown as { rows: { id: string; revision: number }[] }
+      `))
       const scenario = inserted.rows[0]!
 
       if (sourceScenarioId) {
-        const source = (await tx.execute(sql`
+        const source = (await tx.execute<{ id: string }>(sql`
           select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-        `)) as unknown as { rows: { id: string }[] }
+        `))
         if (!source.rows[0]) throw new Error('source_not_found')
         await tx.execute(sql`
           insert into budget_lines

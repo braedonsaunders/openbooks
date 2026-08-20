@@ -77,7 +77,7 @@ async function installTaxReturnPackWith(
   // Reference-data jurisdiction the return files into. Idempotent by (org, code)
   // so re-importing a pack keeps the same jurisdiction row and its registrations.
   const j = pack.jurisdiction;
-  const jurRes = (await tx.execute(sql`
+  const jurRes = (await tx.execute<{ id: string }>(sql`
     insert into tax_jurisdictions
       (org_id, code, name, country, region, level, tax_type, is_active, created_by, updated_by)
     values (${orgId}, ${j.code}, ${j.name}, ${j.country}, ${j.region ?? null},
@@ -86,10 +86,10 @@ async function installTaxReturnPackWith(
       set name = excluded.name, country = excluded.country, region = excluded.region,
           level = excluded.level, tax_type = excluded.tax_type, is_active = true,
           updated_at = now(), updated_by = ${actorId}
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const jurisdictionId = jurRes.rows[0]?.id ?? null;
 
-  const formRes = (await tx.execute(sql`
+  const formRes = (await tx.execute<{ id: string; inserted: boolean }>(sql`
     insert into tax_return_forms
       (org_id, code, name, country, jurisdiction_id, submission_channel, government_format,
        submission_url, watermark, is_active, created_by, updated_by)
@@ -104,19 +104,17 @@ async function installTaxReturnPackWith(
           submission_url = excluded.submission_url,
           watermark = excluded.watermark, is_active = true,
           updated_at = now(), updated_by = ${actorId}
-    returning id, (xmax = 0) as inserted`)) as unknown as { rows: { id: string; inserted: boolean }[] };
+    returning id, (xmax = 0) as inserted`));
 
   await tx.execute(sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`);
 
-  const candidates = (await tx.execute(sql`
+  const candidates = (await tx.execute<{ id: string; country: string | null; jurisdiction_id: string | null; jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null; applies_to: "sales" | "purchases" | "both" }>(sql`
     select c.id, c.country, c.jurisdiction_id, c.applies_to,
            j.tax_type as jurisdiction_tax_type
       from tax_codes c
       left join tax_jurisdictions j on j.id = c.jurisdiction_id and j.org_id = c.org_id
      where c.org_id = ${orgId} and c.is_active
-       and c.applies_to in ('sales', 'purchases', 'both')`)) as unknown as {
-    rows: { id: string; country: string | null; jurisdiction_id: string | null; jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null; applies_to: "sales" | "purchases" | "both" }[];
-  };
+       and c.applies_to in ('sales', 'purchases', 'both')`));
   // Prefer tax codes scoped to THIS jurisdiction (so a state return sums only its
   // own state's codes, not every US code); fall back to country, then to codes
   // with no country at all.

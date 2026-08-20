@@ -47,9 +47,9 @@ export async function POST(req: Request) {
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-  const org = (await db.execute(sql`
+  const org = (await db.execute<{ brand_primary: string | null }>(sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${user.orgId}
-  `)) as unknown as { rows: { brand_primary: string | null }[] };
+  `));
   const starter = starterTemplate(meta, org.rows[0]?.brand_primary);
 
   const source = body.sourceHtml?.trim() ? body.sourceHtml : starter.sourceHtml;

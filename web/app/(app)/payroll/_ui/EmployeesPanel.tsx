@@ -45,7 +45,7 @@ export interface FilingAccountOption {
   country: 'CA' | 'US'
 }
 
-export interface ProfileRow {
+export type ProfileRow = {
   id: string
   employee_party_id: string
   employee_name: string
@@ -84,7 +84,7 @@ export interface ProfileRow {
   /** Payroll override of the pay rail; null inherits the party preference. */
   payment_method: 'eft' | 'cheque' | null
   is_active: boolean
-}
+};
 
 const STUB_DELIVERIES = ['email', 'print', 'both'] as const
 const PAYMENT_METHODS = ['eft', 'cheque'] as const

@@ -86,7 +86,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
   let detail: CaptureDetail | null = null
   let options: { vendors: any[]; accounts: any[]; purchaseOrders: any[] } | null = null
   if (selectedId) {
-    const selected = (await db.execute(sql`
+    const selected = (await db.execute<CaptureDetail>(sql`
       select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
              vendor.display_name as "resolvedVendor", po.document_number as "purchaseOrderNumber"
         from ap_capture_items ci join files f on f.id = ci.file_id
@@ -94,7 +94,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
         left join documents po on po.id = ci.purchase_order_id
        where ci.org_id = ${authz.user.orgId} and ci.id = ${selectedId}
        ${subsidiaryScope}
-    `)) as unknown as { rows: CaptureDetail[] }
+    `))
     detail = selected.rows[0] ?? null
     if (detail) {
       const vendorScope = allowed === null

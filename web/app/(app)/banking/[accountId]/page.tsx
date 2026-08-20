@@ -62,7 +62,7 @@ export default async function BankingAccount({
   const sp = await searchParams
   const basePath = `/banking/${accountId}`
 
-  const accountRes = (await db.execute(sql`
+  const accountRes = (await db.execute<any>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
                       join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
@@ -77,7 +77,7 @@ export default async function BankingAccount({
              order by r.created_at desc limit 1) as open_reconciliation_id
       from accounts a
      where a.id = ${accountId} and a.reconcilable
-  `)) as unknown as { rows: any[] }
+  `))
   const account = accountRes.rows[0]
   if (!account) notFound()
 
@@ -108,7 +108,7 @@ export default async function BankingAccount({
   const openStatementId = pickString(sp.statement)
 
   const [statements, stmtCount, sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at,
              coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count
         from bank_statements s
@@ -119,26 +119,26 @@ export default async function BankingAccount({
        order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
     `),
-    db.execute(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
-    db.execute(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} group by s.source order by s.source`),
-    db.execute(sql`
+    db.execute<any>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
+    db.execute<any>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} group by s.source order by s.source`),
+    db.execute<any>(sql`
       select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at
         from reconciliations r
        where ${reconWhere}
        order by ${RECON_SORTS[reconParams.sort]} ${reconParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${reconParams.perPage} offset ${(reconParams.page - 1) * reconParams.perPage}
     `),
-    db.execute(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
-    db.execute(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} group by r.status`),
-  ])) as unknown as { rows: any[] }[]
+    db.execute<any>(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
+    db.execute<any>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} group by r.status`),
+  ]))
 
   // -- statement drawer (?statement=<id>) ------------------------------------
   let drawer: { statement: any; lines: any[]; lineTotal: number; lineParams: any } | null = null
   if (openStatementId && isUuid(openStatementId)) {
-    const s = (await db.execute(sql`
+    const s = (await db.execute<any>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
         from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId}
-    `)) as unknown as { rows: any[] }
+    `))
     if (s.rows[0]) {
       const lineParams = parsePrefixedListParams(sp, 'sl', {
         sort: 'line',
@@ -150,15 +150,15 @@ export default async function BankingAccount({
       const lineWhere = sql`l.statement_id = ${openStatementId}
         ${lineParams.q ? sql` and (l.description ilike ${'%' + lineParams.q + '%'} or l.counterparty_ref ilike ${'%' + lineParams.q + '%'})` : sql``}`
       const [lines, lineCount] = (await Promise.all([
-        db.execute(sql`
+        db.execute<any>(sql`
           select l.id, l.line_number, l.posted_on, l.amount, l.description, l.counterparty_ref, l.match_status
             from bank_statement_lines l
            where ${lineWhere}
            order by ${lineSorts[lineParams.sort]} ${lineParams.dir === 'asc' ? sql`asc` : sql`desc`}
            limit ${lineParams.perPage} offset ${(lineParams.page - 1) * lineParams.perPage}
         `),
-        db.execute(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
-      ])) as unknown as { rows: any[] }[]
+        db.execute<any>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
+      ]))
       drawer = {
         statement: s.rows[0],
         lines: lines.rows,

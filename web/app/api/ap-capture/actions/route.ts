@@ -20,10 +20,10 @@ export async function POST(request: Request) {
     try {
       if (body.action === 'reject') {
         await db.transaction(async (tx) => {
-          const changed = (await tx.execute(sql`
+          const changed = (await tx.execute<{ id: string }>(sql`
             update ap_capture_items set status = 'rejected', updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and id = ${id} and status <> 'materialized' returning id
-          `)) as unknown as { rows: { id: string }[] }
+          `))
           if (!changed.rows[0]) throw new Error('not_rejectable')
           await tx.execute(sql`
             insert into ap_capture_events (org_id, capture_item_id, event_kind, actor_id)
@@ -33,10 +33,10 @@ export async function POST(request: Request) {
         results.push({ id, ok: true })
       } else if (body.action === 'reprocess') {
         await db.transaction(async (tx) => {
-          const changed = (await tx.execute(sql`
+          const changed = (await tx.execute<{ id: string }>(sql`
             update ap_capture_items set status = 'queued', last_error = null, updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and id = ${id} and status in ('failed','needs_review','ready','duplicate') returning id
-          `)) as unknown as { rows: { id: string }[] }
+          `))
           if (!changed.rows[0]) throw new Error('not_reprocessable')
           await tx.execute(sql`
             insert into ap_capture_events (org_id, capture_item_id, event_kind, actor_id)

@@ -42,9 +42,9 @@ async function payrollFixture(label: string) {
     periodStart: "2026-07-05",
     periodEnd: "2026-07-18",
   });
-  const component = (await db.execute(sql`
+  const component = (await db.execute<{ id: string }>(sql`
     select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return {
     orgId: org.orgId,
     actorId,
@@ -76,10 +76,10 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
         note: "Approved one-off",
       },
     });
-    const reset = (await db.execute(sql`
+    const reset = (await db.execute<Record<string, unknown>>(sql`
       select run_status, gross_total, net_total, employer_cost_total, employee_count, calculated_at
         from pay_runs where org_id = ${a.orgId} and document_id = ${a.documentId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     assert.deepEqual(reset.rows[0], {
       run_status: "draft",
       gross_total: "0.0000",
@@ -146,9 +146,9 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
       actorId: b.actorId,
       mutation: { action: "exclude", employeePartyId: b.employeeId },
     });
-    const bAdjustment = (await db.execute(sql`
+    const bAdjustment = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments where org_id = ${b.orgId} and pay_run_document_id = ${b.documentId}
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await assert.rejects(
       mutatePayRunAdjustment({
         orgId: a.orgId,
@@ -158,10 +158,10 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
       }),
       /pay run adjustment not found/,
     );
-    const preserved = (await db.execute(sql`
+    const preserved = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pay_run_adjustments
        where org_id = ${b.orgId} and id = ${bAdjustment.rows[0]!.id}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     assert.equal(preserved.rows[0]!.n, 1);
   } finally {
     await dropScratchOrgReporting(a.orgId);
@@ -183,10 +183,10 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
         amount: "10.00",
       },
     });
-    const adjustment = (await db.execute(sql`
+    const adjustment = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments
        where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     let signalLocked!: () => void;
     let releaseLock!: () => void;
@@ -233,11 +233,11 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
         /pay run is not editable/,
       );
     }
-    const unchanged = (await db.execute(sql`
+    const unchanged = (await db.execute<{ adjustment_type: string }>(sql`
       select adjustment_type from pay_run_adjustments
        where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}
        order by created_at
-    `)) as unknown as { rows: { adjustment_type: string }[] };
+    `));
     assert.deepEqual(unchanged.rows, [{ adjustment_type: "line" }]);
 
     await db.execute(sql`

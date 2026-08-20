@@ -32,21 +32,30 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const filings = (await db.execute(sql`
+  const filings = (await db.execute<{ tax_year: number; form_type: string; currency: string; status: string; payer_name: string }>(sql`
     select f.tax_year, f.form_type, f.currency, f.status,
            coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
       from information_return_filings f
       join orgs o on o.id = f.org_id
       left join subsidiaries s on s.id = f.subsidiary_id
      where f.org_id = ${orgId} and f.id = ${id}
-  `)) as unknown as {
-    rows: { tax_year: number; form_type: string; currency: string; status: string; payer_name: string }[]
-  }
+  `))
   const filing = filings.rows[0]
   if (!filing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const form = formDefinition(filing.form_type)
 
-  const recipients = (await db.execute(sql`
+  const recipients = (await db.execute<{
+      name: string
+      display_name: string
+      tin_last4: string | null
+      tin_type: string | null
+      tax_classification: string | null
+      address: Record<string, string | null> | null
+      computed_amounts: Record<string, string>
+      adjustments: Record<string, string>
+      tax_withheld: string
+      corrected: boolean
+    }>(sql`
     select coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
            p.display_name as display_name,
            r.tin_last4, r.tin_type,
@@ -58,20 +67,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       join parties p on p.id = r.party_id
      where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
      order by name
-  `)) as unknown as {
-    rows: {
-      name: string
-      display_name: string
-      tin_last4: string | null
-      tin_type: string | null
-      tax_classification: string | null
-      address: Record<string, string | null> | null
-      computed_amounts: Record<string, string>
-      adjustments: Record<string, string>
-      tax_withheld: string
-      corrected: boolean
-    }[]
-  }
+  `))
 
   const header = [
     'payer_name',

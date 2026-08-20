@@ -32,14 +32,14 @@ import type { CustomFieldDef } from "../custom-fields";
  * the renderer skips them — so deactivating a custom field never breaks a form.
  */
 
-export interface FormLayoutRow {
+export type FormLayoutRow = {
   id: string;
   name: string;
   recordType: string;
   isDefault: boolean;
   isActive: boolean;
   allowedRoles: string[] | null;
-}
+};
 
 export interface ResolvedFormLayout {
   layout: FormLayoutConfig;
@@ -49,7 +49,7 @@ export interface ResolvedFormLayout {
   available: FormLayoutRow[];
 }
 
-export interface ListViewRow {
+export type ListViewRow = {
   id: string;
   name: string;
   recordType: string;
@@ -57,7 +57,7 @@ export interface ListViewRow {
   ownerId: string | null;
   isDefault: boolean;
   isActive: boolean;
-}
+};
 
 export interface ResolvedListView {
   view: ListViewConfig;
@@ -151,22 +151,22 @@ export const resolveFormLayout = cache(
   }): Promise<ResolvedFormLayout> => {
     const { orgId, userId, recordType, userRoles, headerDefs, lineDefs, explicitLayoutId } = args;
 
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<(FormLayoutRow & { layout: unknown })>(sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
              is_active as "isActive", allowed_roles as "allowedRoles", layout
         from form_layouts
        where org_id = ${orgId} and record_type = ${recordType} and is_active
        order by is_default desc, name
-    `)) as unknown as { rows: (FormLayoutRow & { layout: unknown })[] };
+    `));
 
     const accessible = rows.rows.filter((r) => rowIsAccessible(r, userRoles) || userRoles.includes("admin"));
     const available = accessible.map(({ layout: _layout, ...r }) => r);
 
     // user preference
-    const pref = (await db.execute(sql`
+    const pref = (await db.execute<{ layoutId: string | null }>(sql`
       select layout_id as "layoutId" from user_form_preferences
        where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-    `)) as unknown as { rows: { layoutId: string | null }[] };
+    `));
     const prefId = pref.rows[0]?.layoutId;
 
     let chosen: (FormLayoutRow & { layout: unknown }) | undefined;
@@ -262,14 +262,14 @@ export const resolveListView = cache(
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
 
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<(ListViewRow & { config: unknown })>(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",
              is_default as "isDefault", is_active as "isActive", config
         from list_views
        where org_id = ${orgId} and record_type = ${recordType} and is_active
          and (scope = 'org' or owner_id = ${userId})
        order by scope asc, is_default desc, name
-    `)) as unknown as { rows: (ListViewRow & { config: unknown })[] };
+    `));
 
     const available = rows.rows.map(({ config: _config, ...r }) => r);
 
@@ -280,10 +280,10 @@ export const resolveListView = cache(
     if (viewId && isUuid(viewId)) chosen = byId(viewId);
     // 2. user default
     if (!chosen) {
-      const pref = (await db.execute(sql`
+      const pref = (await db.execute<{ viewId: string | null }>(sql`
         select view_id as "viewId" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-      `)) as unknown as { rows: { viewId: string | null }[] };
+      `));
       const pid = pref.rows[0]?.viewId;
       if (pid && isUuid(pid)) chosen = byId(pid);
     }

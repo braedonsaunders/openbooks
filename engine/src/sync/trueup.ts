@@ -58,40 +58,40 @@ export async function trueUpResidualGl(
         hashtextextended(${`migration-gl-trueup:${orgId}:${source.name}`}, 0)
       )
     `);
-    const org = (await db.execute(sql`
+    const org = (await db.execute<{ base_currency: string }>(sql`
       select base_currency
         from orgs
        where id = ${orgId}
-    `)) as unknown as { rows: { base_currency: string }[] };
+    `));
     if (!org.rows[0]) throw new Error("true-up organization not found");
     if (org.rows[0].base_currency !== source.baseCurrency) {
       throw new Error(
         `true-up source currency ${source.baseCurrency} does not match organization base currency ${org.rows[0].base_currency}`,
       );
     }
-    const bookRow = (await db.execute(sql`
+    const bookRow = (await db.execute<{ id: string }>(sql`
       select id
         from accounting_books
        where org_id = ${orgId} and is_primary
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const bookId = bookRow.rows[0]?.id;
     if (!bookId) throw new Error("true-up requires a primary accounting book");
-    const subRow = (await db.execute(sql`
+    const subRow = (await db.execute<{ id: string }>(sql`
       select id
         from subsidiaries
        where org_id = ${orgId} and parent_id is null
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const subsidiaryId = subRow.rows[0]?.id;
     if (!subsidiaryId) throw new Error("true-up requires a root subsidiary");
 
-    const accRows = (await db.execute(sql`
+    const accRows = (await db.execute<{ id: string; ref: string }>(sql`
       select id, custom->>${refKey} as ref
         from accounts
        where org_id = ${orgId}
          and custom->>${refKey} is not null
-    `)) as unknown as { rows: { id: string; ref: string }[] };
+    `));
     const idByRef = new Map(
       accRows.rows.map((row) => [row.ref, row.id] as const),
     );
@@ -113,7 +113,7 @@ export async function trueUpResidualGl(
       }
     }
 
-    const oursRows = (await db.execute(sql`
+    const oursRows = (await db.execute<{ account_id: string; month: string; amount: string }>(sql`
       select jl.account_id, to_char(e.posting_date, 'YYYY-MM') as month,
              sum(jl.amount)::text as amount
         from journal_lines jl
@@ -136,9 +136,7 @@ export async function trueUpResidualGl(
            )
          )
        group by jl.account_id, to_char(e.posting_date, 'YYYY-MM')
-    `)) as unknown as {
-      rows: { account_id: string; month: string; amount: string }[];
-    };
+    `));
     const ours = new Map<string, bigint>();
     for (const row of oursRows.rows) {
       ours.set(
@@ -195,7 +193,7 @@ export async function trueUpResidualGl(
         );
       }
       const endOn = MONTH_END(month);
-      const period = (await db.execute(sql`
+      const period = (await db.execute<{ id: string }>(sql`
         select id
           from accounting_periods
          where org_id = ${orgId}
@@ -204,7 +202,7 @@ export async function trueUpResidualGl(
            and not is_adjustment
          order by starts_on
          limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const periodId = period.rows[0]?.id;
       if (!periodId) {
         throw new Error(`no accounting period covers true-up month ${month}`);

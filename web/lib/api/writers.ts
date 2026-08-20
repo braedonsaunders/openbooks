@@ -117,9 +117,9 @@ async function applyCustomRecord(
   }
 
   // before_submit user scripts gate the save exactly as they do in the UI.
-  const orgRow = (await db.execute(
+  const orgRow = (await db.execute<{ id: string; name: string; base_currency: string }>(
     sql`select id, name, base_currency from orgs where id = ${user.orgId}`,
-  )) as unknown as { rows: { id: string; name: string; base_currency: string }[] };
+  ));
   const org = orgRow.rows[0]!;
   const outcomes = await runTriggerScripts(
     "before_submit",
@@ -184,12 +184,12 @@ async function createCustomRecord(
   const recordNumber = await nextDocumentNumber(user.orgId, `custrec:${typeKey}`, recordNumberPrefix(typeKey));
   const searchText = await buildSearchText(sections, data, recordNumber);
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)
     values (${user.orgId}, ${type.id}, ${typeKey}, ${recordNumber}, ${JSON.stringify(data)}::jsonb,
             ${searchText}, ${user.id}, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const id = r.rows[0]!.id;
 
   // If the caller sent data/status, apply it on top of the seeded draft.
@@ -348,10 +348,10 @@ async function runDocumentLifecycle(
 ): Promise<WriteResult | null> {
   if (action !== "submit" && action !== "post") return null;
   try {
-    const status = (await db.execute(sql`
+    const status = (await db.execute<{ status: string }>(sql`
       select status from documents
        where id = ${id} and org_id = ${user.orgId}
-    `)) as unknown as { rows: { status: string }[] };
+    `));
     if (status.rows[0]?.status === "draft") {
       const submission = await submitAndReleaseIfUngated(kind, id, user.id);
       if (submission.flowError) {
@@ -424,10 +424,10 @@ async function updateDocument(
   body: DocApiBody,
   source: "api" | "mcp" | "assistant",
 ): Promise<WriteResult> {
-  const owned = (await db.execute(sql`
+  const owned = (await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate", updated_at as "updatedAt"
-      from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as unknown as { rows: DocumentEditCurrent[] };
+      from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`));
   const row = owned.rows[0];
   if (!row) return err(404, "not found");
   if (row.status === "voided") return err(422, "a voided document cannot be edited");

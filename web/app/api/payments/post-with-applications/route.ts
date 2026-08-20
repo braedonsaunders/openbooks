@@ -28,11 +28,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'documentId is required' }, { status: 400 })
   }
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
     select kind, status from documents
      where id = ${body.documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
-  `)) as unknown as { rows: { kind: PaymentKind; status: string }[] }
+  `))
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const perm = paymentPermission(r.rows[0].kind)
   if (!can(authz, perm)) {
@@ -41,12 +41,12 @@ export async function POST(req: Request) {
 
   try {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
-      const locked = (await db.execute(sql`
+      const locked = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
         select kind, status from documents
          where id = ${body.documentId} and org_id = ${authz.user.orgId}
            and kind in ('vendor_payment', 'customer_payment')
          for update
-      `)) as unknown as { rows: Array<{ kind: PaymentKind; status: string }> }
+      `))
       const payment = locked.rows[0]
       if (!payment) return { kind: 'not_found' as const }
       const previousStatus = payment.status

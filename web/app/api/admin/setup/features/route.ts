@@ -44,9 +44,9 @@ export async function PUT(req: Request) {
   }
 
   const dependencyError = await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
+    const before = (await tx.execute<{ features: Record<string, boolean> }>(sql`
       select coalesce(settings->'features', '{}'::jsonb) as features
-        from orgs where id = ${orgId} for update`)) as unknown as { rows: { features: Record<string, boolean> }[] }
+        from orgs where id = ${orgId} for update`))
     if (!before.rows[0]) return { error: 'not-found' }
     const currentState = before.rows[0].features ?? {}
     const after = { ...currentState, ...clean }

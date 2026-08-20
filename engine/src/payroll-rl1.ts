@@ -158,7 +158,7 @@ export function assembleRl1Slip(
  */
 export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
   const caps = rl1YearCaps(taxYear);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -192,7 +192,7 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
      order by p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
   return rows.rows.map((row) => assembleRl1Slip({
     employeePartyId: String(row.employee_party_id),
@@ -245,7 +245,7 @@ export const RLZ1S_GAPS = [
 
 export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1SummaryTotals> {
   const slips = await rl1Slips(orgId, taxYear);
-  const employer = (await db.execute(sql`
+  const employer = (await db.execute<{ employer_qpp: string | null; employer_qpip: string | null }>(sql`
     select
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_qpp,
       sum(case when pc.system_key = 'qpip' then l.amount else 0 end) as employer_qpip
@@ -255,7 +255,7 @@ export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1Sum
       join pay_components pc on pc.id = l.component_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
-  `)) as unknown as { rows: { employer_qpp: string | null; employer_qpip: string | null }[] };
+  `));
   const total = (pick: (slip: Rl1Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   return {
@@ -285,10 +285,10 @@ export interface Rl1Return {
 }
 
 export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Return> {
-  const cfg = (await db.execute(sql`
+  const cfg = (await db.execute<{ id_number: string | null }>(sql`
     select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { id_number: string | null }[] };
+  `));
   return {
     identificationNumber: cfg.rows[0]?.id_number ?? null,
     slips: await rl1Slips(orgId, taxYear),

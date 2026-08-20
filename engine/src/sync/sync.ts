@@ -334,7 +334,7 @@ export async function verifyCurrentLedgerState(
     )
   )`;
   const theirs = await source.trialBalance();
-  const ours = (await db.execute(sql`
+  const ours = (await db.execute<{ ref: string; bal: string }>(sql`
     select a.custom->>${refKey} as ref, sum(l.amount) as bal
       from journal_lines l
       join journal_entries e
@@ -346,7 +346,7 @@ export async function verifyCurrentLedgerState(
        and ${sourceProjection}
        and a.custom->>${refKey} is not null
      group by 1
-  `)) as unknown as { rows: { ref: string; bal: string }[] };
+  `));
   const oursByRef = new Map(ours.rows.map((row) => [row.ref, toUnits(row.bal)]));
   const theirsByRef = new Map(
     theirs.map((row) => [row.accountRef, toUnits(row.balance)]),
@@ -373,16 +373,21 @@ export async function verifyCurrentLedgerState(
   let openItems: SyncResult["openItems"] = null;
   if (source.openItems) {
     const truth = await source.openItems();
-    const mine = (await db.execute(sql`
+    const mine = (await db.execute<SourceOpenItem>(sql`
       select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
         from documents
        where org_id = ${orgId} and custom->>${refKey} is not null
-    `)) as unknown as { rows: SourceOpenItem[] };
+    `));
     openItems = verifyOpenItems(truth, mine.rows);
   }
 
   const periodTruth = await source.monthlyActivity();
-  const periodMine = (await db.execute(sql`
+  const periodMine = (await db.execute<{
+      accountRef: string;
+      periodRef: string | null;
+      month: string;
+      amount: string;
+    }>(sql`
     select a.custom->>${refKey} as "accountRef",
            ap.custom->>${refKey} as "periodRef",
            to_char(e.posting_date, 'YYYY-MM') as month,
@@ -400,20 +405,19 @@ export async function verifyCurrentLedgerState(
        and a.custom->>${refKey} is not null
      group by 1, 2, 3
     having sum(l.amount) <> 0
-  `)) as unknown as {
-    rows: {
-      accountRef: string;
-      periodRef: string | null;
-      month: string;
-      amount: string;
-    }[];
-  };
+  `));
   const periods = verifyAccountMonths(periodTruth, periodMine.rows);
 
   let projectPeriods: SyncResult["projectPeriods"] = null;
   if (source.projectMonthlyActivity) {
     const projectTruth = await source.projectMonthlyActivity();
-    const projectMine = (await db.execute(sql`
+    const projectMine = (await db.execute<{
+        projectRef: string;
+        accountRef: string;
+        periodRef: string | null;
+        month: string;
+        amount: string;
+      }>(sql`
       select p.custom->>${refKey} as "projectRef",
              a.custom->>${refKey} as "accountRef",
              ap.custom->>${refKey} as "periodRef",
@@ -435,15 +439,7 @@ export async function verifyCurrentLedgerState(
          and a.custom->>${refKey} is not null
        group by 1, 2, 3, 4
       having sum(l.amount) <> 0
-    `)) as unknown as {
-      rows: {
-        projectRef: string;
-        accountRef: string;
-        periodRef: string | null;
-        month: string;
-        amount: string;
-      }[];
-    };
+    `));
     projectPeriods = verifyProjectAccountMonths(
       projectTruth,
       projectMine.rows,
@@ -726,27 +722,23 @@ function storedCanonicalKey(
 
 async function storedKey(docId: string): Promise<string> {
   const [d] = (
-    (await db.execute(sql`
+    (await db.execute<StoredDocumentKeyRow>(sql`
       select kind, party_id, subsidiary_id,
              document_date::text, posting_date::text,
              posting_period_id,
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
              posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
-        from documents where id = ${docId}`)) as unknown as {
-      rows: StoredDocumentKeyRow[];
-    }
+        from documents where id = ${docId}`))
   ).rows;
   const lines = (
-    (await db.execute(sql`
+    (await db.execute<StoredLineKeyRow>(sql`
       select line_number, custom->>'sourceLineRef' as source_line_ref,
              account_id, item_id, quantity, unit, unit_price,
              amount, tax_amount, tax_overridden, tax_code_id,
              party_id, department_id, project_id, subsidiary_id, extra_dims, description,
              is_billable, markup_percent, bill_amount
-        from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
-      rows: StoredLineKeyRow[];
-    }
+        from document_lines where document_id = ${docId} order by line_number`))
   ).rows;
   return storedCanonicalKey(d!, lines);
 }
@@ -757,7 +749,7 @@ async function loadStoredKeys(
   orgId: string,
   refKey: string,
 ): Promise<Map<string, string>> {
-  const documents = (await db.execute(sql`
+  const documents = (await db.execute<StoredDocumentKeyRow>(sql`
     select id, kind, party_id, subsidiary_id,
            document_date::text, posting_date::text,
            posting_period_id,
@@ -766,8 +758,8 @@ async function loadStoredKeys(
            posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
       from documents
      where org_id = ${orgId} and custom->>${refKey} is not null
-     order by id`)) as unknown as { rows: StoredDocumentKeyRow[] };
-  const lineResult = (await db.execute(sql`
+     order by id`));
+  const lineResult = (await db.execute<StoredLineKeyRow>(sql`
     select dl.document_id, dl.line_number,
            dl.custom->>'sourceLineRef' as source_line_ref,
            dl.account_id, dl.item_id, dl.quantity, dl.unit, dl.unit_price,
@@ -778,9 +770,7 @@ async function loadStoredKeys(
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
      where d.org_id = ${orgId} and d.custom->>${refKey} is not null
-     order by dl.document_id, dl.line_number`)) as unknown as {
-    rows: StoredLineKeyRow[];
-  };
+     order by dl.document_id, dl.line_number`));
   const linesByDocument = new Map<string, StoredLineKeyRow[]>();
   for (const line of lineResult.rows) {
     const lines = linesByDocument.get(line.document_id);
@@ -832,9 +822,9 @@ export async function preflightFullSync(
   source: MigrationSource,
   opts: { orgId: string; connectionId?: string },
 ): Promise<FullSyncPreflight> {
-  const orgRows = (await db.execute(sql`
+  const orgRows = (await db.execute<{ id: string }>(sql`
     select id from orgs where id = ${opts.orgId}
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!orgRows.rows[0]) throw new Error(`organization ${opts.orgId} not found`);
 
   const ctx = await buildNativeContext(
@@ -843,19 +833,17 @@ export async function preflightFullSync(
     source.baseCurrency,
   );
   const changes = await source.nativeChanges(null, ctx);
-  const existingRows = (await db.execute(sql`
-    select id, kind, status, document_number, custom->>${source.refKey} as ref
-      from documents
-     where org_id = ${opts.orgId}
-  `)) as unknown as {
-    rows: {
+  const existingRows = (await db.execute<{
       id: string;
       kind: string;
       status: string;
       document_number: string;
       ref: string | null;
-    }[];
-  };
+    }>(sql`
+    select id, kind, status, document_number, custom->>${source.refKey} as ref
+      from documents
+     where org_id = ${opts.orgId}
+  `));
   const existingByRef = new Map(
     existingRows.rows
       .filter((row): row is typeof row & { ref: string } => row.ref !== null)
@@ -929,13 +917,13 @@ export async function preflightFullSync(
   );
   const acknowledgedRows =
     opts.connectionId && deletionCandidates.length > 0
-      ? ((await db.execute(sql`
+      ? ((await db.execute<{ source_ref: string }>(sql`
           select source_ref
             from source_deletion_resolutions
            where org_id = ${opts.orgId}
              and connection_id = ${opts.connectionId}
              and source_ref in ${deletionCandidates}
-        `)) as unknown as { rows: { source_ref: string }[] }).rows
+        `))).rows
       : [];
   const acknowledged = new Set(
     acknowledgedRows.map((row) => row.source_ref),
@@ -1268,11 +1256,9 @@ export async function runSync(
     // accepted merely because it is syntactically valid.
     if (source.controlAccounts) {
       const existingCtrl = (
-        (await db.execute(
+        (await db.execute<{ ctrl: Record<string, string> | null }>(
           sql`select settings->'controlAccounts' as ctrl from orgs where id = ${org.id}`,
-        )) as unknown as {
-          rows: { ctrl: Record<string, string> | null }[];
-        }
+        ))
       ).rows[0]?.ctrl;
       const refs = await source.controlAccounts();
       const resolved: Record<string, string> = { ...(existingCtrl ?? {}) };
@@ -1300,14 +1286,14 @@ export async function runSync(
       }
       for (const [key, ref] of Object.entries(refs)) {
         if (!ref) continue;
-        const matches = (await db.execute(sql`
+        const matches = (await db.execute<{ id: string }>(sql`
           select id
             from accounts
            where org_id = ${org.id}
              and custom->>${refKey} = ${ref}
            order by id
            limit 2
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         if (matches.rows.length !== 1) {
           throw new Error(
             `${source.name} control account ${key} reference ${ref} resolved to ${matches.rows.length} organization accounts`,
@@ -1401,19 +1387,17 @@ export async function runSync(
       }
     >();
     const allDocumentRows = (
-      (await db.execute(sql`
-        select id, kind, status, document_number,
-               posted_entry_id is not null as posted, custom->>${refKey} as ref
-          from documents where org_id = ${org.id}`)) as unknown as {
-        rows: {
+      (await db.execute<{
           id: string;
           kind: string;
           status: string;
           document_number: string;
           posted: boolean;
           ref: string | null;
-        }[];
-      }
+        }>(sql`
+        select id, kind, status, document_number,
+               posted_entry_id is not null as posted, custom->>${refKey} as ref
+          from documents where org_id = ${org.id}`))
     ).rows;
     for (const r of allDocumentRows) {
       if (r.ref !== null) {
@@ -1906,12 +1890,10 @@ export async function runSync(
       // Recorded controller dispositions (retain / manual void) are
       // acknowledged divergences: they stand and are never auto-mirrored.
       const resolvedRows = connectionId
-        ? ((await db.execute(sql`
+        ? ((await db.execute<{ source_ref: string }>(sql`
             select source_ref from source_deletion_resolutions
              where org_id = ${org.id} and connection_id = ${connectionId}
-               and source_ref in ${[...deletedAtSource]}`)) as unknown as {
-            rows: { source_ref: string }[];
-          }).rows
+               and source_ref in ${[...deletedAtSource]}`))).rows
         : [];
       for (const ref of unresolvedSourceDeletionCandidates(
         deletedAtSource,
@@ -1960,11 +1942,9 @@ export async function runSync(
     //    whose cumulative TB matches but has benign monthly date-allocation drift).
     const trueUpEnabled =
       (
-        (await db.execute(
+        (await db.execute<{ on: boolean | null }>(
           sql`select (settings->>'glTrueup')::boolean as on from orgs where id = ${org.id}`,
-        )) as unknown as {
-          rows: { on: boolean | null }[];
-        }
+        ))
       ).rows[0]?.on === true;
     const trueUp = trueUpEnabled && !targetedRefs
       ? await trueUpResidualGl(org.id, source, {

@@ -138,7 +138,7 @@ export default async function Approvals({
   // ---- All approvals (org-wide; only queried when the tab is open) ---------
   let allRows: ApprovalRow[] = []
   if (tab === 'all' && canSeeAll) {
-    const gatesRes = (await db.execute(sql`
+    const gatesRes = (await db.execute<Record<string, any>>(sql`
       select g.id, g.flow_id as "flowId", g.title, g.quorum, g.created_at as "createdAt",
              g.signature_required as "signatureRequired",
              g.subject_kind as "subjectKind", g.subject_id as "subjectId",
@@ -155,7 +155,7 @@ export default async function Approvals({
         left join accounting_periods cp on cp.id = cr.period_id
        where g.org_id = ${orgId} and g.status = 'pending'
        order by g.created_at
-    `)) as unknown as { rows: Record<string, any>[] }
+    `))
 
     allRows = gatesRes.rows
       .map((g): ApprovalRow => {
@@ -188,7 +188,7 @@ export default async function Approvals({
   // ---- Submitted by me ------------------------------------------------------
   let submittedRows: SubmittedRow[] = []
   if (tab === 'submitted') {
-    const flowRes = (await db.execute(sql`
+    const flowRes = (await db.execute<Record<string, any>>(sql`
       select r.id as "runId", f.name as "flowName", r.subject_id as "subjectId",
              coalesce(d.document_number, cp.name) as "documentNumber",
              coalesce(d.kind, case when cr.id is not null then 'close_run' end, r.subject_kind) as kind,
@@ -208,7 +208,7 @@ export default async function Approvals({
        group by r.id, f.name, r.subject_id, d.document_number, d.kind, d.total,
                 d.status, cr.id, cr.status, cp.name, p.display_name
        order by min(g.created_at)
-    `)) as unknown as { rows: Record<string, any>[] }
+    `))
 
     submittedRows = flowRes.rows
       .map(
@@ -229,11 +229,11 @@ export default async function Approvals({
   }
 
   // Delegate targets (row delegation + out-of-office picker).
-  const usersRes = (await db.execute(sql`
+  const usersRes = (await db.execute<DelegateOption>(sql`
     select id, name from users
      where org_id = ${orgId} and is_active and id <> ${user.id}
      order by name limit 500
-  `)) as unknown as { rows: DelegateOption[] }
+  `))
   const delegateUsers = usersRes.rows
 
   // ---- Kind chips + filter (mine/all tabs) ----------------------------------

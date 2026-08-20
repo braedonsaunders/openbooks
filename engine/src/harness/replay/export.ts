@@ -74,10 +74,8 @@ function requireKey<T>(map: Map<string, T>, id: string, what: string): T {
 
 async function exportAccounts(world: SimOrg): Promise<CorpusAccount[]> {
   const ids = Object.values(world.accounts);
-  const rows = (await db.execute(sql`
-    select id, number, name, type from accounts where id in ${ids} order by number`)) as unknown as {
-    rows: { id: string; number: string; name: string; type: string }[];
-  };
+  const rows = (await db.execute<{ id: string; number: string; name: string; type: string }>(sql`
+    select id, number, name, type from accounts where id in ${ids} order by number`));
   const keyById = new Map(Object.entries(world.accounts).map(([key, id]) => [id, key]));
   return rows.rows.map((r) => ({ key: keyById.get(r.id)!, number: r.number, name: r.name, type: r.type }));
 }
@@ -86,11 +84,9 @@ async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[
   const out: CorpusProject[] = [];
   const custKey = (id: string) => requireKey(maps.partyKeyById, id, "customer");
   for (const job of world.jobs) {
-    const sov = (await db.execute(sql`
+    const sov = (await db.execute<{ description: string; scheduled_value: string }>(sql`
       select description, scheduled_value::text as scheduled_value from sov_lines
-       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`)) as unknown as {
-      rows: { description: string; scheduled_value: string }[];
-    };
+       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`));
     out.push({
       key: job.code,
       name: job.name,
@@ -108,11 +104,9 @@ async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[
 
 /** Signed GL lines of one journal entry in semantic keys. */
 async function entryGlLines(entryId: string, maps: Maps): Promise<CorpusDocLine[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ account_id: string; project_id: string | null; amount: string; memo: string | null }>(sql`
     select account_id, project_id, amount::text as amount, memo from journal_lines
-     where entry_id = ${entryId} order by line_number`)) as unknown as {
-    rows: { account_id: string; project_id: string | null; amount: string; memo: string | null }[];
-  };
+     where entry_id = ${entryId} order by line_number`));
   return rows.rows.map((l) => ({
     account: requireKey(maps.accountKeyById, l.account_id, "account"),
     amount: fromUnits(toUnits(l.amount)),
@@ -133,20 +127,18 @@ export async function exportDataset(
 
   // Every posted/reversed entry, with its source document when it has one,
   // in stable replay order.
-  const entries = (await db.execute(sql`
+  const entries = (await db.execute<{
+      entry_id: string; origin: string | null; posting_date: string;
+      doc_id: string | null; kind: string | null; document_number: string | null;
+      party_id: string | null; document_date: string | null; due_date: string | null; memo: string | null;
+    }>(sql`
     select e.id as entry_id, e.origin, e.posting_date::text as posting_date,
            d.id as doc_id, d.kind, d.document_number, d.party_id,
            d.document_date::text as document_date, d.due_date::text as due_date, d.memo
       from journal_entries e
       left join documents d on d.posted_entry_id = e.id
      where e.org_id = ${world.orgId} and e.status in ('posted', 'reversed')
-     order by e.posting_date, e.created_at, e.entry_number`)) as unknown as {
-    rows: {
-      entry_id: string; origin: string | null; posting_date: string;
-      doc_id: string | null; kind: string | null; document_number: string | null;
-      party_id: string | null; document_date: string | null; due_date: string | null; memo: string | null;
-    }[];
-  };
+     order by e.posting_date, e.created_at, e.entry_number`));
 
   const events: DatasetEvent[] = [];
   const eventIdByDocId = new Map<string, string>();
@@ -171,11 +163,9 @@ export async function exportDataset(
     const glLines = await entryGlLines(row.entry_id, maps);
 
     if (row.doc_id && row.kind && COMMERCIAL_KINDS.includes(row.kind)) {
-      const docLines = (await db.execute(sql`
+      const docLines = (await db.execute<{ account_id: string; project_id: string | null; amount: string; description: string | null }>(sql`
         select account_id, project_id, amount::text as amount, description from document_lines
-         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`)) as unknown as {
-        rows: { account_id: string; project_id: string | null; amount: string; description: string | null }[];
-      };
+         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`));
       const id = uniqueId(row.document_number ?? row.doc_id);
       eventIdByDocId.set(row.doc_id, id);
       documents++;
@@ -223,14 +213,14 @@ export async function exportDataset(
   // Payments last within their date (they settle previously posted items).
   for (const row of deferredPayments) {
     const glLines = await entryGlLines(row.entry_id, maps);
-    const allocs = (await db.execute(sql`
+    const allocs = (await db.execute<{ amount: string; target_doc: string }>(sql`
       select a.amount::text as amount, td.id as target_doc
         from applications a
         join journal_lines fl on fl.id = a.from_line_id
         join journal_lines tl on tl.id = a.to_line_id
         join documents td on td.posted_entry_id = tl.entry_id
        where fl.entry_id = ${row.entry_id} and a.unapplied_at is null
-       order by a.created_at`)) as unknown as { rows: { amount: string; target_doc: string }[] };
+       order by a.created_at`));
     const id = uniqueId(row.document_number ?? row.doc_id!);
     eventIdByDocId.set(row.doc_id!, id);
     documents++;

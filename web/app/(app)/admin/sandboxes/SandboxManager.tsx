@@ -13,10 +13,10 @@ import {
 } from "./actions";
 import { enterOrg } from "../../../../lib/sandbox-session";
 
-export interface PeriodOption {
+export type PeriodOption = {
   id: string;
   name: string;
-}
+};
 
 export interface SandboxRow {
   id: string;

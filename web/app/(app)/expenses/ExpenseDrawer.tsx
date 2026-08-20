@@ -28,8 +28,7 @@ import {
   type FormLayoutConfig,
   type HeaderFieldPlacement,
 } from '@openbooks/customization'
-
-interface Opt {
+type Opt = {
   id: string
   display_name?: string
   number?: string
@@ -37,7 +36,7 @@ interface Opt {
   code?: string
   rate?: string
   tax_components?: TaxComponentConfig[]
-}
+};
 interface SegmentOpt {
   key: string
   name: string

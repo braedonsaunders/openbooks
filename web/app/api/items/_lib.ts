@@ -15,23 +15,23 @@ export interface ItemPayload {
 }
 
 export async function loadItem(id: string, orgId: string): Promise<ItemPayload | null> {
-  const item = (await db.execute(sql`
+  const item = (await db.execute<Record<string, unknown>>(sql`
     select * from items where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!item.rows[0]) return null
   const row = item.rows[0]
 
   const [income, expense, tax] = (await Promise.all([
     row.income_account_id
-      ? db.execute(sql`select number, name from accounts where id = ${row.income_account_id} and org_id = ${orgId}`)
+      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.income_account_id} and org_id = ${orgId}`)
       : Promise.resolve({ rows: [] }),
     row.expense_account_id
-      ? db.execute(sql`select number, name from accounts where id = ${row.expense_account_id} and org_id = ${orgId}`)
+      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.expense_account_id} and org_id = ${orgId}`)
       : Promise.resolve({ rows: [] }),
     row.tax_code_id
-      ? db.execute(sql`select code, name from tax_codes where id = ${row.tax_code_id} and org_id = ${orgId}`)
+      ? db.execute<Record<string, unknown>>(sql`select code, name from tax_codes where id = ${row.tax_code_id} and org_id = ${orgId}`)
       : Promise.resolve({ rows: [] }),
-  ])) as unknown as { rows: Record<string, unknown>[] }[]
+  ]))
 
   const acctName = (r?: Record<string, unknown>) =>
     r ? `${(r.number as string) ?? ''} ${(r.name as string) ?? ''}`.trim() || null : null

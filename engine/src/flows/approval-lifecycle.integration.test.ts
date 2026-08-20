@@ -34,17 +34,15 @@ import { createDelegation } from "./delegations.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = (await db.execute(sql`select status from documents where id = ${id}`)) as unknown as {
-    rows: { status: string }[];
-  };
+  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`));
   return r.rows[0]?.status ?? null;
 }
 
 async function gateRows(runOrSubject: { subjectId: string }): Promise<{ id: string; status: string; assigneeUserId: string | null }[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; status: string; assigneeUserId: string | null }>(sql`
     select id, status, assignee_user_id as "assigneeUserId"
       from flow_gates where subject_id = ${runOrSubject.subjectId} order by created_at
-  `)) as unknown as { rows: { id: string; status: string; assigneeUserId: string | null }[] };
+  `));
   return r.rows;
 }
 
@@ -268,11 +266,11 @@ async function gateProvenance(id: string): Promise<{
   delegatedFromUserId: string | null;
   onBehalfOfUserId: string | null;
 }> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<any>(sql`
     select assignee_user_id as "assigneeUserId", decided_by as "decidedBy",
            delegated_from_user_id as "delegatedFromUserId", on_behalf_of_user_id as "onBehalfOfUserId"
       from flow_gates where id = ${id}
-  `)) as unknown as { rows: any[] };
+  `));
   return r.rows[0]!;
 }
 

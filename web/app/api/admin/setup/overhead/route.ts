@@ -59,7 +59,7 @@ export async function POST(req: Request) {
     try {
       await db.transaction(async (tx) => {
         for (const id of typeIds) {
-          const current = (await tx.execute(sql`
+          const current = (await tx.execute<{ financial_profile: FinancialProfile }>(sql`
             select version.financial_profile as financial_profile
               from project_types pt
               left join lateral (
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
               ) version on true
              where pt.org_id = ${orgId} and pt.id = ${id}
              for update of pt
-          `)) as unknown as { rows: { financial_profile: FinancialProfile }[] }
+          `))
           const profile = current.rows[0]?.financial_profile
           if (!profile) throw new Error('project type not found')
           const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'

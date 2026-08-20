@@ -37,15 +37,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
         where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
         returning id
-      `)) as unknown as { rows: unknown[] }
+      `))
       if (!updated.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
     } else if (resource === 'schedules') {
-      const current = (await db.execute(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`)) as unknown as { rows: { cron: string; timezone: string }[] }
+      const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
       if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current.rows[0].cron, new Date(), body.timezone?.trim() || current.rows[0].timezone) : undefined
       if ((body.cron || body.timezone) && !next) return NextResponse.json({ error: 'cron expression or time zone is invalid' }, { status: 400 })
       if (body.paymentBankProfileId) {
-        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`)) as unknown as { rows: unknown[] }
+        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
         if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       }
       await db.execute(sql`

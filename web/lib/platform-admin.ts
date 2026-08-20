@@ -151,7 +151,7 @@ export async function platformOrganizations(
               : sql`o.name ${dir}`;
     const offset = (input.page - 1) * input.perPage;
     const [rowsResult, totalResult, countsResult] = await Promise.all([
-      db.execute(sql`
+      db.execute<PlatformOrganization>(sql`
         select o.id, o.name, o.legal_name as "legalName", o.base_currency as "baseCurrency",
                o.country, o.env_kind as "envKind", o.sandbox_of as "sandboxOf",
                parent.name as "parentName", o.created_at as "createdAt",
@@ -167,19 +167,17 @@ export async function platformOrganizations(
       db.execute(
         sql`select count(*)::int as total from orgs o where ${search} ${environment}`,
       ),
-      db.execute(
+      db.execute<{ kind: string; count: number }>(
         sql`select env_kind as kind, count(*)::int as count from orgs group by env_kind`,
       ),
     ]);
     return {
-      rows: rowsResult.rows as unknown as PlatformOrganization[],
+      rows: rowsResult.rows,
       total: Number(
         (totalResult.rows[0] as { total?: number } | undefined)?.total ?? 0,
       ),
       environmentCounts: Object.fromEntries(
-        (countsResult.rows as unknown as { kind: string; count: number }[]).map(
-          (row) => [row.kind, Number(row.count)],
-        ),
+        countsResult.rows.map((row) => [row.kind, Number(row.count)]),
       ),
     };
   });
@@ -225,7 +223,7 @@ export async function platformUsers(
                 : sql`u.name ${dir}, u.email asc`;
     const offset = (input.page - 1) * input.perPage;
     const [rowsResult, totalResult, countsResult] = await Promise.all([
-      db.execute(sql`
+      db.execute<PlatformUser>(sql`
         select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName",
                coalesce((select array_agg(r.name order by r.name) from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id where a.user_id = u.id and a.org_id = u.org_id), '{}'::text[]) as roles,
                u.is_super_admin as "isSuperAdmin", u.is_active as "isActive",
@@ -252,7 +250,7 @@ export async function platformUsers(
     ]);
     const counts = countsResult.rows[0] as Record<string, number> | undefined;
     return {
-      rows: rowsResult.rows as unknown as PlatformUser[],
+      rows: rowsResult.rows,
       total: Number(
         (totalResult.rows[0] as { total?: number } | undefined)?.total ?? 0,
       ),
@@ -308,7 +306,7 @@ export async function platformGrants(
     `;
     const offset = (input.page - 1) * input.perPage;
     const [rowsResult, totalResult, countsResult] = await Promise.all([
-      db.execute(sql`
+      db.execute<PlatformGrant>(sql`
         select a.id, a.member_user_id as "memberUserId", m.email as "memberEmail", m.name as "memberName",
                mo.name as "memberOrgName", a.org_id as "orgId", o.name as "orgName",
                a.acting_user_id as "actingUserId", au.email as "actingEmail", au.name as "actingName",
@@ -329,7 +327,7 @@ export async function platformGrants(
     ]);
     const counts = countsResult.rows[0] as Record<string, number> | undefined;
     return {
-      rows: rowsResult.rows as unknown as PlatformGrant[],
+      rows: rowsResult.rows,
       total: Number(
         (totalResult.rows[0] as { total?: number } | undefined)?.total ?? 0,
       ),
@@ -379,26 +377,22 @@ export async function platformGrantOptions(): Promise<{
   >[];
 }> {
   return withBypassContext(async () => {
-    const usersResult = await db.execute(sql`
+    const usersResult = await db.execute<
+      Pick<PlatformUser, "id" | "name" | "email" | "orgName" | "orgId">
+    >(sql`
       select u.id, u.name, u.email, u.org_id as "orgId", o.name as "orgName"
         from users u join orgs o on o.id = u.org_id
        where o.env_kind = 'production' and u.is_active
        order by o.name, u.name, u.email
     `);
-    const orgsResult = await db.execute(sql`
+    const orgsResult = await db.execute<Pick<PlatformOrganization, "id" | "name">>(sql`
       select id, name from orgs where env_kind = 'production' order by name
     `);
-    const users = usersResult.rows as unknown as Pick<
-      PlatformUser,
-      "id" | "name" | "email" | "orgName" | "orgId"
-    >[];
+    const users = usersResult.rows;
     return {
       members: users,
       actingUsers: users,
-      organizations: orgsResult.rows as unknown as Pick<
-        PlatformOrganization,
-        "id" | "name"
-      >[],
+      organizations: orgsResult.rows,
     };
   });
 }
@@ -434,7 +428,7 @@ export async function platformEmails(
               : sql`e.created_at ${dir}`;
     const offset = (input.page - 1) * input.perPage;
     const [rowsResult, totalResult, countsResult] = await Promise.all([
-      db.execute(sql`
+      db.execute<PlatformEmail>(sql`
         select e.id, e.org_id as "orgId", o.name as "orgName", e.recipient_primary as "recipientPrimary",
                e.recipients, e.subject, e.provider, e.status, e.category_key as "categoryKey",
                e.error_message as "errorMessage", e.sent_at as "sentAt", e.created_at as "createdAt"
@@ -448,19 +442,17 @@ export async function platformEmails(
           from email_log e join orgs o on o.id = e.org_id
          where ${search} ${status}
       `),
-      db.execute(
+      db.execute<{ status: string; count: number }>(
         sql`select status, count(*)::int as count from email_log group by status`,
       ),
     ]);
     return {
-      rows: rowsResult.rows as unknown as PlatformEmail[],
+      rows: rowsResult.rows,
       total: Number(
         (totalResult.rows[0] as { total?: number } | undefined)?.total ?? 0,
       ),
       statusCounts: Object.fromEntries(
-        (
-          countsResult.rows as unknown as { status: string; count: number }[]
-        ).map((row) => [row.status, Number(row.count)]),
+        countsResult.rows.map((row) => [row.status, Number(row.count)]),
       ),
     };
   });

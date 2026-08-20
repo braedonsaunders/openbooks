@@ -228,8 +228,7 @@ interface AppDetail {
     endpoints?: { name: string; file: string; method: 'GET' | 'POST' | 'ANY' }[]
   } | null
 }
-
-interface RunRow {
+type RunRow = {
   endpoint: string
   status: string
   units: number
@@ -237,7 +236,7 @@ interface RunRow {
   error_message: string | null
   duration_ms: number | null
   at: string
-}
+};
 
 export function AppDrawer({
   app,

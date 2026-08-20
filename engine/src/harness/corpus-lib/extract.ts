@@ -15,12 +15,12 @@ export async function trialBalanceByKey(
   accounts: Record<string, string>,
 ): Promise<Record<string, string>> {
   const keyById = new Map(Object.entries(accounts).map(([key, id]) => [id, key]));
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ account_id: string; bal: string }>(sql`
     select l.account_id, sum(l.amount)::text as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id`)) as unknown as { rows: { account_id: string; bal: string }[] };
+     group by l.account_id`));
   const out: Record<string, string> = {};
   for (const r of rows.rows) {
     const key = keyById.get(r.account_id);
@@ -40,7 +40,7 @@ export async function openBalancesByParty(
   partyIds: Record<string, string>,
 ): Promise<Record<string, { ar?: string; ap?: string }>> {
   const keyById = new Map(Object.entries(partyIds).map(([key, id]) => [id, key]));
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ party_id: string; kind: string; open: string }>(sql`
     select d.party_id, d.kind,
            sum(l.amount - sign(l.amount) * coalesce((
              select sum(ap.amount) from applications ap
@@ -50,9 +50,7 @@ export async function openBalancesByParty(
       join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted', 'reversed')
       join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
      where d.org_id = ${orgId} and d.status = 'posted'
-     group by d.party_id, d.kind`)) as unknown as {
-    rows: { party_id: string; kind: string; open: string }[];
-  };
+     group by d.party_id, d.kind`));
   const out: Record<string, { ar?: string; ap?: string }> = {};
   for (const r of rows.rows) {
     const key = keyById.get(r.party_id);
@@ -84,7 +82,7 @@ export async function projectRollups(
   projectIds: Record<string, string>,
 ): Promise<Record<string, ProjectRollup>> {
   const keyById = new Map(Object.entries(projectIds).map(([key, id]) => [id, key]));
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ project_id: string; cost: string; billed: string }>(sql`
     select l.project_id,
            coalesce(sum(l.amount) filter (where a.type in ('cogs', 'expense', 'expense_other', 'expense_deferred')), 0)::text as cost,
            coalesce(-sum(l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as billed
@@ -92,9 +90,7 @@ export async function projectRollups(
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id
      where l.org_id = ${orgId} and l.project_id is not null
-     group by l.project_id`)) as unknown as {
-    rows: { project_id: string; cost: string; billed: string }[];
-  };
+     group by l.project_id`));
   const out: Record<string, ProjectRollup> = {};
   for (const r of rows.rows) {
     const key = keyById.get(r.project_id);

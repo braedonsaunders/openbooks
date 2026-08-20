@@ -65,7 +65,7 @@ interface PatchBody {
 async function partyExists(id: string, orgId: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
-  )) as unknown as { rows: unknown[] }
+  ))
   return !!r.rows[0]
 }
 
@@ -97,9 +97,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ name: string; is_active: boolean; custom: Record<string, unknown> | null }>(sql`
     select name, is_active, custom from projects where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { name: string; is_active: boolean; custom: Record<string, unknown> | null }[] }
+  `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
@@ -202,7 +202,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v === 'invalid') return bad('Invalid project type')
     projectTypeId = v
     if (v) {
-      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: unknown[] }
+      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`))
       if (pt.rows.length === 0) return bad('Unknown project type')
     }
   }

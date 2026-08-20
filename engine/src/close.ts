@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
-import { db, withOrg, inDbTransaction } from "./db.ts";
+import { db, withOrg, inDbTransaction, type SqlExecutor } from "./db.ts";
 
 export class CloseError extends Error {}
 
@@ -57,7 +57,7 @@ export function closeModuleForDocument(kind: string): CloseModule {
 /** Application-level companion to the Postgres guard. It supplies a precise,
  * user-facing error before a write reaches the kernel. */
 export async function assertPeriodModulesOpen(
-  executor: { execute: (query: any) => Promise<unknown> },
+  executor: SqlExecutor,
   args: {
     orgId: string;
     periodId: string;
@@ -74,16 +74,14 @@ export async function assertPeriodModulesOpen(
     : [null];
   for (const subsidiaryId of subsidiaryIds) {
     for (const module of modules) {
-      const result = (await executor.execute(sql`
+      const result = (await executor.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
         select state, reopen_expires_at as "reopenExpiresAt", reason
           from period_locks
          where org_id = ${args.orgId} and period_id = ${args.periodId}
            and book_id = ${args.bookId} and module = ${module}
            and (subsidiary_id is not distinct from ${subsidiaryId} or subsidiary_id is null)
          order by (subsidiary_id is not null) desc
-         limit 1`)) as unknown as {
-        rows: { state: string; reopenExpiresAt: Date | string | null; reason: string | null }[];
-      };
+         limit 1`));
       if (periodLockBlocksPosting(result.rows[0], args.allowImportedLocks === true))
         throw new CloseError(
           `${module.toUpperCase()} is closed for this period and accounting book`,
@@ -327,10 +325,15 @@ type DefaultCloseFeatureContext = {
 };
 
 async function defaultCloseFeatureContext(
-  executor: { execute: (query: any) => Promise<unknown> },
+  executor: SqlExecutor,
   orgId: string,
 ): Promise<DefaultCloseFeatureContext> {
-  const result = (await executor.execute(sql`
+  const result = (await executor.execute<{
+      features: Record<string, boolean>;
+      entities: number;
+      has_fx: boolean;
+      has_assets: boolean;
+    }>(sql`
     select coalesce(o.settings->'features', '{}'::jsonb) as features,
            (select count(*)::int from subsidiaries s
              where s.org_id=o.id and s.is_active and not s.is_elimination) as entities,
@@ -338,14 +341,7 @@ async function defaultCloseFeatureContext(
              or exists(select 1 from fx_rates f where f.org_id=o.id)) as has_fx,
            exists(select 1 from fixed_assets fa where fa.org_id=o.id) as has_assets
       from orgs o where o.id=${orgId}
-  `)) as unknown as {
-    rows: {
-      features: Record<string, boolean>;
-      entities: number;
-      has_fx: boolean;
-      has_assets: boolean;
-    }[];
-  };
+  `));
   const row = result.rows[0];
   if (!row) throw new CloseError("organization not found");
   const features = row.features ?? {};
@@ -599,46 +595,40 @@ export async function ensureCloseDefaults(
   // transaction — clearing its SET LOCAL RLS GUCs and breaking later inserts.
   return inDbTransaction(async (tx) => {
     const closeFeatures = await defaultCloseFeatureContext(tx, orgId);
-    const org = (await tx.execute(sql`
+    const org = (await tx.execute<{ start_month: number; time_zone: string }>(sql`
       select coalesce((settings->>'fiscalYearStartMonth')::integer, 1) as start_month,
              coalesce(settings->>'timeZone', 'UTC') as time_zone
-        from orgs where id = ${orgId}`)) as unknown as {
-      rows: { start_month: number; time_zone: string }[];
-    };
+        from orgs where id = ${orgId}`));
     if (!org.rows[0]) throw new CloseError("organization not found");
 
-    const existingCalendar = (await tx.execute(sql`
+    const existingCalendar = (await tx.execute<{ id: string }>(sql`
       select id from fiscal_calendars where org_id = ${orgId} and is_active
-       order by is_default desc, created_at limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+       order by is_default desc, created_at limit 1`));
     let calendarId = existingCalendar.rows[0]?.id;
     if (!calendarId) {
-      const createdCalendar = (await tx.execute(sql`
+      const createdCalendar = (await tx.execute<{ id: string }>(sql`
         insert into fiscal_calendars
           (org_id, name, cadence, year_start_month, time_zone, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.calendar.name', 'monthly', ${org.rows[0].start_month},
                 ${org.rows[0].time_zone}, true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       calendarId = createdCalendar.rows[0]?.id;
     }
     if (!calendarId)
       throw new CloseError("could not initialize fiscal calendar");
 
-    const existingBlueprint = (await tx.execute(sql`
+    const existingBlueprint = (await tx.execute<{ id: string; name: string }>(sql`
       select id, name from close_blueprints where org_id = ${orgId} and is_active
-       order by is_default desc, version desc, created_at limit 1`)) as unknown as {
-      rows: { id: string; name: string }[];
-    };
+       order by is_default desc, version desc, created_at limit 1`));
     let blueprintId = existingBlueprint.rows[0]?.id;
     let createdBlueprint = false;
     if (!blueprintId) {
-      const blueprintRes = (await tx.execute(sql`
+      const blueprintRes = (await tx.execute<{ id: string }>(sql`
         insert into close_blueprints
           (org_id, name, description, period_type, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.blueprint.name', 'close.defaultData.blueprint.description',
                 'any', true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       blueprintId = blueprintRes.rows[0]?.id;
       createdBlueprint = true;
     }
@@ -649,7 +639,7 @@ export async function ensureCloseDefaults(
     if (systemBlueprint) {
       const stepIds = new Map<string, string>();
       for (const [index, step] of DEFAULT_STEPS.entries()) {
-        const inserted = (await tx.execute(sql`
+        const inserted = (await tx.execute<{ id: string }>(sql`
         insert into close_blueprint_steps
           (org_id, blueprint_id, key, title, description, workstream, task_type,
            completion_mode, gate_type, due_offset_business_days, evidence_required,
@@ -660,7 +650,7 @@ export async function ensureCloseDefaults(
         on conflict (blueprint_id, key) do update set
           title = excluded.title, description = excluded.description,
           sort_order = excluded.sort_order, updated_at = now()
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
         stepIds.set(step.key, inserted.rows[0].id);
       }
       for (const [stepKey, dependencyKey] of DEFAULT_DEPENDENCIES) {
@@ -690,9 +680,9 @@ export async function ensureCloseDefaults(
            'segregation', ${JSON.stringify({ prohibitSelfApproval: true })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
         on conflict (org_id, code) do nothing`);
 
-      const closeApprovalFlow = (await tx.execute(sql`
+      const closeApprovalFlow = (await tx.execute<{ id: string }>(sql`
         select id from flows where org_id = ${orgId} and subject_kind = 'close_run' limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (!closeApprovalFlow.rows[0]) {
       const graph = {
         schemaVersion: 1,
@@ -734,14 +724,12 @@ export async function ensureCloseDefaults(
       }
     }
 
-    const existingPackage = (await tx.execute(sql`
+    const existingPackage = (await tx.execute<{ id: string }>(sql`
       select id from close_reporting_packages where org_id = ${orgId} and is_active
-       order by is_default desc, created_at limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+       order by is_default desc, created_at limit 1`));
     let reportingPackageId = existingPackage.rows[0]?.id;
     if (!reportingPackageId) {
-      const createdPackage = (await tx.execute(sql`
+      const createdPackage = (await tx.execute<{ id: string }>(sql`
         insert into close_reporting_packages
           (org_id, name, description, reports, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.package.name', 'close.defaultData.package.description',
@@ -753,7 +741,7 @@ export async function ensureCloseDefaults(
                   { slug: "general-ledger" },
                 ])}::jsonb,
                 true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       reportingPackageId = createdPackage.rows[0]?.id;
     }
     if (!reportingPackageId)
@@ -769,11 +757,9 @@ export async function generateAccountingPeriods(
   fiscalYear: number,
   actorId: string,
 ): Promise<{ created: number; updated: number; periods: GeneratedPeriod[] }> {
-  const calendarRes = (await db.execute(sql`
+  const calendarRes = (await db.execute<CalendarRow>(sql`
     select id, cadence, year_start_month, anchor_date, adjustment_period_enabled, config
-      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`)) as unknown as {
-    rows: CalendarRow[];
-  };
+      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`));
   const calendar = calendarRes.rows[0];
   if (!calendar) throw new CloseError("active fiscal calendar not found");
   const periods = generatedPeriods(calendar, fiscalYear);
@@ -782,34 +768,30 @@ export async function generateAccountingPeriods(
   let updated = 0;
   await db.transaction(async (tx) => {
     for (const period of periods) {
-      const existing = (await tx.execute(sql`
-        select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
-               exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
-          from accounting_periods p
-         where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
-           and p.fiscal_year = ${fiscalYear} and p.period_number = ${period.number}`)) as unknown as {
-        rows: {
+      const existing = (await tx.execute<{
           id: string;
           name: string;
           starts_on: string;
           ends_on: string;
           is_adjustment: boolean;
           has_entries: boolean;
-        }[];
-      };
+        }>(sql`
+        select p.id, p.name, p.starts_on, p.ends_on, p.is_adjustment,
+               exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
+          from accounting_periods p
+         where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
+           and p.fiscal_year = ${fiscalYear} and p.period_number = ${period.number}`));
       const row = existing.rows[0];
       if (!row) {
-        const inserted = (await tx.execute(sql`
+        const inserted = (await tx.execute<{ id: string }>(sql`
           insert into accounting_periods
             (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on,
              is_adjustment, created_by, updated_by)
           values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
                   ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
-          returning id`)) as unknown as { rows: { id: string }[] };
-        const books = (await tx.execute(sql`
-          select id from accounting_books where org_id = ${orgId} and is_active`)) as unknown as {
-          rows: { id: string }[];
-        };
+          returning id`));
+        const books = (await tx.execute<{ id: string }>(sql`
+          select id from accounting_books where org_id = ${orgId} and is_active`));
         for (const book of books.rows) {
           for (const module of CLOSE_MODULES) {
             await tx.execute(sql`
@@ -847,7 +829,7 @@ async function periodFingerprint(
   periodId: string,
   bookId: string,
 ): Promise<string> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entries,
       (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entry_changed,
@@ -870,14 +852,14 @@ async function periodFingerprint(
           and d.posting_period_id is null) as unassigned_document_changed,
       (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId}
         where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return createHash("sha256")
     .update(JSON.stringify(result.rows[0] ?? {}))
     .digest("hex");
 }
 
 async function assertCloseScope(
-  executor: { execute: (query: any) => Promise<unknown> },
+  executor: SqlExecutor,
   args: {
     orgId: string;
     periodId: string;
@@ -893,18 +875,16 @@ async function assertCloseScope(
           sql`, `,
         )}))`
     : sql`0`;
-  const scope = (await executor.execute(sql`
+  const scope = (await executor.execute<{
+      period_ok: boolean;
+      book_ok: boolean;
+      subsidiaries_found: number;
+    }>(sql`
     select
       exists(select 1 from accounting_periods where id = ${args.periodId} and org_id = ${args.orgId}) as period_ok,
       exists(select 1 from accounting_books where id = ${args.bookId} and org_id = ${args.orgId} and is_active) as book_ok,
       ${subsidiaryCount} as subsidiaries_found
-  `)) as unknown as {
-    rows: {
-      period_ok: boolean;
-      book_ok: boolean;
-      subsidiaries_found: number;
-    }[];
-  };
+  `));
   const row = scope.rows[0];
   if (!row?.period_ok) throw new CloseError("period not found");
   if (!row.book_ok) throw new CloseError("active accounting book not found");
@@ -933,32 +913,28 @@ export async function startCloseRun(args: {
   const reportingPackageId =
     args.reportingPackageId ?? defaults.reportingPackageId;
   await assertCloseScope(db, args);
-  const periodRes = (await db.execute(sql`
-    select p.id, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
-           (select max(p2.period_number) from accounting_periods p2
-             where p2.org_id = p.org_id and p2.fiscal_calendar_id = p.fiscal_calendar_id
-               and p2.fiscal_year = p.fiscal_year and not p2.is_adjustment) as last_regular_period
-      from accounting_periods p
-     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`)) as unknown as {
-    rows: {
+  const periodRes = (await db.execute<{
       id: string;
       ends_on: string;
       fiscal_year: number;
       period_number: number;
       is_adjustment: boolean;
       last_regular_period: number;
-    }[];
-  };
+    }>(sql`
+    select p.id, p.ends_on, p.fiscal_year, p.period_number, p.is_adjustment,
+           (select max(p2.period_number) from accounting_periods p2
+             where p2.org_id = p.org_id and p2.fiscal_calendar_id = p.fiscal_calendar_id
+               and p2.fiscal_year = p.fiscal_year and not p2.is_adjustment) as last_regular_period
+      from accounting_periods p
+     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`));
   const period = periodRes.rows[0];
   if (!period) throw new CloseError("period not found");
-  const configuration = (await db.execute(sql`
+  const configuration = (await db.execute<{ blueprint_name: string | null; package_ok: boolean }>(sql`
     select
       (select name from close_blueprints where id = ${blueprintId} and org_id = ${args.orgId} and is_active) as blueprint_name,
       (${reportingPackageId}::uuid is null or exists(
         select 1 from close_reporting_packages where id = ${reportingPackageId} and org_id = ${args.orgId} and is_active
-      )) as package_ok`)) as unknown as {
-    rows: { blueprint_name: string | null; package_ok: boolean }[];
-  };
+      )) as package_ok`));
   if (!configuration.rows[0]?.blueprint_name)
     throw new CloseError("active close blueprint not found");
   const systemBlueprint = configuration.rows[0].blueprint_name === "close.defaultData.blueprint.name";
@@ -977,7 +953,7 @@ export async function startCloseRun(args: {
 
   return db
     .transaction(async (tx) => {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
          current_stage, target_close_date, scope, data_fingerprint, last_validated_at,
@@ -989,15 +965,15 @@ export async function startCloseRun(args: {
       on conflict (org_id, period_id, book_id) do update set
         status = case when close_runs.status = 'cancelled' then 'in_progress' else close_runs.status end,
         updated_at = now(), updated_by = ${args.actorId}
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
       const runId = inserted.rows[0].id;
-      const steps = (await tx.execute(sql`
+      const steps = (await tx.execute<any>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
              default_owner_role_key, default_reviewer_role_key, applicability
         from close_blueprint_steps
        where blueprint_id = ${blueprintId} and org_id = ${args.orgId}
-       order by sort_order`)) as unknown as { rows: any[] };
+       order by sort_order`));
       if (steps.rows.length === 0)
         throw new CloseError("close blueprint has no steps");
       let materializedSteps = 0;
@@ -1019,14 +995,14 @@ export async function startCloseRun(args: {
           excluding?: string,
         ): Promise<string | null> {
           if (!roleKey) return null;
-          const user = (await tx.execute(sql`
+          const user = (await tx.execute<{ id: string }>(sql`
           select distinct u.id from users u
             join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
             join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
            where u.org_id = ${args.orgId} and u.is_active and ar.key = ${roleKey}
              ${excluding ? sql`and u.id <> ${excluding}` : sql``}
            order by u.id limit 1
-        `)) as unknown as { rows: { id: string }[] };
+        `));
           return user.rows[0]?.id ?? null;
         }
         const configuredOwnerId = await userForRole(
@@ -1088,15 +1064,7 @@ async function readinessChecks(
   orgId: string,
   runId: string,
 ): Promise<ReadinessCheck[]> {
-  const context = (await db.execute(sql`
-    select r.period_id, r.book_id, p.starts_on, p.ends_on,
-           p.fiscal_calendar_id, p.period_number, p.is_adjustment,
-           o.base_currency
-      from close_runs r
-      join accounting_periods p on p.id = r.period_id
-      join orgs o on o.id = r.org_id
-     where r.id = ${runId} and r.org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const context = (await db.execute<{
       period_id: string;
       book_id: string;
       starts_on: string;
@@ -1105,8 +1073,14 @@ async function readinessChecks(
       period_number: number;
       is_adjustment: boolean;
       base_currency: string;
-    }[];
-  };
+    }>(sql`
+    select r.period_id, r.book_id, p.starts_on, p.ends_on,
+           p.fiscal_calendar_id, p.period_number, p.is_adjustment,
+           o.base_currency
+      from close_runs r
+      join accounting_periods p on p.id = r.period_id
+      join orgs o on o.id = r.org_id
+     where r.id = ${runId} and r.org_id = ${orgId}`));
   const ctx = context.rows[0];
   if (!ctx) throw new CloseError("close run not found");
 
@@ -1225,7 +1199,7 @@ async function readinessChecks(
     amount: "10000.0000",
     percent: 20,
   };
-  const variances = (await db.execute(sql`
+  const variances = (await db.execute<{ count: string }>(sql`
     with current_activity as (
       select l.account_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id
@@ -1251,7 +1225,7 @@ async function readinessChecks(
        and (
          coalesce(p.amount, 0) = 0
          or abs((coalesce(c.amount, 0) - p.amount) / nullif(abs(p.amount), 0) * 100) >= ${threshold.percent}::numeric
-       )`)) as unknown as { rows: { count: string }[] };
+       )`));
 
   return [
     {
@@ -1343,14 +1317,12 @@ export async function refreshCloseRun(
   invalidated: number;
   openExceptions: number;
 }> {
-  const runRes = (await db.execute(sql`
-    select period_id, book_id, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const runRes = (await db.execute<{
       period_id: string;
       book_id: string;
       data_fingerprint: string | null;
-    }[];
-  };
+    }>(sql`
+    select period_id, book_id, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId}`));
   const run = runRes.rows[0];
   if (!run) throw new CloseError("close run not found");
   const fingerprint = await periodFingerprint(
@@ -1361,9 +1333,9 @@ export async function refreshCloseRun(
   const dataChanged = Boolean(
     run.data_fingerprint && run.data_fingerprint !== fingerprint,
   );
-  const availableTasks = (await db.execute(sql`
+  const availableTasks = (await db.execute<{ key: string }>(sql`
     select key from close_run_tasks where run_id=${runId} and org_id=${orgId}
-  `)) as unknown as { rows: { key: string }[] };
+  `));
   const availableTaskKeys = new Set(availableTasks.rows.map((task) => task.key));
   const checks = (await readinessChecks(orgId, runId)).filter((check) => availableTaskKeys.has(check.taskKey));
   const hardChecks = checks.filter((check) => check.severity !== "warning");
@@ -1376,14 +1348,14 @@ export async function refreshCloseRun(
   const outcome = await db.transaction(async (tx) => {
     let invalidated = 0;
     if (dataChanged) {
-      const changed = (await tx.execute(sql`
+      const changed = (await tx.execute<{ id: string }>(sql`
         update close_run_tasks
            set status = 'invalidated', completed_at = null, completed_by = null,
                reviewed_at = null, reviewed_by = null, updated_at = now(), updated_by = ${actorId ?? null}
          where run_id = ${runId} and org_id = ${orgId}
            and status in ('complete','submitted') and data_fingerprint is not null
            and data_fingerprint <> ${fingerprint}
-         returning id`)) as unknown as { rows: { id: string }[] };
+         returning id`));
       invalidated = changed.rows.length;
       await tx.execute(sql`
         update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${actorId ?? null}
@@ -1403,10 +1375,8 @@ export async function refreshCloseRun(
     }
 
     for (const check of checks) {
-      const task = (await tx.execute(sql`
-        select id from close_run_tasks where run_id = ${runId} and key = ${check.taskKey}`)) as unknown as {
-        rows: { id: string }[];
-      };
+      const task = (await tx.execute<{ id: string }>(sql`
+        select id from close_run_tasks where run_id = ${runId} and key = ${check.taskKey}`));
       const taskId = task.rows[0]?.id ?? null;
       if (check.count > 0) {
         await tx.execute(sql`
@@ -1459,10 +1429,8 @@ export async function refreshCloseRun(
              end,
              last_validated_at = now(), updated_at = now(), updated_by = ${actorId ?? null}
        where id = ${runId} and org_id = ${orgId}`);
-    const open = (await tx.execute(sql`
-      select count(*) as count from close_exceptions where run_id = ${runId} and status = 'open'`)) as unknown as {
-      rows: { count: string }[];
-    };
+    const open = (await tx.execute<{ count: string }>(sql`
+      select count(*) as count from close_exceptions where run_id = ${runId} and status = 'open'`));
     return {
       readinessScore,
       fingerprint,
@@ -1470,21 +1438,19 @@ export async function refreshCloseRun(
       openExceptions: Number(open.rows[0]?.count ?? 0),
     };
   });
-  const automationSubjects = (await db.execute(sql`
-    select t.id as task_id, t.key as task_key, t.status,
-           x.id as exception_id, x.code as exception_code
-      from close_run_tasks t
-      left join close_exceptions x on x.task_id = t.id and x.run_id = t.run_id and x.status = 'open'
-     where t.run_id = ${runId} and t.org_id = ${orgId} and (t.status = 'ready' or x.id is not null)
-  `)) as unknown as {
-    rows: {
+  const automationSubjects = (await db.execute<{
       task_id: string;
       task_key: string;
       status: string;
       exception_id: string | null;
       exception_code: string | null;
-    }[];
-  };
+    }>(sql`
+    select t.id as task_id, t.key as task_key, t.status,
+           x.id as exception_id, x.code as exception_code
+      from close_run_tasks t
+      left join close_exceptions x on x.task_id = t.id and x.run_id = t.run_id and x.status = 'open'
+     where t.run_id = ${runId} and t.org_id = ${orgId} and (t.status = 'ready' or x.id is not null)
+  `));
   for (const subject of automationSubjects.rows) {
     if (subject.status === "ready") {
       await runCloseAutomations({
@@ -1512,7 +1478,7 @@ export async function refreshCloseRun(
 }
 
 async function resolveTaskDependenciesTx(
-  tx: any,
+  tx: SqlExecutor,
   orgId: string,
   runId: string,
 ): Promise<void> {
@@ -1541,19 +1507,17 @@ export async function updateCloseTask(args: {
     "start" | "submit" | "complete" | "approve" | "request_changes" | "waive";
   notes?: string;
 }): Promise<void> {
-  const fingerprintRes = (await db.execute(sql`
-    select data_fingerprint from close_runs where id = ${args.runId} and org_id = ${args.orgId}`)) as unknown as {
-    rows: { data_fingerprint: string | null }[];
-  };
+  const fingerprintRes = (await db.execute<{ data_fingerprint: string | null }>(sql`
+    select data_fingerprint from close_runs where id = ${args.runId} and org_id = ${args.orgId}`));
   const fingerprint = fingerprintRes.rows[0]?.data_fingerprint;
   if (!fingerprint)
     throw new CloseError("validate the close run before updating tasks");
 
   await db.transaction(async (tx) => {
-    const taskRes = (await tx.execute(sql`
+    const taskRes = (await tx.execute<any>(sql`
       select t.*, (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
         from close_run_tasks t where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
-        for update`)) as unknown as { rows: any[] };
+        for update`));
     const task = taskRes.rows[0];
     if (!task) throw new CloseError("close task not found");
     if (task.status === "blocked")
@@ -1623,10 +1587,8 @@ export async function updateCloseTask(args: {
               ${JSON.stringify({ status, notes: args.notes ?? null })}::jsonb)`);
     await resolveTaskDependenciesTx(tx, args.orgId, args.runId);
   });
-  const ready = (await db.execute(sql`select id, key from close_run_tasks
-    where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`)) as unknown as {
-    rows: { id: string; key: string }[];
-  };
+  const ready = (await db.execute<{ id: string; key: string }>(sql`select id, key from close_run_tasks
+    where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`));
   for (const task of ready.rows) {
     await runCloseAutomations({
       orgId: args.orgId,
@@ -1657,7 +1619,7 @@ export async function addCloseEvidence(args: {
   const contentHash = createHash("sha256")
     .update(canonicalJson(snapshot), "utf8")
     .digest("hex");
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into close_task_evidence
       (org_id, run_id, task_id, file_id, evidence_type, reference_id, reference_url,
        label, snapshot, content_hash, created_by, updated_by)
@@ -1666,7 +1628,7 @@ export async function addCloseEvidence(args: {
            ${JSON.stringify(snapshot)}::jsonb, ${contentHash}, ${args.actorId}, ${args.actorId}
       from close_run_tasks t
      where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   if (!inserted.rows[0]) throw new CloseError("close task not found");
   await db.execute(sql`
     insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
@@ -1676,10 +1638,10 @@ export async function addCloseEvidence(args: {
 }
 
 async function assertCloseReadyForApproval(
-  executor: { execute: (query: any) => Promise<unknown> },
+  executor: SqlExecutor,
   runId: string,
 ): Promise<void> {
-  const blockers = (await executor.execute(sql`
+  const blockers = (await executor.execute<{ tasks: string; exceptions: string }>(sql`
     select
       (select count(*) from close_run_tasks where run_id = ${runId} and gate_type = 'hard'
         and task_type <> 'approval'
@@ -1687,7 +1649,7 @@ async function assertCloseReadyForApproval(
         and status not in ('complete','waived')) as tasks,
       (select count(*) from close_exceptions where run_id = ${runId} and status = 'open'
         and severity in ('error','critical')) as exceptions
-  `)) as unknown as { rows: { tasks: string; exceptions: string }[] };
+  `));
   if (
     Number(blockers.rows[0]?.tasks ?? 0) > 0 ||
     Number(blockers.rows[0]?.exceptions ?? 0) > 0
@@ -1718,10 +1680,10 @@ export async function attestOwnerManagedClose(
   await refreshCloseRun(orgId, runId, actorId);
   await withOrg(orgId, async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`close-attestation:${runId}`}))`);
-    const run = (await db.execute(sql`
+    const run = (await db.execute<{ status: string; data_fingerprint: string | null }>(sql`
       select status, data_fingerprint from close_runs
        where id=${runId} and org_id=${orgId} for update
-    `)) as unknown as { rows: { status: string; data_fingerprint: string | null }[] };
+    `));
     const row = run.rows[0];
     if (!row) throw new CloseError("close run not found");
     if (row.status !== "in_progress") {
@@ -1760,17 +1722,17 @@ export async function requestCloseApproval(
     // Serialize the status check, gate creation, and transition to review so a
     // double-click or concurrent request can never create duplicate approvals.
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`close-approval:${runId}`}))`);
-    const run = (await db.execute(sql`
+    const run = (await db.execute<{ status: string; data_fingerprint: string | null }>(sql`
       select status, data_fingerprint from close_runs
        where id = ${runId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: { status: string; data_fingerprint: string | null }[] };
+    `));
     if (!run.rows[0]) throw new CloseError("close run not found");
     if (run.rows[0].status === "review") {
-      const pending = (await db.execute(sql`
+      const pending = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count from flow_gates
          where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
            and status in ('pending','escalated')
-      `)) as unknown as { rows: { count: number }[] };
+      `));
       if (Number(pending.rows[0]?.count ?? 0) > 0)
         throw new CloseError("close approval is already in progress");
     } else if (run.rows[0].status !== "in_progress") {
@@ -1841,18 +1803,16 @@ export async function finalizeCloseFlowApproval(args: {
   if (!args.actorId) throw new CloseError("a signed-in approver is required");
   // decideGate calls this inside its serialized, org-scoped transaction. Keep
   // every statement on that transaction instead of opening a nested one.
-  const run = (await db.execute(sql`
-    select status, started_by, data_fingerprint, period_id, book_id from close_runs
-     where id = ${args.runId} and org_id = ${args.orgId} for update
-  `)) as unknown as {
-    rows: {
+  const run = (await db.execute<{
       status: string;
       started_by: string | null;
       data_fingerprint: string | null;
       period_id: string;
       book_id: string;
-    }[];
-  };
+    }>(sql`
+    select status, started_by, data_fingerprint, period_id, book_id from close_runs
+     where id = ${args.runId} and org_id = ${args.orgId} for update
+  `));
   const row = run.rows[0];
   if (!row) throw new CloseError("close run not found");
   if (row.status !== "review")
@@ -1933,7 +1893,7 @@ export async function finalizeCloseFlowApproval(args: {
 }
 
 async function upsertLock(args: {
-  tx: any;
+  tx: SqlExecutor;
   orgId: string;
   periodId: string;
   bookId: string;
@@ -1977,25 +1937,21 @@ export async function setPeriodLockState(args: {
       ...args,
       subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
     });
-    const current = (await tx.execute(sql`
+    const current = (await tx.execute<{ state: string }>(sql`
       select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
         and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-        and module = ${args.module} for update`)) as unknown as {
-      rows: { state: string }[];
-    };
+        and module = ${args.module} for update`));
     if (args.state === "open" && current.rows[0]?.state === "closed") {
       throw new CloseError(
         "closed periods must be reopened through an approved reopen request",
       );
     }
     if (args.module === "gl" && args.state === "closed") {
-      const openSubledgers = (await tx.execute(sql`
+      const openSubledgers = (await tx.execute<{ module: string }>(sql`
         select module from period_locks
          where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
            and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-           and module <> 'gl' and state <> 'closed'`)) as unknown as {
-        rows: { module: string }[];
-      };
+           and module <> 'gl' and state <> 'closed'`));
       if (openSubledgers.rows.length > 0) {
         throw new CloseError(
           `close ${openSubledgers.rows.map((row) => row.module.toUpperCase()).join(", ")} before GL`,
@@ -2003,10 +1959,10 @@ export async function setPeriodLockState(args: {
       }
     }
     if (args.module !== "gl" && args.state === "open") {
-      const gl = (await tx.execute(sql`
+      const gl = (await tx.execute<{ state: string }>(sql`
         select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
           and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-          and module = 'gl'`)) as unknown as { rows: { state: string }[] };
+          and module = 'gl'`));
       if (gl.rows[0]?.state === "closed")
         throw new CloseError(
           "GL must be reopened before a subledger can be opened",
@@ -2027,27 +1983,23 @@ export async function closeApprovedRun(
 ): Promise<void> {
   await refreshCloseRun(orgId, runId, actorId);
   await db.transaction(async (tx) => {
-    const run = (await tx.execute(sql`
-      select period_id, book_id, status, scope from close_runs
-       where id = ${runId} and org_id = ${orgId} for update`)) as unknown as {
-      rows: {
+    const run = (await tx.execute<{
         period_id: string;
         book_id: string;
         status: string;
         scope: { subsidiaryIds?: string[] };
-      }[];
-    };
+      }>(sql`
+      select period_id, book_id, status, scope from close_runs
+       where id = ${runId} and org_id = ${orgId} for update`));
     const row = run.rows[0];
     if (!row) throw new CloseError("close run not found");
     if (row.status !== "approved")
       throw new CloseError(
         "the close run requires approval or an owner attestation before locking",
       );
-    const blockers = (await tx.execute(sql`
+    const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
-       where run_id = ${runId} and status = 'open' and severity in ('error','critical')`)) as unknown as {
-      rows: { count: string }[];
-    };
+       where run_id = ${runId} and status = 'open' and severity in ('error','critical')`));
     if (Number(blockers.rows[0].count) > 0)
       throw new CloseError(
         "critical exceptions reappeared after approval; review the run again",
@@ -2110,10 +2062,8 @@ export async function publishCloseRun(
   comment?: string,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const run = (await tx.execute(sql`
-      select status, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId} for update`)) as unknown as {
-      rows: { status: string; data_fingerprint: string | null }[];
-    };
+    const run = (await tx.execute<{ status: string; data_fingerprint: string | null }>(sql`
+      select status, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId} for update`));
     if (!run.rows[0]) throw new CloseError("close run not found");
     if (run.rows[0].status !== "closed")
       throw new CloseError(
@@ -2181,10 +2131,8 @@ export async function publishCloseRun(
   // Redis enqueue isn't transactional with the DB, and delivery must never fire
   // for a rolled-back publish). Best-effort: the worker itself skips manual
   // cadence / no recipients, and a queue outage must not fail publication.
-  const packageRow = (await db.execute(sql`
-    select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`)) as unknown as {
-    rows: { reporting_package_id: string | null }[];
-  };
+  const packageRow = (await db.execute<{ reporting_package_id: string | null }>(sql`
+    select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`));
   const packageId = packageRow.rows[0]?.reporting_package_id;
   if (packageId) {
     try {
@@ -2220,16 +2168,14 @@ export async function requestPeriodReopen(args: {
     ...args,
     subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
   });
-  const impact = (await db.execute(sql`
+  const impact = (await db.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,
       (select count(*) from close_signoffs s join close_runs r on r.id = s.run_id
         where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as signoffs,
       (select count(*) from close_task_evidence e join close_runs r on r.id = e.run_id
-        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`)) as unknown as {
-    rows: Record<string, unknown>[];
-  };
-  const inserted = (await db.execute(sql`
+        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`));
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into close_reopen_requests
       (org_id, period_id, book_id, subsidiary_id, modules, reason, impact_snapshot,
        requested_by, created_by, updated_by)
@@ -2237,7 +2183,7 @@ export async function requestPeriodReopen(args: {
             ${JSON.stringify(args.modules)}::jsonb, ${args.reason.trim()},
             ${JSON.stringify({ ...impact.rows[0], reports: ["balance-sheet", "pnl", "cash-flow", "trial-balance"] })}::jsonb,
             ${args.actorId}, ${args.actorId}, ${args.actorId})
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   return inserted.rows[0].id;
 }
 
@@ -2249,10 +2195,10 @@ export async function decidePeriodReopen(args: {
   hours?: number;
 }): Promise<void> {
   await db.transaction(async (tx) => {
-    const request = (await tx.execute(sql`
+    const request = (await tx.execute<any>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-       for update`)) as unknown as { rows: any[] };
+       for update`));
     const row = request.rows[0];
     if (!row) throw new CloseError("pending reopen request not found");
     if (row.requested_by === args.actorId)
@@ -2264,10 +2210,8 @@ export async function decidePeriodReopen(args: {
          where id = ${args.requestId}`);
       return;
     }
-    const policy = (await tx.execute(sql`select rules from close_policies
-      where org_id = ${args.orgId} and code = 'controlled-reopen' and is_active limit 1`)) as unknown as {
-      rows: { rules: { defaultHours?: number; maxHours?: number } }[];
-    };
+    const policy = (await tx.execute<{ rules: { defaultHours?: number; maxHours?: number } }>(sql`select rules from close_policies
+      where org_id = ${args.orgId} and code = 'controlled-reopen' and is_active limit 1`));
     const defaultHours = Number(policy.rows[0]?.rules?.defaultHours ?? 24);
     const maxHours = Math.max(
       1,
@@ -2289,7 +2233,7 @@ export async function decidePeriodReopen(args: {
         )
       )
     `);
-    const activeRequests = (await tx.execute(sql`
+    const activeRequests = (await tx.execute<{ id: string; modules: CloseModule[] }>(sql`
       select id, modules
         from close_reopen_requests
        where org_id = ${args.orgId}
@@ -2299,9 +2243,7 @@ export async function decidePeriodReopen(args: {
          and id <> ${args.requestId}
          and status = 'approved'
          and expires_at > now()
-       for update`)) as unknown as {
-      rows: { id: string; modules: CloseModule[] }[];
-    };
+       for update`));
     const overlap = activeRequests.rows.find((request) =>
       request.modules.some((module) => modules.includes(module)),
     );
@@ -2311,10 +2253,10 @@ export async function decidePeriodReopen(args: {
       );
     }
     if (modules.some((module) => module !== "gl") && !modules.includes("gl")) {
-      const gl = (await tx.execute(sql`
+      const gl = (await tx.execute<{ state: string }>(sql`
         select state from period_locks where org_id = ${args.orgId} and period_id = ${row.period_id}
           and book_id = ${row.book_id} and subsidiary_id is not distinct from ${row.subsidiary_id}
-          and module = 'gl'`)) as unknown as { rows: { state: string }[] };
+          and module = 'gl'`));
       if (gl.rows[0]?.state === "closed")
         throw new CloseError(
           "GL must be included before a closed subledger can be reopened",
@@ -2353,7 +2295,7 @@ export async function decidePeriodReopen(args: {
 }
 
 async function recloseApprovedReopenRow(args: {
-  tx: any;
+  tx: SqlExecutor;
   row: any;
   actorId?: string;
   reason: string;
@@ -2374,7 +2316,7 @@ async function recloseApprovedReopenRow(args: {
       )
     )
   `);
-  const overlapping = (await args.tx.execute(sql`
+  const overlapping = (await args.tx.execute<{ id: string; modules: CloseModule[] }>(sql`
     select id, modules
       from close_reopen_requests
      where org_id = ${args.row.org_id}
@@ -2384,9 +2326,7 @@ async function recloseApprovedReopenRow(args: {
        and id <> ${args.row.id}
        and status = 'approved'
        and expires_at > now()
-     for update`)) as unknown as {
-    rows: { id: string; modules: CloseModule[] }[];
-  };
+     for update`));
   const coveredModules = new Set(
     overlapping.rows.flatMap((request) =>
       request.modules.filter((module) => modules.includes(module)),
@@ -2408,7 +2348,7 @@ async function recloseApprovedReopenRow(args: {
     });
   }
   if (modulesToClose.includes("gl")) {
-    const openSubledgers = (await args.tx.execute(sql`
+    const openSubledgers = (await args.tx.execute<{ module: CloseModule }>(sql`
       select module
         from period_locks
        where org_id = ${args.row.org_id}
@@ -2417,7 +2357,7 @@ async function recloseApprovedReopenRow(args: {
          and subsidiary_id is not distinct from ${args.row.subsidiary_id}
          and module <> 'gl'
          and state <> 'closed'
-       for update`)) as unknown as { rows: { module: CloseModule }[] };
+       for update`));
     if (openSubledgers.rows.length > 0) {
       throw new CloseError(
         `cannot re-close GL while ${openSubledgers.rows
@@ -2489,13 +2429,13 @@ export async function recloseApprovedReopen(args: {
     throw new CloseError("a 10-500 character re-close reason is required");
   }
   await db.transaction(async (tx) => {
-    const request = (await tx.execute(sql`
+    const request = (await tx.execute<any>(sql`
       select *
         from close_reopen_requests
        where id = ${args.requestId}
          and org_id = ${args.orgId}
          and status = 'approved'
-       for update`)) as unknown as { rows: any[] };
+       for update`));
     const row = request.rows[0];
     if (!row) throw new CloseError("approved reopen request not found");
     await recloseApprovedReopenRow({
@@ -2509,24 +2449,22 @@ export async function recloseApprovedReopen(args: {
 }
 
 export async function recloseExpiredReopens(actorId?: string): Promise<number> {
-  const expired = (await db.execute(sql`
+  const expired = (await db.execute<any>(sql`
     select request.id, request.org_id, request.period_id, request.book_id,
            request.subsidiary_id, request.modules, request.reason
       from close_reopen_requests request
       join orgs organization on organization.id = request.org_id
      where request.status = 'approved' and request.expires_at <= now()
-       and organization.env_kind = 'production'`)) as unknown as {
-    rows: any[];
-  };
+       and organization.env_kind = 'production'`));
   for (const row of expired.rows) {
     await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<any>(sql`
         select *
           from close_reopen_requests
          where id = ${row.id}
            and status = 'approved'
            and expires_at <= now()
-         for update`)) as unknown as { rows: any[] };
+         for update`));
       if (!locked.rows[0]) return;
       await recloseApprovedReopenRow({
         tx,
@@ -2577,7 +2515,7 @@ function conditionMatches(expected: unknown, actual: unknown): boolean {
 export async function runCloseAutomations(
   context: CloseAutomationContext,
 ): Promise<{ completed: number; failed: number }> {
-  const runResult = (await db.execute(sql`
+  const runResult = (await db.execute<any>(sql`
     select r.*, p.name as period_name, b.name as book_name,
            t.key as task_key, t.workstream, t.status as task_status,
            x.severity as exception_severity, x.code as exception_code
@@ -2587,14 +2525,14 @@ export async function runCloseAutomations(
       left join close_run_tasks t on t.id = ${context.taskId ?? null} and t.run_id = r.id
       left join close_exceptions x on x.id = ${context.exceptionId ?? null} and x.run_id = r.id
      where r.id = ${context.runId} and r.org_id = ${context.orgId}
-  `)) as unknown as { rows: any[] };
+  `));
   const run = runResult.rows[0];
   if (!run) throw new CloseError("close run not found");
-  const rules = (await db.execute(sql`
+  const rules = (await db.execute<any>(sql`
     select * from close_automation_rules
      where org_id = ${context.orgId} and trigger = ${context.trigger} and is_active
      order by created_at, id
-  `)) as unknown as { rows: any[] };
+  `));
   let completed = 0;
   let failed = 0;
   for (const rule of rules.rows) {
@@ -2618,13 +2556,13 @@ export async function runCloseAutomations(
     )
       continue;
 
-    const claim = (await db.execute(sql`
+    const claim = (await db.execute<{ id: string }>(sql`
       insert into close_automation_executions
         (org_id, rule_id, run_id, task_id, trigger, event_key, status, created_by, updated_by)
       values (${context.orgId}, ${rule.id}, ${context.runId}, ${context.taskId ?? null}, ${context.trigger},
               ${context.eventKey}, 'running', ${context.actorId ?? null}, ${context.actorId ?? null})
       on conflict (rule_id, event_key) do nothing returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const executionId = claim.rows[0]?.id;
     if (!executionId) continue;
     try {
@@ -2633,20 +2571,20 @@ export async function runCloseAutomations(
         const users = new Map<string, { id: string }>();
         if (stringList(config.userIds).length) {
           const direct =
-            (await db.execute(sql`select id from users where org_id = ${context.orgId} and is_active
+            (await db.execute<{ id: string }>(sql`select id from users where org_id = ${context.orgId} and is_active
             and id in (${sql.join(
               stringList(config.userIds).map((id) => sql`${id}`),
               sql`, `,
-            )})`)) as unknown as { rows: { id: string }[] };
+            )})`));
           for (const user of direct.rows) users.set(user.id, user);
         }
         for (const role of stringList(config.roleKeys)) {
-          const roleUsers = (await db.execute(sql`
+          const roleUsers = (await db.execute<{ id: string }>(sql`
             select distinct u.id from users u
               join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
               join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
              where u.org_id = ${context.orgId} and u.is_active and ar.key = ${role}
-          `)) as unknown as { rows: { id: string }[] };
+          `));
           for (const user of roleUsers.rows) users.set(user.id, user);
         }
         if (users.size === 0 && run.started_by)
@@ -2669,18 +2607,18 @@ export async function runCloseAutomations(
           roleValue: unknown,
         ): Promise<string | null> {
           if (typeof userValue === "string") {
-            const direct = (await db.execute(
+            const direct = (await db.execute<{ id: string }>(
               sql`select id from users where id = ${userValue} and org_id = ${context.orgId} and is_active`,
-            )) as unknown as { rows: { id: string }[] };
+            ));
             if (direct.rows[0]) return direct.rows[0].id;
           }
           if (typeof roleValue === "string") {
             const byRole =
-              (await db.execute(sql`select distinct u.id from users u
+              (await db.execute<{ id: string }>(sql`select distinct u.id from users u
               join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
               join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
               where u.org_id = ${context.orgId} and u.is_active and ar.key = ${roleValue}
-              order by u.id limit 1`)) as unknown as { rows: { id: string }[] };
+              order by u.id limit 1`));
             if (byRole.rows[0]) return byRole.rows[0].id;
           }
           return null;
@@ -2708,12 +2646,10 @@ export async function runCloseAutomations(
             "complete-task automation requires a task event",
           );
         await db.transaction(async (tx) => {
-          const task = (await tx.execute(sql`select evidence_required,
+          const task = (await tx.execute<{ evidence_required: boolean; evidence_count: string }>(sql`select evidence_required,
             (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
             from close_run_tasks t where t.id = ${context.taskId} and t.run_id = ${context.runId}
-              and t.org_id = ${context.orgId} for update`)) as unknown as {
-            rows: { evidence_required: boolean; evidence_count: string }[];
-          };
+              and t.org_id = ${context.orgId} for update`));
           if (!task.rows[0]) throw new CloseError("automation task not found");
           if (
             task.rows[0].evidence_required &&
@@ -2748,10 +2684,8 @@ export async function runCloseAutomations(
       } else if (rule.action === "generate_report") {
         const report = String(config.report ?? "trial-balance");
         const target =
-          (await db.execute(sql`select id from close_run_tasks where run_id = ${context.runId}
-          and id = coalesce(${context.taskId ?? null}, id) order by case when key = 'publish-package' then 0 else 1 end, sort_order limit 1`)) as unknown as {
-            rows: { id: string }[];
-          };
+          (await db.execute<{ id: string }>(sql`select id from close_run_tasks where run_id = ${context.runId}
+          and id = coalesce(${context.taskId ?? null}, id) order by case when key = 'publish-package' then 0 else 1 end, sort_order limit 1`));
         if (!target.rows[0])
           throw new CloseError(
             "report automation could not resolve an evidence task",
@@ -2827,13 +2761,13 @@ export async function runCloseAutomations(
 /** Scheduler entrypoint. Each run/rule/day is idempotent across processes. */
 export async function runDueCloseAutomations(): Promise<number> {
   const today = new Date().toISOString().slice(0, 10);
-  const due = (await db.execute(sql`
+  const due = (await db.execute<{ org_id: string; id: string }>(sql`
     select distinct r.org_id, r.id
       from close_runs r
       join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
       join orgs organization on organization.id = r.org_id and organization.env_kind = 'production'
      where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 90
-  `)) as unknown as { rows: { org_id: string; id: string }[] };
+  `));
   for (const run of due.rows) {
     await runCloseAutomations({
       orgId: run.org_id,

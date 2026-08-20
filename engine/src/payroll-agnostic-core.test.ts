@@ -214,10 +214,10 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await seedPayrollComponents(org.orgId, actorId, "ZZ");
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{ code: string; system_key: string | null; country: string | null }>(sql`
       select code, system_key, country from pay_components where org_id = ${org.orgId}
       order by sequence, code
-    `)) as unknown as { rows: { code: string; system_key: string | null; country: string | null }[] };
+    `));
 
     // Exactly the jurisdiction-free baseline, all of it country-less; not one
     // statutory component of anybody else's.
@@ -233,7 +233,7 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     // No vacation entitlement plan either: ZZ declares no vacation accrual.
     const plans = (await db.execute(sql`
       select 1 from entitlement_plans where org_id = ${org.orgId} and system_key = 'vacation'
-    `)) as unknown as { rows: unknown[] };
+    `));
     assert.equal(plans.rows.length, 0);
   } finally {
     delete PAYROLL_COUNTRY_PACKS.ZZ;
@@ -491,7 +491,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   });
 
   const snapshot = async () => {
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select s.employee_party_id, s.gross, s.net_pay, s.employer_cost, s.factors,
              l.kind, l.description, l.hours, l.rate, l.amount, l.sequence, c.code
         from pay_stubs s
@@ -499,7 +499,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
         left join pay_components c on c.id = l.component_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        order by s.employee_party_id, l.sequence, l.amount, l.description
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return JSON.stringify(rows.rows);
   };
 
@@ -560,16 +560,14 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // the holiday's week = the committed June 7–20 stub, 80h × $30 = 2,400.00
   // (vacation pay: none). 2,400 ÷ 20 = 120.00 for the day; no hours worked on
   // July 1, so no premium line.
-  const statLines = (await db.execute(sql`
+  const statLines = (await db.execute<{ system_key: string; amount: string; gross: string; employee_party_id: string }>(sql`
     select c.system_key, l.amount, s.gross, s.employee_party_id
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_components c on c.id = l.component_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and c.system_key in ('stat_holiday', 'stat_holiday_premium')
-  `)) as unknown as {
-    rows: { system_key: string; amount: string; gross: string; employee_party_id: string }[];
-  };
+  `));
   assert.equal(statLines.rows.length, 2);
   const ontarioStat = statLines.rows.find((r) => r.employee_party_id === ontarioId);
   assert.ok(ontarioStat);

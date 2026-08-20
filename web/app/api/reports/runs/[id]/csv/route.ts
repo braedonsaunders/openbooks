@@ -12,12 +12,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { user } = gate
   const { id } = await params
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ result_csv: string | null; status: string; slug: string }>(sql`
     select run.result_csv, run.status, def.slug
       from report_runs run
       join report_definitions def on def.id = run.definition_id
      where run.id = ${id} and run.org_id = ${user.orgId}
-  `)) as unknown as { rows: { result_csv: string | null; status: string; slug: string }[] }
+  `))
   const row = r.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (row.status !== 'succeeded' || row.result_csv == null) {

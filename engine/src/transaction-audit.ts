@@ -38,7 +38,7 @@ export async function captureTransactionAuditSnapshot(
   runner: Runner,
   documentId: string,
 ): Promise<TransactionAuditSnapshot | null> {
-  const result = (await runner.execute(sql`
+  const result = (await runner.execute<{ snapshot: TransactionAuditSnapshot }>(sql`
     select jsonb_build_object(
       'document', to_jsonb(d),
       'lines', coalesce((
@@ -93,7 +93,7 @@ export async function captureTransactionAuditSnapshot(
      where d.id = ${documentId}
      limit 1
      for update of d
-  `)) as unknown as { rows: { snapshot: TransactionAuditSnapshot }[] };
+  `));
   return result.rows[0]?.snapshot ?? null;
 }
 

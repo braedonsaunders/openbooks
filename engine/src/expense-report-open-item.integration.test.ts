@@ -49,11 +49,11 @@ test(
 
       const actorId = randomUUID();
       await db.transaction(async (tx) => {
-        const role = (await tx.execute(sql`
+        const role = (await tx.execute<{ id: string }>(sql`
           insert into app_roles (org_id, key, name, is_built_in, permissions)
           values (${org.orgId}, 'accountant', 'accountant', false, '[]'::jsonb)
           on conflict (org_id, key) do update set updated_at = now()
-          returning id`)) as unknown as { rows: { id: string }[] };
+          returning id`));
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${actorId}, ${org.orgId}, ${`clerk-${actorId.slice(0, 8)}@test.local`}, 'AP Clerk', 'x', true)`);
@@ -76,11 +76,9 @@ test(
 
       const entryId = await postDocument(documentId, deps);
 
-      const control = (await db.execute(sql`
+      const control = (await db.execute<{ id: string; amount: string; is_open_item: boolean }>(sql`
         select id, amount::text, is_open_item from journal_lines
-         where entry_id = ${entryId} and account_id = ${employeePayable}`)) as unknown as {
-        rows: { id: string; amount: string; is_open_item: boolean }[];
-      };
+         where entry_id = ${entryId} and account_id = ${employeePayable}`));
       assert.equal(control.rows.length, 1, "expense report must credit the configured employee-payable control");
       assert.equal(control.rows[0]!.is_open_item, true, "control line must be an open item despite its account type");
 

@@ -17,10 +17,10 @@ async function setFramework(orgId: string, framework: "us_gaap" | "ifrs"): Promi
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`)) as unknown as { rows: { bal: string }[] };
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`));
   return toUnits(r.rows[0]!.bal);
 }
 

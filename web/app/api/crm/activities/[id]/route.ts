@@ -45,7 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const current = (await db.execute(sql`select * from crm_activities where id = ${id} and org_id = ${user.orgId}`)) as unknown as { rows: any[] }
+  const current = (await db.execute<any>(sql`select * from crm_activities where id = ${id} and org_id = ${user.orgId}`))
   if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json() as Record<string, any>
   if (body.kind !== undefined && !KINDS.includes(body.kind)) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })

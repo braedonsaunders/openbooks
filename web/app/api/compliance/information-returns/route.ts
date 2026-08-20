@@ -53,9 +53,7 @@ export async function POST(req: Request) {
   const subsidiaryId = body.subsidiaryId && isUuid(body.subsidiaryId) ? body.subsidiaryId : null
 
   const [org] = (
-    (await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-      rows: { base_currency: string }[]
-    }
+    (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
   ).rows
 
   try {

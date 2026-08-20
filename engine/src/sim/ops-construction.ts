@@ -66,11 +66,9 @@ export async function setupProject(
   // profitability/invoicing/backup profiles), not free text. billing_method is
   // only the coarse back-compat classifier (time_and_materials|fixed_price|
   // cost_plus) and is derived from the resolved type.
-  const typeRow = (await db.execute(sql`
+  const typeRow = (await db.execute<{ id: string }>(sql`
     select id from project_types
-     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`));
   const type = typeRow.rows[0];
   if (!type) throw new Error(`no project_type "${method}" — run seedProjectTypes`);
 
@@ -104,10 +102,8 @@ export async function runProgressBilling(
   submitterId: string,
   approverId: string,
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
-  const sov = (await db.execute(sql`
-    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`)) as unknown as {
-    rows: { id: string; scheduled_value: string }[];
-  };
+  const sov = (await db.execute<{ id: string; scheduled_value: string }>(sql`
+    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`));
   const app = await createPayApplication(world.orgId, submitterId, projectId, periodEnd);
   const updates: PayApplicationLineUpdate[] = sov.rows.map((l) => ({
     sovLineId: l.id,
@@ -133,22 +129,20 @@ export async function billFixedPrice(
   invoiceDate: string,
   description = "Milestone billing",
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string; billedToDate: string; contractValue: string }> {
-  const proj = (await db.execute(sql`
+  const proj = (await db.execute<{ customer_id: string | null; name: string; code: string; type_key: string | null; contract: string }>(sql`
     select p.customer_id, p.name, p.code, pt.key as type_key, p.contract_value::text as contract
       from projects p left join project_types pt on pt.id = p.project_type_id
-     where p.id = ${projectId} and p.org_id = ${world.orgId}`)) as unknown as {
-    rows: { customer_id: string | null; name: string; code: string; type_key: string | null; contract: string }[];
-  };
+     where p.id = ${projectId} and p.org_id = ${world.orgId}`));
   const p = proj.rows[0];
   if (!p?.customer_id) throw new Error(`project ${projectId} has no customer to bill`);
   if (p.type_key !== "fixed_price" && p.type_key !== "not_to_exceed") {
     throw new Error(`project ${projectId} is a ${p.type_key ?? "?"} job, not fixed-price/NTE`);
   }
   if (cmp(amount, "0") <= 0) throw new Error("fixed-price billing amount must be greater than zero");
-  const priorRow = (await db.execute(sql`
+  const priorRow = (await db.execute<{ billed: string }>(sql`
     select coalesce(sum(total), 0)::text as billed from documents
      where org_id = ${world.orgId} and kind = 'customer_invoice' and status = 'posted'
-       and custom->'sim'->>'projectId' = ${projectId}`)) as unknown as { rows: { billed: string }[] };
+       and custom->'sim'->>'projectId' = ${projectId}`));
   const priorBilled = priorRow.rows[0]?.billed ?? "0";
   const billedToDate = add(priorBilled, amount);
   if (cmp(billedToDate, p.contract) > 0) {

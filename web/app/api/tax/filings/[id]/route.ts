@@ -18,19 +18,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const updated = await db.transaction(async (tx) => {
-      const before = (await tx.execute(sql`
+      const before = (await tx.execute<{ status: 'prepared' | 'filed' }>(sql`
         select status from tax_filings
-         where id = ${id} and org_id = ${gate.user.orgId} for update`)) as unknown as {
-        rows: { status: 'prepared' | 'filed' }[]
-      }
+         where id = ${id} and org_id = ${gate.user.orgId} for update`))
       if (!before.rows[0]) return null
       if (before.rows[0].status !== 'prepared') throw new Error('already-filed')
-      const result = (await tx.execute(sql`
+      const result = (await tx.execute<{ id: string; filed_at: string }>(sql`
         update tax_filings
            set status = 'filed', filing_reference = ${filingReference || null}, filed_at = now(),
                updated_at = now(), updated_by = ${gate.user.id}
          where id = ${id} and org_id = ${gate.user.orgId}
-        returning id, filed_at`)) as unknown as { rows: { id: string; filed_at: string }[] }
+        returning id, filed_at`))
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'tax_filings', ${id}, 'update',

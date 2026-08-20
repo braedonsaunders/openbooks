@@ -69,13 +69,13 @@ const draftJournalEntry: AssistantToolDef = {
     for (let index = 0; index < a.lines.length; index++) {
       const l = a.lines[index]!;
       const key = l.account.trim();
-      const r = (await db.execute(sql`
+      const r = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
         select id, number, name from accounts
          where is_active and not is_summary
            and (number = ${key} or lower(name) = lower(${key}))
          order by (number = ${key}) desc
          limit 2
-      `)) as unknown as { rows: { id: string; number: string | null; name: string }[] };
+      `));
       if (r.rows.length === 0) {
         return { ok: false, error: `account not found: "${key}" — use find_accounts to locate it` };
       }

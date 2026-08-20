@@ -61,7 +61,7 @@ type CloseRunRow = {
 };
 
 async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.org_id, p.name as period_name, p.fiscal_year, p.period_number,
            p.is_adjustment, r.book_id, b.name as book_name, bp.name as blueprint_name,
            r.status, r.readiness_score, r.target_close_date, r.started_by,
@@ -72,7 +72,7 @@ async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
       join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id
      where r.id = ${subjectId}
-  `)) as unknown as { rows: CloseRunRow[] };
+  `));
   return result.rows[0] ?? null;
 }
 

@@ -60,7 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const owned = (await db.execute(
     sql`select 1 from parties where id = ${partyId} and org_id = ${user.orgId}`,
-  )) as unknown as { rows: unknown[] }
+  ))
   if (owned.rows.length === 0) return NextResponse.json({ error: 'party not found' }, { status: 404 })
 
   const body = (await req.json().catch(() => ({}))) as Body
@@ -72,7 +72,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const country = normalizeCountryCode(body.country) ?? null
 
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into party_bank_accounts
       (org_id, party_id, bank_name, country, currency, routing,
        account_number_encrypted, account_last_four, approval_status, is_active,
@@ -82,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
             'pending', false, null, null, ${user.id}, now(), ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   const accountId = inserted.rows[0]!.id
 
   await runRecordFlows(
@@ -105,11 +105,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ approvalStatus: string; updatedAt: Date }>(sql`
     select approval_status as "approvalStatus", updated_at as "updatedAt"
       from party_bank_accounts
      where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { approvalStatus: string; updatedAt: Date }[] }
+  `))
   if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json().catch(() => ({}))) as Body
@@ -134,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
   // Any material edit re-enters approval: pending + inactive + approval
   // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update party_bank_accounts set
       bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
       country = ${body.country !== undefined ? country : sql`country`},
@@ -151,14 +151,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       and updated_at = ${existing.rows[0].updatedAt}
       and retired_at is null
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (!updated.rows[0]) {
     return NextResponse.json(
       { error: 'these bank details changed or were retired; reload and review the latest revision' },
       { status: 409 },
     )
   }
-  const cancelledRuns = (await db.execute(sql`
+  const cancelledRuns = (await db.execute<{ run_id: string }>(sql`
     update flow_gates
        set status = 'cancelled', updated_at = now()
      where org_id = ${user.orgId}
@@ -166,7 +166,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
        and subject_id = ${accountId}
        and status in ('pending', 'escalated')
      returning run_id
-  `)) as unknown as { rows: { run_id: string }[] }
+  `))
   const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
   if (runIds.length > 0) {
     await db.execute(sql`
@@ -220,7 +220,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
-  const dependencies = (await db.execute(sql`
+  const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
     select
       exists (
         select 1
@@ -236,14 +236,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
            and mandate.party_bank_account_id = ${accountId}
            and mandate.status in ('pending', 'active', 'suspended')
       ) as live_mandate
-  `)) as unknown as { rows: { in_flight_payment: boolean; live_mandate: boolean }[] }
+  `))
   if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
     return NextResponse.json(
       { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
       { status: 422 },
     )
   }
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update party_bank_accounts
        set is_active = false,
            retired_at = now(),
@@ -255,7 +255,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
        and retired_at is null
        and updated_at = ${body.expectedUpdatedAt}
      returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (!updated.rows[0]) {
     return NextResponse.json(
       { error: 'these bank details changed or were already retired; reload and review the latest revision' },

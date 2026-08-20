@@ -60,8 +60,7 @@ export interface PromoteExistingSampleTemplateInput {
   masked?: boolean;
   confirmedSynthetic?: boolean;
 }
-
-interface TemplateRow {
+type TemplateRow = {
   id: string;
   name: string;
   documents: number;
@@ -69,7 +68,7 @@ interface TemplateRow {
   parties: number;
   periods: number;
   adminRoles: number;
-}
+};
 
 const TEMPLATE_MINIMUMS = {
   documents: 8,
@@ -88,7 +87,7 @@ const TEMPLATE_MINIMUMS = {
  */
 async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promise<void> {
   const allowed = await withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ allowed: boolean }>(sql`
       select exists (
         select 1
           from users member
@@ -120,7 +119,7 @@ async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promi
              )
            )
       ) as allowed
-    `)) as unknown as { rows: Array<{ allowed: boolean }> };
+    `));
     return result.rows[0]?.allowed === true;
   });
   if (!allowed) {
@@ -136,7 +135,7 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
   // Content verification happens separately under each candidate's own RLS
   // context below.
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ id: string }>(sql`
       select o.id
         from orgs o
        where o.env_kind in ('production', 'sandbox')
@@ -155,7 +154,7 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
          and not (o.settings ? 'sampleCompany')
        order by coalesce((o.settings->'sampleTemplate'->>'enabled')::boolean, false) desc,
                 o.created_at desc
-    `)) as unknown as { rows: Array<{ id: string }> };
+    `));
     return result.rows;
   });
 }
@@ -288,7 +287,7 @@ async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKin
   // explicit organization context makes PostgreSQL RLS the authoritative
   // boundary even for maintainer-driven template preparation.
   return withOrgContext(orgId, async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<TemplateRow & { envKind: string }>(sql`
       select o.id, o.name, o.env_kind as "envKind",
              (select count(*)::int from documents d where d.org_id = o.id) as documents,
              (select count(*)::int from journal_entries j
@@ -298,7 +297,7 @@ async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKin
              (select count(*)::int from app_roles r
                where r.org_id = o.id and r.key = 'admin') as "adminRoles"
         from orgs o where o.id = ${orgId}
-    `)) as unknown as { rows: Array<TemplateRow & { envKind: string }> };
+    `));
     return result.rows[0] ?? null;
   });
 }
@@ -346,9 +345,9 @@ export async function promoteExistingSampleTemplate(
   }));
   await withOrgTransaction(clone.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
-      const state = (await tx.execute(sql`
+      const state = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
         select settings from orgs where id = ${clone.sandboxOrgId} for update
-      `)) as unknown as { rows: { settings: Record<string, unknown> }[] };
+      `));
       const settings = { ...(state.rows[0]?.settings ?? {}) };
       delete settings.sampleCompany;
       settings.simHarness = true;
@@ -408,7 +407,7 @@ export async function promoteExistingSampleTemplate(
 
 async function existingFor(memberUserId: string, industryKey: string): Promise<{ id: string; name: string } | null> {
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ id: string; name: string }>(sql`
       select o.id, o.name
         from orgs o
         join user_org_access access
@@ -420,7 +419,7 @@ async function existingFor(memberUserId: string, industryKey: string): Promise<{
          and o.settings->'sampleCompany'->>'industryKey' = ${industryKey}
        order by o.created_at asc
        limit 1
-    `)) as unknown as { rows: { id: string; name: string }[] };
+    `));
     return result.rows[0] ?? null;
   });
 }
@@ -428,18 +427,18 @@ async function existingFor(memberUserId: string, industryKey: string): Promise<{
 export async function sampleCompanyStatuses(memberUserId: string): Promise<SampleCompanyStatus[]> {
   const [templates, existing] = await Promise.all([
     withBypassContext(async () => {
-      const result = (await db.execute(sql`
+      const result = (await db.execute<{ profile: string }>(sql`
         select distinct o.settings->'sampleTemplate'->>'profileId' as profile
           from orgs o
          where o.env_kind in ('production', 'sandbox')
            and coalesce((o.settings->'sampleTemplate'->>'enabled')::boolean, false)
            and o.settings->'sampleTemplate'->>'profileId' in ${SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)}
            and not (o.settings ? 'sampleCompany')
-      `)) as unknown as { rows: { profile: string }[] };
+      `));
       return new Set(result.rows.map((row) => row.profile));
     }),
     withBypassContext(async () => {
-      const result = (await db.execute(sql`
+      const result = (await db.execute<{ id: string; industry: string }>(sql`
         select o.id, o.settings->'sampleCompany'->>'industryKey' as industry
           from orgs o
           join user_org_access access
@@ -448,7 +447,7 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
            and access.is_active
          where o.env_kind = 'preview'
            and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
-      `)) as unknown as { rows: { id: string; industry: string }[] };
+      `));
       return new Map(result.rows.map((row) => [row.industry, row.id]));
     }),
   ]);
@@ -555,10 +554,10 @@ async function runSimulatorThroughTransientDatabaseFailures(
 async function markSimulationOraclePassed(orgId: string, profileId: string): Promise<void> {
   await withOrgTransaction(orgId, async () => {
     await db.transaction(async (tx) => {
-      const before = (await tx.execute(sql`
+      const before = (await tx.execute<{ value: unknown }>(sql`
         select settings->'sampleTemplateOracle' as value
           from orgs where id = ${orgId} for update
-      `)) as unknown as { rows: { value: unknown }[] };
+      `));
       const after = {
         version: 1,
         profileId,
@@ -591,9 +590,9 @@ async function markSimulationOraclePassed(orgId: string, profileId: string): Pro
 async function markTemplate(template: TemplateRow, profileId: string): Promise<void> {
   await withOrgTransaction(template.id, async () => {
     await db.transaction(async (tx) => {
-      const before = (await tx.execute(sql`
+      const before = (await tx.execute<{ value: unknown }>(sql`
         select settings->'sampleTemplate' as value from orgs where id = ${template.id} for update
-      `)) as unknown as { rows: { value: unknown }[] };
+      `));
       const current = before.rows[0]?.value;
       const currentCoverage = current && typeof current === "object"
         ? (current as Record<string, unknown>).coverage
@@ -653,18 +652,18 @@ async function finalizePreview(args: {
 }): Promise<void> {
   await withOrgTransaction(args.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
-      const current = (await tx.execute(sql`
+      const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
         select settings from orgs where id = ${args.sandboxOrgId} for update
-      `)) as unknown as { rows: { settings: Record<string, unknown> }[] };
+      `));
       const row = current.rows[0];
       if (!row) throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
 
       const actingUserId = randomUUID();
-      const role = (await tx.execute(sql`
+      const role = (await tx.execute<{ id: string }>(sql`
         select id from app_roles
          where org_id = ${args.sandboxOrgId} and key = 'admin'
          limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (!role.rows[0]) throw new SampleCompanyError("sample template has no administrator role");
 
       await tx.execute(sql`

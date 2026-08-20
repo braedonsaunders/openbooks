@@ -89,7 +89,7 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   currency: string;
   settings?: Record<string, unknown>;
 }): Promise<void> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ format_currency: string | null; rail: string }>(sql`
     select f.currency as format_currency, f.rail
       from payment_formats f
       join accounts a on a.id = ${input.bankAccountId} and a.org_id = f.org_id
@@ -99,7 +99,7 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
          select 1 from subsidiaries s where s.id = ${input.subsidiaryId ?? null} and s.org_id = ${orgId} and s.is_active))
        and (${input.sftpServerId ?? null}::uuid is null or exists (
          select 1 from sftp_servers sv where sv.id = ${input.sftpServerId ?? null} and sv.org_id = ${orgId} and sv.is_active))
-  `)) as unknown as { rows: { format_currency: string | null; rail: string }[] };
+  `));
   const row = result.rows[0];
   if (!row) throw new PaymentError("select active tenant-owned payment, bank, subsidiary, and delivery records");
   if (!/^[A-Z]{3}$/.test(input.currency)) throw new PaymentError("currency must be a three-letter ISO code");
@@ -108,9 +108,9 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   }
   const discountAccountId = input.settings?.discountAccountId;
   if (typeof discountAccountId === "string" && discountAccountId) {
-    const account = (await db.execute(sql`
+    const account = (await db.execute<{ id: string }>(sql`
       select id from accounts where id = ${discountAccountId} and org_id = ${orgId} and is_active and not is_summary
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!account.rows[0]) throw new PaymentError("discount account is invalid or inactive");
   }
   if (row.rail === "positive_pay" && !String(input.settings?.positivePayAccountReference ?? "").trim()) {
@@ -153,9 +153,9 @@ export async function updatePaymentBankProfile(
   userId: string,
   input: Partial<PaymentBankProfileInput>,
 ): Promise<void> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string; originator_secrets_encrypted: string | null; bank_account_id: string; subsidiary_id: string | null; payment_format_id: string; currency: string; settings: Record<string, unknown>; sftp_server_id: string | null }>(sql`
     select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Array<{ id: string; originator_secrets_encrypted: string | null; bank_account_id: string; subsidiary_id: string | null; payment_format_id: string; currency: string; settings: Record<string, unknown>; sftp_server_id: string | null }> };
+  `));
   if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
   const current = existing.rows[0];
   await validatePaymentBankProfileRefs(orgId, {
@@ -220,7 +220,7 @@ async function event(opts: {
 }
 
 export async function submitPaymentRun(runId: string, orgId: string, userId: string): Promise<void> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ status: string }>(sql`
     update payment_runs r set
       status = case when p.require_run_approval then 'pending_approval' else 'approved' end,
       submitted_at = now(), submitted_by = ${userId},
@@ -231,7 +231,7 @@ export async function submitPaymentRun(runId: string, orgId: string, userId: str
     where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
       and p.id = r.payment_bank_profile_id and p.is_active and r.payment_count > 0 and r.total_amount > 0
     returning r.status
-  `)) as unknown as { rows: { status: string }[] };
+  `));
   const row = result.rows[0];
   if (!row) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
   await event({ orgId, runId, eventType: "run_submitted", actorId: userId, fromStatus: "draft", toStatus: row.status });
@@ -246,7 +246,7 @@ export async function decidePaymentRun(
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const next = decision === "approve" ? "approved" : "rejected";
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string }>(sql`
     update payment_runs set
       status = ${next},
       approved_at = case when ${decision} = 'approve' then now() else null end,
@@ -257,7 +257,7 @@ export async function decidePaymentRun(
       updated_at = now(), updated_by = ${userId}
     where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!result.rows[0]) throw new PaymentError("only a run pending approval can be decided");
   await event({ orgId, runId, eventType: `run_${decision}d`, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
 }
@@ -292,15 +292,7 @@ interface FormatContext {
 }
 
 async function loadFormatContext(runId: string, orgId: string): Promise<FormatContext> {
-  const rows = (await db.execute(sql`
-    select r.*, p.name as profile_name, p.settings as profile_settings,
-           p.originator_secrets_encrypted, f.id as format_id, f.code as format_code,
-           f.rail, f.file_extension, f.content_type, f.formatter_script
-      from payment_runs r
-      join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.is_active
-      join payment_formats f on f.id = p.payment_format_id and f.is_active
-     where r.id = ${runId} and r.org_id = ${orgId}
-  `)) as unknown as { rows: Array<Record<string, unknown> & {
+  const rows = (await db.execute<Record<string, unknown> & {
     id: string;
     payment_bank_profile_id: string;
     profile_name: string;
@@ -312,10 +304,28 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
     file_extension: string;
     content_type: string;
     formatter_script: string | null;
-  }> };
+  }>(sql`
+    select r.*, p.name as profile_name, p.settings as profile_settings,
+           p.originator_secrets_encrypted, f.id as format_id, f.code as format_code,
+           f.rail, f.file_extension, f.content_type, f.formatter_script
+      from payment_runs r
+      join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.is_active
+      join payment_formats f on f.id = p.payment_format_id and f.is_active
+     where r.id = ${runId} and r.org_id = ${orgId}
+  `));
   const row = rows.rows[0];
   if (!row) throw new PaymentError("payment run has no active bank profile and format");
-  const payments = (await db.execute(sql`
+  const payments = (await db.execute<{
+    id: string;
+    amount: string;
+    currency: string;
+    payee_party_id: string;
+    display_name: string;
+    routing: Record<string, string>;
+    account_number_encrypted: string | null;
+    reference: string;
+    mandate_reference: string | null;
+  }>(sql`
     select i.id, i.amount, i.currency, i.payee_party_id, p.display_name,
            b.routing, b.account_number_encrypted,
            coalesce(i.payment_reference, d.document_number, i.id::text) as reference,
@@ -327,17 +337,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
       left join payment_mandates m on m.id = i.mandate_id and m.status = 'active'
      where i.payment_run_id = ${runId} and i.status <> 'cancelled'
      order by p.display_name, i.id
-  `)) as unknown as { rows: Array<{
-    id: string;
-    amount: string;
-    currency: string;
-    payee_party_id: string;
-    display_name: string;
-    routing: Record<string, string>;
-    account_number_encrypted: string | null;
-    reference: string;
-    mandate_reference: string | null;
-  }> };
+  `));
   return {
     run: row,
     profile: {
@@ -558,7 +558,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
   if (ctx.format.rail === "positive_pay") return { ...positivePayRegister(ctx), runNumber: String(ctx.run.run_number) };
   if (ctx.format.rail !== "custom") return { ...genericRegister(ctx), runNumber: String(ctx.run.run_number) };
   if (!ctx.format.formatterScript) throw new PaymentError("custom payment format has no formatter script");
-  const org = (await db.execute(sql`select id, name, base_currency from orgs where id = ${orgId}`)) as unknown as { rows: { id: string; name: string; base_currency: string }[] };
+  const org = (await db.execute<{ id: string; name: string; base_currency: string }>(sql`select id, name, base_currency from orgs where id = ${orgId}`));
   const outcome = await runScript(ctx.format.formatterScript, {
     trigger: "payment_format",
     request: { run: ctx.run, profile: ctx.profile, payments: ctx.payments, now: now.toISOString() },
@@ -582,16 +582,16 @@ async function storeArtifactFile(
 ): Promise<{ fileId: string; versionId: string }> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-files:${orgId}`}, 0))`);
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and system_kind = 'payment_files' limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     let folderId = existing.rows[0]?.id;
     if (!folderId) {
-      const created = (await tx.execute(sql`
+      const created = (await tx.execute<{ id: string }>(sql`
         insert into folders (org_id, name, is_system, system_kind, created_by, updated_by)
         values (${orgId}, 'Payment files', true, 'payment_files', ${userId}, ${userId})
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       folderId = created.rows[0]?.id;
     }
     if (!folderId) throw new PaymentError("could not create the payment file cabinet folder");
@@ -634,13 +634,13 @@ export async function generatePaymentFileArtifact(
     throw new PaymentError("approve the payment run before generating its file");
   }
   if (!opts?.reprocessFileId) {
-    const existing = (await db.execute(sql`
+    const existing = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
       select pf.id, pf.filename, pf.content_type, fb.bytes
         from payment_files pf
         join file_blobs fb on fb.version_id = pf.file_version_id
        where pf.payment_run_id = ${runId} and pf.status not in ('superseded', 'voided', 'rejected')
        order by pf.sequence_number desc limit 1
-    `)) as unknown as { rows: { id: string; filename: string; content_type: string; bytes: Buffer }[] };
+    `));
     if (existing.rows[0]) return { id: existing.rows[0].id, filename: existing.rows[0].filename, contentType: existing.rows[0].content_type, content: existing.rows[0].bytes };
   }
   const now = opts?.now ?? new Date();
@@ -648,11 +648,11 @@ export async function generatePaymentFileArtifact(
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
-  const seq = (await db.execute(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId}`)) as unknown as { rows: { n: number }[] };
+  const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId}`));
   const parentId = opts?.reprocessFileId ?? null;
-  const profile = (await db.execute(sql`
+  const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
     select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id}
-  `)) as unknown as { rows: { require_file_approval: boolean }[] };
+  `));
   const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
   const total = sum(ctx.payments.map((p) => p.amount));
   const [artifact] = await db.insert(schema.paymentFiles).values({
@@ -695,7 +695,7 @@ export async function decidePaymentFile(
   reason?: string | null,
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ payment_run_id: string }>(sql`
     update payment_files set
       status = ${decision === "approve" ? "approved" : "rejected"},
       approved_at = case when ${decision} = 'approve' then now() else null end,
@@ -706,15 +706,15 @@ export async function decidePaymentFile(
       updated_at = now(), updated_by = ${userId}
     where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
     returning payment_run_id
-  `)) as unknown as { rows: { payment_run_id: string }[] };
+  `));
   if (!result.rows[0]) throw new PaymentError("only a file pending approval can be decided");
   await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType: `file_${decision}d`, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
 }
 
 export async function recordPaymentFileDownload(fileId: string, orgId: string, userId: string): Promise<void> {
-  const file = (await db.execute(sql`
+  const file = (await db.execute<{ payment_run_id: string }>(sql`
     select payment_run_id from payment_files where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
-  `)) as unknown as { rows: { payment_run_id: string }[] };
+  `));
   if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
   await db.insert(schema.paymentFileDeliveries).values({
     orgId,
@@ -740,10 +740,10 @@ export async function recordPaymentFileSftpDelivery(opts: {
   targetRef: string;
   response?: Record<string, unknown>;
 }): Promise<void> {
-  const file = (await db.execute(sql`
+  const file = (await db.execute<{ payment_run_id: string }>(sql`
     select payment_run_id from payment_files
      where id = ${opts.fileId} and org_id = ${opts.orgId} and status in ('approved', 'delivered')
-  `)) as unknown as { rows: { payment_run_id: string }[] };
+  `));
   if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
   await db.insert(schema.paymentFileDeliveries).values({
     orgId: opts.orgId,
@@ -771,7 +771,7 @@ export async function recordPaymentFileDeliveryFailure(opts: {
   targetRef: string;
   error: string;
 }): Promise<void> {
-  const file = (await db.execute(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`)) as unknown as { rows: { payment_run_id: string }[] };
+  const file = (await db.execute<{ payment_run_id: string }>(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`));
   if (!file.rows[0]) throw new PaymentError("payment file not found");
   await db.insert(schema.paymentFileDeliveries).values({ orgId: opts.orgId, paymentFileId: opts.fileId, channel: opts.channel, targetRef: opts.targetRef, status: "failed", attemptCount: 1, lastAttemptAt: new Date(), error: opts.error, createdBy: opts.userId, updatedBy: opts.userId });
   await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
@@ -779,12 +779,12 @@ export async function recordPaymentFileDeliveryFailure(opts: {
 
 export async function rollbackPaymentRun(runId: string, orgId: string, userId: string, reason: string): Promise<void> {
   if (!reason.trim()) throw new PaymentError("a rollback reason is required");
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ status: string }>(sql`
     update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
      where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
        and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status in ('sent', 'settled', 'returned', 'reversed'))
      returning r.status
-  `)) as unknown as { rows: { status: string }[] };
+  `));
   if (!result.rows[0]) throw new PaymentError("a run can only be rolled back before any payment is posted or settled");
   await db.execute(sql`update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId} where payment_run_id = ${runId} and status not in ('superseded', 'voided')`);
   await event({ orgId, runId, actorId: userId, eventType: "run_rolled_back", toStatus: "rolled_back", details: { reason } });
@@ -801,11 +801,11 @@ export async function recordPaymentSettlement(opts: {
   returnCode?: string | null;
   returnReason?: string | null;
 }): Promise<void> {
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ payment_run_id: string; payment_document_id: string | null; amount: string; currency: string; status: string }>(sql`
     select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
       from payment_instructions i join payment_runs r on r.id = i.payment_run_id
      where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
-  `)) as unknown as { rows: { payment_run_id: string; payment_document_id: string | null; amount: string; currency: string; status: string }[] };
+  `));
   const instruction = row.rows[0];
   if (!instruction) throw new PaymentError("payment instruction not found");
   if (!["sent", "settled", "returned"].includes(instruction.status)) throw new PaymentError("only a sent payment can be settled or returned");
@@ -854,7 +854,11 @@ export async function recordPaymentSettlement(opts: {
 }
 
 export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ scheduleId: string; runId?: string; selected: number; error?: string }>> {
-  const schedules = (await db.execute(sql`
+  const schedules = (await db.execute<{
+    id: string; org_id: string; payment_bank_profile_id: string; cron: string; timezone: string;
+    selection_criteria: Record<string, unknown>; action: string; created_by: string | null;
+    currency: string; subsidiary_id: string | null;
+  }>(sql`
     select s.id, s.org_id, s.payment_bank_profile_id, s.cron, s.timezone, s.selection_criteria,
            s.action, s.created_by, p.currency, p.subsidiary_id
       from payment_schedules s
@@ -862,26 +866,22 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
       join orgs o on o.id = s.org_id and o.env_kind = 'production'
      where s.is_active and s.next_run_at <= ${now}
      order by s.next_run_at
-  `)) as unknown as { rows: Array<{
-    id: string; org_id: string; payment_bank_profile_id: string; cron: string; timezone: string;
-    selection_criteria: Record<string, unknown>; action: string; created_by: string | null;
-    currency: string; subsidiary_id: string | null;
-  }> };
+  `));
   const outcomes: Array<{ scheduleId: string; runId?: string; selected: number; error?: string }> = [];
   for (const schedule of schedules.rows) {
     const next = computeNextRunAt(schedule.cron, now, schedule.timezone);
-    const claimed = (await db.execute(sql`
+    const claimed = (await db.execute<{ id: string }>(sql`
       update payment_schedules set next_run_at = ${next}, last_run_at = ${now}
        where id = ${schedule.id} and next_run_at <= ${now}
        returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!claimed.rows[0]) continue;
     const criteria = schedule.selection_criteria ?? {};
     const dueDays = Math.max(0, Math.min(3650, Number(criteria.dueThroughDays ?? 0)));
     const minimum = String(criteria.minimumAmount ?? "0");
     const maximum = criteria.maximumRunAmount == null || criteria.maximumRunAmount === "" ? null : String(criteria.maximumRunAmount);
     try {
-      const candidates = (await db.execute(sql`
+      const candidates = (await db.execute<{ id: string; open_balance: string }>(sql`
         select d.id, d.open_balance
           from documents d
          where d.org_id = ${schedule.org_id} and d.kind = 'vendor_bill' and d.status = 'posted'
@@ -891,7 +891,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
            and (${schedule.subsidiary_id}::uuid is null or d.subsidiary_id = ${schedule.subsidiary_id})
            and coalesce(d.due_date, d.document_date) <= (${now.toISOString().slice(0, 10)}::date + ${dueDays}::integer)
          order by coalesce(d.due_date, d.document_date), d.document_number
-      `)) as unknown as { rows: { id: string; open_balance: string }[] };
+      `));
       const selected: string[] = [];
       let accumulated = 0n;
       const cap = maximum ? toUnits(maximum) : null;

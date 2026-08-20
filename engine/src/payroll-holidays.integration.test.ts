@@ -169,13 +169,13 @@ test(
       // not have qualified before" half is a fact and not a claim: there is not
       // one approved timesheet day in the thirty before the holiday, so the old
       // 15-of-30 numerator was zero and the day was refused outright.
-      const timesheetDays = (await db.execute(sql`
+      const timesheetDays = (await db.execute<{ days: number }>(sql`
         select count(distinct worked_on)::int as days
           from time_entries
          where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}
            and status = 'approved' and hours > 0
            and worked_on between '2026-06-01' and '2026-06-30'
-      `)) as unknown as { rows: { days: number }[] };
+      `));
       assert.equal(Number(timesheetDays.rows[0]?.days ?? 0), 0);
 
       const lines = await resolveStatutoryHolidayPay(db, holidayInput(fx));

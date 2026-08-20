@@ -18,7 +18,7 @@ type Check = {
 
 export default async function SetupReadinessPage() {
   const { user } = await requirePermission('admin.setup.manage')
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, any>>(sql`
     select o.name, o.legal_name, o.base_currency, o.country, o.settings,
       (select count(*)::int from currencies) as currencies,
       (select count(*)::int from subsidiaries s where s.org_id=o.id and s.parent_id is null) as roots,
@@ -31,7 +31,7 @@ export default async function SetupReadinessPage() {
       (select count(*)::int from journal_entries je where je.org_id=o.id and je.status in ('posted','reversed')) as posted_entries,
       (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
     from orgs o where o.id=${user.orgId}
-  `)) as unknown as { rows: Array<Record<string, any>> }
+  `))
   const org = result.rows[0]
   const settings = (org?.settings ?? {}) as Record<string, any>
   const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>

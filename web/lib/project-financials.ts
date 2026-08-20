@@ -65,7 +65,7 @@ async function rateEngineOverhead(
   cfg: OverheadSource['rateEngine'],
 ): Promise<string> {
   const basis = cfg?.hoursBasis ?? 'total_hours'
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ overhead: string }>(sql`
     select coalesce(sum(round(
              case when o.rate_kind = 'percent'
                   then te.hours * coalesce(te.cost_rate, 0) * o.rate_percent / 100
@@ -82,7 +82,7 @@ async function rateEngineOverhead(
          ? sql`and te.is_billable`
          : basis === 'actual_hours'
            ? sql`and te.costing_basis = 'actual'`
-           : sql``}`)) as unknown as { rows: { overhead: string }[] }
+           : sql``}`))
   return amount(r.rows[0]?.overhead)
 }
 
@@ -90,11 +90,11 @@ async function overheadAdjustments(
   orgId: string,
   projectId: string,
 ): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ adjustment: string }>(sql`
     select coalesce(sum(amount), 0) as adjustment
       from project_overhead_adjustments
      where org_id = ${orgId} and project_id = ${projectId}
-  `)) as unknown as { rows: { adjustment: string }[] }
+  `))
   return amount(r.rows[0]?.adjustment)
 }
 
@@ -110,14 +110,12 @@ async function projectFinancialAdjustments(
   orgId: string,
   projectId: string,
 ): Promise<Record<AdjustableMeasure, string>> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ measure: AdjustableMeasure; amount: string }>(sql`
     select measure, coalesce(sum(amount), 0) as amount
       from project_financial_adjustments
      where org_id = ${orgId} and project_id = ${projectId}
      group by measure
-  `)) as unknown as {
-    rows: Array<{ measure: AdjustableMeasure; amount: string }>
-  }
+  `))
   const adjustments: Record<AdjustableMeasure, string> = {
     actual_cost: '0.0000',
     invoiced_to_date: '0.0000',
@@ -136,7 +134,7 @@ export async function resolveProjectFinancials(
   profile: FinancialProfile,
 ): Promise<ProjectFinancials> {
   // Project header (contract value + markup + billing method).
-  const projRow = (await db.execute(sql`
+  const projRow = (await db.execute<{ contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string }>(sql`
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
            coalesce(pt.key, 'time_and_materials') as project_type,
@@ -144,7 +142,7 @@ export async function resolveProjectFinancials(
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string }[] }
+  `))
   const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0' }
   const contractValue = amount(proj.contract_value)
   const projectMarkupPercent = amount(proj.markup_percent)
@@ -184,7 +182,7 @@ export async function resolveProjectFinancials(
   const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
     // invoicedToDate — effective line tagging (line override, then header
     // inheritance), matching the posting kernel's dimension semantics.
-    db.execute(sql`
+    db.execute<any>(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
            - coalesce(sum(dl.amount) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced
         from document_lines dl join documents d on d.id = dl.document_id
@@ -193,7 +191,7 @@ export async function resolveProjectFinancials(
          and d.status = 'posted'
          and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})`),
     // actualCost + revenuePosted — posted GL tagged to the project.
-    db.execute(sql`
+    db.execute<any>(sql`
       select coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
         from journal_lines l
@@ -203,7 +201,7 @@ export async function resolveProjectFinancials(
     // committedCost — unbilled portion (by line amount) of open (approved)
     // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
     // migrated orders often carry the amount but no per-unit price.
-    db.execute(sql`
+    db.execute<any>(sql`
       select coalesce(sum(
                case when d.kind = 'project_charge'
                     then coalesce(dl.cost_amount, dl.amount)
@@ -232,7 +230,7 @@ export async function resolveProjectFinancials(
     // Billable time is selling-value evidence independent of invoice amount.
     // Fixed/progress invoices often have no one-to-one time-line relationship,
     // so total price cannot be reconstructed as invoice + unbilled time.
-    db.execute(sql`
+    db.execute<any>(sql`
       select coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as total_bill,
              coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as total_cost,
              coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4))
@@ -244,7 +242,7 @@ export async function resolveProjectFinancials(
          and te.status = 'approved' and te.is_billable`),
     // Billable cost is likewise all eligible work, with its unbilled subset
     // retained separately for invoicing/backlog presentation.
-    db.execute(sql`
+    db.execute<any>(sql`
       select coalesce(sum(
                case
                  when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
@@ -299,36 +297,36 @@ export async function resolveProjectFinancials(
            or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))`),
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
-      ? db.execute(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id
+      ? db.execute<any>(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id
            where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'`)
       : profile.laborCost.source === 'time_rate'
-        ? db.execute(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+        ? db.execute<any>(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
         : profile.laborCost.source === 'estimated_time_rate'
-          ? db.execute(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
+          ? db.execute<any>(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
                where te.org_id = ${orgId} and te.project_id = ${projectId}
                  and te.status = 'approved' and te.costing_basis = 'estimated'`)
-        : db.execute(sql`select 0 as labor`),
+        : db.execute<any>(sql`select 0 as labor`),
     // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
     profile.overhead.method !== 'posted_gl_account_group'
-      ? db.execute(sql`select 0 as overhead`)
-      : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
+      ? db.execute<any>(sql`select 0 as overhead`)
+      : db.execute<any>(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
     // project approved labor hours (base for per-hour / rate-engine overhead).
-    db.execute(sql`select coalesce(sum(te.hours), 0) as total,
+    db.execute<any>(sql`select coalesce(sum(te.hours), 0) as total,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
     // cost by account (for the breakdown subtab) — same cost predicate.
-    db.execute(sql`
+    db.execute<any>(sql`
       select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${costPredicate(profile.actualCost, costIds)}
        group by a.id, a.number, a.name, a.type having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
     // documents on the project (transactions tab).
-    db.execute(sql`
+    db.execute<any>(sql`
       select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
              d.status, pt.display_name as "partyName",
              case when d.kind = 'project_charge'
@@ -341,7 +339,7 @@ export async function resolveProjectFinancials(
        where d.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
        group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
-  ]) as unknown as { rows: any[] }[]
+  ])
 
   const [adjustments, directSubcontractCommitment] = await Promise.all([
     financialAdjustmentsPromise,

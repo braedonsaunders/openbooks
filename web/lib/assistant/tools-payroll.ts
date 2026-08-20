@@ -65,12 +65,12 @@ const listPayRuns: AssistantToolDef = {
     }
     const a = raw as { limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
-    const runs = (await db.execute(sql`
+    const runs = (await db.execute<Record<string, unknown>>(sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId}
        order by r.pay_date desc, d.document_number desc
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: { returned: runs.rows.length, runs: runs.rows.map(payRunRow), href: "/payroll/runs" },
@@ -90,10 +90,10 @@ const getPayRun: AssistantToolDef = {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { documentId: string };
-    const runs = (await db.execute(sql`
+    const runs = (await db.execute<Record<string, unknown>>(sql`
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId} and r.document_id = ${a.documentId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const run = runs.rows[0];
     if (!run) return { ok: false, error: "pay_run_not_found" };
     const readiness = await payRunReadiness(authz.user.orgId, a.documentId);
@@ -217,7 +217,7 @@ const listPayrollEmployees: AssistantToolDef = {
     // Summary columns only — the confidential election facts (claim amounts,
     // exemptions, additional withholding) and the sealed government-id
     // columns on this table are deliberately not selected.
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select prof.id, prof.employee_party_id, p.display_name as employee_name,
              prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
              prof.pay_basis, prof.is_active, prof.stub_delivery, prof.payment_method,
@@ -230,7 +230,7 @@ const listPayrollEmployees: AssistantToolDef = {
          ${like ? sql` and p.display_name ilike ${like}` : sql``}
        order by p.display_name
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {
@@ -271,10 +271,10 @@ const payrollEntitlements: AssistantToolDef = {
       return { ok: false, error: "payroll_feature_disabled" };
     }
     const a = raw as { employeePartyId: string; asOfDate?: string };
-    const exists = (await db.execute(sql`
+    const exists = (await db.execute<{ display_name: string }>(sql`
       select display_name from parties
        where org_id = ${authz.user.orgId} and id = ${a.employeePartyId}
-    `)) as unknown as { rows: { display_name: string }[] };
+    `));
     if (!exists.rows[0]) return { ok: false, error: "employee_not_found" };
     const balances = await entitlementBalances(authz.user.orgId, a.employeePartyId, a.asOfDate);
     const capped = capList(

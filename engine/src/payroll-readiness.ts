@@ -64,8 +64,13 @@ export interface PayRunReadiness {
   /** Employees in scope after exclusions — the run's actual population. */
   included: number;
 }
+/** The columns the statutory-rate scope check reads off a payroll population. */
+type RateScopeRow = Pick<
+  ScopeRow,
+  "employee_party_id" | "name" | "country" | "province" | "filing_account_id"
+>;
 
-interface ScopeRow {
+type ScopeRow = {
   employee_party_id: string;
   name: string;
   pay_basis: string;
@@ -90,9 +95,8 @@ interface ScopeRow {
    * rate) resolve against it.
    */
   filing_account_id: string | null;
-}
-
-interface RunRow {
+};
+type RunRow = {
   pay_schedule_id: string;
   period_start: string;
   period_end: string;
@@ -101,16 +105,16 @@ interface RunRow {
   run_type: string;
   run_status: string;
   subsidiary_id: string | null;
-}
+};
 
 async function runContext(orgId: string, documentId: string): Promise<RunRow | null> {
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<RunRow>(sql`
     select r.pay_schedule_id, r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.tax_year, r.run_type, r.run_status, s.subsidiary_id
       from pay_runs r
       join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as { rows: RunRow[] };
+  `));
   return runs.rows[0] ?? null;
 }
 
@@ -124,7 +128,7 @@ async function runContext(orgId: string, documentId: string): Promise<RunRow | n
  * one that will be paid makes every per-employee count on this screen wrong.
  */
 async function scope(orgId: string, documentId: string, run: RunRow): Promise<ScopeRow[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<ScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            prof.province, prof.labour_jurisdiction,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
@@ -169,7 +173,7 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
           where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
             and a.adjustment_type = 'exclude' and a.employee_party_id = p.id)
      order by p.display_name
-  `)) as unknown as { rows: ScopeRow[] };
+  `));
   return rows.rows;
 }
 
@@ -188,10 +192,10 @@ export async function installedPayrollCountries(
   if (Array.isArray((payrollBlob as { countries?: unknown }).countries)) {
     return ((payrollBlob as { countries: unknown[] }).countries).map(String);
   }
-  return ((await db.execute(sql`
+  return ((await db.execute<{ country: string }>(sql`
     select distinct country from pay_components
      where org_id = ${orgId} and system_key is not null and country is not null
-  `)) as unknown as { rows: { country: string }[] }).rows.map((row) => row.country);
+  `))).rows.map((row) => row.country);
 }
 
 /**
@@ -232,9 +236,9 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   const setupHref = "/admin/setup/payroll";
   const checks: PayrollSetupCheck[] = [];
 
-  const blobRes = (await db.execute(sql`
+  const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
     select settings->'payroll' as p from orgs where id = ${orgId}
-  `)) as unknown as { rows: { p: Record<string, unknown> | null }[] };
+  `));
   const blob = blobRes.rows[0]?.p ?? {};
   const installed = await installedPayrollCountries(orgId, blob);
   const settings = await payrollSettings(orgId);
@@ -252,9 +256,9 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
     ok: Boolean(settings.netPayAccountId), href: `${setupHref}?tab=accounts`,
   });
   if (settings.wagesTo === "labor_clearing") {
-    const clearing = (await db.execute(sql`
+    const clearing = (await db.execute<{ id: string | null }>(sql`
       select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
-    `)) as unknown as { rows: { id: string | null }[] };
+    `));
     checks.push({
       severity: "blocker", code: "setup.laborClearing",
       ok: Boolean(clearing.rows[0]?.id), href: setupHref,
@@ -279,10 +283,10 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   }
 
   // A run needs a pay calendar to exist at all.
-  const schedules = (await db.execute(sql`
+  const schedules = (await db.execute<{ ok: boolean }>(sql`
     select exists (
       select 1 from pay_schedules where org_id = ${orgId} and is_active) as ok
-  `)) as unknown as { rows: { ok: boolean }[] };
+  `));
   checks.push({
     severity: "blocker", code: "setup.schedule",
     ok: Boolean(schedules.rows[0]?.ok), href: `${setupHref}?tab=schedules`,
@@ -391,17 +395,17 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   if (!settings.wageExpenseAccountId) flag("blocker", "setup.wageExpense", [], { href: setupHref });
   if (!settings.netPayAccountId) flag("blocker", "setup.netPay", [], { href: setupHref });
   if (settings.wagesTo === "labor_clearing") {
-    const clearing = (await db.execute(sql`
+    const clearing = (await db.execute<{ id: string | null }>(sql`
       select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
-    `)) as unknown as { rows: { id: string | null }[] };
+    `));
     if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: setupHref });
   }
 
   // Every statutory slot of every pack the run's people belong to must resolve
   // to a liability account, or the commit has nowhere to credit withholdings.
-  const blob = (await db.execute(sql`
+  const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
     select settings->'payroll' as p from orgs where id = ${orgId}
-  `)) as unknown as { rows: { p: Record<string, unknown> | null }[] };
+  `));
   const legacy = blob.rows[0]?.p ?? {};
   const installed = await installedPayrollCountries(orgId, legacy);
   const countriesInRun = new Set(people.map((p) => p.country));
@@ -472,7 +476,7 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   }
 
   // --- Period control: posting into a closed period fails at post ---------
-  const lock = (await db.execute(sql`
+  const lock = (await db.execute<{ name: string; state: string }>(sql`
     select p.name, coalesce(l.state, 'open') as state
       from accounting_periods p
       join accounting_books b on b.org_id = p.org_id and b.is_primary and b.is_active
@@ -483,7 +487,7 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
        and p.is_adjustment = false
      order by (l.subsidiary_id is not null) desc
      limit 1
-  `)) as unknown as { rows: { name: string; state: string }[] };
+  `));
   if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date });
   else if (lock.rows[0].state !== "open") {
     flag("blocker", "period.closed", [], { detail: lock.rows[0].name, href: "/admin/close" });
@@ -618,20 +622,23 @@ const currentTaxYear = (country: string): number =>
  * made of: country, region, and the filing identity the employee is paid under.
  * Used where there is no run to scope by (the setup state, the rates surface).
  */
-async function activePayrollPopulation(orgId: string): Promise<ScopeRow[]> {
-  const rows = (await db.execute(sql`
+/**
+ * The regions and filing accounts the org's active payroll actually occupies.
+ *
+ * This selects only the columns the statutory-rate check reads. It used to
+ * claim `ScopeRow[]`, which also declares `pay_basis`, `labour_jurisdiction`
+ * and the per-run readiness flags — none of which this query selects, so those
+ * fields were `undefined` behind a type that promised otherwise.
+ */
+async function activePayrollPopulation(orgId: string): Promise<RateScopeRow[]> {
+  const rows = (await db.execute<RateScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active
-  `)) as unknown as {
-    rows: {
-      employee_party_id: string; name: string; country: string;
-      province: string | null; filing_account_id: string | null;
-    }[];
-  };
-  return rows.rows as unknown as ScopeRow[];
+  `));
+  return rows.rows;
 }
 
 /**
@@ -660,7 +667,7 @@ async function unconfiguredRatesForRun(
   orgId: string,
   country: string,
   taxYear: number,
-  people: readonly ScopeRow[],
+  people: readonly RateScopeRow[],
 ): Promise<UnconfiguredStatutoryRate[]> {
   let resolution;
   try {
@@ -714,13 +721,13 @@ async function flagMissingOpeningBalances(args: {
      where other.org_id = ${orgId} and other.tax_year = ${run.tax_year}
        and other.run_status = 'committed' and other.document_id <> ${documentId}
      limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (prior.rows.length > 0) return; // not the first committed run of the year
 
-  const entered = (await db.execute(sql`
+  const entered = (await db.execute<{ employee_party_id: string }>(sql`
     select employee_party_id from payroll_opening_balances
      where org_id = ${orgId} and tax_year = ${run.tax_year}
-  `)) as unknown as { rows: { employee_party_id: string }[] };
+  `));
   const have = new Set(entered.rows.map((r) => r.employee_party_id));
 
   // Someone hired on or after this period started cannot have been paid by
@@ -745,7 +752,7 @@ async function flagMissingOpeningBalances(args: {
   // SECOND full annual limit and the excess is the employer's to unwind — which
   // is why it is worth a separate line rather than being folded into the row
   // warning that has already gone quiet.
-  const capped = (await db.execute(sql`
+  const capped = (await db.execute<{ code: string; employee_party_id: string }>(sql`
     select distinct c.code, epc.employee_party_id
       from employee_pay_components epc
       join pay_components c on c.id = epc.component_id and c.org_id = epc.org_id
@@ -759,7 +766,7 @@ async function flagMissingOpeningBalances(args: {
           where oc.org_id = epc.org_id and oc.component_id = epc.component_id
             and b.employee_party_id = epc.employee_party_id and b.tax_year = ${run.tax_year})
      order by c.code
-  `)) as unknown as { rows: { code: string; employee_party_id: string }[] };
+  `));
   if (capped.rows.length > 0) {
     const byPerson = new Map(people.map((p) => [p.employee_party_id, p]));
     const byComponent = new Map<string, ScopeRow[]>();
@@ -815,18 +822,18 @@ async function flagMissingEntitlementOpenings(args: {
   if (people.length === 0) return;
 
   // Employees with a carry-in somewhere else: the adoption evidence.
-  const carried = (await db.execute(sql`
+  const carried = (await db.execute<{ employee_party_id: string }>(sql`
     select b.employee_party_id from payroll_opening_balances b
      where b.org_id = ${orgId} and b.tax_year = ${run.tax_year}
     union
     select l.employee_party_id from entitlement_ledger l
      where l.org_id = ${orgId} and l.kind = 'opening'
-  `)) as unknown as { rows: { employee_party_id: string }[] };
+  `));
   const adopted = new Set(carried.rows.map((r) => r.employee_party_id));
   if (adopted.size === 0) return;
 
   // Plans no committed run has ever moved: this run is the plan's first.
-  const virgin = (await db.execute(sql`
+  const virgin = (await db.execute<{ id: string; code: string; name: string }>(sql`
     select pl.id, pl.code, pl.name from entitlement_plans pl
      where pl.org_id = ${orgId} and pl.is_active
        and not exists (
@@ -835,13 +842,13 @@ async function flagMissingEntitlementOpenings(args: {
           where l.org_id = pl.org_id and l.plan_id = pl.id
             and r.run_status = 'committed' and l.pay_run_document_id <> ${documentId})
      order by pl.code
-  `)) as unknown as { rows: { id: string; code: string; name: string }[] };
+  `));
   if (virgin.rows.length === 0) return;
 
-  const openings = (await db.execute(sql`
+  const openings = (await db.execute<{ plan_id: string; employee_party_id: string }>(sql`
     select plan_id, employee_party_id from entitlement_ledger
      where org_id = ${orgId} and kind = 'opening'
-  `)) as unknown as { rows: { plan_id: string; employee_party_id: string }[] };
+  `));
   const have = new Set(openings.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
   for (const plan of virgin.rows) {
@@ -900,7 +907,15 @@ export async function payRunStaleness(
   orgId: string,
   documentId: string,
 ): Promise<PayRunStaleness> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      calculated_at: Date | string | null; never_calculated: boolean;
+      adjustments_changed: boolean; time_changed: boolean;
+      wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
+      components_changed: boolean; component_definitions_changed: boolean;
+      derived_rules_changed: boolean; entitlements_changed: boolean;
+      worker_comp_changed: boolean; time_types_changed: boolean;
+      settings_changed: boolean; ytd_changed: boolean;
+    }>(sql`
     select r.calculated_at,
            r.calculated_at is null as never_calculated,
            exists (
@@ -1013,17 +1028,7 @@ export async function payRunStaleness(
                    where os.pay_run_document_id = other.document_id)) as ytd_changed
       from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as {
-    rows: {
-      calculated_at: Date | string | null; never_calculated: boolean;
-      adjustments_changed: boolean; time_changed: boolean;
-      wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
-      components_changed: boolean; component_definitions_changed: boolean;
-      derived_rules_changed: boolean; entitlements_changed: boolean;
-      worker_comp_changed: boolean; time_types_changed: boolean;
-      settings_changed: boolean; ytd_changed: boolean;
-    }[];
-  };
+  `));
   const row = rows.rows[0];
   // A missing run is not a fresh run. Fail closed and say why.
   if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
@@ -1099,12 +1104,12 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
   const run = await runContext(orgId, documentId);
   const payDate = run?.pay_date ?? new Date().toISOString().slice(0, 10);
 
-  const totals = (await db.execute(sql`
+  const totals = (await db.execute<{ net: string; gross: string; employer: string }>(sql`
     select coalesce(sum(net_pay), 0)::text as net,
            coalesce(sum(gross), 0)::text as gross,
            coalesce(sum(employer_cost), 0)::text as employer
       from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-  `)) as unknown as { rows: { net: string; gross: string; employer: string }[] };
+  `));
   const t = totals.rows[0] ?? { net: "0", gross: "0", employer: "0" };
   // Liabilities = what the run owes but does not pay today: employee
   // withholdings (gross − net) plus the employer-side accruals.
@@ -1118,7 +1123,7 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
     return { method, netPay: sum(mine.map((s) => s.netPay)), employees: mine.length };
   });
 
-  const accounts = (await db.execute(sql`
+  const accounts = (await db.execute<{ id: string; label: string; balance: string }>(sql`
     select a.id, coalesce(a.number || ' · ', '') || a.name as label,
            coalesce(bal.amount, 0)::text as balance
       from accounts a
@@ -1129,7 +1134,7 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
          where jl.org_id = a.org_id and jl.account_id = a.id) bal on true
      where a.org_id = ${orgId} and a.is_active and not a.is_summary and a.type = 'asset_bank'
      order by a.number nulls last, a.name
-  `)) as unknown as { rows: { id: string; label: string; balance: string }[] };
+  `));
 
   return {
     netPay: t.net,
@@ -1165,7 +1170,12 @@ export interface StubChange {
  * where errors survive — so compare the component sets, not just net pay.
  */
 export async function payRunChanges(orgId: string, documentId: string): Promise<StubChange[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      employee_party_id: string; name: string; gross: string; net_pay: string;
+      prev_gross: string | null; prev_net: string | null; prev_pay_date: string | null;
+      current_lines: { d: string; a: string; h: string | null }[] | null;
+      previous_lines: { d: string; a: string; h: string | null }[] | null;
+    }>(sql`
     with current_stub as (
       select s.id, s.employee_party_id, p.display_name as name, s.gross, s.net_pay
         from pay_stubs s
@@ -1189,14 +1199,7 @@ export async function payRunChanges(orgId: string, documentId: string): Promise<
       from current_stub c
       left join previous_stub pv on pv.employee_party_id = c.employee_party_id
      order by c.name
-  `)) as unknown as {
-    rows: {
-      employee_party_id: string; name: string; gross: string; net_pay: string;
-      prev_gross: string | null; prev_net: string | null; prev_pay_date: string | null;
-      current_lines: { d: string; a: string; h: string | null }[] | null;
-      previous_lines: { d: string; a: string; h: string | null }[] | null;
-    }[];
-  };
+  `));
 
   const fold = (lines: { d: string; a: string; h: string | null }[] | null) => {
     const map = new Map<string, { amount: string; hours: string }>();

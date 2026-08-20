@@ -20,11 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const format = new URL(req.url).searchParams.get('format')?.toLowerCase() ?? 'pdf'
   if (!['pdf', 'xlsx', 'csv'].includes(format)) return NextResponse.json({ error: 'invalid format' }, { status: 422 })
 
-  const saved = (await db.execute(sql`
-    select form_code, form_name, period_from::text, period_to::text, submission_channel,
-           boxes, snapshot_hash, version
-      from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`)) as unknown as {
-    rows: {
+  const saved = (await db.execute<{
       form_code: string
       form_name: string
       period_from: string
@@ -33,8 +29,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       boxes: { lineCode: string; label: string; value: string; computed: boolean; editable: boolean }[]
       snapshot_hash: string
       version: number
-    }[]
-  }
+    }>(sql`
+    select form_code, form_name, period_from::text, period_to::text, submission_channel,
+           boxes, snapshot_hash, version
+      from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`))
   const row = saved.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const t = (await getTranslations('tax')) as unknown as Translator

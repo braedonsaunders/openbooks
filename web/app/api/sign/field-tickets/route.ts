@@ -41,14 +41,12 @@ export async function POST(req: Request) {
     if (!(await validateSigningRequest(String(body.token ?? ''), verified))) {
       return NextResponse.json({ error: 'This signing request is no longer available' }, { status: 422 })
     }
-    const doc = (await db.execute(sql`
+    const doc = (await db.execute<{ id: string; status: string; document_number: string }>(sql`
       select d.id, d.status, d.document_number
         from documents d
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${verified.ticketId} and d.org_id = ${verified.orgId}
-         and d.kind = 'field_ticket'`)) as unknown as {
-      rows: { id: string; status: string; document_number: string }[]
-    }
+         and d.kind = 'field_ticket'`))
     const row = doc.rows[0]
     if (!row) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
     if (row.status !== 'approved') return NextResponse.json({ error: 'This ticket is not open for signing' }, { status: 422 })
@@ -80,14 +78,14 @@ export async function POST(req: Request) {
            and role = 'customer'
       `)
       if (current.rows.length) return false
-      const inserted = (await db.execute(sql`
+      const inserted = (await db.execute<{ id: string }>(sql`
         insert into field_ticket_signatures
           (org_id, field_ticket_id, role, signer_name, comment,
            signature_file_id, signed_at, created_by)
         values (${verified.orgId}, ${verified.ticketId}, 'customer', ${name},
                 ${comment}, ${file.id}, ${acceptedAt}, null)
         returning id
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       await db.execute(sql`
         update field_ticket_signature_requests
            set responded_at = ${acceptedAt}

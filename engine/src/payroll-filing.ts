@@ -41,14 +41,14 @@ export async function listFilingAccounts(
   orgId: string,
   country?: string,
 ): Promise<PayrollFilingAccount[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select id, country, program_type, account_number, name, remitter_type,
            subsidiary_id, state_code, is_default, is_active
       from payroll_filing_accounts
      where org_id = ${orgId} and is_active
        and (${country ?? null}::text is null or country = ${country ?? null})
      order by is_default desc, account_number
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map(toAccount);
 }
 

@@ -411,7 +411,13 @@ export async function loadWorkSchedules(
   tx: Pick<typeof db, "execute">,
   orgId: string,
 ): Promise<WorkScheduleRow[]> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute<{
+      id: string; name: string | null; employee_party_id: string | null; job_title: string | null;
+      trade_id: string | null; department_id: string | null; subsidiary_id: string | null;
+      pattern: WorkPattern; cycle_days: number | null; cycle_anchor: string | Date | null;
+      effective_from: string | Date; effective_to: string | Date | null; is_active: boolean;
+      days: { dayIndex: number; hours: string }[] | null;
+    }>(sql`
     select s.id, s.name, s.employee_party_id, s.job_title, s.trade_id, s.department_id,
            s.subsidiary_id, s.pattern, s.cycle_days, s.cycle_anchor,
            s.effective_from, s.effective_to, s.is_active,
@@ -424,15 +430,7 @@ export async function loadWorkSchedules(
       from work_schedules s
      where s.org_id = ${orgId}
      order by s.effective_from, s.id
-  `)) as unknown as {
-    rows: {
-      id: string; name: string | null; employee_party_id: string | null; job_title: string | null;
-      trade_id: string | null; department_id: string | null; subsidiary_id: string | null;
-      pattern: WorkPattern; cycle_days: number | null; cycle_anchor: string | Date | null;
-      effective_from: string | Date; effective_to: string | Date | null; is_active: boolean;
-      days: { dayIndex: number; hours: string }[] | null;
-    }[];
-  };
+  `));
   return rows.rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -471,18 +469,16 @@ export async function resolveWorkSchedule(
 ): Promise<ResolvedWorkSchedule | null> {
   let keys = scope;
   if (!keys) {
-    const employee = (await tx.execute(sql`
+    const employee = (await tx.execute<{
+        job_title: string | null; trade_id: string | null;
+        department_id: string | null; subsidiary_id: string | null;
+      }>(sql`
       select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
        limit 1
-    `)) as unknown as {
-      rows: {
-        job_title: string | null; trade_id: string | null;
-        department_id: string | null; subsidiary_id: string | null;
-      }[];
-    };
+    `));
     const found = employee.rows[0];
     keys = {
       jobTitle: found?.job_title ?? null,

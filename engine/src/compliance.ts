@@ -86,7 +86,7 @@ const FAILING_STATES: ReadonlySet<ComplianceState> = new Set<ComplianceState>([
   "rejected",
 ]);
 
-export interface RequirementPolicy {
+export type RequirementPolicy = {
   id: string;
   code: string;
   name: string;
@@ -104,9 +104,9 @@ export interface RequirementPolicy {
   graceDays: number;
   expiryWarningDays: number;
   requiresVerification: boolean;
-}
+};
 
-export interface EvidenceRecord {
+export type EvidenceRecord = {
   id: string;
   requirementId: string;
   /** Project-specific certificate (wrap/OCIP policy); null = vendor-wide. */
@@ -121,16 +121,16 @@ export interface EvidenceRecord {
   waiverOfSubrogation: boolean;
   primaryNoncontributory: boolean;
   verifiedAt: string | null;
-}
+};
 
-export interface WaiverRecord {
+export type WaiverRecord = {
   id: string;
   requirementId: string;
   projectId: string | null;
   effectiveFrom: string;
   expiresOn: string;
   revokedAt: string | null;
-}
+};
 
 export interface RequirementFinding {
   requirementId: string;
@@ -403,7 +403,7 @@ export function evaluateVendorCompliance(args: {
 // Lien-waiver coverage
 // ---------------------------------------------------------------------------
 
-export interface LienWaiverEvidence {
+export type LienWaiverEvidence = {
   id: string;
   waiverNumber: string;
   status: "draft" | "requested" | "received" | "signed" | "rejected" | "void";
@@ -413,7 +413,7 @@ export interface LienWaiverEvidence {
   amount: string;
   currency: string;
   billDocumentId: string | null;
-}
+};
 
 export interface LienWaiverCoverage {
   enforcement: LienWaiverEnforcement;
@@ -524,10 +524,10 @@ export async function complianceFeatureEnabled(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<boolean> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'subcontractorCompliance')::boolean, false) as enabled
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { enabled: boolean }[] };
+  `));
   return Boolean(r.rows[0]?.enabled);
 }
 
@@ -539,7 +539,7 @@ export async function loadRequirementPolicies(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<RequirementPolicy[]> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<RequirementPolicy>(sql`
     select id, code, name, category, class_id as "classId",
            requires_expiry as "requiresExpiry",
            min_coverage_amount as "minCoverageAmount",
@@ -554,7 +554,7 @@ export async function loadRequirementPolicies(
       from compliance_requirements
      where org_id = ${orgId} and is_active
      order by category, code
-  `)) as unknown as { rows: RequirementPolicy[] };
+  `));
   return r.rows;
 }
 
@@ -573,14 +573,14 @@ export async function loadVendorComplianceInputs(
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<VendorComplianceInputs> {
   const [role, records, waivers, lienWaivers] = (await Promise.all([
-    runner.execute(sql`
+    runner.execute<{ classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }>(sql`
       select vr.compliance_class_id as "classId",
              coalesce(cc.lien_waiver_enforcement, 'none') as "lienWaiverEnforcement"
         from vendor_roles vr
         left join compliance_classes cc
                on cc.id = vr.compliance_class_id and cc.org_id = vr.org_id and cc.is_active
        where vr.org_id = ${orgId} and vr.party_id = ${partyId}`),
-    runner.execute(sql`
+    runner.execute<EvidenceRecord>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId", status,
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              coverage_amount as "coverageAmount", aggregate_amount as "aggregateAmount",
@@ -591,25 +591,20 @@ export async function loadVendorComplianceInputs(
              verified_at as "verifiedAt"
         from compliance_records
        where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`),
-    runner.execute(sql`
+    runner.execute<WaiverRecord>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              revoked_at as "revokedAt"
         from compliance_waivers
        where org_id = ${orgId} and party_id = ${partyId} and revoked_at is null`),
-    runner.execute(sql`
+    runner.execute<LienWaiverEvidence>(sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
              amount, currency, bill_document_id as "billDocumentId"
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
          and status = 'signed'`),
-  ])) as unknown as [
-    { rows: { classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }[] },
-    { rows: EvidenceRecord[] },
-    { rows: WaiverRecord[] },
-    { rows: LienWaiverEvidence[] },
-  ];
+  ]));
   return {
     classId: role.rows[0]?.classId ?? null,
     lienWaiverEnforcement: role.rows[0]?.lienWaiverEnforcement ?? "none",

@@ -50,14 +50,14 @@ test(
            1, 100, 100, 0, false, 0, 0, '{}'::jsonb, false, '{}'::jsonb)
       `);
       const entryId = await postDocument(documentId, deps);
-      const before = (await db.execute(sql`
+      const before = (await db.execute<Record<string, unknown>>(sql`
         select jl.id, jl.line_number, jl.account_id, jl.amount::text,
                jl.currency, jl.txn_amount::text, jl.fx_rate::text,
                jl.party_id, jl.is_open_item
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `)) as unknown as { rows: Record<string, unknown>[] };
+      `));
 
       await assert.rejects(
         db.transaction((tx) =>
@@ -127,38 +127,36 @@ test(
           /in-place regeneration is forbidden/.test(error.message),
       );
 
-      const after = (await db.execute(sql`
+      const after = (await db.execute<Record<string, unknown>>(sql`
         select jl.id, jl.line_number, jl.account_id, jl.amount::text,
                jl.currency, jl.txn_amount::text, jl.fx_rate::text,
                jl.party_id, jl.is_open_item
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `)) as unknown as { rows: Record<string, unknown>[] };
+      `));
       assert.deepEqual(after.rows, before.rows, "posted journal evidence never changed");
-      const persisted = (await db.execute(sql`
-        select currency, subtotal::text, total::text, memo
-          from documents
-         where id = ${documentId} and org_id = ${org.orgId}
-      `)) as unknown as {
-        rows: {
+      const persisted = (await db.execute<{
           currency: string;
           subtotal: string;
           total: string;
           memo: string | null;
-        }[];
-      };
+        }>(sql`
+        select currency, subtotal::text, total::text, memo
+          from documents
+         where id = ${documentId} and org_id = ${org.orgId}
+      `));
       assert.deepEqual(persisted.rows[0], {
         currency: "CAD",
         subtotal: "100.0000",
         total: "100.0000",
         memo: "Non-financial source metadata",
       });
-      const entryCount = (await db.execute(sql`
+      const entryCount = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from journal_entries
          where source_document_id = ${documentId} and org_id = ${org.orgId}
-      `)) as unknown as { rows: { count: number }[] };
+      `));
       assert.equal(entryCount.rows[0].count, 1);
     } finally {
       await dropScratchOrg(org.orgId);

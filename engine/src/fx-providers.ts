@@ -7,7 +7,7 @@ export type FxProviderKey = "bank_of_canada" | "ecb" | "open_exchange_rates";
 export type FxSyncSchedule = "manual" | "daily" | "weekdays" | "weekly";
 export type FxRunTrigger = "test" | "manual" | "scheduler";
 
-export interface FxProviderConfigRow {
+export type FxProviderConfigRow = {
   id: string;
   orgId: string;
   provider: FxProviderKey;
@@ -24,7 +24,7 @@ export interface FxProviderConfigRow {
   lastSuccessAt: Date | null;
   lastObservationDate: string | null;
   lastError: string | null;
-}
+};
 
 export interface FxProviderConfigView extends Omit<FxProviderConfigRow, "secrets"> {
   hasSecret: boolean;
@@ -68,9 +68,9 @@ const CONFIG_COLS = sql`id, org_id as "orgId", provider, display_name as "displa
   last_success_at as "lastSuccessAt", last_observation_date as "lastObservationDate", last_error as "lastError"`;
 
 export async function readFxProviderConfig(orgId: string): Promise<FxProviderConfigRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
-  `)) as unknown as { rows: FxProviderConfigRow[] };
+  `));
   return r.rows[0] ?? null;
 }
 
@@ -120,9 +120,9 @@ export async function saveFxProviderConfig(
   const currencies = [...new Set(input.currencies.map(cleanCurrency).filter((c) => c !== baseCurrency))].sort();
   if (currencies.length === 0) throw new FxProviderError("choose at least one foreign currency");
 
-  const known = (await db.execute(sql`
+  const known = (await db.execute<{ code: string }>(sql`
     select code from currencies where code in (${sql.join([baseCurrency, ...currencies].map((c) => sql`${c}`), sql`, `)})
-  `)) as unknown as { rows: { code: string }[] };
+  `));
   if (known.rows.length !== currencies.length + 1) throw new FxProviderError("one or more currencies are not in the currency registry");
 
   const existing = await readFxProviderConfig(orgId);
@@ -134,7 +134,7 @@ export async function saveFxProviderConfig(
   }
   const next = input.isEnabled ? computeNextSyncAt(input.schedule, input.syncHourUtc) : null;
   const displayName = String(input.displayName ?? "").trim() || manifest.displayName;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into fx_provider_configs
       (org_id, provider, display_name, base_currency, currencies, schedule, sync_hour_utc,
        lookback_days, is_enabled, secrets, next_sync_at, created_by, updated_by)
@@ -149,7 +149,7 @@ export async function saveFxProviderConfig(
       secrets = excluded.secrets, next_sync_at = excluded.next_sync_at,
       last_error = null, updated_at = now(), updated_by = excluded.updated_by
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return r.rows[0]!.id;
 }
 
@@ -345,10 +345,10 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
 
 async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<string> {
   try {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by)
       values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}) returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     return r.rows[0]!.id;
   } catch (error) {
     if ((error as { code?: string }).code === "23505") throw new FxProviderError("an FX provider run is already in progress");
@@ -390,11 +390,11 @@ export async function runFxProvider(
     };
     if (trigger !== "test") {
       await db.transaction(async (tx) => {
-        const existing = (await tx.execute(sql`
+        const existing = (await tx.execute<{ from_currency: string; to_currency: string; as_of: string; source: string }>(sql`
           select from_currency, to_currency, as_of::text, source from fx_rates
            where org_id = ${orgId} and rate_type = 'spot'
              and as_of between ${range.from} and ${range.to}
-        `)) as unknown as { rows: { from_currency: string; to_currency: string; as_of: string; source: string }[] };
+        `));
         const byKey = new Map(existing.rows.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
         for (const rate of normalized) {
           const key = `${rate.date}|${rate.fromCurrency}|${rate.toCurrency}`;
@@ -447,7 +447,7 @@ export async function runFxProvider(
 
 /** Scheduler scan with compare-and-swap claims; safe across multiple servers. */
 export async function runDueFxProviders(now = new Date()): Promise<number> {
-  const due = (await db.execute(sql`
+  const due = (await db.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs
      where is_enabled and schedule <> 'manual' and next_sync_at <= ${now}
        and exists (
@@ -456,14 +456,14 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
             and organization.env_kind = 'production'
        )
      order by next_sync_at limit 20
-  `)) as unknown as { rows: FxProviderConfigRow[] };
+  `));
   let claimedCount = 0;
   for (const config of due.rows) {
     const next = computeNextSyncAt(config.schedule, config.syncHourUtc, now);
     const claim = (await db.execute(sql`
       update fx_provider_configs set next_sync_at = ${next}
        where id = ${config.id} and next_sync_at = ${config.nextSyncAt}
-    `)) as unknown as { rowCount?: number };
+    `));
     if (!claim.rowCount) continue;
     claimedCount++;
     try { await runFxProvider(config.orgId, "scheduler", undefined, now); }

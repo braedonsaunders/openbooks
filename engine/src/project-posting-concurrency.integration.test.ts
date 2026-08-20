@@ -99,31 +99,27 @@ test("project labor and overhead posting are exactly-once under concurrency and 
     const overheadEntryId = overheadResults.find((result) => result.entryId)?.entryId;
     assert.ok(overheadEntryId);
 
-    const posted = (await db.execute(sql`
+    const posted = (await db.execute<{ origin: string; count: number }>(sql`
       select origin, count(*)::int as count
         from journal_entries
        where org_id = ${org.orgId}
          and origin in ('labor_burden', 'overhead_applied')
          and reverses_entry_id is null
        group by origin
-       order by origin`)) as unknown as {
-      rows: { origin: string; count: number }[];
-    };
+       order by origin`));
     assert.deepEqual(posted.rows, [
       { origin: "labor_burden", count: 1 },
       { origin: "overhead_applied", count: 1 },
     ]);
 
-    const stamps = (await db.execute(sql`
+    const stamps = (await db.execute<{
+        cost_journal_entry_id: string | null;
+        overhead_journal_entry_id: string | null;
+      }>(sql`
       select cost_journal_entry_id, overhead_journal_entry_id
         from time_entries
        where id = any(${`{${timeEntryIds.join(",")}}`}::uuid[])
-       order by id`)) as unknown as {
-      rows: {
-        cost_journal_entry_id: string | null;
-        overhead_journal_entry_id: string | null;
-      }[];
-    };
+       order by id`));
     assert.equal(stamps.rows.length, 2);
     assert.ok(stamps.rows.every((row) => row.cost_journal_entry_id === laborEntryId));
     assert.ok(stamps.rows.every((row) => row.overhead_journal_entry_id === overheadEntryId));
@@ -146,15 +142,13 @@ test("project labor and overhead posting are exactly-once under concurrency and 
     ]);
     assert.ok(varianceResults.every((result) => result.entryId));
     assert.ok(varianceResults.every((result) => result.variance === "125.0000"));
-    const varianceJournals = (await db.execute(sql`
+    const varianceJournals = (await db.execute<{ status: string; reverses_entry_id: string | null }>(sql`
       select status, reverses_entry_id
         from journal_entries
        where org_id = ${org.orgId}
          and origin = 'payroll_variance'
          and entry_number like 'PVAR-%'
-       order by created_at, id`)) as unknown as {
-      rows: { status: string; reverses_entry_id: string | null }[];
-    };
+       order by created_at, id`));
     assert.equal(
       varianceJournals.rows.filter(
         (row) => row.status === "posted" && row.reverses_entry_id === null,
@@ -190,12 +184,10 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       ),
     ]);
     assert.equal(reversalRace.filter(Boolean).length, 1, "one source journal receives one reversal");
-    const reversalCount = (await db.execute(sql`
+    const reversalCount = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count
         from journal_entries
-       where org_id = ${org.orgId} and reverses_entry_id = ${overheadEntryId}`)) as unknown as {
-      rows: { count: number }[];
-    };
+       where org_id = ${org.orgId} and reverses_entry_id = ${overheadEntryId}`));
     assert.equal(reversalCount.rows[0]?.count, 1);
 
     await Promise.all([
@@ -230,16 +222,14 @@ test("project labor and overhead posting are exactly-once under concurrency and 
         org.date,
       ),
     ]);
-    const released = (await db.execute(sql`
+    const released = (await db.execute<{
+        cost_journal_entry_id: string | null;
+        overhead_journal_entry_id: string | null;
+      }>(sql`
       select cost_journal_entry_id, overhead_journal_entry_id
         from time_entries
        where id = any(${`{${timeEntryIds.join(",")}}`}::uuid[])
-       order by id`)) as unknown as {
-      rows: {
-        cost_journal_entry_id: string | null;
-        overhead_journal_entry_id: string | null;
-      }[];
-    };
+       order by id`));
     assert.ok(
       released.rows.every(
         (row) => row.cost_journal_entry_id === null && row.overhead_journal_entry_id === null,

@@ -16,7 +16,7 @@ import { Pagination } from '../../../../components/pagination'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 type Search = Record<string, string | string[] | undefined>
-interface Opt { id: string; label: string; unmatched?: number }
+type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
 interface Session { id: string; throughDate: string; statementBalance: string }
 

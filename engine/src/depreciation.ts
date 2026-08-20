@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
@@ -218,22 +218,20 @@ function formulaForMethod(
 // ---------------------------------------------------------------------------
 
 /** Primary accounting book id (schedules are book-aware). */
-async function primaryBookId(runner: any, orgId: string): Promise<string> {
-  const result = (await runner.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+async function primaryBookId(runner: SqlExecutor, orgId: string): Promise<string> {
+  const result = (await runner.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
   if (!result.rows[0]) throw new Error("no primary accounting book");
   return result.rows[0].id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
-async function periodForDate(runner: any, orgId: string, date: string): Promise<string | null> {
-  const res = (await runner.execute(sql`
+async function periodForDate(runner: SqlExecutor, orgId: string, date: string): Promise<string | null> {
+  const res = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`)) as unknown as { rows: { id: string }[] };
+     limit 1`));
   return res.rows[0]?.id ?? null;
 }
 
@@ -253,18 +251,13 @@ export interface BuildScheduleResult {
  * Called from the asset save path and by "Run depreciation".
  */
 export async function buildScheduleWithRunner(
-  runner: any,
+  runner: SqlExecutor,
   assetId: string,
   orgId: string,
   actorId: string | null,
   forBookId?: string,
 ): Promise<BuildScheduleResult> {
-  const assetRes = (await runner.execute(sql`
-    select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value,
-           depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
-           depreciation_convention, depreciation_units_total
-      from fixed_assets where id = ${assetId} and org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const assetRes = (await runner.execute<{
       id: string;
       category_id: string;
       in_service_on: string | null;
@@ -276,17 +269,18 @@ export async function buildScheduleWithRunner(
       depreciation_rate_percent: string | null;
       depreciation_convention: ScheduleInput["convention"];
       depreciation_units_total: string | null;
-    }[];
-  };
+    }>(sql`
+    select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value,
+           depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
+           depreciation_convention, depreciation_units_total
+      from fixed_assets where id = ${assetId} and org_id = ${orgId}`));
   const asset = assetRes.rows[0];
   if (!asset) throw new Error("asset not found");
   if (!asset.in_service_on) throw new Error("asset has no in-service date");
 
-  const catRes = (await runner.execute(sql`
+  const catRes = (await runner.execute<{ default_method: DepreciationMethod; default_depreciation_method_id: string | null; default_life_months: number | null; default_convention: string | null }>(sql`
     select default_method, default_depreciation_method_id, default_life_months, default_convention
-      from asset_categories where id = ${asset.category_id} and org_id = ${orgId}`)) as unknown as {
-    rows: { default_method: DepreciationMethod; default_depreciation_method_id: string | null; default_life_months: number | null; default_convention: string | null }[];
-  };
+      from asset_categories where id = ${asset.category_id} and org_id = ${orgId}`));
   const category = catRes.rows[0];
   if (!category) throw new Error("asset category not found");
 
@@ -294,11 +288,9 @@ export async function buildScheduleWithRunner(
 
   // Multi-book: a per-book policy for this category overrides the method / life /
   // rate / convention on this book; else the asset custom + category defaults.
-  const policyRes = (await runner.execute(sql`
+  const policyRes = (await runner.execute<{ method: DepreciationMethod; depreciation_method_id: string | null; life_months: number | null; rate_percent: string | null; units_total: string | null; convention: string | null }>(sql`
     select method, depreciation_method_id, life_months, rate_percent, units_total, convention from depreciation_book_policies
-     where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`)) as unknown as {
-    rows: { method: DepreciationMethod; depreciation_method_id: string | null; life_months: number | null; rate_percent: string | null; units_total: string | null; convention: string | null }[];
-  };
+     where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`));
   const pol = policyRes.rows[0];
   const method: DepreciationMethod = pol?.method ?? asset.depreciation_method ?? category.default_method ?? "straight_line";
   const depreciationMethodId = pol
@@ -320,11 +312,9 @@ export async function buildScheduleWithRunner(
 
   // A user-authored method is a real FK, not a string that can accidentally
   // collide with a built-in. A stale/deactivated reference fails closed.
-  const custom2 = (await runner.execute(sql`
+  const custom2 = (await runner.execute<{ id: string; formula: string; end_of_life: "fully_depreciate" | "retain_balance" }>(sql`
     select id, formula, end_of_life from depreciation_methods
-     where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1`)) as unknown as {
-    rows: { id: string; formula: string; end_of_life: "fully_depreciate" | "retain_balance" }[];
-  };
+     where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1`));
   if (depreciationMethodId && !custom2.rows[0]) throw new Error("configured depreciation formula is inactive or unavailable");
   const firstPeriodFraction = convention === "mid_month" || convention === "half_year" ? "0.5" : "1";
 
@@ -360,13 +350,11 @@ export async function buildScheduleWithRunner(
     });
   }
 
-  return await (async (tx: any) => {
+  return await (async (tx: SqlExecutor) => {
     // find (or create) the primary-book schedule for this asset
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string; method: DepreciationMethod; depreciation_method_id: string | null }>(sql`
       select id, method, depreciation_method_id from depreciation_schedules
-       where asset_id = ${assetId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)) as unknown as {
-      rows: { id: string; method: DepreciationMethod; depreciation_method_id: string | null }[];
-    };
+       where asset_id = ${assetId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
     let scheduleId: string;
     if (existing.rows[0]) {
       scheduleId = existing.rows[0].id;
@@ -374,7 +362,7 @@ export async function buildScheduleWithRunner(
         const evidence = (await tx.execute(sql`
           select 1 from depreciation_schedule_lines
            where schedule_id = ${scheduleId} and source <> 'formula'
-           limit 1 for update`)) as unknown as { rows: unknown[] };
+           limit 1 for update`));
         if (evidence.rows[0]) {
           throw new Error("depreciation method cannot change after manual or production evidence exists");
         }
@@ -385,19 +373,17 @@ export async function buildScheduleWithRunner(
                rate_percent = ${ratePercent}, units_total = ${unitsTotal}, updated_at = now(), updated_by = ${actorId}
          where id = ${scheduleId}`);
     } else {
-      const ins = (await tx.execute(sql`
+      const ins = (await tx.execute<{ id: string }>(sql`
         insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, created_by, updated_by)
         values (${orgId}, ${assetId}, ${bookId}, ${method}, ${depreciationMethodId}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       scheduleId = ins.rows[0].id;
     }
 
     // preserve posted lines; drop only the unposted plan and rewrite it
-    const posted = (await tx.execute(sql`
+    const posted = (await tx.execute<{ period_id: string }>(sql`
       select period_id from depreciation_schedule_lines
-       where schedule_id = ${scheduleId} and posted_amount is not null`)) as unknown as {
-      rows: { period_id: string }[];
-    };
+       where schedule_id = ${scheduleId} and posted_amount is not null`));
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
 
     if (depreciationMethodId || (method !== "manual" && method !== "units_of_production")) {
@@ -447,14 +433,14 @@ export async function buildAllSchedules(
 }
 
 export async function buildAllSchedulesWithRunner(
-  runner: any,
+  runner: SqlExecutor,
   assetId: string,
   orgId: string,
   actorId: string | null,
 ): Promise<BuildScheduleResult[]> {
-  const books = (await runner.execute(sql`
+  const books = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active
-     order by is_primary desc, code`)) as unknown as { rows: { id: string }[] };
+     order by is_primary desc, code`));
   const results: BuildScheduleResult[] = [];
   for (const b of books.rows) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id));
   return results;
@@ -500,7 +486,19 @@ export async function recordDepreciationInput(
   const value = normalizeMoney(args.value);
 
   return db.transaction(async (tx) => {
-    const schedule = (await tx.execute(sql`
+    const schedule = (await tx.execute<{
+        id: string;
+        method: DepreciationMethod;
+        units_total: string | null;
+        book_id: string;
+        acquisition_cost: string;
+        salvage_value: string;
+        status: string;
+        in_service_on: string;
+        period_id: string;
+        period_name: string;
+        period_closed: boolean;
+      }>(sql`
       select s.id, s.method, s.units_total, s.book_id,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
              p.id as period_id, p.name as period_name,
@@ -513,21 +511,7 @@ export async function recordDepreciationInput(
        where s.org_id = ${args.orgId} and s.asset_id = ${args.assetId}
          ${args.bookId ? sql`and s.book_id = ${args.bookId}` : sql`and s.book_id = (select id from accounting_books where org_id = ${args.orgId} and is_primary limit 1)`}
        limit 1
-       for update of s, a, p`)) as unknown as {
-      rows: {
-        id: string;
-        method: DepreciationMethod;
-        units_total: string | null;
-        book_id: string;
-        acquisition_cost: string;
-        salvage_value: string;
-        status: string;
-        in_service_on: string;
-        period_id: string;
-        period_name: string;
-        period_closed: boolean;
-      }[];
-    };
+       for update of s, a, p`));
     const row = schedule.rows[0];
     if (!row) throw new Error("no depreciation schedule or accounting period covers the effective date");
     if (row.status !== "in_service") throw new Error("depreciation inputs require an in-service asset");
@@ -541,29 +525,27 @@ export async function recordDepreciationInput(
         join file_attachments fa on fa.org_id = f.org_id and fa.file_id = f.id
        where f.id = ${args.evidenceFileId} and f.org_id = ${args.orgId} and not f.is_inactive
          and fa.target_table = 'fixed_assets' and fa.target_id = ${args.assetId}
-       limit 1`)) as unknown as { rows: unknown[] };
+       limit 1`));
     if (!evidence.rows[0]) throw new Error("evidence file must be attached to this asset");
 
     const source = args.kind === "manual" ? "manual" : "production_usage";
-    const priorLine = (await tx.execute(sql`
+    const priorLine = (await tx.execute<{ id: string; posted_amount: string | null; input_id: string | null }>(sql`
       select id, posted_amount, input_id
         from depreciation_schedule_lines
        where org_id = ${args.orgId} and schedule_id = ${row.id} and period_id = ${row.period_id}
          and source = ${source} and posted_amount is null
        order by created_at desc
        limit 1
-       for update`)) as unknown as { rows: { id: string; posted_amount: string | null; input_id: string | null }[] };
+       for update`));
     const replacedInputId = priorLine.rows[0]?.input_id ?? null;
 
-    const totals = (await tx.execute(sql`
+    const totals = (await tx.execute<{ planned: string; used_units: string }>(sql`
       select coalesce(sum(l.planned_amount), 0)::text as planned,
              coalesce(sum(i.production_units) filter (where i.voided_at is null), 0)::text as used_units
         from depreciation_schedule_lines l
         left join depreciation_inputs i on i.id = l.input_id
        where l.org_id = ${args.orgId} and l.schedule_id = ${row.id}
-         ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`)) as unknown as {
-      rows: { planned: string; used_units: string }[];
-    };
+         ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`));
     const basis = toUnits(row.acquisition_cost) - toUnits(row.salvage_value);
     if (basis < 0n) throw new Error("salvage value cannot exceed acquisition cost");
     const alreadyPlanned = totals.rows[0]?.planned ?? "0";
@@ -601,14 +583,14 @@ export async function recordDepreciationInput(
            set voided_at = now(), voided_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
          where id = ${replacedInputId} and voided_at is null`);
     }
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into depreciation_inputs
         (org_id, schedule_id, period_id, kind, manual_amount, production_units,
          memo, evidence_file_id, supersedes_input_id, created_by, updated_by)
       values (${args.orgId}, ${row.id}, ${row.period_id}, ${args.kind},
               ${args.kind === "manual" ? value : null}, ${args.kind === "production_usage" ? value : null},
               ${memo}, ${args.evidenceFileId}, ${replacedInputId}, ${args.actorId}, ${args.actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const inputId = inserted.rows[0]!.id;
 
     let scheduleLineId: string;
@@ -620,14 +602,14 @@ export async function recordDepreciationInput(
                input_id = ${inputId}, updated_at = now(), updated_by = ${args.actorId}
          where id = ${scheduleLineId} and posted_amount is null`);
     } else {
-      const line = (await tx.execute(sql`
+      const line = (await tx.execute<{ id: string }>(sql`
         insert into depreciation_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, source, input_id, created_by, updated_by)
         values (${args.orgId}, ${row.id}, ${row.period_id},
                 (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where schedule_id = ${row.id}),
                 ${plannedAmount}, ${args.kind === "manual" ? "manual" : "production_usage"},
                 ${inputId}, ${args.actorId}, ${args.actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       scheduleLineId = line.rows[0]!.id;
     }
 
@@ -672,7 +654,7 @@ export async function runDepreciation(
   const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
 
   // Due, unposted lines with their asset + resolved accounts + period window.
-  const due = (await db.execute(sql`
+  const due = (await db.execute<any>(sql`
     select l.id            as line_id,
            l.planned_amount as planned,
            l.sequence      as sequence,
@@ -710,9 +692,7 @@ export async function runDepreciation(
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
-     order by a.asset_number, l.sequence`)) as unknown as {
-    rows: any[];
-  };
+     order by a.asset_number, l.sequence`));
 
   const result: RunDepreciationResult = {
     posted: 0,
@@ -770,7 +750,7 @@ export async function runDepreciation(
       const posted = await db.transaction(async (tx) => {
         // Claim the schedule line inside the posting transaction. Concurrent
         // runners serialize here and the loser observes posted_amount.
-        const claim = (await tx.execute(sql`
+        const claim = (await tx.execute<{ planned_amount: string; period_closed: boolean }>(sql`
           select l.planned_amount,
                  (period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'assets')
                    or period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
@@ -778,7 +758,7 @@ export async function runDepreciation(
             join depreciation_schedules s on s.id = l.schedule_id
             join fixed_assets a on a.id = s.asset_id
            where l.id = ${row.line_id} and l.org_id = ${orgId} and l.posted_amount is null
-           for update of l`)) as unknown as { rows: { planned_amount: string; period_closed: boolean }[] };
+           for update of l`));
         const claimed = claim.rows[0];
         if (!claimed) return null;
         if (claimed.period_closed) throw new Error("GL period closed");
@@ -796,7 +776,7 @@ export async function runDepreciation(
           { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
         ];
         assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
-        const entryRes = (await tx.execute(sql`
+        const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
@@ -804,7 +784,7 @@ export async function runDepreciation(
                   ${postingDate}, ${row.period_id},
                   ${`Depreciation — ${row.asset_name} (${row.period_name})`},
                   'draft', 'depreciation', ${actorId}, ${actorId})
-          returning id`)) as unknown as { rows: { id: string }[] };
+          returning id`));
         const eid = entryRes.rows[0].id;
 
         for (let i = 0; i < lines.length; i++) {

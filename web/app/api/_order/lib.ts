@@ -66,15 +66,15 @@ export { taxProfileMap as orderTaxProfileMap }
  * the document_links graph (origin + converted-into edges).
  */
 export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!doc.rows[0]) return null
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount,
            l.tax_amount, l.quantity_billed,
@@ -86,10 +86,10 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
       left join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
 
   // Origin (this doc was created from …) and converted-into (this doc → …) edges.
-  const links = (await db.execute(sql`
+  const links = (await db.execute<Record<string, unknown>>(sql`
     select 'from' as direction, dl.link_type, d2.id, d2.kind, d2.document_number, d2.status
       from document_links dl
       join documents d2 on d2.id = dl.from_document_id and d2.org_id = dl.org_id
@@ -100,7 +100,7 @@ export async function loadOrder(id: string, orgId: string, kind: OrderKind) {
       join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
      where dl.from_document_id = ${id} and dl.org_id = ${orgId}
     order by 1
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
 
   return { doc: doc.rows[0], lines: lines.rows, links: links.rows }
 }

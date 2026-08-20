@@ -32,11 +32,11 @@ const pref = (col: unknown): InvoicingPreference => (col as InvoicingPreference)
  */
 export async function resolveInvoicingPreference(orgId: string, projectId: string): Promise<EffectiveInvoicing> {
   const type = await loadProjectType(orgId, projectId)
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ project_pref: unknown; customer_pref: unknown }>(sql`
     select p.invoicing_preference as project_pref, cust.invoicing_preference as customer_pref
       from projects p left join parties cust on cust.id = p.customer_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { project_pref: unknown; customer_pref: unknown }[] }
+  `))
   const custPref = pref(row.rows[0]?.customer_pref)
   const projPref = pref(row.rows[0]?.project_pref)
 

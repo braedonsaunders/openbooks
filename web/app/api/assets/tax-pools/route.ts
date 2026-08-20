@@ -9,11 +9,11 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 async function primaryBook(orgId: string): Promise<string | null> {
-  const r = (await db.execute(sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`)) as unknown as { rows: { id: string }[] }
+  const r = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`))
   return r.rows[0]?.id ?? null
 }
 async function rootSubsidiary(orgId: string): Promise<string | null> {
-  const r = (await db.execute(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`)) as unknown as { rows: { id: string }[] }
+  const r = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`))
   return r.rows[0]?.id ?? null
 }
 
@@ -24,14 +24,14 @@ export async function GET(req: Request) {
   const p = new URL(req.url).searchParams
   const taxYear = Number(p.get('taxYear'))
   if (!Number.isInteger(taxYear)) return NextResponse.json({ error: 'taxYear required' }, { status: 422 })
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, string>>(sql`
     select pp.tax_year, tp.class_code, tp.regime,
            pp.opening_balance::text, pp.additions::text, pp.dispositions::text,
            pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
       from tax_pool_periods pp
       join tax_depreciation_pools tp on tp.id = pp.pool_id
      where pp.org_id = ${gate.user.orgId} and pp.tax_year = ${taxYear}
-     order by tp.class_code`)) as unknown as { rows: Record<string, string>[] }
+     order by tp.class_code`))
   return NextResponse.json({ rows: r.rows })
 }
 

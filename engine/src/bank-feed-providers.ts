@@ -212,13 +212,13 @@ export async function testBankFeedConnection(
   connectionId: string,
 ): Promise<{ ok: boolean; detail?: string }> {
   const row = await withBypass(async () =>
-    (await db.execute(sql`
+    (await db.execute<{ provider: string; credentials: string | null }>(sql`
       select c.provider, c.credentials
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
          and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
-    `)) as unknown as { rows: { provider: string; credentials: string | null }[] },
+    `)),
   );
   const conn = row.rows[0];
   if (!conn) return { ok: false, detail: "connection not found" };
@@ -290,7 +290,17 @@ async function syncOne(row: {
 export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
   const now = Date.now();
   const due = await withBypass(async () =>
-    (await db.execute(sql`
+    (await db.execute<{
+        id: string;
+        orgId: string;
+        provider: string;
+        accountId: string;
+        credentials: string | null;
+        externalAccountId: string | null;
+        syncCadence: string;
+        nextSyncAt: Date | null;
+        lastSyncAt: Date | string | null;
+      }>(sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt"
@@ -301,19 +311,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
          and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
          and c.sync_cadence <> 'manual'
          and (c.next_sync_at is null or c.next_sync_at <= now())
-    `)) as unknown as {
-      rows: {
-        id: string;
-        orgId: string;
-        provider: string;
-        accountId: string;
-        credentials: string | null;
-        externalAccountId: string | null;
-        syncCadence: string;
-        nextSyncAt: Date | null;
-        lastSyncAt: Date | string | null;
-      }[];
-    },
+    `)),
   );
 
   const outcomes: FeedSyncOutcome[] = [];
@@ -321,12 +319,12 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
     const nextSync = new Date(now + cadenceIntervalMs(row.syncCadence));
     // Claim: only the tick that moves next_sync_at off its current value wins.
     const claimed = await withBypass(async () =>
-      (await db.execute(sql`
+      (await db.execute<{ id: string }>(sql`
         update bank_feed_connections set next_sync_at = ${nextSync}
          where id = ${row.id}
            and (next_sync_at is null and ${row.nextSyncAt === null} or next_sync_at = ${row.nextSyncAt})
         returning id
-      `)) as unknown as { rows: { id: string }[] },
+      `)),
     );
     if (!claimed.rows.length) continue;
 
@@ -354,15 +352,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
 /** Force-sync one connection now (the "Sync now" button). */
 export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOutcome> {
   const row = await withBypass(async () =>
-    (await db.execute(sql`
-      select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
-             c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt"
-        from bank_feed_connections c
-        join orgs o on o.id = c.org_id
-       where c.id = ${connectionId}
-         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
-    `)) as unknown as {
-      rows: {
+    (await db.execute<{
         id: string;
         orgId: string;
         provider: string;
@@ -370,8 +360,14 @@ export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOut
         credentials: string | null;
         externalAccountId: string | null;
         lastSyncAt: Date | string | null;
-      }[];
-    },
+      }>(sql`
+      select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
+             c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt"
+        from bank_feed_connections c
+        join orgs o on o.id = c.org_id
+       where c.id = ${connectionId}
+         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+    `)),
   );
   const conn = row.rows[0];
   if (!conn) throw new FeedError("connection not found");

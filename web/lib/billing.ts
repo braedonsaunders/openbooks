@@ -79,16 +79,16 @@ export async function generateInvoiceFromBillingRequest(
   requestId: string,
 ): Promise<GenerateResult> {
   return db.transaction(async (tx) => {
-    const projectGate = (await tx.execute(sql`
+    const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
       select settings->'features' as features
         from orgs where id = ${orgId}
-    `)) as unknown as { rows: { features: FeatureState | null }[] }
+    `))
     const featureState = projectGate.rows[0]?.features ?? {}
     if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
-    const reqRes = (await tx.execute(sql`
+    const reqRes = (await tx.execute<any>(sql`
       select * from billing_requests where id = ${requestId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: any[] }
+    `))
     const req = reqRes.rows[0]
     if (!req) throw new BillingError('Billing request not found')
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
@@ -96,27 +96,27 @@ export async function generateInvoiceFromBillingRequest(
       throw new BillingError('Field Ticket billing is disabled')
     }
     const selectedFieldTickets = req.basis === 'field_ticket'
-      ? (await tx.execute(sql`
+      ? (await tx.execute<{ id: string }>(sql`
           select field_ticket_id as id
             from billing_request_field_tickets
            where org_id = ${orgId}
              and billing_request_id = ${requestId}
            order by selected_at, id
-        `)) as unknown as { rows: { id: string }[] }
+        `))
       : { rows: [] as { id: string }[] }
     const selectedFieldTicketIds = selectedFieldTickets.rows.map((ticket) => ticket.id)
     if (req.basis === 'field_ticket' && selectedFieldTicketIds.length === 0) {
       throw new BillingError('The Field Ticket billing request has no selected tickets')
     }
 
-    const projRes = (await tx.execute(sql`
+    const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
              p.invoicing_profile as project_invoicing, c.invoicing_profile as customer_invoicing,
              coalesce(s.base_currency,o.base_currency) as billing_currency
         from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
              left join parties c on c.id = p.customer_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
-    `)) as unknown as { rows: any[] }
+    `))
     const project = projRes.rows[0]
     if (!project) throw new BillingError('Project not found')
     if (!project.customer_id) throw new BillingError('The project has no customer to invoice')
@@ -142,10 +142,10 @@ export async function generateInvoiceFromBillingRequest(
 
     // A deterministic fallback income account (lowest number) for lines whose
     // item has no income account, and for draw-amount invoices.
-    const defIncome = (await tx.execute(sql`
+    const defIncome = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
        order by number nulls last limit 1
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     const defaultIncomeId = defIncome.rows[0]?.id ?? null
 
     // Fixed-price with revenue recognition configured: the invoice must relieve
@@ -214,11 +214,11 @@ export async function generateInvoiceFromBillingRequest(
       })
     } else if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
       // Bill the selected (or all open) milestone schedule rows.
-      const scheds = (await tx.execute(sql`
+      const scheds = (await tx.execute<any>(sql`
         select id, name, amount_billed from billing_schedules
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
          order by sort_order
-      `)) as unknown as { rows: any[] }
+      `))
       if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
       for (const m of scheds.rows) {
@@ -267,7 +267,7 @@ export async function generateInvoiceFromBillingRequest(
         ? sql` and te.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
         : sql``
 
-      const timeRows = (await tx.execute(sql`
+      const timeRows = (await tx.execute<any>(sql`
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
                te.employee_party_id, te.memo, te.department_id, te.worked_on,
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
@@ -280,7 +280,7 @@ export async function generateInvoiceFromBillingRequest(
            and te.billing_status = 'unbilled'
            ${isFinal && ticketIds.length === 0 ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on
-      `)) as unknown as { rows: any[] }
+      `))
 
       for (const te of timeRows.rows) {
         const rate =
@@ -347,7 +347,7 @@ export async function generateInvoiceFromBillingRequest(
           ? sql``
           : costDateFilter
 
-      const costRows = (await tx.execute(sql`
+      const costRows = (await tx.execute<any>(sql`
         select dl.id,
                -- Native order lines are stored in document direction: ordinary
                -- commitments are positive and discount lines remain negative.
@@ -382,7 +382,7 @@ export async function generateInvoiceFromBillingRequest(
            and ((true ${automaticCostScope}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
-      `)) as unknown as { rows: any[] }
+      `))
 
       for (const cl of costRows.rows) {
         const isProjectCharge = cl.kind === 'project_charge'
@@ -542,10 +542,10 @@ export async function generateInvoiceFromBillingRequest(
       )
       for (const c of charges) {
         const item = c.adjustment.itemId
-          ? ((await tx.execute(sql`
+          ? ((await tx.execute<{ income_account_id: string | null; tax_code_id: string | null }>(sql`
               select income_account_id, tax_code_id from items
                where id = ${c.adjustment.itemId} and org_id = ${orgId}
-            `)) as unknown as { rows: { income_account_id: string | null; tax_code_id: string | null }[] }).rows[0]
+            `))).rows[0]
           : undefined
         built.push({
           itemId: c.adjustment.itemId, accountId: item?.income_account_id ?? defaultIncomeId,
@@ -558,12 +558,12 @@ export async function generateInvoiceFromBillingRequest(
 
     // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
     if (invoicing.notToExceed && built.length) {
-      const contractRes = (await tx.execute(sql`
+      const contractRes = (await tx.execute<{ contract: string }>(sql`
         select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
-      `)) as unknown as { rows: { contract: string }[] }
+      `))
       const contract = contractRes.rows[0]?.contract ?? '0'
       if (cmp(contract, '0') > 0) {
-        const invRes = (await tx.execute(sql`
+        const invRes = (await tx.execute<{ inv: string }>(sql`
           select coalesce(sum(dl.amount), 0)::text as inv
             from document_lines dl
             join documents d
@@ -571,7 +571,7 @@ export async function generateInvoiceFromBillingRequest(
            where dl.org_id = ${orgId}
              and coalesce(dl.project_id, d.project_id) = ${req.project_id}
              and d.kind = 'customer_invoice' and d.status = 'posted'
-        `)) as unknown as { rows: { inv: string }[] }
+        `))
         const invoicedToDate = invRes.rows[0]?.inv ?? '0'
         const running = sum(built.map((l) => l.amount))
         const remaining = add(contract, negate(invoicedToDate))

@@ -188,9 +188,9 @@ export async function caPayrollConfig(orgId: string, taxYear: number): Promise<C
 }
 
 export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ p: Record<string, unknown> | null; c: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p, settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { p: Record<string, unknown> | null; c: Record<string, unknown> | null }[] };
+  ));
   const p = (r.rows[0]?.p ?? {}) as Record<string, string | null>;
   return {
     wageExpenseAccountId: p.wageExpenseAccountId ?? null,
@@ -381,9 +381,9 @@ export async function ensureStatutoryHolidayComponents(
 export async function statutoryHolidayPayEnabled(
   orgId: string, executor: Pick<typeof db, "execute"> = db,
 ): Promise<boolean> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ enabled: string | null }>(sql`
     select settings#>>'{payroll,statutoryHolidayPay}' as enabled from orgs where id = ${orgId}
-  `)) as unknown as { rows: { enabled: string | null }[] };
+  `));
   return r.rows[0]?.enabled === "true";
 }
 
@@ -419,14 +419,14 @@ async function seedVacationEntitlementPlan(
   // tiers raise them; this is only what an employee with neither falls back
   // to. Same derivation the migration script uses, so a migrated tenant and a
   // freshly seeded one land on the same number.
-  const modal = (await db.execute(sql`
+  const modal = (await db.execute<{ percent: string }>(sql`
     select vacation_percent::text as percent
       from employee_payroll_profiles
      where org_id = ${orgId} and vacation_percent is not null and vacation_percent > 0
      group by vacation_percent
      order by count(*) desc, vacation_percent asc
      limit 1
-  `)) as unknown as { rows: { percent: string }[] };
+  `));
   const accrualValue = roundMoney(modal.rows[0]?.percent ?? "4", 4);
 
   await db.execute(sql`
@@ -485,11 +485,10 @@ function assertVacationPlanResolved(
     + "Entitlement plans (or set the employee's vacation method to pay each period)",
   );
 }
-
-interface ScheduleRow {
+type ScheduleRow = {
   id: string; frequency: string; periods_per_year: number;
   anchor_period_end: string; pay_date_offset_days: number;
-}
+};
 
 const DAY = 24 * 60 * 60 * 1000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -733,20 +732,20 @@ export async function createPayRun(input: {
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
-    const s = (await tx.execute(sql`
+    const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
-    `)) as unknown as { rows: (ScheduleRow & { subsidiary_id: string | null })[] };
+    `));
     const schedule = s.rows[0];
     if (!schedule) throw new PayrollError("pay schedule not found");
 
     let periodStart = input.periodStart;
     let periodEnd = input.periodEnd;
     if (!periodStart || !periodEnd) {
-      const last = (await tx.execute(sql`
+      const last = (await tx.execute<{ last_end: string | null }>(sql`
         select max(period_end) as last_end from pay_runs
          where org_id = ${orgId} and pay_schedule_id = ${schedule.id}
-      `)) as unknown as { rows: { last_end: string | null }[] };
+      `));
       const next = nextPeriodAfter(schedule, last.rows[0]?.last_end ?? null);
       periodStart = next.periodStart;
       periodEnd = next.periodEnd;
@@ -763,7 +762,7 @@ export async function createPayRun(input: {
     // wrong for any jurisdiction whose statutory year is not the calendar one,
     // and silently so: every YTD accumulator and every year-end slip keys on
     // `tax_year`.
-    const sub = (await tx.execute(schedule.subsidiary_id
+    const sub = (await tx.execute<{ id: string; name: string; country: string | null; currency_code: string | null }>(schedule.subsidiary_id
       ? sql`
         select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
          where s.org_id = ${orgId} and s.id = ${schedule.subsidiary_id} and s.is_active`
@@ -771,9 +770,7 @@ export async function createPayRun(input: {
         select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
          where s.org_id = ${orgId} and s.parent_id is null and s.is_active
          order by s.created_at limit 1
-    `)) as unknown as {
-      rows: { id: string; name: string; country: string | null; currency_code: string | null }[];
-    };
+    `));
     const subsidiary = sub.rows[0];
     if (!subsidiary) {
       throw new PayrollError(schedule.subsidiary_id
@@ -795,7 +792,7 @@ export async function createPayRun(input: {
     // inside an already-paid period is exactly what they are for.
     const runType: PayRunType = input.runType ?? "regular";
     if (runType === "regular") {
-      const overlap = (await tx.execute(sql`
+      const overlap = (await tx.execute<{ document_number: string }>(sql`
         select d.document_number from pay_runs r
           join documents d on d.id = r.document_id
          where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
@@ -806,7 +803,7 @@ export async function createPayRun(input: {
            -- VOIDED regular run go on blocking its own replacement.
            and d.status <> 'voided'
          limit 1
-      `)) as unknown as { rows: { document_number: string }[] };
+      `));
       if (overlap.rows[0]) {
         throw new PayrollError(
           `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd}`,
@@ -842,14 +839,14 @@ export async function createPayRun(input: {
               + "the whole schedule",
         );
       }
-      const onSchedule = (await tx.execute(sql`
+      const onSchedule = (await tx.execute<{ employee_party_id: string }>(sql`
         select prof.employee_party_id
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${schedule.id} and prof.is_active
            and (${schedule.subsidiary_id}::uuid is null
                 or p.subsidiary_id = ${schedule.subsidiary_id}::uuid)
-      `)) as unknown as { rows: { employee_party_id: string }[] };
+      `));
       const roster = new Set(onSchedule.rows.map((row) => row.employee_party_id));
       const strangers = scopedEmployeeIds.filter((id) => !roster.has(id));
       if (strangers.length > 0) {
@@ -859,23 +856,23 @@ export async function createPayRun(input: {
       }
     }
 
-    const seq = (await tx.execute(sql`
+    const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${orgId}, 'pay_run', null, 'PAY-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       returning prefix, next_number, padding
-    `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+    `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
 
-    const doc = (await tx.execute(sql`
+    const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date,
                              currency, status, memo, created_by, updated_by)
       values (${orgId}, 'pay_run', ${number}, ${runContext.subsidiaryId}, ${payDate},
               ${runContext.currency}, 'draft',
               ${`${RUN_TYPE_MEMO[runType]} ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const documentId = doc.rows[0]!.id;
     await tx.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
@@ -915,17 +912,16 @@ interface StubComputation {
   /** Non-fatal entitlement notices (a bank at or over its scoped limit). */
   warnings: EntitlementWarning[];
 }
-
-interface YtdRow {
+type YtdRow = {
   pensionable: string; insurable: string; cpp: string; cpp2: string; ei: string;
   qpip: string; non_periodic: string; f5b: string; qc_csb: string;
-}
+};
 
 async function employeeYtd(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
   taxYear: number, excludeDocumentId: string,
 ): Promise<YtdRow> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<YtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
@@ -954,11 +950,10 @@ async function employeeYtd(
     join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
-  `)) as unknown as { rows: YtdRow[] };
+  `));
   return r.rows[0]!;
 }
-
-interface UsYtdRow {
+type UsYtdRow = {
   fica: string;
   futa: string;
   supplemental: string;
@@ -973,7 +968,7 @@ interface UsYtdRow {
    * that costs the employee money at filing time.
    */
   fica_tax: string;
-}
+};
 
 /**
  * US YTD state for the wage-base caps: the caps compare cumulative WAGES
@@ -985,7 +980,7 @@ async function usEmployeeYtd(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
   taxYear: number, excludeDocumentId: string,
 ): Promise<UsYtdRow> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<UsYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
@@ -1007,7 +1002,7 @@ async function usEmployeeYtd(
     join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
-  `)) as unknown as { rows: UsYtdRow[] };
+  `));
   return r.rows[0]!;
 }
 
@@ -1025,17 +1020,15 @@ async function usEmployeeYtd(
 async function storedTaxCertificates(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, country: string,
 ): Promise<StoredCertificate[]> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{
+      certificate_key: string; answers: Record<string, string> | null;
+      effective_from: string | null; superseded_on: string | null;
+    }>(sql`
     select certificate_key, answers, effective_from::text as effective_from,
            superseded_on::text as superseded_on
       from employee_tax_certificates
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and country = ${country}
-  `)) as unknown as {
-    rows: {
-      certificate_key: string; answers: Record<string, string> | null;
-      effective_from: string | null; superseded_on: string | null;
-    }[];
-  };
+  `));
   return r.rows.map((row) => ({
     certificateKey: row.certificate_key,
     answers: row.answers ?? {},
@@ -1074,16 +1067,14 @@ async function resolvePayRate(
   /** Functional currency of the run (the run document's currency). */
   payCurrency: string | null,
 ): Promise<{ basis: "hour" | "year"; rate: string; annualHours: string; currency: string } | null> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{ basis: "hour" | "year"; rate: string; annual_hours: string; currency: string }>(sql`
     select * from ${effectivePayRateSql({
       org: sql`${orgId}`,
       employee: sql`${employeePartyId}`,
       onDate: sql`${onDate}`,
       selectList: sql`w.basis, w.rate, w.annual_hours, w.currency`,
     })} as rate
-  `)) as unknown as {
-    rows: { basis: "hour" | "year"; rate: string; annual_hours: string; currency: string }[];
-  };
+  `));
   const row = r.rows[0];
   if (!row) return null;
   const resolved = {
@@ -1153,7 +1144,7 @@ export interface PayRunCalculation {
 export async function captureCalculatedStubs(
   tx: Pick<typeof db, "execute">, orgId: string, documentId: string,
 ): Promise<CapturedStub[]> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute<Record<string, string | number | null>>(sql`
     select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
            l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount,
            l.project_id, l.department_id, l.time_type_id, l.sequence
@@ -1162,7 +1153,7 @@ export async function captureCalculatedStubs(
       left join pay_components c on c.id = l.component_id and c.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by s.employee_party_id, l.sequence, l.description
-  `)) as unknown as { rows: Record<string, string | number | null>[] };
+  `));
   const byEmployee = new Map<string, CapturedStub>();
   for (const row of rows.rows) {
     const employeePartyId = String(row.employee_party_id);
@@ -1250,7 +1241,7 @@ export async function calculatePayRun(input: CalculatePayRunInput): Promise<PayR
 async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayRunCalculation> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
+    const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.currency as doc_currency,
              d.subsidiary_id as doc_subsidiary_id,
              sub.name as subsidiary_name, sub.country as subsidiary_country,
@@ -1263,7 +1254,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
        -- jurisdiction context on the nullable side of an outer join, and
        -- Postgres refuses FOR UPDATE there.
        for update of r, d
-    `)) as unknown as { rows: Record<string, string>[] };
+    `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     // A simulation is a rolled-back re-derivation of a run that has already
@@ -1323,9 +1314,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // declares and branches on nothing.
     await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
 
-    const components = (await tx.execute(sql`
+    const components = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const byKey = new Map<string, Record<string, unknown>>();
     for (const c of components.rows) {
       if (c.system_key) byKey.set(`${c.system_key}:${c.kind}`, c);
@@ -1338,9 +1329,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     // A subsidiary-scoped schedule pays only that entity's employees; an
     // org-wide schedule keeps everyone (the historical behaviour).
-    const scheduleScope = (await tx.execute(sql`
+    const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id}
-    `)) as unknown as { rows: { subsidiary_id: string | null }[] };
+    `));
     const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
     const runType = (run.run_type as string) ?? "regular";
     // `distinct on (p.id)` is load-bearing, not tidiness: employee_roles is
@@ -1348,7 +1339,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // one person — a duplicate stub, doubled pay, and (because the EHT and WCB
     // accumulators below read this run's own stubs) a doubly-consumed
     // exemption. One employee, one pass, stated in the query.
-    const employees = (await tx.execute(sql`
+    const employees = (await tx.execute<Record<string, string | null>>(sql`
       select * from (
         select distinct on (p.id)
                p.id as party_id, p.display_name, er.terminated_on,
@@ -1387,7 +1378,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
          order by p.id, er.terminated_on nulls last
       ) roster
       order by roster.display_name
-    `)) as unknown as { rows: Record<string, string | null>[] };
+    `));
 
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     // Movements are deleted with the stubs that produced them, on the same
@@ -1413,11 +1404,11 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     // Run-level input adjustments: exclusions drop the employee entirely;
     // 'line' rows are merged into the stub's inputs inside calculateStub.
-    const excludedRows = (await tx.execute(sql`
+    const excludedRows = (await tx.execute<{ employee_party_id: string }>(sql`
       select employee_party_id from pay_run_adjustments
        where org_id = ${orgId} and pay_run_document_id = ${documentId}
          and adjustment_type = 'exclude'
-    `)) as unknown as { rows: { employee_party_id: string }[] };
+    `));
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
 
     // The run's own tax year — the resolved context's, never `slice(0, 4)`.
@@ -1540,9 +1531,9 @@ async function calculateStub(
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
   const employeePartyId = emp.party_id!;
-  const schedule = (await tx.execute(sql`
+  const schedule = (await tx.execute<{ periods_per_year: number }>(sql`
     select periods_per_year from pay_schedules where id = ${run.pay_schedule_id}
-  `)) as unknown as { rows: { periods_per_year: number }[] };
+  `));
   const P = schedule.rows[0]!.periods_per_year;
   // Every one of these comes from the resolved context, not from re-reading
   // `emp` and defaulting. `country` decides which statutory engine runs;
@@ -1655,7 +1646,10 @@ async function calculateStub(
     const hourlyWage = payRate!.basis === "hour"
       ? payRate!.rate
       : divideMoney(payRate!.rate, String(payRate!.annualHours), 4);
-    const time = (await tx.execute(sql`
+    const time = (await tx.execute<{
+        id: string; hours: string; project_id: string | null; department_id: string | null;
+        time_type_id: string | null; classification: string; multiplier: string; type_name: string;
+      }>(sql`
       select te.id, te.hours, te.project_id, te.department_id, te.time_type_id,
              coalesce(tt.classification, 'regular') as classification,
              coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name
@@ -1666,12 +1660,7 @@ async function calculateStub(
          and te.worked_on between ${run.period_start} and ${run.period_end}
          and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
          and coalesce(tt.exclude_from_wages, false) = false
-    `)) as unknown as {
-      rows: {
-        id: string; hours: string; project_id: string | null; department_id: string | null;
-        time_type_id: string | null; classification: string; multiplier: string; type_name: string;
-      }[];
-    };
+    `));
     const otComponent = ctx.need("overtime", "earning");
     const groups = new Map<string, { hours: string; rate: string; row: (typeof time.rows)[0] }>();
     for (const t of time.rows) {
@@ -1741,7 +1730,7 @@ async function calculateStub(
   // with no country are shared across packs. `country` is the RESOLVED one
   // (see the destructure at the top of this function) — it used to be
   // re-derived right here as `emp.country === "US" ? "US" : "CA"`.
-  const assigned = (await tx.execute(sql`
+  const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, c.*
       from employee_pay_components a
       join pay_components c on c.id = a.component_id
@@ -1751,7 +1740,7 @@ async function calculateStub(
        and a.effective_from <= ${run.period_end}
        and (a.effective_to is null or a.effective_to >= ${run.period_end})
      order by c.sequence
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
   const earningsBase = () =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
@@ -1799,7 +1788,11 @@ async function calculateStub(
     if (derivedRules.length > 0) {
       // Salaried supervisors earn derived amounts too, and the hourly branch's
       // time query is scoped to wages, so read the period's facts explicitly.
-      const facts = (await tx.execute(sql`
+      const facts = (await tx.execute<{
+          id: string; worked_on: string; hours: string; time_type_id: string | null;
+          project_id: string | null; department_id: string | null;
+          is_billable: boolean; created_at: string | Date;
+        }>(sql`
         select te.id, te.worked_on, te.hours, te.time_type_id, te.project_id,
                te.department_id, te.is_billable, te.created_at
           from time_entries te
@@ -1807,13 +1800,7 @@ async function calculateStub(
            and te.status = 'approved'
            and te.worked_on between ${run.period_start} and ${run.period_end}
            and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
-      `)) as unknown as {
-        rows: {
-          id: string; worked_on: string; hours: string; time_type_id: string | null;
-          project_id: string | null; department_id: string | null;
-          is_billable: boolean; created_at: string | Date;
-        }[];
-      };
+      `));
       const derived = await resolveDerivedEarnings(tx, {
         orgId,
         employeePartyId,
@@ -2026,14 +2013,14 @@ async function calculateStub(
   // run. replaceComponent swaps out the component's derived lines (time,
   // salary, or recurring) before the one-off amount lands; either way the
   // statutory math below sees the adjusted inputs, never edited outputs.
-  const adjustments = (await tx.execute(sql`
+  const adjustments = (await tx.execute<Record<string, unknown>>(sql`
     select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*
       from pay_run_adjustments a
       join pay_components c on c.id = a.component_id
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
        and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
      order by c.sequence, a.created_at
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   for (const adj of adjustments.rows) {
     if (adj.replace_component) {
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -2382,16 +2369,16 @@ async function calculateStub(
   if (country === "CA") {
     const grossEarnings = () =>
       sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
-    const wcbGroup = (await tx.execute(sql`
+    const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
       select g.rate_percent, g.max_assessable
         from employee_roles er
         join worker_comp_groups g on g.id = er.worker_comp_group_id and g.is_active
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId} and er.is_active
        limit 1
-    `)) as unknown as { rows: { rate_percent: string | null; max_assessable: string | null }[] };
+    `));
     const wcb = wcbGroup.rows[0];
     if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
-      const priorAssessable = ((await tx.execute(sql`
+      const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
         select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
           from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id
@@ -2399,7 +2386,7 @@ async function calculateStub(
            and s.tax_year = ${taxYear}
            and (r.run_status in ('calculated', 'committed')
                 or s.pay_run_document_id = ${documentId})
-      `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
+      `))).rows[0]!.prior;
       const gross = grossEarnings();
       const room = wcb.max_assessable
         ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
@@ -2470,14 +2457,14 @@ async function calculateStub(
         // Scoped to the province whose exemption it is: the previous query
         // summed Ontario stubs only, which was right when only Ontario could be
         // levied and wrong the moment a second province can be.
-        const priorInProvince = ((await tx.execute(sql`
+        const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
           select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id
            where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${province}
              and (r.run_status in ('calculated', 'committed')
                   or s.pay_run_document_id = ${documentId})
-        `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
+        `))).rows[0]!.prior;
         const exemption = eht.annualExemption ?? "0";
         const exemptionLeft = cmp(exemption, priorInProvince) > 0
           ? add(exemption, neg(priorInProvince))
@@ -2969,7 +2956,7 @@ async function calculateStub(
     fallbackToCheque: ctx.eftFallbackToCheque,
   }).method;
 
-  const stub = (await tx.execute(sql`
+  const stub = (await tx.execute<{ id: string }>(sql`
     insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
                            periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
                            currency_code, gross, pensionable_earnings, insurable_earnings,
@@ -2982,7 +2969,7 @@ async function calculateStub(
             ${paymentMethod},
             ${actorId}, ${actorId})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const stubId = stub.rows[0]!.id;
   for (const line of lines) {
     await tx.execute(sql`
@@ -3042,11 +3029,9 @@ async function payRunGlLegs(
   {
     const settings = await payrollSettings(orgId);
     const costing = await laborCostingSettings(orgId);
-    const control = (await tx.execute(sql`
+    const control = (await tx.execute<{ c: Record<string, string | null> | null; p: Record<string, unknown> | null }>(sql`
       select settings->'controlAccounts' as c, settings->'payroll' as p from orgs where id = ${orgId}
-    `)) as unknown as {
-      rows: { c: Record<string, string | null> | null; p: Record<string, unknown> | null }[];
-    };
+    `));
     const laborClearing = control.rows[0]?.c?.laborClearing ?? null;
     const rawPayrollSettings = control.rows[0]?.p ?? {};
 
@@ -3072,7 +3057,7 @@ async function payRunGlLegs(
       throw new PayrollError("payroll setup incomplete: labor clearing account is not configured");
     }
 
-    const stubLines = (await tx.execute(sql`
+    const stubLines = (await tx.execute<Record<string, string | null>>(sql`
       select s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.expense_account_id, c.liability_account_id, s.net_pay
         from pay_stub_lines l
@@ -3080,7 +3065,7 @@ async function payRunGlLegs(
         left join pay_components c on c.id = l.component_id
        where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        order by s.employee_party_id, l.sequence
-    `)) as unknown as { rows: Record<string, string | null>[] };
+    `));
     if (stubLines.rows.length === 0) throw new PayrollError("pay run has no calculated stubs");
 
     // Aggregate GL legs: key = account|project|department|party (party only on net pay)
@@ -3160,11 +3145,11 @@ export async function commitPayRun(input: {
 }): Promise<{ lines: number }> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
+    const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status from pay_runs r
       join documents d on d.id = r.document_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
-    `)) as unknown as { rows: Record<string, string>[] };
+    `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.run_status !== "calculated") throw new PayrollError("calculate the pay run before committing");
@@ -3250,10 +3235,10 @@ export async function previewPayRunGl(
 ): Promise<{ legs: (PayRunGlLeg & {
   accountLabel: string; partyName: string | null; projectName: string | null;
 })[]; debitTotal: string }> {
-  const runRows = (await db.execute(sql`
+  const runRows = (await db.execute<{ run_status: string }>(sql`
     select r.run_status from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as { rows: { run_status: string }[] };
+  `));
   if (!runRows.rows[0]) throw new PayrollError("pay run not found");
   if (runRows.rows[0].run_status === "draft") {
     throw new PayrollError("calculate the pay run to preview its GL impact");
@@ -3263,21 +3248,17 @@ export async function previewPayRunGl(
   const partyIds = [...new Set(legs.map((l) => l.partyId).filter(Boolean))] as string[];
   const projectIds = [...new Set(legs.map((l) => l.projectId).filter(Boolean))] as string[];
   const [accounts, parties, projects] = (await Promise.all([
-    db.execute(sql`select id, number, name from accounts
+    db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
                     where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`),
     partyIds.length
-      ? db.execute(sql`select id, display_name from parties
+      ? db.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
                         where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
     projectIds.length
-      ? db.execute(sql`select id, name from projects
+      ? db.execute<{ id: string; name: string }>(sql`select id, name from projects
                         where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
-  ])) as unknown as [
-    { rows: { id: string; number: string | null; name: string }[] },
-    { rows: { id: string; display_name: string }[] },
-    { rows: { id: string; name: string }[] },
-  ];
+  ]));
   const accountById = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
   const partyById = new Map(parties.rows.map((p) => [p.id, p.display_name]));
   const projectById = new Map(projects.rows.map((p) => [p.id, p.name]));

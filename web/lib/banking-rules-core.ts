@@ -67,16 +67,16 @@ export function isCategorizeOutcome(o: RuleOutcome): o is Extract<RuleOutcome, {
   return o.action === 'categorize'
 }
 
-export interface RuleRow {
+export type RuleRow = {
   id: string
   name: string
   criteria: RuleCriteria
   outcome: RuleOutcome
   priority: number
   is_active: boolean
-}
+};
 
-export interface BankLine {
+export type BankLine = {
   id: string
   posted_on: string
   amount: string
@@ -84,7 +84,7 @@ export interface BankLine {
   counterparty_ref: string | null
   currency: string
   source: string
-}
+};
 
 // ---------------------------------------------------------------------------
 // Evaluation

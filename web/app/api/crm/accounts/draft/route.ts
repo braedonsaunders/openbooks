@@ -12,19 +12,19 @@ export async function POST() {
   const { user } = gate
   await ensureCrmDefaults(user.orgId, user.id)
   const result = await db.transaction(async (tx) => {
-    const party = (await tx.execute(sql`
+    const party = (await tx.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, is_active, created_by, updated_by)
       values (${user.orgId}, 'company', 'New lead', false, ${user.id}, ${user.id}) returning id
-    `)) as unknown as { rows: { id: string }[] }
-    const status = (await tx.execute(sql`
+    `))
+    const status = (await tx.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${user.orgId} and lifecycle_stage = 'lead' and is_default and is_active
-       order by sequence limit 1`)) as unknown as { rows: { id: string }[] }
-    const profile = (await tx.execute(sql`
+       order by sequence limit 1`))
+    const profile = (await tx.execute<{ id: string }>(sql`
       insert into crm_account_profiles
         (org_id, party_id, lifecycle_stage, status_id, owner_user_id, is_active, created_by, updated_by)
       values (${user.orgId}, ${party.rows[0]!.id}, 'lead', ${status.rows[0]?.id ?? null}, ${user.id}, false, ${user.id}, ${user.id})
-      returning id`)) as unknown as { rows: { id: string }[] }
+      returning id`))
     await tx.execute(sql`
       insert into crm_account_stage_events
         (org_id, account_profile_id, to_stage, source_kind, reason, created_by, updated_by)

@@ -310,10 +310,10 @@ export async function enrichContinuousCloseRun(
   const authz = systemAuthz(input.orgId, input.agentKey);
   const tools = buildToolRegistry(authz);
   const evidence = input.agentKey === "finance" ? await financeEvidence(input, authz) : null;
-  const org = (await db.execute(sql`
+  const org = (await db.execute<{ locale: string }>(sql`
     select coalesce(settings->>'defaultLocale', 'en') as locale
       from orgs where id = ${input.orgId}
-  `)) as unknown as { rows: { locale: string }[] };
+  `));
   const fiscal = await orgFiscalContext(undefined, input.orgId);
   const timeoutController = new AbortController();
   const timeout = setTimeout(

@@ -55,7 +55,7 @@ async function orgRefExists(
                 : kind === 'workerComp'
                   ? sql`select 1 from worker_comp_groups where id = ${id} and org_id = ${orgId} and is_active`
                   : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
-  const result = await db.execute(query) as unknown as { rows: unknown[] }
+  const result = await db.execute(query)
   return result.rows.length === 1
 }
 
@@ -166,7 +166,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{
+    display_name: string
+    is_active: boolean
+    updated_at: Date
+    customer_hold: boolean
+    customer_hold_reason: string | null
+    vendor_hold: boolean
+    vendor_hold_reason: string | null
+    before: Record<string, unknown>
+  }>(sql`
     select p.display_name, p.is_active, p.updated_at,
            coalesce(cr.is_on_hold, false) as customer_hold,
            cr.hold_reason as customer_hold_reason,
@@ -181,16 +190,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
       left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
      where p.id = ${id} and p.org_id = ${user.orgId}
-  `)) as unknown as { rows: {
-    display_name: string
-    is_active: boolean
-    updated_at: Date
-    customer_hold: boolean
-    customer_hold_reason: string | null
-    vendor_hold: boolean
-    vendor_hold_reason: string | null
-    before: Record<string, unknown>
-  }[] }
+  `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
@@ -236,7 +236,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad('Vendor payment hold requires a reason of at least 5 characters')
   }
   if (body.isActive === false && existing.rows[0].is_active) {
-    const live = (await db.execute(sql`
+    const live = (await db.execute<{ in_flight: number; open_balance_count: number }>(sql`
       select
         count(*) filter (
           where status in ('pending_approval', 'approved')
@@ -246,7 +246,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )::int as open_balance_count
         from documents
        where org_id = ${user.orgId} and party_id = ${id}
-    `)) as unknown as { rows: { in_flight: number; open_balance_count: number }[] }
+    `))
     const row = live.rows[0]
     if ((row?.in_flight ?? 0) > 0 || (row?.open_balance_count ?? 0) > 0) {
       return bad('resolve in-flight transactions and open balances before deactivating this party')
@@ -294,12 +294,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ...(additionalSubsidiaryIds ?? []),
   ])]
   if (requestedSubsidiaries.length > 0) {
-    const found = (await db.execute(sql`
+    const found = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${user.orgId} and is_active and not is_elimination
-         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)) as unknown as {
-      rows: { id: string }[]
-    }
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`))
     if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
   }
 
@@ -311,7 +309,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    const updatedParty = (await db.execute(sql`
+    const updatedParty = (await db.execute<{ id: string }>(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
         invoicing_preference = ${invoicingPref !== undefined ? (invoicingPref === null ? sql`null` : sql`${JSON.stringify(invoicingPref)}::jsonb`) : sql`invoicing_preference`},
@@ -328,7 +326,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where id = ${id} and org_id = ${user.orgId}
         and updated_at = ${existing.rows[0].updated_at}
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (!updatedParty.rows[0]) {
       return NextResponse.json(
         { error: 'this party changed while you were saving; reload and review the latest revision' },

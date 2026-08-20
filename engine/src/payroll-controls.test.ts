@@ -254,10 +254,10 @@ test(
  */
 async function voidedRunStatusAllowed(): Promise<boolean> {
   if (!DB) return false;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ def: string }>(sql`
     select pg_get_constraintdef(oid) as def from pg_constraint
      where conrelid = 'pay_runs'::regclass and conname = 'pay_runs_run_status'
-  `)) as unknown as { rows: { def: string }[] };
+  `));
   return !r.rows[0] || r.rows[0].def.includes("'voided'");
 }
 

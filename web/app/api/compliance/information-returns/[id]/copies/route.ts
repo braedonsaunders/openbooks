@@ -39,16 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const recipientId = new URL(req.url).searchParams.get('recipientId')
   if (recipientId && !isUuid(recipientId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const filings = (await db.execute(sql`
-    select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
-           coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name,
-           o.settings->'taxIds' as org_tax_ids
-      from information_return_filings f
-      join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id
-     where f.org_id = ${orgId} and f.id = ${id}
-  `)) as unknown as {
-    rows: {
+  const filings = (await db.execute<{
       tax_year: number
       form_type: string
       currency: string
@@ -56,23 +47,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       payer_snapshot: { taxIds?: Record<string, string> } | null
       payer_name: string
       org_tax_ids: Record<string, string> | null
-    }[]
-  }
+    }>(sql`
+    select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
+           coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name,
+           o.settings->'taxIds' as org_tax_ids
+      from information_return_filings f
+      join orgs o on o.id = f.org_id
+      left join subsidiaries s on s.id = f.subsidiary_id
+     where f.org_id = ${orgId} and f.id = ${id}
+  `))
   const filing = filings.rows[0]
   if (!filing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const recipients = (await db.execute(sql`
-    select r.id, r.status, r.tin_last4, r.tin_type, r.computed_amounts, r.adjustments,
-           r.corrected_from_id,
-           coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
-           r.recipient_snapshot->'address' as address
-      from information_return_recipients r
-      join parties p on p.id = r.party_id
-     where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
-       and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
-     order by name
-  `)) as unknown as {
-    rows: {
+  const recipients = (await db.execute<{
       id: string
       status: string
       tin_last4: string | null
@@ -82,8 +69,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       corrected_from_id: string | null
       name: string
       address: Record<string, string | null> | null
-    }[]
-  }
+    }>(sql`
+    select r.id, r.status, r.tin_last4, r.tin_type, r.computed_amounts, r.adjustments,
+           r.corrected_from_id,
+           coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
+           r.recipient_snapshot->'address' as address
+      from information_return_recipients r
+      join parties p on p.id = r.party_id
+     where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
+       and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
+     order by name
+  `))
   if (recipients.rows.length === 0) {
     return NextResponse.json({ error: 'no included recipients to print' }, { status: 422 })
   }

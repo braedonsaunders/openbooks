@@ -55,24 +55,18 @@ export async function GET() {
 
   const [schedules, employees, trades, departments, subsidiaries] = await Promise.all([
     loadWorkSchedules(db, orgId),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId}
-       order by p.display_name`) as unknown as Promise<{ rows: { id: string; name: string }[] }>,
-    db.execute(sql`
-      select id, name from trades where org_id = ${orgId} order by name`) as unknown as Promise<{
-      rows: { id: string; name: string }[]
-    }>,
-    db.execute(sql`
-      select id, name from departments where org_id = ${orgId} order by name`) as unknown as Promise<{
-      rows: { id: string; name: string }[]
-    }>,
-    db.execute(sql`
-      select id, name from subsidiaries where org_id = ${orgId} order by name`) as unknown as Promise<{
-      rows: { id: string; name: string }[]
-    }>,
+       order by p.display_name`),
+    db.execute<{ id: string; name: string }>(sql`
+      select id, name from trades where org_id = ${orgId} order by name`),
+    db.execute<{ id: string; name: string }>(sql`
+      select id, name from departments where org_id = ${orgId} order by name`),
+    db.execute<{ id: string; name: string }>(sql`
+      select id, name from subsidiaries where org_id = ${orgId} order by name`),
   ])
 
   return NextResponse.json({
@@ -166,7 +160,7 @@ export async function POST(request: Request) {
   const saved = await db.transaction(async (tx) => {
     let scheduleId = id
     if (scheduleId) {
-      const updated = (await tx.execute(sql`
+      const updated = (await tx.execute<{ id: string }>(sql`
         update work_schedules
            set name = ${name}, employee_party_id = ${scope.employeePartyId},
                job_title = ${scope.jobTitle}, trade_id = ${scope.tradeId},
@@ -176,12 +170,12 @@ export async function POST(request: Request) {
                notes = ${notes}, is_active = ${isActive},
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${scheduleId}
-         returning id`)) as unknown as { rows: { id: string }[] }
+         returning id`))
       if (updated.rows.length === 0) throw new Error('that work schedule no longer exists')
       await tx.execute(sql`
         delete from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`)
     } else {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into work_schedules (org_id, name, employee_party_id, job_title, trade_id,
                                     department_id, subsidiary_id, pattern, cycle_days, cycle_anchor,
                                     effective_from, effective_to, notes, is_active,
@@ -190,7 +184,7 @@ export async function POST(request: Request) {
                 ${scope.departmentId}, ${scope.subsidiaryId}, ${pattern}, ${cycleDays},
                 ${cycleAnchor}, ${effectiveFrom}, ${effectiveTo}, ${notes}, ${isActive},
                 ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] }
+        returning id`))
       scheduleId = inserted.rows[0]!.id
     }
     for (const day of days) {

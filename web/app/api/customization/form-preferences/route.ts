@@ -28,7 +28,7 @@ export async function PUT(req: Request) {
     const owned = (await db.execute(sql`
       select 1 from form_layouts
        where id = ${layoutId} and org_id = ${user.orgId} and record_type = ${body.recordType}
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!owned.rows[0]) return NextResponse.json({ error: "form layout not found" }, { status: 404 });
   }
   await db.execute(sql`

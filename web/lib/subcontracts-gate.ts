@@ -5,11 +5,11 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 
 async function enabled(orgId: string): Promise<boolean> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true)
        and coalesce((settings->'features'->>'subcontracts')::boolean, false) as enabled
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { enabled: boolean }[] };
+  `));
   return result.rows[0]?.enabled === true;
 }
 

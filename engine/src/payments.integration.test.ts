@@ -34,9 +34,9 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
     const invoiceEntryId = await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const invoiceControl = (await db.execute(sql`
+    const invoiceControl = (await db.execute<{ id: string }>(sql`
       select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const targetLineId = invoiceControl.rows[0]!.id;
 
     const payment = await createPaymentDocument({
@@ -72,18 +72,25 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
     await db.execute(sql`
       update orgs set settings = settings #- '{controlAccounts,fxRealizedGainLoss}' where id = ${org.orgId}`);
     await assert.rejects(postPaymentWithApplications(payment.id, undefined, userId), /realized FX gain\/loss account is not configured/);
-    const afterFailure = (await db.execute(sql`
+    const afterFailure = (await db.execute<{ status: string; posted_entry_id: string | null; entries: number }>(sql`
       select status, posted_entry_id,
              (select count(*) from journal_entries where source_document_id = ${payment.id})::int as entries
         from documents where id = ${payment.id}
-    `)) as unknown as { rows: { status: string; posted_entry_id: string | null; entries: number }[] };
+    `));
     assert.deepEqual(afterFailure.rows[0], { status: "approved", posted_entry_id: null, entries: 0 });
 
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${org.accounts.fxGainLoss}::text), true)
        where id = ${org.orgId}`);
     const { entryId: paymentEntryId } = await postPaymentWithApplications(payment.id, undefined, userId);
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{
+      amount: string; source_amount: string;
+      source_transaction_amount: string; source_transaction_currency: string;
+      target_transaction_amount: string; target_transaction_currency: string;
+      settlement_rate: string; settlement_rate_source: string; settlement_rate_reference: string;
+      fx_gain_loss_entry_id: string; fx_status: string; fx_balance: string;
+      control_adjustment: string; gain_loss: string;
+    }>(sql`
       select a.amount, a.source_amount,
              a.source_transaction_amount, a.source_transaction_currency,
              a.target_transaction_amount, a.target_transaction_currency,
@@ -94,14 +101,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
              (select amount from journal_lines where entry_id = a.fx_gain_loss_entry_id and account_id = ${org.accounts.fxGainLoss}) as gain_loss
         from applications a join journal_entries fx on fx.id = a.fx_gain_loss_entry_id
        where a.from_line_id in (select id from journal_lines where entry_id = ${paymentEntryId})
-    `)) as unknown as { rows: {
-      amount: string; source_amount: string;
-      source_transaction_amount: string; source_transaction_currency: string;
-      target_transaction_amount: string; target_transaction_currency: string;
-      settlement_rate: string; settlement_rate_source: string; settlement_rate_reference: string;
-      fx_gain_loss_entry_id: string; fx_status: string; fx_balance: string;
-      control_adjustment: string; gain_loss: string;
-    }[] };
+    `));
     assert.deepEqual(evidence.rows[0], {
       amount: "120.0000",
       source_amount: "130.0000",
@@ -122,14 +122,14 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
     const fxEntryId = evidence.rows[0]!.fx_gain_loss_entry_id;
     const reversalId = await reversePaymentForReturn(payment.id, org.orgId, "NSF", userId, org.date);
     assert.ok(reversalId);
-    const reversed = (await db.execute(sql`
+    const reversed = (await db.execute<{ payment_status: string; fx_status: string; reversals: number; unapplied: number; document_status: string }>(sql`
       select
         (select status from journal_entries where id = ${paymentEntryId}) as payment_status,
         (select status from journal_entries where id = ${fxEntryId}) as fx_status,
         (select count(*) from journal_entries where reverses_entry_id in (${paymentEntryId}, ${fxEntryId}) and status = 'posted')::int as reversals,
         (select count(*) from applications where from_line_id in (select id from journal_lines where entry_id = ${paymentEntryId}) and unapplied_at is not null)::int as unapplied,
         (select status from documents where id = ${payment.id}) as document_status
-    `)) as unknown as { rows: { payment_status: string; fx_status: string; reversals: number; unapplied: number; document_status: string }[] };
+    `));
     assert.deepEqual(reversed.rows[0], {
       payment_status: "reversed",
       fx_status: "reversed",

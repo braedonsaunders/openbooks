@@ -36,8 +36,7 @@ import {
   lineFieldMeta,
   FORM_ACTION_KEYS,
 } from '@openbooks/customization'
-
-interface Opt {
+type Opt = {
   id: string
   display_name?: string
   number?: string
@@ -47,7 +46,7 @@ interface Opt {
   label?: string
   subsidiary_id?: string | null
   tax_components?: TaxComponentConfig[]
-}
+};
 
 interface SubsidiaryOpt {
   id: string

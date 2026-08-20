@@ -34,12 +34,12 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const COMPONENT_KINDS = new Set(['percent_of_wage', 'per_hour', 'per_day', 'worker_comp'])
 
 async function configuredCurrencies(orgId: string): Promise<string[]> {
-  const result = await db.execute(sql`
+  const result = await db.execute<{ code: string }>(sql`
     select code from (
       select base_currency as code from orgs where id = ${orgId}
       union
       select base_currency as code from subsidiaries where org_id = ${orgId} and is_active
-    ) configured order by code`) as unknown as { rows: { code: string }[] }
+    ) configured order by code`)
   return result.rows.map((row) => row.code)
 }
 
@@ -73,26 +73,21 @@ export async function GET(req: Request) {
   const employee = url.searchParams.get('employee')
   if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
   const [rates, org, currencies, employeeContext] = await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, rate, currency, basis, annual_hours, effective_from::text as effective_from,
              effective_to::text as effective_to, notes,
              effective_from <= current_date and (effective_to is null or effective_to >= current_date) as is_current
         from labor_cost_rates
        where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
        order by effective_from desc`),
-    db.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
     configuredCurrencies(gate.user.orgId),
-    db.execute(sql`
+    db.execute<{ base_currency: string | null }>(sql`
       select s.base_currency
         from parties p
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id and s.is_active
        where p.org_id = ${gate.user.orgId} and p.id = ${employee}`),
-  ]) as unknown as [
-    { rows: Record<string, unknown>[] },
-    { rows: { base_currency: string }[] },
-    string[],
-    { rows: { base_currency: string | null }[] },
-  ]
+  ])
   const orgCurrency = org.rows[0]?.base_currency ?? 'CAD'
   return NextResponse.json({
     rates: rates.rows,
@@ -167,7 +162,7 @@ export async function POST(req: Request) {
       tradeId ? db.execute(sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`) : null,
       departmentId ? db.execute(sql`select 1 from departments where org_id = ${orgId} and id = ${departmentId} and is_active`) : null,
       subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`) : null,
-    ]) as unknown as Array<{ rows: unknown[] } | null>
+    ])
     if (scopeRefs.some((result) => result && result.rows.length !== 1)) return NextResponse.json({ error: 'wage scope is not available' }, { status: 422 })
     const currencies = await configuredCurrencies(orgId)
     const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
@@ -238,7 +233,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
     }
     if (!isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
-    const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`) as unknown as { rows: unknown[] }
+    const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
     if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
     const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
     if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
@@ -250,7 +245,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
     }
     if (!isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
-    const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`) as unknown as { rows: unknown[] }
+    const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
     if (subsidiary.rows.length !== 1) return NextResponse.json({ error: 'subsidiary is not available' }, { status: 422 })
     try {
       const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd, subsidiaryId: body.subsidiaryId })

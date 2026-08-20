@@ -65,13 +65,13 @@ export async function createDocumentCorrectionDraft(input: {
 
   return withOrg(input.orgId, async () =>
     db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<{ id: string }>(sql`
         select id
           from documents
          where id = ${input.sourceDocumentId}
            and org_id = ${input.orgId}
          for update
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const [source] = locked.rows[0]
         ? await tx
             .select()
@@ -80,7 +80,12 @@ export async function createDocumentCorrectionDraft(input: {
         : [];
       if (!source) throw new DocumentCorrectionError("source document not found");
 
-      const existing = (await tx.execute(sql`
+      const existing = (await tx.execute<{
+          id: string;
+          document_number: string;
+          reason: string;
+          requested_by: string;
+        }>(sql`
         select replacement.id, replacement.document_number,
                link.reason, link.requested_by
           from document_links link
@@ -91,14 +96,7 @@ export async function createDocumentCorrectionDraft(input: {
            and link.to_document_id = ${source.id}
            and link.link_type = 'reverses'
          limit 1
-      `)) as unknown as {
-        rows: Array<{
-          id: string;
-          document_number: string;
-          reason: string;
-          requested_by: string;
-        }>;
-      };
+      `));
       const prior = existing.rows[0];
       if (prior) {
         if (
@@ -123,14 +121,14 @@ export async function createDocumentCorrectionDraft(input: {
         );
       }
 
-      const duplicateNumber = (await tx.execute(sql`
+      const duplicateNumber = (await tx.execute<{ id: string }>(sql`
         select id
           from documents
          where org_id = ${input.orgId}
            and kind = ${source.kind}
            and document_number = ${replacementDocumentNumber}
          limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (duplicateNumber.rows[0]) {
         throw new DocumentCorrectionError(
           `${replacementDocumentNumber} is already in use for ${source.kind}`,

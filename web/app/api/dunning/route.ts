@@ -45,16 +45,16 @@ function validStages(raw: unknown): StageInput[] | null {
 
 export async function GET() {
   const authz = await requirePermission("documents.manage");
-  const policies = (await db.execute(sql`
+  const policies = (await db.execute<Record<string, unknown>>(sql`
     select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
            min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive"
       from dunning_policies where org_id = ${authz.user.orgId} order by name
-  `)) as unknown as { rows: Record<string, unknown>[] };
-  const stages = (await db.execute(sql`
+  `));
+  const stages = (await db.execute<Record<string, unknown>>(sql`
     select id, policy_id as "policyId", sequence, name, offset_days as "offsetDays",
            subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
       from dunning_stages where org_id = ${authz.user.orgId} order by policy_id, sequence
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const byPolicy = new Map<string, Record<string, unknown>[]>();
   for (const s of stages.rows) {
     const key = s.policyId as string;
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
 
   const id = await db.transaction(async (tx) => {
-    const created = (await tx.execute(sql`
+    const created = (await tx.execute<{ id: string }>(sql`
       insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
                                     reply_to, is_active, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${(body.appliesToKind as string) ?? "customer_invoice"},
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
               ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
               ${authz.user.id}, ${authz.user.id})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const policyId = created.rows[0]!.id;
     for (const s of stages) {
       await tx.execute(sql`

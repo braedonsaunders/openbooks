@@ -52,7 +52,10 @@ interface RunStub {
 }
 
 async function runStubs(orgId: string, documentId: string): Promise<RunStub[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      id: string; name: string; email: string | null; delivery: string
+      employee_number: string | null; birth_date: string | null
+    }>(sql`
     select s.id, p.display_name as name, p.email,
            coalesce(prof.stub_delivery, 'email') as delivery,
            er.employee_number, er.birth_date::text as birth_date
@@ -63,12 +66,7 @@ async function runStubs(orgId: string, documentId: string): Promise<RunStub[]> {
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
-  `)) as unknown as {
-    rows: {
-      id: string; name: string; email: string | null; delivery: string
-      employee_number: string | null; birth_date: string | null
-    }[]
-  }
+  `))
   return r.rows.map((row) => {
     const [surname, ...given] = splitName(row.name)
     return {
@@ -93,9 +91,9 @@ function splitName(displayName: string): string[] {
 }
 
 export async function stubPasswordPolicy(orgId: string): Promise<StubPasswordPolicy> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ policy: { enabled?: unknown; expression?: unknown } | null }>(sql`
     select settings#>'{payroll,stubPassword}' as policy from orgs where id = ${orgId}
-  `)) as unknown as { rows: { policy: { enabled?: unknown; expression?: unknown } | null }[] }
+  `))
   const policy = r.rows[0]?.policy ?? {}
   return {
     enabled: policy.enabled === true,

@@ -201,15 +201,13 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
 async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
   const econ = ctx.profile.economics!;
   const monthStart = `${ctx.simDate.slice(0, 7)}-01`;
-  const rev = (await db.execute(sql`
+  const rev = (await db.execute<{ revenue: string }>(sql`
     select coalesce(sum(case when kind = 'customer_invoice' then total
                              when kind = 'customer_credit'  then -total else 0 end), 0)::text as revenue
       from documents
      where org_id = ${ctx.world.orgId} and status = 'posted'
        and kind in ('customer_invoice', 'customer_credit')
-       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`)) as unknown as {
-    rows: { revenue: string }[];
-  };
+       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`));
   const revenue = rev.rows[0]?.revenue ?? "0";
   if (cmp(revenue, "0") <= 0) return;
 

@@ -43,7 +43,7 @@ export default async function PayrollRetroPage() {
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
-  const schedules = (await db.execute(sql`
+  const schedules = (await db.execute<RetroSchedule>(sql`
     select s.id, s.name
       from pay_schedules s
      where s.org_id = ${orgId} and s.is_active
@@ -53,7 +53,7 @@ export default async function PayrollRetroPage() {
           where r.org_id = s.org_id and r.pay_schedule_id = s.id
             and r.run_status = 'committed')
      order by s.name
-  `)) as unknown as { rows: RetroSchedule[] }
+  `))
 
   const tabs = await groupTabs('payroll', '/payroll/retro')
 

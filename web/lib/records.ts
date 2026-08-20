@@ -48,10 +48,10 @@ export async function loadRecordTypeByKey(
   orgId: string,
   key: string,
 ): Promise<RecordTypeRow | undefined> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<RecordTypeRow>(sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and key = ${key}
-  `)) as unknown as { rows: RecordTypeRow[] }
+  `))
   return r.rows[0]
 }
 
@@ -59,10 +59,10 @@ export async function loadRecordTypeById(
   orgId: string,
   id: string,
 ): Promise<RecordTypeRow | undefined> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<RecordTypeRow>(sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and id = ${id}
-  `)) as unknown as { rows: RecordTypeRow[] }
+  `))
   return r.rows[0]
 }
 
@@ -71,11 +71,11 @@ export async function loadRecord(
   typeKey: string,
   id: string,
 ): Promise<RecordRow | undefined> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<RecordRow>(sql`
     select id, type_id, type_key, record_number, data, status, created_at, created_by, updated_at
       from custom_records
      where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
-  `)) as unknown as { rows: RecordRow[] }
+  `))
   return r.rows[0]
 }
 
@@ -122,16 +122,16 @@ export async function resolveEntityLabels(
   }
   const [parties, accounts] = await Promise.all([
     partyIds.size > 0
-      ? (db.execute(sql`
+      ? (db.execute<{ id: string; display_name: string }>(sql`
           select id, display_name from parties
            where id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...partyIds])}::jsonb))
-        `) as unknown as Promise<{ rows: { id: string; display_name: string }[] }>)
+        `))
       : Promise.resolve({ rows: [] as { id: string; display_name: string }[] }),
     accountIds.size > 0
-      ? (db.execute(sql`
+      ? (db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name from accounts
            where id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...accountIds])}::jsonb))
-        `) as unknown as Promise<{ rows: { id: string; number: string | null; name: string }[] }>)
+        `))
       : Promise.resolve({ rows: [] as { id: string; number: string | null; name: string }[] }),
   ])
   return {

@@ -23,9 +23,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
 
   // Org-scoped existence + kind lookup BEFORE anything is disclosed.
-  const owned = (await db.execute(
+  const owned = (await db.execute<{ kind: string }>(
     sql`select kind from documents where id = ${id} and org_id = ${authz.user.orgId}`,
-  )) as unknown as { rows: { kind: string }[] }
+  ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!DOC_KINDS[row.kind]) {
@@ -57,11 +57,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = authz.user
   const { id } = await params
 
-  const owned = (await db.execute(
+  const owned = (await db.execute<(DocumentEditCurrent)>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
                document_date as "documentDate", updated_at as "updatedAt"
           from documents where id = ${id} and org_id = ${user.orgId}`,
-  )) as unknown as { rows: (DocumentEditCurrent)[] }
+  ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]
@@ -114,9 +114,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
-  const owned = (await db.execute(
+  const owned = (await db.execute<{ kind: string }>(
     sql`select kind from documents where id = ${id} and org_id = ${authz.user.orgId}`,
-  )) as unknown as { rows: { kind: string }[] }
+  ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]

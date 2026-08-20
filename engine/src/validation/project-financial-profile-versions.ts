@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, type SqlExecutor } from "../db.ts";
 import {
   publishProjectFinancialProfileInTransaction,
   type PublishProjectFinancialProfileInput,
@@ -9,7 +9,7 @@ import type { FinancialProfile } from "@openbooks/schema";
 const ROLLBACK = Symbol("expected validation rollback");
 
 async function expectDatabaseRejection(
-  tx: { execute: (query: any) => Promise<any> },
+  tx: SqlExecutor,
   name: string,
   query: any,
 ): Promise<void> {
@@ -25,7 +25,14 @@ async function expectDatabaseRejection(
 }
 
 async function main(): Promise<void> {
-  const population = (await db.execute(sql`
+  const population = (await db.execute<{
+      project_types: number;
+      versions: number;
+      missing_versions: number;
+      overlaps: number;
+      gaps: number;
+      unresolved_current: number;
+    }>(sql`
     select
       (select count(*)::int from project_types) as project_types,
       (select count(*)::int from project_financial_profile_versions) as versions,
@@ -72,16 +79,7 @@ async function main(): Promise<void> {
               and (v.effective_to is null or v.effective_to >= current_date)
          ) <> 1
       ) as unresolved_current
-  `)) as unknown as {
-    rows: {
-      project_types: number;
-      versions: number;
-      missing_versions: number;
-      overlaps: number;
-      gaps: number;
-      unresolved_current: number;
-    }[];
-  };
+  `));
   const counts = population.rows[0]!;
   for (const key of [
     "missing_versions",
@@ -92,7 +90,11 @@ async function main(): Promise<void> {
     if (counts[key] !== 0) throw new Error(`${key}: ${counts[key]}`);
   }
 
-  const candidate = (await db.execute(sql`
+  const candidate = (await db.execute<{
+      org_id: string;
+      id: string;
+      financial_profile: FinancialProfile;
+    }>(sql`
     select pt.org_id, pt.id, v.financial_profile
       from project_types pt
       join project_financial_profile_versions v
@@ -108,13 +110,7 @@ async function main(): Promise<void> {
      )
      order by pt.org_id, pt.id
      limit 1
-  `)) as unknown as {
-    rows: {
-      org_id: string;
-      id: string;
-      financial_profile: FinancialProfile;
-    }[];
-  };
+  `));
   const type = candidate.rows[0];
   if (!type) throw new Error("no project type available for rollback exercise");
 
@@ -164,7 +160,7 @@ async function main(): Promise<void> {
         actorId: null,
       };
       const published = await publishProjectFinancialProfileInTransaction(tx, input);
-      const evidence = (await tx.execute(sql`
+      const evidence = (await tx.execute<{ version_exists: boolean; audit_exists: boolean }>(sql`
         select
           exists (
             select 1
@@ -179,9 +175,7 @@ async function main(): Promise<void> {
                and row_id = ${published.id}
                and action = 'insert'
           ) as audit_exists
-      `)) as unknown as {
-        rows: { version_exists: boolean; audit_exists: boolean }[];
-      };
+      `));
       if (!evidence.rows[0]?.version_exists || !evidence.rows[0]?.audit_exists) {
         throw new Error("controlled publication did not produce version and audit evidence");
       }
@@ -191,13 +185,13 @@ async function main(): Promise<void> {
     if (error !== ROLLBACK) throw error;
   }
 
-  const persistedProbe = (await db.execute(sql`
+  const persistedProbe = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n
       from project_financial_profile_versions
      where org_id = ${type.org_id}
        and project_type_id = ${type.id}
        and effective_from = date '9999-01-01'
-  `)) as unknown as { rows: { n: number }[] };
+  `));
   if (persistedProbe.rows[0]?.n !== 0) {
     throw new Error("rollback-only validation version persisted");
   }

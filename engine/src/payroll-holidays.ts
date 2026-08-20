@@ -385,23 +385,21 @@ export async function loadHolidayOverrides(
   orgId: string,
   jurisdiction: string,
 ): Promise<HolidayOverride[]> {
-  const rows = (await tx.execute(sql`
-    select id, jurisdiction, pack_key, name, rule_kind, rule_month, rule_day,
-           rule_weekday, rule_nth, rule_offset, observed_on, observance,
-           is_observed, is_paid, effective_from, effective_to
-      from payroll_holidays
-     where org_id = ${orgId} and jurisdiction = ${jurisdiction}
-     order by effective_from, pack_key nulls last, name
-  `)) as unknown as {
-    rows: {
+  const rows = (await tx.execute<{
       id: string; jurisdiction: string; pack_key: string | null; name: string | null;
       rule_kind: HolidayOverride["ruleKind"]; rule_month: number | null; rule_day: number | null;
       rule_weekday: number | null; rule_nth: number | null; rule_offset: number | null;
       observed_on: string | Date | null; observance: PayrollHolidayObservance;
       is_observed: boolean; is_paid: boolean;
       effective_from: string | Date; effective_to: string | Date | null;
-    }[];
-  };
+    }>(sql`
+    select id, jurisdiction, pack_key, name, rule_kind, rule_month, rule_day,
+           rule_weekday, rule_nth, rule_offset, observed_on, observance,
+           is_observed, is_paid, effective_from, effective_to
+      from payroll_holidays
+     where org_id = ${orgId} and jurisdiction = ${jurisdiction}
+     order by effective_from, pack_key nulls last, name
+  `));
   const day = (value: string | Date | null): string | null =>
     value === null ? null : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
   return rows.rows.map((row) => ({
@@ -954,11 +952,11 @@ export async function resolveStatutoryHolidayPay(
     .filter((holiday) => holiday.paid);
   if (holidays.length === 0) return [];
 
-  const hire = (await tx.execute(sql`
+  const hire = (await tx.execute<{ hired_on: string | Date | null }>(sql`
     select hired_on from employee_roles
      where org_id = ${input.orgId} and party_id = ${input.employeePartyId}
      order by hired_on nulls last limit 1
-  `)) as unknown as { rows: { hired_on: string | Date | null }[] };
+  `));
   const hiredOn = hire.rows[0]?.hired_on
     ? String(hire.rows[0].hired_on instanceof Date
         ? hire.rows[0].hired_on.toISOString()
@@ -1135,7 +1133,10 @@ async function lookbackEarnings(
   input: StatutoryHolidayPayInput,
   window: { from: string; to: string },
 ): Promise<HolidayLookbackEarnings> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute<{
+      system_key: string; amount: string;
+      period_start: string | Date; period_end: string | Date;
+    }>(sql`
     select coalesce(c.system_key, '') as system_key,
            sum(l.amount) as amount,
            r.period_start, r.period_end
@@ -1148,12 +1149,7 @@ async function lookbackEarnings(
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
      group by c.system_key, r.period_start, r.period_end
-  `)) as unknown as {
-    rows: {
-      system_key: string; amount: string;
-      period_start: string | Date; period_end: string | Date;
-    }[];
-  };
+  `));
 
   const totals = emptyLookbackEarnings();
   for (const row of rows.rows) {
@@ -1318,13 +1314,13 @@ async function loadHolidayDayEvidence(
    *  counts only days worked does not pay for the stub scan. */
   needsPaidDays: boolean,
 ): Promise<HolidayDayEvidence> {
-  const worked = (await tx.execute(sql`
+  const worked = (await tx.execute<{ worked_on: string | Date }>(sql`
     select distinct worked_on
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `)) as unknown as { rows: { worked_on: string | Date }[] };
+  `));
 
   const day = (value: string | Date) =>
     String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
@@ -1337,7 +1333,10 @@ async function loadHolidayDayEvidence(
   // earnings on it. The classification is done here rather than in SQL so the
   // rule ("paid for the period, not for hours") is readable beside the comment
   // that justifies it.
-  const stubs = (await tx.execute(sql`
+  const stubs = (await tx.execute<{
+      period_start: string | Date; period_end: string | Date;
+      hours: string; earnings: string; holiday_pay: string;
+    }>(sql`
     select r.period_start, r.period_end,
            coalesce(sum(case when l.kind = 'earning' then l.hours end), 0)::text as hours,
            coalesce(sum(case when l.kind = 'earning' then l.amount end), 0)::text as earnings,
@@ -1352,12 +1351,7 @@ async function loadHolidayDayEvidence(
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
      group by s.id, r.period_start, r.period_end
-  `)) as unknown as {
-    rows: {
-      period_start: string | Date; period_end: string | Date;
-      hours: string; earnings: string; holiday_pay: string;
-    }[];
-  };
+  `));
 
   const paidPeriodsWithoutHours: { from: string; to: string }[] = [];
   const holidayPaidPeriods: { from: string; to: string }[] = [];
@@ -1384,12 +1378,12 @@ async function hoursOn(
   input: StatutoryHolidayPayInput,
   date: string,
 ): Promise<string> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute<{ hours: string }>(sql`
     select coalesce(sum(hours), 0)::text as hours
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and worked_on = ${date}
-  `)) as unknown as { rows: { hours: string }[] };
+  `));
   return roundMoney(rows.rows[0]?.hours ?? "0", 2);
 }
 

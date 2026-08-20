@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const r = (await db.execute(sql`
+  const r = (await db.execute<any>(sql`
     select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
            d.total::numeric(19,4) as cost,
            coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
      where d.org_id = ${gate.user.orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
      group by d.id
      order by d.document_date desc, d.document_number desc
-  `)) as unknown as { rows: any[] }
+  `))
   return NextResponse.json({ charges: r.rows })
 }
 

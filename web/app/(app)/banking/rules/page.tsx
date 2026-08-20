@@ -29,34 +29,34 @@ export default async function BankingRules({
 
   const [offsetAccounts, reconAccounts, departments, locations, classes, taxCodes, parties, open, seedLine] =
     (await Promise.all([
-      db.execute(sql`
+      db.execute<any>(sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and is_active and not is_summary
          order by number nulls last limit 2000
       `),
-      db.execute(sql`
+      db.execute<any>(sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
          order by number nulls last
       `),
-      db.execute(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute(sql`select id, code, name from tax_codes where org_id = ${authz.user.orgId} and is_active order by code limit 500`),
-      db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
+      db.execute<any>(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
+      db.execute<any>(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
+      db.execute<any>(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
+      db.execute<any>(sql`select id, code, name from tax_codes where org_id = ${authz.user.orgId} and is_active order by code limit 500`),
+      db.execute<any>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
       openId && openId !== 'new' && isUuid(openId)
-        ? db.execute(sql`
+        ? db.execute<any>(sql`
             select id, name, criteria, outcome, priority, is_active
               from bank_match_rules where id = ${openId} and org_id = ${authz.user.orgId}
           `)
         : Promise.resolve({ rows: [] }),
       fromLine && isUuid(fromLine)
-        ? db.execute(sql`
+        ? db.execute<any>(sql`
             select l.description, l.amount from bank_statement_lines l
              where l.id = ${fromLine} and l.org_id = ${authz.user.orgId} limit 1
           `)
         : Promise.resolve({ rows: [] }),
-    ])) as unknown as { rows: any[] }[]
+    ]))
 
   const accountOpts = offsetAccounts.rows.map((account: any) => ({
     value: account.id,

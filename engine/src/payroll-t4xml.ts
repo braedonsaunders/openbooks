@@ -99,9 +99,9 @@ export async function buildT4Xml(
    */
   unsupportedFilings: string[];
 }> {
-  const cfgRow = (await db.execute(sql`
+  const cfgRow = (await db.execute<{ cfg: Partial<TransmitterConfig> | null }>(sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
-  `)) as unknown as { rows: { cfg: Partial<TransmitterConfig> | null }[] };
+  `));
   const cfg = cfgRow.rows[0]?.cfg ?? {};
   const missingCfg = (["bn", "transmitterNumber", "name", "contactName", "contactEmail", "contactPhone"] as const)
     .filter((key) => !cfg[key] || !String(cfg[key]).trim());
@@ -118,11 +118,11 @@ export async function buildT4Xml(
     : await scopedReturns(orgId, taxYear, options.rowIds);
   const slipCount = returns.reduce((count, ret) => count + ret.slips.length, 0);
 
-  const sins = (await db.execute(sql`
+  const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId}
-  `)) as unknown as { rows: { employee_party_id: string; sin_encrypted: string | null }[] };
+  `));
   const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];

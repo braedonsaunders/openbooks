@@ -80,13 +80,13 @@ async function seedBanks(): Promise<BankFixture> {
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
 
-  const components = (await db.execute(sql`
+  const components = (await db.execute<{ accrual_id: string; payout_id: string }>(sql`
     select (array_agg(id order by created_at, id)
               filter (where system_key = 'vacation_accrual'))[1] as accrual_id,
            (array_agg(id order by created_at, id)
               filter (where system_key = 'vacation_payout'))[1] as payout_id
       from pay_components where org_id = ${org.orgId}
-  `)) as unknown as { rows: { accrual_id: string; payout_id: string }[] };
+  `));
   const accrualComponentId = components.rows[0]!.accrual_id;
   const payoutComponentId = components.rows[0]!.payout_id;
 
@@ -112,10 +112,10 @@ async function seedBanks(): Promise<BankFixture> {
   // second one: `entitlement_plans_org_system` allows only one plan per org to
   // claim a system key, and inventing a parallel vacation plan here would test a
   // shape no tenant has.
-  const vacation = (await db.execute(sql`
+  const vacation = (await db.execute<{ id: string }>(sql`
     select id from entitlement_plans
      where org_id = ${org.orgId} and system_key = 'vacation'
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const vacationPlanId = vacation.rows[0]!.id;
   const bankedPlanId = await plan("BANK", "Banked overtime");
   const recoupPlanId = await plan("RECOUP", "Benefit recoup", {
@@ -244,11 +244,9 @@ test(
       assert.equal(byCode.get("VAC")!.balance, "6200.0000");
       assert.equal(byCode.get("BANK")!.balance, "1450.5000");
       // The movement is an `opening`, written through the ledger, not a column.
-      const kinds = (await db.execute(sql`
+      const kinds = (await db.execute<{ kind: string; n: number }>(sql`
         select kind, count(*)::int as n from entitlement_ledger
-         where org_id = ${fx.orgId} group by kind`)) as unknown as {
-        rows: { kind: string; n: number }[];
-      };
+         where org_id = ${fx.orgId} group by kind`));
       assert.deepEqual(kinds.rows, [{ kind: "opening", n: 2 }]);
 
       // A final pay must clear every accrued bank — with the carry-in in it.
@@ -265,15 +263,13 @@ test(
       });
       assert.deepEqual(result.errors, []);
 
-      const payouts = (await db.execute(sql`
+      const payouts = (await db.execute<{ description: string; amount: string }>(sql`
         select l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.component_id = ${fx.payoutComponentId} and l.description like '%payout%'
-         order by l.description`)) as unknown as {
-        rows: { description: string; amount: string }[];
-      };
+         order by l.description`));
       const paid = new Map(payouts.rows.map((r) => [r.description, r.amount]));
       assert.equal(
         paid.get("Banked overtime payout (accrued balance)"), "1450.5000",

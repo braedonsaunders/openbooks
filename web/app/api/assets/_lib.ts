@@ -75,16 +75,16 @@ export async function loadAsset(
   orgId: string,
   options: { bookId?: string | null; query?: string; page?: number; perPage?: number } = {},
 ): Promise<AssetPayload | null> {
-  const assetRes = (await db.execute(sql`
+  const assetRes = (await db.execute<Record<string, any>>(sql`
     select * from fixed_assets where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const asset = assetRes.rows[0]
   if (!asset) return null
 
   const catRes = asset.category_id
-    ? ((await db.execute(sql`
+    ? ((await db.execute<Record<string, any>>(sql`
         select * from asset_categories where id = ${asset.category_id} and org_id = ${orgId}
-      `)) as unknown as { rows: Record<string, any>[] })
+      `)))
     : { rows: [] }
   const category = catRes.rows[0] ?? null
 
@@ -110,13 +110,13 @@ export async function loadAsset(
     eff.depreciationExpenseAccountId,
   ].filter(Boolean)
   const acctRes = ids.length
-    ? ((await db.execute(sql`
+    ? ((await db.execute<Record<string, any>>(sql`
         select id, number, name from accounts
          where org_id = ${orgId} and id = any(${sql`array[${sql.join(
            ids.map((i) => sql`${i}::uuid`),
            sql`, `,
          )}]`})
-      `)) as unknown as { rows: Record<string, any>[] })
+      `)))
     : { rows: [] }
   const byId = new Map(acctRes.rows.map((r) => [r.id, r]))
 
@@ -125,7 +125,7 @@ export async function loadAsset(
   const query = (options.query ?? '').trim()
   const bookId = options.bookId ?? null
   const [bookRows, totalRows, primaryTotals] = await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, any>>(sql`
       select b.id, b.code, b.name, b.is_primary, b.posts_gl,
              s.method, s.depreciation_method_id, m.name as method_name
         from accounting_books b
@@ -133,7 +133,7 @@ export async function loadAsset(
         left join depreciation_methods m on m.id=s.depreciation_method_id
        where b.org_id=${orgId} and b.is_active
        order by b.is_primary desc, b.code`),
-    db.execute(sql`
+    db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id=l.schedule_id
@@ -142,7 +142,7 @@ export async function loadAsset(
        where s.asset_id=${id} and l.org_id=${orgId}
          ${bookId ? sql`and s.book_id=${bookId}` : sql``}
          ${query ? sql`and (p.name ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`),
-    db.execute(sql`
+    db.execute<{ posted: string; planned: string; has_evidence: boolean }>(sql`
       select coalesce(sum(l.posted_amount),0)::text as posted,
              coalesce(sum(l.planned_amount),0)::text as planned,
              exists (
@@ -155,11 +155,8 @@ export async function loadAsset(
         join accounting_books b on b.id=s.book_id and b.is_primary
         left join depreciation_schedule_lines l on l.schedule_id=s.id
        where s.asset_id=${id} and s.org_id=${orgId}`),
-  ]) as unknown as [
-    { rows: Record<string, any>[] }, { rows: { n: number }[] },
-    { rows: { posted: string; planned: string; has_evidence: boolean }[] },
-  ]
-  const linesRes = (await db.execute(sql`
+  ])
+  const linesRes = (await db.execute<Record<string, any>>(sql`
     with schedule_rows as (
       select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source,
              s.book_id, b.code as book_code, b.name as book_name,
@@ -184,7 +181,7 @@ export async function loadAsset(
        ${query ? sql`and (period_name ilike ${`%${query}%`} or book_name ilike ${`%${query}%`} or source ilike ${`%${query}%`})` : sql``}
      order by book_code, period_starts_on, sequence
      limit ${perPage} offset ${(page - 1) * perPage}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
 
   const cost = toUnits(String(asset.acquisition_cost ?? '0'))
   const schedule = linesRes.rows.map((l) => {

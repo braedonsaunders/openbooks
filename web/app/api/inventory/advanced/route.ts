@@ -51,7 +51,7 @@ export async function GET(req: Request) {
        group by l.id, i.code, i.name
        order by l.lot_number
        limit 200
-    `)) as unknown as { rows: unknown[] };
+    `));
     return NextResponse.json({ lots: rows.rows });
   }
 
@@ -60,7 +60,7 @@ export async function GET(req: Request) {
       select id, document_number as "documentNumber", status, amount, basis, voucher_date as "voucherDate", memo
         from landed_cost_vouchers where org_id = ${orgId}
        order by voucher_date desc limit 50
-    `)) as unknown as { rows: unknown[] };
+    `));
     return NextResponse.json({ vouchers: rows.rows });
   }
 
@@ -74,7 +74,7 @@ export async function GET(req: Request) {
      where t.org_id = ${orgId}
      order by t.ordered_on desc, t.created_at desc
      limit 50
-  `)) as unknown as { rows: unknown[] };
+  `));
   return NextResponse.json({ transfers: transfers.rows });
 }
 
@@ -93,9 +93,9 @@ export async function POST(req: Request) {
       case "createTransfer": {
         let subsidiaryId = body.subsidiaryId;
         if (!subsidiaryId || !isUuid(subsidiaryId)) {
-          const r = (await db.execute(
+          const r = (await db.execute<{ id: string }>(
             sql`select id from subsidiaries where org_id = ${orgId} order by created_at limit 1`,
-          )) as unknown as { rows: { id: string }[] };
+          ));
           subsidiaryId = r.rows[0]?.id;
         }
         if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
@@ -124,9 +124,9 @@ export async function POST(req: Request) {
       case "postLandedVoucher": {
         let subsidiaryId = body.subsidiaryId;
         if (!subsidiaryId || !isUuid(subsidiaryId)) {
-          const r = (await db.execute(
+          const r = (await db.execute<{ id: string }>(
             sql`select id from subsidiaries where org_id = ${orgId} order by created_at limit 1`,
-          )) as unknown as { rows: { id: string }[] };
+          ));
           subsidiaryId = r.rows[0]?.id;
         }
         if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });

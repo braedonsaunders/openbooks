@@ -97,9 +97,9 @@ export async function GET(req: Request) {
   const orgId = gate.user.orgId
   const url = new URL(req.url)
 
-  const blobRes = (await db.execute(
+  const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { p: Record<string, unknown> | null }[] }
+  ))
   const installed = await installedPayrollCountries(orgId, blobRes.rows[0]?.p ?? {})
   const requestedYear = Number(url.searchParams.get('year'))
   const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100

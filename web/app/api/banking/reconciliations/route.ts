@@ -27,7 +27,7 @@ export async function GET(req: Request) {
        ${accountId ? sql` and r.account_id = ${accountId}` : sql``}
      order by r.created_at desc
      limit 200
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({ reconciliations: rows.rows })
 }
 

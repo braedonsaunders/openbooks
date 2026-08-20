@@ -17,7 +17,7 @@ export default async function InvoicingSettingsPage() {
   const [subscriptionBillingEnabled, projectsEnabled, projectTypes, subscriptionCounts] = await Promise.all([
     isFeatureEnabled(orgId, 'subscriptionBilling'),
     isFeatureEnabled(orgId, 'projects'),
-    db.execute(sql`
+    db.execute<{ active: number; standard: number; applications: number }>(sql`
       select count(*) filter (where is_active)::int as active,
              count(*) filter (
                where is_active
@@ -28,16 +28,12 @@ export default async function InvoicingSettingsPage() {
                  and invoicing_profile->>'billingProcedure' = 'application_for_payment'
              )::int as applications
         from project_types
-       where org_id = ${orgId}`) as unknown as Promise<{
-      rows: { active: number; standard: number; applications: number }[]
-    }>,
-    db.execute(sql`
+       where org_id = ${orgId}`),
+    db.execute<{ active: number; paused: number }>(sql`
       select count(*) filter (where status = 'active')::int as active,
              count(*) filter (where status = 'paused')::int as paused
         from subscriptions
-       where org_id = ${orgId}`) as unknown as Promise<{
-      rows: { active: number; paused: number }[]
-    }>,
+       where org_id = ${orgId}`),
   ])
   const typeCounts = projectTypes.rows[0]
   const subscriptions = subscriptionCounts.rows[0]

@@ -26,13 +26,12 @@ import {
   type FormLayoutConfig,
   type HeaderFieldPlacement,
 } from '@openbooks/customization'
-
-interface Opt {
+type Opt = {
   id: string
   display_name?: string
   number?: string
   name?: string
-}
+};
 interface SubsidiaryOpt {
   id: string
   name: string

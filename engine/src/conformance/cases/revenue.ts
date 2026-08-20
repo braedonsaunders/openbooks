@@ -417,20 +417,16 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           },
         ],
       }).then(async () => {
-        const row = (await db.execute(sql`
-          select id from documents where org_id = ${ledger.orgId} and document_number = 'CONF-REV-3'`)) as unknown as {
-          rows: { id: string }[];
-        };
+        const row = (await db.execute<{ id: string }>(sql`
+          select id from documents where org_id = ${ledger.orgId} and document_number = 'CONF-REV-3'`));
         return row.rows[0]!.id;
       });
 
-      const rows = (await db.execute(sql`
+      const rows = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n
           from performance_obligations
          where org_id = ${ledger.orgId}
-           and document_line_id in (select id from document_lines where document_id = ${documentId})`)) as unknown as {
-        rows: { n: number }[];
-      };
+           and document_line_id in (select id from document_lines where document_id = ${documentId})`));
       return { values: { obligations: String(rows.rows[0]!.n) } };
     },
   },

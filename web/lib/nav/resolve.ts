@@ -39,10 +39,8 @@ export async function resolveNav(
   t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
   const [r, appResult, featureState] = await Promise.all([
-    db.execute(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`) as unknown as Promise<{
-      rows: { config: OrgNavConfig }[]
-    }>,
-    db.execute(sql`
+    db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`),
+    db.execute<NavAppOption>(sql`
       select a.key,
              coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
              coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
@@ -50,7 +48,7 @@ export async function resolveNav(
         join app_versions v on v.id = a.active_version_id
        where a.org_id = ${orgId} and a.status = 'installed'
        order by a.sort_order, a.name
-    `) as unknown as Promise<{ rows: NavAppOption[] }>,
+    `),
     resolvedFeatureState(orgId),
   ])
   const saved = r.rows[0]?.config
@@ -161,19 +159,17 @@ async function recordTypeNavItems(
 ): Promise<SidebarNavGroup['items']> {
   if (!can('records.read')) return []
   try {
-    const r = (await db.execute(sql`
-      select key, plural_name, icon_key, allowed_roles
-        from custom_record_types
-       where org_id = ${orgId} and status = 'published' and show_in_nav
-       order by sort_order, plural_name
-    `)) as unknown as {
-      rows: {
+    const r = (await db.execute<{
         key: string
         plural_name: string
         icon_key: string
         allowed_roles: string[] | null
-      }[]
-    }
+      }>(sql`
+      select key, plural_name, icon_key, allowed_roles
+        from custom_record_types
+       where org_id = ${orgId} and status = 'published' and show_in_nav
+       order by sort_order, plural_name
+    `))
     return r.rows
       .filter(
         (t) =>

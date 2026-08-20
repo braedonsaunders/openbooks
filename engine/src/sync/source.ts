@@ -97,10 +97,10 @@ export interface SourceProjectAccountMonthRow {
 }
 
 /** Source ground truth for one open item (invoice/bill): remaining unpaid. */
-export interface SourceOpenItem {
+export type SourceOpenItem = {
   ref: string;
   unpaid: string;
-}
+};
 
 export interface SourceLedgerContext {
   /** Source-native identifier of the authoritative ledger/book. */

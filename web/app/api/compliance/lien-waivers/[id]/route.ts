@@ -52,10 +52,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const action: Action = body.action ?? 'update'
 
-  const before = (await db.execute(sql`
+  const before = (await db.execute<Record<string, unknown>>(sql`
     select id, status, waiver_number, waiver_type, through_date, amount, currency, direction
       from lien_waivers where org_id = ${orgId} and id = ${id}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   const waiver = before.rows[0]
   if (!waiver) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!ALLOWED_FROM[action].includes(String(waiver.status))) {

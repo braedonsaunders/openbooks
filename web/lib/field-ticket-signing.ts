@@ -29,11 +29,9 @@ export async function sendTicketForSignature(args: {
   message?: string | null
   appBaseUrl: string
 }): Promise<{ to: string }> {
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<{ id: string; status: string; document_number: string }>(sql`
     select id, status, document_number from documents
-     where id = ${args.ticketId} and org_id = ${args.orgId} and kind = 'field_ticket'`)) as unknown as {
-    rows: { id: string; status: string; document_number: string }[]
-  }
+     where id = ${args.ticketId} and org_id = ${args.orgId} and kind = 'field_ticket'`))
   const row = doc.rows[0]
   if (!row) throw new FieldTicketError('Ticket not found')
   if (row.status !== 'approved') throw new FieldTicketError('Approve the ticket before sending it for signature')
@@ -44,7 +42,7 @@ export async function sendTicketForSignature(args: {
     resolvePdfTemplate(args.orgId, 'field_ticket', null),
     loadPdfRecordValues('field_ticket', args.orgId, args.ticketId),
     resolveOrgEmailTransport(args.orgId),
-    db.execute(sql`select name from orgs where id = ${args.orgId}`) as unknown as Promise<{ rows: { name: string }[] }>,
+    db.execute<{ name: string }>(sql`select name from orgs where id = ${args.orgId}`),
   ])
   if (!tpl || !record) throw new FieldTicketError('Could not render the ticket PDF')
   if (!transport) throw new FieldTicketError('Email delivery is not configured — set it up in Admin → Email')

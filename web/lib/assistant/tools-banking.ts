@@ -28,7 +28,7 @@ const listBankReconciliations: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
@@ -38,7 +38,7 @@ const listBankReconciliations: AssistantToolDef = {
          ${a.accountId ? sql` and r.account_id = ${a.accountId}` : sql``}
        order by r.created_at desc
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {
@@ -69,14 +69,14 @@ const getBankReconciliation: AssistantToolDef = {
   inputSchema: z.object({ reconciliationId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { reconciliationId: string };
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
         join accounts a on a.id = r.account_id
        where r.org_id = ${authz.user.orgId} and r.id = ${a.reconciliationId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const recon = rows.rows[0];
     if (!recon) return { ok: false, error: "reconciliation_not_found" };
     const totals = await reconciliationTotals(a.reconciliationId, {
@@ -122,7 +122,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
     const where = sql`l.org_id = ${authz.user.orgId} and l.match_status = 'unmatched'
       ${a.accountId ? sql` and l.account_id = ${a.accountId}` : sql``}`;
     const [rows, count] = (await Promise.all([
-      db.execute(sql`
+      db.execute<Record<string, unknown>>(sql`
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                l.account_id, a.number as account_number, a.name as account_name
           from bank_statement_lines l
@@ -131,8 +131,8 @@ const listUnmatchedBankLines: AssistantToolDef = {
          order by l.posted_on desc, l.line_number
          limit ${limit}
       `),
-      db.execute(sql`select count(*) as n from bank_statement_lines l where ${where}`),
-    ])) as unknown as [{ rows: Record<string, unknown>[] }, { rows: { n: string }[] }];
+      db.execute<{ n: string }>(sql`select count(*) as n from bank_statement_lines l where ${where}`),
+    ]));
     const total = Number(count.rows[0]?.n ?? 0);
     const { items, truncated } = capList(
       rows.rows.map((l) => ({
@@ -173,7 +173,7 @@ const listBankFeeds: AssistantToolDef = {
     }
     // Deliberately never selects the sealed `credentials` column — only the
     // fact that credentials exist.
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select c.id, c.name, c.provider, c.account_id, c.status,
              c.external_account_id, c.sync_cadence,
              c.next_sync_at, c.last_sync_at, c.last_result, c.last_error, c.is_active,
@@ -184,7 +184,7 @@ const listBankFeeds: AssistantToolDef = {
        where c.org_id = ${authz.user.orgId}
        order by c.created_at desc
        limit 200
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {

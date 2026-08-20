@@ -10,25 +10,24 @@ const SESSION_TTL_MS = 2 * 60 * 60 * 1_000;
 interface QbdSecrets { webConnectorPassword: string }
 interface QbdConfig { historyStartDate: string; companyFile?: string }
 
-export interface CaptureResponse {
+export type CaptureResponse = {
   family: string;
   requestKind: string;
   page: number;
   responseXml: string;
-}
+};
 
 export interface QbdAuthResult {
   ticket: string;
   companyFile: string;
 }
-
-interface PublicConnection {
+type PublicConnection = {
   id: string;
   orgId: string;
   config: QbdConfig;
   secrets: string | null;
   status: string;
-}
+};
 
 function secureEqual(left: string, right: string): boolean {
   const a = createHash("sha256").update(left).digest();
@@ -38,9 +37,9 @@ function secureEqual(left: string, right: string): boolean {
 
 async function publicConnection(connectionId: string): Promise<PublicConnection | null> {
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<PublicConnection>(sql`
       select id, org_id as "orgId", config, secrets, status
-        from connections where id = ${connectionId} and source = 'qbd' limit 1`)) as unknown as { rows: PublicConnection[] };
+        from connections where id = ${connectionId} and source = 'qbd' limit 1`));
     return result.rows[0] ?? null;
   });
 }
@@ -90,11 +89,9 @@ export async function waitForCapture(orgId: string, captureId: string): Promise<
   const started = Date.now();
   while (Date.now() - started < CAPTURE_TTL_MS) {
     const state = await withOrgContext(orgId, async () => {
-      const capture = (await db.execute(sql`
+      const capture = (await db.execute<{ status: string; errorMessage: string | null; expiresAt: Date }>(sql`
         select status, error_message as "errorMessage", expires_at as "expiresAt"
-          from qbd_captures where id = ${captureId} limit 1`)) as unknown as {
-        rows: { status: string; errorMessage: string | null; expiresAt: Date }[];
-      };
+          from qbd_captures where id = ${captureId} limit 1`));
       return capture.rows[0] ?? null;
     });
     if (!state) throw new Error("QuickBooks Desktop capture disappeared");
@@ -160,14 +157,12 @@ export async function authenticateWebConnector(connectionId: string, username: s
     await db.execute(sql`
       update qbd_requests set status = 'queued', session_id = null, sent_at = null, updated_at = now()
        where connection_id = ${connectionId} and status = 'sent' and sent_at < now() - interval '10 minutes'`);
-    const pending = (await db.execute(sql`
+    const pending = (await db.execute<{ pending: boolean }>(sql`
       select exists(
         select 1 from qbd_requests r join qbd_captures c on c.id = r.capture_id
          where r.connection_id = ${connectionId} and r.status = 'queued'
            and c.status in ('queued', 'running') and c.expires_at > now()
-      ) as pending`)) as unknown as {
-      rows: { pending: boolean }[];
-    };
+      ) as pending`));
     const ticket = randomUUID();
     await db.insert(schema.qbdSessions).values({
       id: ticket,
@@ -178,16 +173,15 @@ export async function authenticateWebConnector(connectionId: string, username: s
     return { ticket, companyFile: pending.rows[0]?.pending ? String(conn.config.companyFile ?? "") : "none" };
   });
 }
-
-interface SessionRow { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null }
+type SessionRow = { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null };
 
 async function session(ticket: string): Promise<SessionRow | null> {
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<SessionRow>(sql`
       select s.id, s.org_id as "orgId", s.connection_id as "connectionId", s.status,
              c.config->>'region' as "expectedRegion"
         from qbd_sessions s join connections c on c.id = s.connection_id
-       where s.id = ${ticket} and s.expires_at > now() limit 1`)) as unknown as { rows: SessionRow[] };
+       where s.id = ${ticket} and s.expires_at > now() limit 1`));
     return result.rows[0] ?? null;
   });
 }
@@ -218,7 +212,7 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
              country = coalesce(${metadata.country ?? null}, country), qbxml_major = coalesce(${metadata.qbxmlMajor ?? null}, qbxml_major),
              qbxml_minor = coalesce(${metadata.qbxmlMinor ?? null}, qbxml_minor)
        where id = ${ticket}`);
-    const result = (await tx.execute(sql`
+    const result = (await tx.execute<{ requestXml: string; captureId: string }>(sql`
       update qbd_requests set status = 'sent', session_id = ${ticket}, sent_at = now(), updated_at = now()
        where id = (
          select r.id from qbd_requests r
@@ -226,9 +220,7 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
          where r.connection_id = ${current.connectionId} and r.status = 'queued'
            and c.status in ('queued', 'running') and c.expires_at > now()
           order by r.sequence for update of r skip locked limit 1
-       ) returning request_xml as "requestXml", capture_id as "captureId"`)) as unknown as {
-      rows: { requestXml: string; captureId: string }[];
-    };
+       ) returning request_xml as "requestXml", capture_id as "captureId"`));
     const request = result.rows[0];
     if (!request) return "";
     await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${request.captureId} and status = 'queued'`);
@@ -240,13 +232,11 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
   const current = await session(ticket);
   if (!current || current.status !== "open") return -101;
   return withBypassContext(async () => db.transaction(async (tx) => {
-    const sent = (await tx.execute(sql`
+    const sent = (await tx.execute<{ id: string; orgId: string; captureId: string; family: string; requestKind: string; sequence: number; page: number; requestXml: string }>(sql`
       select id, org_id as "orgId", capture_id as "captureId", family, request_kind as "requestKind",
              sequence, page, request_xml as "requestXml"
         from qbd_requests where session_id = ${ticket} and status = 'sent'
-       order by sent_at desc limit 1 for update`)) as unknown as {
-      rows: Array<{ id: string; orgId: string; captureId: string; family: string; requestKind: string; sequence: number; page: number; requestXml: string }>;
-    };
+       order by sent_at desc limit 1 for update`));
     const request = sent.rows[0];
     if (!request) return -101;
     if (hresult || !responseXml.trim()) {
@@ -293,13 +283,11 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
         requestXml: next.requestXml,
       });
     }
-    const counts = (await tx.execute(sql`
+    const counts = (await tx.execute<{ complete: number; remaining: number; total: number }>(sql`
       select count(*) filter (where status = 'complete')::int as complete,
              count(*) filter (where status in ('queued', 'sent'))::int as remaining,
              count(*)::int as total
-        from qbd_requests where capture_id = ${request.captureId}`)) as unknown as {
-      rows: { complete: number; remaining: number; total: number }[];
-    };
+        from qbd_requests where capture_id = ${request.captureId}`));
     const count = counts.rows[0] ?? { complete: 0, remaining: 1, total: 1 };
     const complete = count.remaining === 0;
     await tx.execute(sql`
@@ -316,7 +304,7 @@ export async function webConnectorLastError(ticket: string): Promise<string> {
   const current = await session(ticket);
   if (!current) return "Invalid or expired Web Connector ticket";
   return withBypassContext(async () => {
-    const result = (await db.execute(sql`select last_error as error from qbd_sessions where id = ${ticket}`)) as unknown as { rows: { error: string | null }[] };
+    const result = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket}`));
     return result.rows[0]?.error ?? "No error recorded";
   });
 }
@@ -356,8 +344,8 @@ export async function recordConnectionError(ticket: string, hresult: string, mes
 
 export async function latestWebConnectorHeartbeat(orgId: string, connectionId: string): Promise<Date | null> {
   return withOrgContext(orgId, async () => {
-    const result = (await db.execute(sql`
-      select max(last_seen_at) as heartbeat from qbd_sessions where connection_id = ${connectionId}`)) as unknown as { rows: { heartbeat: Date | null }[] };
+    const result = (await db.execute<{ heartbeat: Date | null }>(sql`
+      select max(last_seen_at) as heartbeat from qbd_sessions where connection_id = ${connectionId}`));
     return result.rows[0]?.heartbeat ?? null;
   });
 }

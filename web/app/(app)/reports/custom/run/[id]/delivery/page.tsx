@@ -36,14 +36,14 @@ export default async function ReportDeliveryPage({ params }: { params: Promise<{
     : definition.name
 
   const [schedules, recentRuns] = (await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
              timezone, recipient_emails, next_run_at, active
         from report_schedules
        where org_id = ${authz.user.orgId} and definition_id = ${id}
        order by next_run_at
     `),
-    db.execute(sql`
+    db.execute<any>(sql`
       select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
              exists(select 1 from report_run_artifacts a where a.run_id=r.id) as artifact_available,
              count(d.id)::int as delivery_total,
@@ -56,7 +56,7 @@ export default async function ReportDeliveryPage({ params }: { params: Promise<{
        group by r.id
        order by r.created_at desc limit 10
     `),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }]
+  ]))
 
   return (
     <DetailPageLayout

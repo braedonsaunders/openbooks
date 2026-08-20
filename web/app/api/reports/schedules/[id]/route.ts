@@ -23,11 +23,11 @@ type ScheduleRow = {
 }
 
 async function loadSchedule(orgId: string, id: string): Promise<ScheduleRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ScheduleRow>(sql`
     select id, cadence, day_of_week, day_of_month, hour, minute, timezone, recipient_emails, active
       from report_schedules
      where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: ScheduleRow[] }
+  `))
   return r.rows[0] ?? null
 }
 
@@ -92,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where id = ${id} and org_id = ${user.orgId}
     returning id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
               timezone, recipient_emails, next_run_at, active
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({ schedule: updated.rows[0] })
 }
 

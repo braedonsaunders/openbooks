@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = (await req.json().catch(() => ({}))) as { action?: string; isActive?: boolean }
   if (body.action === 'run') {
     // Scoped run: activate-scan just this org's schedules and report this one.
-    const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`)) as unknown as { rows: unknown[] }
+    const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`))
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const runs = await runDueSftpImports(user.orgId, id)
     const mine = runs.find((r) => r.scheduleId === id)

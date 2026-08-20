@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
 import {
   computeLineTaxes,
@@ -18,7 +18,7 @@ export interface TaxProfiles {
 export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<TaxProfiles> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const date = asOfDate ?? new Date().toISOString().slice(0, 10)
-  const codeRows = (await db.execute(sql`
+  const codeRows = (await db.execute<Record<string, any>>(sql`
     select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
@@ -31,7 +31,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
            and (effective_to is null or effective_to >= ${date})
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const config = (row: Record<string, any>, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
     taxCodeId: String(row.id),
     code: String(row.code),
@@ -48,7 +48,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
   })
   const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows.map((row) => [String(row.id), [config(row, 1)]]))
 
-  const groupRows = (await db.execute(sql`
+  const groupRows = (await db.execute<Record<string, any>>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
            tgm.sequence, tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
            tc.recoverable_percent::text as recoverable_percent,
@@ -64,7 +64,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
          order by effective_from desc limit 1) tr on true
      where tg.org_id = ${resolvedOrgId} and tg.is_active
      order by tg.id, tgm.sequence
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const groups = new Map<string, TaxComponentConfig[]>()
   for (const row of groupRows.rows) {
     const id = String(row.group_id)
@@ -114,7 +114,7 @@ export function computeBillTotals(lines: BillLineInput[], profiles: TaxProfiles)
   return { lines: computed, subtotal, taxTotal, total: add(subtotal, taxTotal) }
 }
 
-type SqlRunner = { execute: (query: ReturnType<typeof sql>) => Promise<unknown> }
+type SqlRunner = SqlExecutor
 
 /** Persist the immutable calculation snapshot immediately after its document line. */
 export async function persistLineTaxComponents(
@@ -155,13 +155,13 @@ export async function nextDocumentNumber(orgId: string, kind: string, prefix: st
          limit 1`)) as any).rows.length > 0
     : false
   const sequenceSubsidiaryId = configured ? requested : null
-  const seq = (await db.execute(sql`
+  const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] }
+  `))
   const s = seq.rows[0]!
   return `${s.prefix}${String(s.next_number).padStart(s.padding, '0')}`
 }
@@ -169,20 +169,20 @@ export async function nextDocumentNumber(orgId: string, kind: string, prefix: st
 /** Full bill payload for the drawer: header + lines. */
 export async function loadBill(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as vendor_name, e.id as entry_id
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'vendor_bill'
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!doc.rows[0]) return null
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.description, l.amount, l.tax_code_id, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.custom
       from document_lines l
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return { doc: doc.rows[0], lines: lines.rows }
 }

@@ -54,13 +54,13 @@ export async function POST(request: Request) {
     let captureItemId: string
     try {
       captureItemId = await db.transaction(async (tx) => {
-        const inserted = (await tx.execute(sql`
+        const inserted = (await tx.execute<{ id: string }>(sql`
           insert into ap_capture_items (org_id, file_id, status, source, original_filename,
                                         content_hash, created_by, updated_by)
           values (${gate.user.orgId}, ${stored.id}, 'queued', 'upload', ${upload.filename},
                   ${upload.hash}, ${gate.user.id}, ${gate.user.id})
           returning id
-        `)) as unknown as { rows: { id: string }[] }
+        `))
         const id = inserted.rows[0].id
         await tx.execute(sql`
           insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)

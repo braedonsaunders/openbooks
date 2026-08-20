@@ -475,10 +475,10 @@ export async function loadBoxRules(
   formType: FormType,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, string>> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ account_id: string; box: string }>(sql`
     select account_id, box from information_return_box_rules
      where org_id = ${orgId} and form_type = ${formType} and is_active
-  `)) as unknown as { rows: { account_id: string; box: string }[] };
+  `));
   return new Map(r.rows.map((row) => [row.account_id, row.box]));
 }
 
@@ -500,7 +500,7 @@ export async function loadPaymentTraces(args: {
   const runner = args.runner ?? db;
   const from = `${args.taxYear}-01-01`;
   const to = `${args.taxYear}-12-31`;
-  const payments = (await runner.execute(sql`
+  const payments = (await runner.execute<{ id: string; document_number: string; party_id: string; document_date: string; cash: string }>(sql`
     select d.id, d.document_number, d.party_id, d.document_date,
            -- Cash out is the credit to the funding account; sum the negative,
            -- non-open-item legs so cheques, EFT and card runs all measure alike.
@@ -515,15 +515,13 @@ export async function loadPaymentTraces(args: {
      group by d.id, d.document_number, d.party_id, d.document_date
      having coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) > 0
      order by d.document_date, d.document_number
-  `)) as unknown as {
-    rows: { id: string; document_number: string; party_id: string; document_date: string; cash: string }[];
-  };
+  `));
   if (payments.rows.length === 0) return new Map();
 
   const paymentIds = payments.rows.map((p) => p.id);
   // What each payment settled, and each settled bill's expense composition.
   // `applications.amount` is base currency, matching the cash figure above.
-  const settled = (await runner.execute(sql`
+  const settled = (await runner.execute<{ payment_id: string; bill_id: string; applied: string }>(sql`
     with paid as (
       select d.id as payment_id, jl.id as line_id
         from documents d
@@ -539,18 +537,18 @@ export async function loadPaymentTraces(args: {
       join documents bill on bill.id = bje.source_document_id
      where a.org_id = ${args.orgId}
      group by paid.payment_id, bill.id
-  `)) as unknown as { rows: { payment_id: string; bill_id: string; applied: string }[] };
+  `));
 
   const billIds = [...new Set(settled.rows.map((r) => r.bill_id))];
   const lines = billIds.length
-    ? ((await runner.execute(sql`
+    ? ((await runner.execute<{ document_id: string; account_id: string | null; weight: string }>(sql`
         select dl.document_id, dl.account_id,
                -- Tax rides along proportionally: a 1099 reports the gross paid.
                (dl.amount + coalesce(dl.tax_amount, 0)) as weight
           from document_lines dl
          where dl.org_id = ${args.orgId} and dl.document_id = any(${`{${billIds.join(',')}}`}::uuid[])
          order by dl.document_id, dl.line_number
-      `)) as unknown as { rows: { document_id: string; account_id: string | null; weight: string }[] })
+      `)))
     : { rows: [] };
 
   const linesByBill = new Map<string, SettledLine[]>();
@@ -593,7 +591,24 @@ export async function loadRecipientProfiles(args: {
 }): Promise<Map<string, RecipientProfile>> {
   if (args.partyIds.length === 0) return new Map();
   const runner = args.runner ?? db;
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{
+      id: string;
+      display_name: string;
+      legal_name: string | null;
+      reportable: boolean | null;
+      resolved_form: string | null;
+      default_box: string | null;
+      tax_classification: TaxClassification | null;
+      tin_last4: string | null;
+      tin_type: string | null;
+      backup_withholding: boolean;
+      line1: string | null;
+      line2: string | null;
+      city: string | null;
+      region: string | null;
+      postal_code: string | null;
+      country: string | null;
+    }>(sql`
     select p.id, p.display_name, p.legal_name,
            vr.is_t4a as reportable,
            coalesce(vr.information_return_form, cc.default_information_return) as resolved_form,
@@ -612,26 +627,7 @@ export async function loadRecipientProfiles(args: {
          limit 1
       ) a on true
      where p.org_id = ${args.orgId} and p.id = any(${`{${[...args.partyIds].join(',')}}`}::uuid[])
-  `)) as unknown as {
-    rows: {
-      id: string;
-      display_name: string;
-      legal_name: string | null;
-      reportable: boolean | null;
-      resolved_form: string | null;
-      default_box: string | null;
-      tax_classification: TaxClassification | null;
-      tin_last4: string | null;
-      tin_type: string | null;
-      backup_withholding: boolean;
-      line1: string | null;
-      line2: string | null;
-      city: string | null;
-      region: string | null;
-      postal_code: string | null;
-      country: string | null;
-    }[];
-  };
+  `));
   return new Map(
     r.rows.map((row) => [
       row.id,
@@ -724,10 +720,10 @@ export async function computeFiling(args: {
     if (summary.unmappedAccountIds.length > 0 && (onThisForm || unassigned)) {
       const missing = summary.unmappedAccountIds.filter((id) => !accountNames.has(id));
       if (missing.length > 0) {
-        const named = (await runner.execute(sql`
+        const named = (await runner.execute<{ id: string; label: string }>(sql`
           select id, coalesce(number || ' · ' || name, name) as label
             from accounts where org_id = ${args.orgId} and id = any(${`{${missing.join(',')}}`}::uuid[])
-        `)) as unknown as { rows: { id: string; label: string }[] };
+        `));
         for (const row of named.rows) accountNames.set(row.id, row.label);
       }
     }
@@ -794,7 +790,7 @@ export function filedTotal(form: FormDefinition, boxAmounts: Record<string, stri
 // Filing lifecycle
 // ---------------------------------------------------------------------------
 
-export interface FilingRow {
+export type FilingRow = {
   id: string;
   taxYear: number;
   formType: FormType;
@@ -802,7 +798,7 @@ export interface FilingRow {
   status: "draft" | "computed" | "finalized" | "filed" | "void";
   threshold: string;
   currency: string;
-}
+};
 
 /** Open (or create) this year's filing. Idempotent per year/form/entity. */
 export async function ensureFiling(args: {
@@ -818,22 +814,22 @@ export async function ensureFiling(args: {
   const runner = args.runner ?? db;
   const form = formDefinition(args.formType);
   const subsidiaryId = args.subsidiaryId ?? null;
-  const existing = (await runner.execute(sql`
+  const existing = (await runner.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
            status, threshold, currency
       from information_return_filings
      where org_id = ${args.orgId} and tax_year = ${args.taxYear} and form_type = ${args.formType}
        and subsidiary_id is not distinct from ${subsidiaryId}::uuid
-  `)) as unknown as { rows: FilingRow[] };
+  `));
   if (existing.rows[0]) return existing.rows[0];
-  const inserted = (await runner.execute(sql`
+  const inserted = (await runner.execute<FilingRow>(sql`
     insert into information_return_filings
       (org_id, tax_year, form_type, subsidiary_id, status, threshold, currency, created_by, updated_by)
     values (${args.orgId}, ${args.taxYear}, ${args.formType}, ${subsidiaryId}, 'draft',
             ${args.threshold ?? form.defaultThreshold}, ${args.currency}, ${args.actorId}, ${args.actorId})
     returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
               status, threshold, currency
-  `)) as unknown as { rows: FilingRow[] };
+  `));
   return inserted.rows[0]!;
 }
 
@@ -852,12 +848,12 @@ export async function recomputeFiling(args: {
   filingId: string;
   actorId: string;
 }): Promise<{ filing: FilingRow; computation: FilingComputation }> {
-  const filings = (await db.execute(sql`
+  const filings = (await db.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
            status, threshold, currency
       from information_return_filings
      where org_id = ${args.orgId} and id = ${args.filingId}
-  `)) as unknown as { rows: FilingRow[] };
+  `));
   const filing = filings.rows[0];
   if (!filing) throw new InformationReturnError("information return filing not found");
   if (filing.status !== "draft" && filing.status !== "computed") {
@@ -956,7 +952,18 @@ export async function finalizeFiling(args: {
   filingId: string;
   actorId: string;
 }): Promise<void> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      status: string;
+      tax_year: number;
+      form_type: string;
+      threshold: string;
+      currency: string;
+      org_name: string;
+      tax_ids: Record<string, string> | null;
+      subsidiary_name: string | null;
+      included: number;
+      missing_tin: number;
+    }>(sql`
     select f.status, f.tax_year, f.form_type, f.threshold, f.currency,
            o.name as org_name, o.settings->'taxIds' as tax_ids,
            s.name as subsidiary_name,
@@ -968,20 +975,7 @@ export async function finalizeFiling(args: {
       join orgs o on o.id = f.org_id
       left join subsidiaries s on s.id = f.subsidiary_id
      where f.org_id = ${args.orgId} and f.id = ${args.filingId}
-  `)) as unknown as {
-    rows: {
-      status: string;
-      tax_year: number;
-      form_type: string;
-      threshold: string;
-      currency: string;
-      org_name: string;
-      tax_ids: Record<string, string> | null;
-      subsidiary_name: string | null;
-      included: number;
-      missing_tin: number;
-    }[];
-  };
+  `));
   const filing = rows.rows[0];
   if (!filing) throw new InformationReturnError("information return filing not found");
   if (filing.status !== "computed") {
@@ -1022,14 +1016,14 @@ export async function markFilingFiled(args: {
   reference?: string | null;
   actorId: string;
 }): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update information_return_filings
        set status = 'filed', filed_at = now(), filed_by = ${args.actorId},
            filing_channel = ${args.channel}, filing_reference = ${args.reference ?? null},
            updated_at = now(), updated_by = ${args.actorId}
      where org_id = ${args.orgId} and id = ${args.filingId} and status = 'finalized'
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (updated.rows.length === 0) {
     throw new InformationReturnError("only a finalized filing can be recorded as filed");
   }

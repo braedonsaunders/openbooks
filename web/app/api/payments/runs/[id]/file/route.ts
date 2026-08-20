@@ -18,13 +18,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
 
   try {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
       select pf.id, pf.filename, pf.content_type, fb.bytes
         from payment_files pf join file_blobs fb on fb.version_id = pf.file_version_id
        where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
          and pf.status in ('approved', 'delivered')
        order by pf.sequence_number desc limit 1
-    `)) as unknown as { rows: { id: string; filename: string; content_type: string; bytes: Buffer }[] }
+    `))
     const file = result.rows[0]
     if (!file) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
     await recordPaymentFileDownload(file.id, gate.user.orgId, gate.user.id)
@@ -48,7 +48,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   try {
     const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id)
-    const state = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] }
+    const state = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`))
     return NextResponse.json({ id: file.id, filename: file.filename, status: state.rows[0]?.status })
   } catch (e) {
     return paymentErrorResponse(e)

@@ -19,9 +19,9 @@ test(
         { key: "publish", status: "complete" },
       ],
     };
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ snapshot: unknown }>(sql`
       select ${JSON.stringify(snapshot)}::jsonb as snapshot
-    `)) as unknown as { rows: Array<{ snapshot: unknown }> };
+    `));
     const digest = (value: unknown) =>
       createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
     assert.equal(digest(result.rows[0]!.snapshot), digest(snapshot));

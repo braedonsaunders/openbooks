@@ -85,13 +85,13 @@ export async function nextNumber(orgId: string, kind: string, prefix: string, su
          limit 1`)) as any).rows.length > 0
     : false;
   const sequenceSubsidiaryId = configured ? subsidiaryId : null;
-  const seq = (await db.execute(sql`
+  const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const s = seq.rows[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
@@ -101,9 +101,9 @@ export async function nextNumber(orgId: string, kind: string, prefix: string, su
 // ---------------------------------------------------------------------------
 
 export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ c: Record<string, string> | null }>(
     sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { c: Record<string, string> | null }[] };
+  ));
   const c = r.rows[0]?.c ?? {};
   if (!c.ap || !c.ar || !c.bank) {
     throw new PaymentError(
@@ -141,11 +141,11 @@ export async function createPaymentDocument(opts: {
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
-  const sub = (await db.execute(sql`
+  const sub = (await db.execute<{ id: string }>(sql`
     select coalesce(
       (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
-    ) as id`)) as unknown as { rows: { id: string }[] };
+    ) as id`));
   const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
   const [doc] = await db
@@ -312,24 +312,24 @@ export async function updateDraftPayment(
   if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
 
   if (bankAccountId) {
-    const bank = (await db.execute(sql`
+    const bank = (await db.execute<{ id: string }>(sql`
       select id from accounts
        where id = ${bankAccountId} and org_id = ${doc.orgId}
          and type = 'asset_bank' and is_active and not is_summary
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
   }
   if (discountAccountId || controlAccountId || feeIncomeAccountId) {
     const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
-    const validRefs = (await db.execute(sql`
+    const validRefs = (await db.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${doc.orgId} and id in ${refs} and is_active and not is_summary
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (validRefs.rows.length !== refs.length) throw new PaymentError("payment accounting account is invalid or inactive");
   }
   if (partyId && partyId !== doc.partyId) {
-    const party = (await db.execute(
+    const party = (await db.execute<{ id: string }>(
       sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`,
-    )) as unknown as { rows: { id: string }[] };
+    ));
     if (!party.rows[0]) throw new PaymentError("party not found");
   }
 
@@ -483,25 +483,7 @@ export async function suggestApplications(
  */
 export async function openItemsForParty(partyId: string, side: OpenItemSide): Promise<OpenItem[]> {
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
-  const r = (await db.execute(sql`
-    select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
-           jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
-           je.id as entry_id, je.entry_number, je.posting_date,
-           d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
-           coalesce(ap.applied, 0) as applied,
-           coalesce(ap.transaction_applied, 0) as transaction_applied
-      from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-      left join documents d on d.id = je.source_document_id
-      left join lateral (
-        select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
-          from applications a
-         where a.to_line_id = jl.id and a.unapplied_at is null
-      ) ap on true
-     where jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
-     order by jl.due_date nulls last, je.posting_date, je.entry_number
-  `)) as unknown as {
-    rows: {
+  const r = (await db.execute<{
       line_id: string;
       amount: string;
       due_date: string | null;
@@ -518,8 +500,24 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
       fx_rate: string;
       transaction_amount: string;
       transaction_applied: string;
-    }[];
-  };
+    }>(sql`
+    select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
+           jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
+           je.id as entry_id, je.entry_number, je.posting_date,
+           d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
+           coalesce(ap.applied, 0) as applied,
+           coalesce(ap.transaction_applied, 0) as transaction_applied
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+      left join documents d on d.id = je.source_document_id
+      left join lateral (
+        select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
+          from applications a
+         where a.to_line_id = jl.id and a.unapplied_at is null
+      ) ap on true
+     where jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
+     order by jl.due_date nulls last, je.posting_date, je.entry_number
+  `));
   return r.rows
     .map((row) => ({
       lineId: row.line_id,
@@ -553,7 +551,7 @@ function negStr(a: string): string {
  * allocations, and (once posted) the live applications with their targets.
  */
 export async function loadPaymentDocument(id: string, kind: PaymentKind) {
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id, e.entry_number,
            ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name
       from documents d
@@ -562,14 +560,14 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
       left join document_lines dl on dl.document_id = d.id and dl.line_number = 1
       left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id)
      where d.id = ${id} and d.kind = ${kind}
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const row = doc.rows[0];
   if (!row) return null;
 
   const custom = (row.custom ?? {}) as { bankAccountId?: string; allocations?: AllocationInput[] };
   const applied =
     row.status === "posted" && row.posted_entry_id
-      ? ((await db.execute(sql`
+      ? ((await db.execute<Record<string, unknown>>(sql`
           select a.id, a.amount, a.source_amount,
                  a.source_transaction_amount, a.source_transaction_currency,
                  a.target_transaction_amount, a.target_transaction_currency,
@@ -588,7 +586,7 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
             left join documents td on td.id = te.source_document_id
            where jl.entry_id = ${row.posted_entry_id}
            order by te.posting_date, te.entry_number
-        `)) as unknown as { rows: Record<string, unknown>[] }).rows
+        `))).rows
       : [];
 
   return {
@@ -672,13 +670,13 @@ export async function postPaymentWithApplications(
       ? await captureTransactionAuditSnapshot(db, paymentDocId)
       : null;
     if (doc.kind === "vendor_payment") {
-      const hold = (await db.execute(sql`
+      const hold = (await db.execute<{ hold_reason: string | null }>(sql`
         select hold_reason
           from vendor_roles
          where org_id = ${doc.orgId} and party_id = ${doc.partyId}
            and is_active and is_on_hold
          limit 1
-      `)) as unknown as { rows: { hold_reason: string | null }[] };
+      `));
       if (hold.rows[0]) {
         throw new PaymentError(
           `vendor is on payment hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
@@ -723,11 +721,11 @@ export async function postPaymentWithApplications(
     }
     const evidenceIds = [...new Set(allocs.map((a) => a.settlementFxRateId).filter((id): id is string => !!id))];
     if (evidenceIds.length) {
-      const evidenceRows = (await db.execute(sql`
+      const evidenceRows = (await db.execute<{ id: string; from_currency: string; to_currency: string; rate: string; as_of: string }>(sql`
         select id, from_currency, to_currency, rate, as_of::text as as_of
           from fx_rates
          where org_id = ${doc.orgId} and id in ${evidenceIds}
-      `)) as unknown as { rows: { id: string; from_currency: string; to_currency: string; rate: string; as_of: string }[] };
+      `));
       const evidenceById = new Map(evidenceRows.rows.map((row) => [row.id, row]));
       for (const allocation of allocs) {
         if (!allocation.settlementFxRateId) continue;
@@ -764,9 +762,9 @@ export async function postPaymentWithApplications(
       // source and every target to share a control account, so deriving the
       // targets' account is the only way such a payment can post at all;
       // mixed-account allocations keep the default and fail loudly below.
-      const targetAccounts = (await db.execute(sql`
+      const targetAccounts = (await db.execute<{ account_id: string }>(sql`
         select distinct account_id from journal_lines where id in ${allocs.map((a) => a.openLineId)}
-      `)) as unknown as { rows: { account_id: string }[] };
+      `));
       const derived = targetAccounts.rows.length === 1 ? targetAccounts.rows[0]!.account_id : null;
       if (derived && derived !== controlAccountId) {
         controlAccountId = derived;
@@ -780,7 +778,11 @@ export async function postPaymentWithApplications(
       }
     }
     const entryId = await postDocument(doc.id, deps, { deferEffects: true });
-    const sourceResult = (await db.execute(sql`
+    const sourceResult = (await db.execute<{
+      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
+      party_id: string | null; subsidiary_id: string; posting_date: string; period_id: string;
+      book_id: string; functional_currency: string;
+    }>(sql`
       select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id,
              jl.subsidiary_id, je.posting_date, je.period_id, je.book_id,
              s.base_currency as functional_currency
@@ -789,18 +791,17 @@ export async function postPaymentWithApplications(
         join subsidiaries s on s.id = jl.subsidiary_id
        where jl.entry_id = ${entryId} and jl.account_id = ${controlAccountId}
        limit 1
-    `)) as unknown as { rows: {
-      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
-      party_id: string | null; subsidiary_id: string; posting_date: string; period_id: string;
-      book_id: string; functional_currency: string;
-    }[] };
+    `));
     const source = sourceResult.rows[0];
     if (!source) throw new PaymentError("posted payment entry has no AP/AR control line");
     if (source.currency !== doc.currency || cmp(fromUnits(toUnits(source.txn_amount) < 0n ? -toUnits(source.txn_amount) : toUnits(source.txn_amount)), totalAlloc) !== 0) {
       throw new PaymentError("payment control line does not cross-foot to the transaction-currency applications");
     }
 
-    const targetsResult = (await db.execute(sql`
+    const targetsResult = (await db.execute<{
+      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
+      party_id: string | null; subsidiary_id: string; open_base: string; open_transaction: string;
+    }>(sql`
       select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id, jl.subsidiary_id,
              abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
              abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
@@ -809,10 +810,7 @@ export async function postPaymentWithApplications(
         left join applications a on a.to_line_id = jl.id
        where jl.id in ${allocs.map((a) => a.openLineId)}
        group by jl.id
-    `)) as unknown as { rows: {
-      id: string; amount: string; currency: string; txn_amount: string; account_id: string;
-      party_id: string | null; subsidiary_id: string; open_base: string; open_transaction: string;
-    }[] };
+    `));
     const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
 
     let sourceBaseRemaining = fromUnits(toUnits(source.amount) < 0n ? -toUnits(source.amount) : toUnits(source.amount));
@@ -903,11 +901,11 @@ export async function postPaymentWithApplications(
       // Credit allocations currently carry functional-currency amounts. Keep
       // their evidence explicit and reject any attempt to disguise foreign
       // transaction values as base amounts.
-      const creditRows = (await db.execute(sql`
+      const creditRows = (await db.execute<{ id: string; currency: string; base_currency: string }>(sql`
         select jl.id, jl.currency, s.base_currency
           from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id
          where jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
-      `)) as unknown as { rows: { id: string; currency: string; base_currency: string }[] };
+      `));
       if (creditRows.rows.some((row) => row.currency !== row.base_currency)) {
         throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
       }
@@ -930,11 +928,11 @@ export async function postPaymentWithApplications(
     }
 
     const targetIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
-    const targets = (await db.execute(sql`
+    const targets = (await db.execute<{ doc_id: string }>(sql`
       select distinct je.source_document_id as doc_id
         from journal_lines jl join journal_entries je on je.id = jl.entry_id
        where jl.id in ${targetIds} and je.source_document_id is not null
-    `)) as unknown as { rows: { doc_id: string }[] };
+    `));
     if (targets.rows.length > 0) {
       await db.insert(schema.documentLinks).values(targets.rows.map((target) => ({
         orgId: doc.orgId,
@@ -975,13 +973,13 @@ export async function reversePaymentForReturn(
   reversalDate?: string,
 ): Promise<string> {
   const reversalId = await withOrg(orgId, async () => {
-    const row = (await db.execute(sql`
+    const row = (await db.execute<{ id: string; posted_entry_id: string; document_number: string }>(sql`
       select d.id, d.posted_entry_id, d.document_number
         from documents d
        where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
          and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
        for update
-    `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
+    `));
     const payment = row.rows[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
     const voidReason = `Bank return: ${reason.trim() || payment.document_number}`;
@@ -1048,7 +1046,7 @@ export type EftSettingsResult =
 
 /** Read and validate the org's EFT origination settings. Never fakes success. */
 export async function loadEftSettings(orgId: string, runId?: string): Promise<EftSettingsResult> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id
@@ -1057,7 +1055,7 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  `));
   const eft = unsealJson<Partial<EftSettings>>(r.rows[0]?.originator_secrets_encrypted) ?? {};
   const missing = EFT_REQUIRED.filter((k) => {
     const v = eft[k];
@@ -1112,15 +1110,7 @@ export async function createPaymentRun(opts: {
 }): Promise<{ id: string; runNumber: string }> {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
-  const profiles = (await db.execute(sql`
-    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval, p.settings,
-           f.rail, f.direction
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.is_active
-      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
-                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
-     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-  `)) as unknown as { rows: {
+  const profiles = (await db.execute<{
     id: string;
     bank_account_id: string;
     subsidiary_id: string | null;
@@ -1129,7 +1119,15 @@ export async function createPaymentRun(opts: {
     settings: Record<string, unknown>;
     rail: string;
     direction: string;
-  }[] };
+  }>(sql`
+    select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval, p.settings,
+           f.rail, f.direction
+      from payment_bank_profiles p
+      join payment_formats f on f.id = p.payment_format_id and f.is_active
+      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
+                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
+     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
+  `));
   const profile = profiles.rows[0];
   if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
   if (profile.direction === "debit") throw new PaymentError("a debit-only bank profile cannot pay vendor bills");
@@ -1145,7 +1143,7 @@ export async function createPaymentRun(opts: {
   if (!org) throw new PaymentError("org not found");
 
   // Selected bills → their open AP lines with current open balances.
-  const bills = (await db.execute(sql`
+  const bills = (await db.execute<{ document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }>(sql`
     select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
            d.project_id, d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
@@ -1166,9 +1164,7 @@ export async function createPaymentRun(opts: {
        and d.payment_hold_reason is null
        and d.currency = ${profile.currency}
        and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
-  `)) as unknown as {
-    rows: { document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
-  };
+  `));
 
   const found = new Set(bills.rows.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
@@ -1267,7 +1263,7 @@ export async function createPaymentRun(opts: {
   for (const vendorBills of byVendor.values()) {
     const first = vendorBills[0]!;
     const partyId = first.party_id;
-    const availableCredits = applyCredits ? (await db.execute(sql`
+    const availableCredits = applyCredits ? (await db.execute<{ document_id: string; open_line_id: string; open_base: string }>(sql`
       select d.id as document_id, jl.id as open_line_id,
              abs(jl.amount) - coalesce(ap.applied, 0) as open_base
         from documents d
@@ -1283,7 +1279,7 @@ export async function createPaymentRun(opts: {
          and d.subsidiary_id is not distinct from ${first.subsidiary_id}::uuid
          and abs(jl.amount) - coalesce(ap.applied, 0) > 0
        order by d.document_date, d.document_number
-    `)) as unknown as { rows: { document_id: string; open_line_id: string; open_base: string }[] } : { rows: [] };
+    `)) : { rows: [] };
     const groupBase = vendorBills.reduce((n, b) => n + toUnits(b.open_base), 0n);
     const creditBase = availableCredits.rows.reduce((n, c) => n + toUnits(c.open_base), 0n);
     // A bank run must still move cash. If credits cover the entire group they
@@ -1366,11 +1362,11 @@ export async function createPaymentRun(opts: {
 
     // Latest approved, active bank account for the payee (may be none — the
     // file export blocks on it with a clear error, never silently).
-    const payeeBank = (await db.execute(sql`
+    const payeeBank = (await db.execute<{ id: string }>(sql`
       select id from party_bank_accounts
        where party_id = ${partyId} and is_active and approved_at is not null
        order by approved_at desc, created_at desc limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     const [instruction] = await db.insert(schema.paymentInstructions).values({
       orgId: opts.orgId,
@@ -1509,18 +1505,7 @@ export async function paymentRunComplianceDecisions(
   runId: string,
   orgId: string,
 ): Promise<Array<BillReleaseDecision & { instructionId: string; payee: string }>> {
-  const rows = (await db.execute(sql`
-    select i.id as instruction_id, i.payee_party_id, p.display_name as payee,
-           d.id as document_id, d.document_number, d.project_id, d.document_date,
-           ri.payment_amount, ri.currency
-      from payment_run_items ri
-      join payment_instructions i on i.id = ri.payment_instruction_id
-      join documents d on d.id = ri.source_document_id
-      join parties p on p.id = i.payee_party_id
-     where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
-       and i.status <> 'cancelled' and ri.kind <> 'credit'
-  `)) as unknown as {
-    rows: {
+  const rows = (await db.execute<{
       instruction_id: string;
       payee_party_id: string;
       payee: string;
@@ -1530,8 +1515,17 @@ export async function paymentRunComplianceDecisions(
       document_date: string;
       payment_amount: string;
       currency: string;
-    }[];
-  };
+    }>(sql`
+    select i.id as instruction_id, i.payee_party_id, p.display_name as payee,
+           d.id as document_id, d.document_number, d.project_id, d.document_date,
+           ri.payment_amount, ri.currency
+      from payment_run_items ri
+      join payment_instructions i on i.id = ri.payment_instruction_id
+      join documents d on d.id = ri.source_document_id
+      join parties p on p.id = i.payee_party_id
+     where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
+       and i.status <> 'cancelled' and ri.kind <> 'credit'
+  `));
   if (rows.rows.length === 0) return [];
   const decisions = await evaluateBillsForRelease({
     orgId,
@@ -1562,13 +1556,13 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
   eft: EftSettingsResult;
   blockers: RunBlocker[];
 }> {
-  const runInfo = (await db.execute(sql`
+  const runInfo = (await db.execute<{ method: string; rail: string | null }>(sql`
     select r.method, f.rail
       from payment_runs r
       left join payment_bank_profiles p on p.id = r.payment_bank_profile_id
       left join payment_formats f on f.id = p.payment_format_id
      where r.id = ${runId} and r.org_id = ${orgId}
-  `)) as unknown as { rows: { method: string; rail: string | null }[] };
+  `));
   const method = runInfo.rows[0]?.method;
   const rail = runInfo.rows[0]?.rail;
   let eft: EftSettingsResult;
@@ -1576,15 +1570,7 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
   else if (method === "sepa") eft = await loadSepaSettings(orgId, runId) as EftSettingsResult;
   else if (method === "eft") eft = await loadEftSettings(orgId, runId);
   else eft = { ok: true, settings: {} as EftSettings };
-  const rows = (await db.execute(sql`
-    select i.id, p.display_name as payee, i.payee_bank_account_id,
-           b.approved_at, b.is_active, b.routing, b.account_number_encrypted, i.currency
-      from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      left join party_bank_accounts b on b.id = i.payee_bank_account_id
-     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
-  `)) as unknown as {
-    rows: {
+  const rows = (await db.execute<{
       id: string;
       payee: string;
       payee_bank_account_id: string | null;
@@ -1593,8 +1579,14 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       routing: Record<string, string> | null;
       account_number_encrypted: string | null;
       currency: string;
-    }[];
-  };
+    }>(sql`
+    select i.id, p.display_name as payee, i.payee_bank_account_id,
+           b.approved_at, b.is_active, b.routing, b.account_number_encrypted, i.currency
+      from payment_instructions i
+      join parties p on p.id = i.payee_party_id
+      left join party_bank_accounts b on b.id = i.payee_bank_account_id
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+  `));
 
   const blockers: RunBlocker[] = [];
   for (const r of rows.rows) {
@@ -1686,7 +1678,13 @@ export async function postPaymentRun(
     );
   }
 
-  const instructions = (await db.execute(sql`
+  const instructions = (await db.execute<{
+      id: string;
+      payment_document_id: string | null;
+      status: string;
+      payee: string;
+      document_status: string | null;
+    }>(sql`
     select i.id, i.payment_document_id, i.status, p.display_name as payee,
            d.status as document_status
       from payment_instructions i
@@ -1694,15 +1692,7 @@ export async function postPaymentRun(
       left join documents d on d.id = i.payment_document_id
      where i.payment_run_id = ${runId} and i.status = 'pending'
      order by p.display_name
-  `)) as unknown as {
-    rows: {
-      id: string;
-      payment_document_id: string | null;
-      status: string;
-      payee: string;
-      document_status: string | null;
-    }[];
-  };
+  `));
 
   // Final compliance gate. Posting is the irreversible step, so the control
   // runs once more against today's evidence and blocks the instruction rather
@@ -1798,7 +1788,7 @@ export async function postPaymentRun(
 }
 
 async function queueAutomaticRemittance(instructionId: string, orgId: string, userId: string): Promise<void> {
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ id: string; amount: string; currency: string; payment_reference: string | null; document_number: string | null; payment_date: string; payee: string; email: string | null; auto_remittance: boolean; direction: string; org_name: string }>(sql`
     select i.id, i.amount, i.currency, i.payment_reference, d.document_number,
            coalesce(r.scheduled_for, d.document_date) as payment_date,
            p.display_name as payee, vr.eft_notification_email as email,
@@ -1811,12 +1801,12 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
       left join documents d on d.id = i.payment_document_id
       join orgs o on o.id = i.org_id
      where i.id = ${instructionId} and i.org_id = ${orgId}
-  `)) as unknown as { rows: Array<{ id: string; amount: string; currency: string; payment_reference: string | null; document_number: string | null; payment_date: string; payee: string; email: string | null; auto_remittance: boolean; direction: string; org_name: string }> };
+  `));
   const instruction = row.rows[0];
   if (!instruction?.auto_remittance || instruction.direction !== "outbound") return;
   const already = (await db.execute(sql`
     select 1 from payment_remittances where payment_instruction_id = ${instructionId} and status = 'sent' limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (already.rows[0]) return;
   const recipients = instruction.email ? [instruction.email] : [];
   const [remittance] = await db.insert(schema.paymentRemittances).values({
@@ -1830,13 +1820,13 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
     updatedBy: userId,
   }).returning({ id: schema.paymentRemittances.id });
   if (!recipients.length) return;
-  const documents = (await db.execute(sql`
+  const documents = (await db.execute<{ number: string; amount: string; discount: string; credit: string }>(sql`
     select d.document_number as number, ri.payment_amount as amount,
            ri.discount_amount as discount, ri.credit_amount as credit
       from payment_run_items ri join documents d on d.id = ri.source_document_id
      where ri.payment_instruction_id = ${instructionId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
      order by d.document_number
-  `)) as unknown as { rows: Array<{ number: string; amount: string; discount: string; credit: string }> };
+  `));
   try {
     const [{ enqueueEmail }, { paymentRemittanceEmail }] = await Promise.all([
       import("@openbooks/jobs"),
@@ -2091,7 +2081,14 @@ export async function loadCpa005RunFile(
     );
   }
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      id: string;
+      amount: string;
+      payee: string;
+      routing: Record<string, string>;
+      account_number_encrypted: string;
+      document_number: string | null;
+    }>(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted,
            d.document_number
       from payment_instructions i
@@ -2100,16 +2097,7 @@ export async function loadCpa005RunFile(
       left join documents d on d.id = i.payment_document_id
      where i.payment_run_id = ${runId} and i.status <> 'cancelled'
      order by p.display_name
-  `)) as unknown as {
-    rows: {
-      id: string;
-      amount: string;
-      payee: string;
-      routing: Record<string, string>;
-      account_number_encrypted: string;
-      document_number: string | null;
-    }[];
-  };
+  `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
   const fundsDate = run.scheduledFor ? new Date(`${run.scheduledFor}T00:00:00`) : new Date();
@@ -2180,7 +2168,7 @@ export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok:
 }
 
 export async function loadNachaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id
@@ -2189,7 +2177,7 @@ export async function loadNachaSettings(orgId: string, runId?: string) {
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  `));
   return validateNachaSettings(unsealJson<Partial<NachaSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
@@ -2288,14 +2276,14 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   const settings = await loadNachaSettings(orgId, runId);
   if (!settings.ok) throw new PaymentError(`ACH origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
       from payment_instructions i
       join parties p on p.id = i.payee_party_id
       join party_bank_accounts b on b.id = i.payee_bank_account_id
       left join documents d on d.id = i.payment_document_id
      where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
-  `)) as unknown as { rows: { id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }[] };
+  `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
   const entries: NachaEntry[] = rows.rows.map((r) => {
@@ -2337,7 +2325,7 @@ export function validateSepaSettings(raw: Partial<SepaSettings> | null): { ok: t
 }
 
 export async function loadSepaSettings(orgId: string, runId?: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id
@@ -2346,7 +2334,7 @@ export async function loadSepaSettings(orgId: string, runId?: string) {
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `)) as unknown as { rows: { originator_secrets_encrypted: string | null }[] };
+  `));
   return validateSepaSettings(unsealJson<Partial<SepaSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
@@ -2410,14 +2398,14 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
   const settings = await loadSepaSettings(orgId, runId);
   if (!settings.ok) throw new PaymentError(`SEPA origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
       from payment_instructions i
       join parties p on p.id = i.payee_party_id
       join party_bank_accounts b on b.id = i.payee_bank_account_id
       left join documents d on d.id = i.payment_document_id
      where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
-  `)) as unknown as { rows: { id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }[] };
+  `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
   const payments = rows.rows.map((r) => {
