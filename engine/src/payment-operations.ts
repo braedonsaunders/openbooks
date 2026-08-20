@@ -427,11 +427,57 @@ function positivePayRegister(ctx: FormatContext): { filename: string; content: s
   };
 }
 
-function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
-  const s = ctx.profile.secrets as unknown as NachaSettings;
-  const required = ["odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId"] as const;
-  const missing = required.filter((k) => !String(s[k] ?? "").trim());
+const NACHA_DEBIT_REQUIRED = [
+  "odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId",
+] as const;
+
+/**
+ * Parse a debit profile's unsealed `secrets` blob into NACHA originator
+ * settings.
+ *
+ * `secrets` is decrypted tenant JSON, so nothing in it is known to be a string
+ * until it has been shown to be one. The credit rails put every originator
+ * through `validateNachaSettings`, which additionally rejects an unfinished
+ * "FILL-ME" placeholder and an `odfiRouting` that is not exactly nine digits.
+ * The debit rail used to assert the blob straight into `NachaSettings` and only
+ * check each field for non-emptiness, which let two malformed profiles reach
+ * the bank: a placeholder passed through verbatim, and — because the writer
+ * below slices `odfiRouting` to eight characters for the batch and file
+ * trailers — an over-long routing number truncated into a well-formed
+ * 94-character file addressed to the WRONG originating institution.
+ */
+export function nachaOriginator(secrets: Record<string, unknown>): NachaSettings {
+  const values: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const key of NACHA_DEBIT_REQUIRED) {
+    const value = secrets[key];
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text === "" || text.includes("FILL-ME")) missing.push(key);
+    else values[key] = text;
+  }
   if (missing.length) throw new PaymentError(`NACHA debit profile is missing: ${missing.join(", ")}`);
+  if (!/^\d{9}$/.test(values.odfiRouting)) {
+    throw new PaymentError("NACHA debit profile needs a 9-digit odfiRouting");
+  }
+  // An unrecognised SEC code would be truncated into the 3-character field as
+  // whatever the tenant typed; fall back to the corporate default instead.
+  const entryClassCode = secrets.entryClassCode;
+  const entryDescription = secrets.entryDescription;
+  return {
+    odfiRouting: values.odfiRouting,
+    immediateDestination: values.immediateDestination,
+    immediateOrigin: values.immediateOrigin,
+    destinationName: values.destinationName,
+    originName: values.originName,
+    companyName: values.companyName,
+    companyId: values.companyId,
+    entryClassCode: entryClassCode === "PPD" || entryClassCode === "CCD" ? entryClassCode : undefined,
+    entryDescription: typeof entryDescription === "string" ? entryDescription : undefined,
+  };
+}
+
+function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
+  const s = nachaOriginator(ctx.profile.secrets);
   const field = (v: unknown, n: number, right = false, pad = " ") => (right ? String(v ?? "").slice(0, n).padStart(n, pad) : String(v ?? "").slice(0, n).padEnd(n, pad));
   const yymmdd = (d: Date) => `${String(d.getUTCFullYear() % 100).padStart(2, "0")}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
@@ -462,11 +508,32 @@ function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content:
   return { filename: `NACHA-DEBIT-${String(ctx.run.run_number)}.ach`, content: lines.join("\n") + "\n", contentType: ctx.format.contentType };
 }
 
-function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
-  const s = ctx.profile.secrets as unknown as SepaSettings & { creditorId: string };
-  for (const key of ["originatorName", "originatorIban", "originatorBic", "creditorId"] as const) {
-    if (!String(s[key] ?? "").trim()) throw new PaymentError(`SEPA debit profile is missing ${key}`);
+const SEPA_DEBIT_REQUIRED = ["originatorName", "originatorIban", "originatorBic", "creditorId"] as const;
+
+/**
+ * Parse a debit profile's unsealed `secrets` blob into SEPA originator settings
+ * plus the creditor scheme identifier the direct-debit mandate needs. Same
+ * reasoning as `nachaOriginator`: decrypted tenant JSON is untrusted, and an
+ * unfinished "FILL-ME" placeholder must not reach a collection file.
+ */
+export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings & { creditorId: string } {
+  const values: Record<string, string> = {};
+  for (const key of SEPA_DEBIT_REQUIRED) {
+    const value = secrets[key];
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text === "" || text.includes("FILL-ME")) throw new PaymentError(`SEPA debit profile is missing ${key}`);
+    values[key] = text;
   }
+  return {
+    originatorName: values.originatorName,
+    originatorIban: values.originatorIban,
+    originatorBic: values.originatorBic,
+    creditorId: values.creditorId,
+  };
+}
+
+function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
+  const s = sepaOriginator(ctx.profile.secrets);
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
   const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
   const total2 = bankAmount2(total);
