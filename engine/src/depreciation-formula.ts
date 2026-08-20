@@ -320,6 +320,17 @@ export interface FormulaScheduleInput {
   lifetimeUsage?: DecimalInput;
   rateTable?: DecimalInput[];
   firstPeriodFraction?: DecimalInput;
+  /**
+   * How many LEADING periods `firstPeriodFraction` applies to. Default 1.
+   *
+   * A first-period convention and a first-YEAR convention are different animals
+   * and this engine runs on periods, not years. Mid-month reduces one month, so
+   * it leaves this at 1. The half-year rule reduces the whole first YEAR — with
+   * monthly periods that is the first 12, each at half charge — so it passes 12.
+   * Treating half-year as "half of one month" made year one ~11.5 months of
+   * expense instead of six.
+   */
+  firstFractionPeriods?: number;
 }
 
 export interface FormulaScheduleLine {
@@ -344,7 +355,15 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
   if (firstPeriodFraction < 0n || firstPeriodFraction > EXACT_SCALE) {
     throw new DepreciationFormulaError("first-period fraction must be between zero and one");
   }
-  const extension = firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate" ? 1 : 0;
+  const fractionPeriods = Math.max(1, Math.trunc(input.firstFractionPeriods ?? 1));
+  // The charge withheld from the reduced periods has to land somewhere, so the
+  // schedule grows by exactly the periods'-worth that was held back: one month
+  // for mid-month, six for a half-year rule on monthly periods. Without this the
+  // whole deferred amount was dumped into a single final period.
+  const withheld = Number(EXACT_SCALE - firstPeriodFraction) / Number(EXACT_SCALE);
+  const extension = firstPeriodFraction < EXACT_SCALE && endOfLife === "fully_depreciate"
+    ? Math.max(1, Math.round(fractionPeriods * withheld))
+    : 0;
   const totalPeriods = life + extension;
   const lines: FormulaScheduleLine[] = [];
   let accumulated = 0n;
@@ -356,6 +375,13 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
     let charge: bigint;
     if (endOfLife === "fully_depreciate" && currentPeriod === totalPeriods) {
       charge = remaining;
+    } else if (currentPeriod > life) {
+      // Tail periods created by the extension. The formulas are written in terms
+      // of the nominal life — `straight_line_remaining` and the declining-balance
+      // crossovers all divide by (AL − CP + 1), which is zero or negative once CP
+      // passes AL — so evaluating them here is undefined, not merely inaccurate.
+      // Spread what is left evenly instead, which is what a crossover tail is.
+      charge = roundDiv(remaining, BigInt(totalPeriods - currentPeriod + 1));
     } else {
       const context: DepContext = {
         OC: fromUnits(cost), CC: fromUnits(cost), NB: fromUnits(netBookValue), RV: fromUnits(salvage),
@@ -364,7 +390,9 @@ export function computeScheduleByFormula(input: FormulaScheduleInput): FormulaSc
         DH: "1", DP: "1", FY: "12", PB: "0", R: input.rateTable,
       };
       let evaluated = evaluate(context);
-      if (currentPeriod === 1 && firstPeriodFraction < EXACT_SCALE) evaluated = mulExact(evaluated, firstPeriodFraction);
+      if (currentPeriod <= fractionPeriods && firstPeriodFraction < EXACT_SCALE) {
+        evaluated = mulExact(evaluated, firstPeriodFraction);
+      }
       charge = roundDiv(evaluated, MONEY_TO_EXACT);
       if (charge < 0n) charge = 0n;
       if (charge > remaining) charge = remaining;
