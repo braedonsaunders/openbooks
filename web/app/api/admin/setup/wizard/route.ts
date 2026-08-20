@@ -2,12 +2,19 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { FEATURE_BY_KEY, featureRequirements } from '../../../../../lib/features'
+import { FEATURE_BY_KEY, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { periodDerivationSql } from '../../../../../lib/fiscal-periods'
 import { ONBOARDING_SCHEMA_VERSION, onboardingRecord } from '../../../../../lib/onboarding'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '../../../../../lib/workspace-profile'
+
+/** A feature the wizard was asked to disable still has load-bearing data. */
+class WizardFeatureBlocked extends Error {
+  constructor(readonly key: string) {
+    super(`feature ${key} cannot be disabled`)
+  }
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -165,6 +172,7 @@ export async function PUT(req: Request) {
   const orgSets: SQL[] = []
   let nextSettings: Record<string, unknown> | null = null
 
+  try {
   await db.transaction(async (tx) => {
     // Lock the org row and load current state.
     const cur = (
@@ -315,6 +323,29 @@ export async function PUT(req: Request) {
         }
       }
 
+      // The wizard writes features through the same model as the Features page
+      // and therefore owes the same integrity control. It previously wrote the
+      // merged map straight to settings, so re-running setup was a way around
+      // every refusal the switchboard enforces: an industry preset (or a
+      // dependency cascade above, which silently forces dependents to false)
+      // could switch off Payroll with posted pay runs, or multi-subsidiary with
+      // a ledger already partitioned per entity, and return 200.
+      //
+      // Probed here rather than trusting the caller's intent: a feature turned
+      // off by the cascade is just as load-bearing as one turned off by hand.
+      const nowDisabled = Object.keys(nextFeatures).filter(
+        (key) =>
+          nextFeatures[key] === false
+          && (curFeatures[key] ?? FEATURE_BY_KEY.get(key)?.defaultEnabled ?? false),
+      )
+      for (const key of nowDisabled) {
+        if (await featureDisableBlocked(orgId, key)) {
+          // Thrown, not returned: an early return from the transaction callback
+          // COMMITS the partial setup written above it.
+          throw new WizardFeatureBlocked(key)
+        }
+      }
+
       if (JSON.stringify(nextFeatures) !== JSON.stringify(curFeatures)) {
         nextSettings!.features = nextFeatures
         settingsChanges.features = { before: curFeatures, after: nextFeatures }
@@ -446,6 +477,14 @@ export async function PUT(req: Request) {
         values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify(changes)}, ${actorId})`)
     }
   })
+  } catch (error) {
+    // Same status and body the Features switchboard returns, so the wizard is
+    // not a second, weaker door onto the same decision.
+    if (error instanceof WizardFeatureBlocked) {
+      return NextResponse.json({ error: 'feature-blocked', key: error.key }, { status: 409 })
+    }
+    throw error
+  }
 
   return NextResponse.json({ ok: true })
 }

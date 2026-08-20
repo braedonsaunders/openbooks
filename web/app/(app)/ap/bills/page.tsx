@@ -120,6 +120,7 @@ export default async function ApBills({
     openDoc && pickers && resolvedForm && openKind ? (
       <DocumentDrawer
         payload={openDoc as any}
+        key={(openDoc as any).doc.id}
         config={DOC_KINDS[openKind]!}
         basePath="/ap/bills"
         initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
