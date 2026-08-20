@@ -18,9 +18,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ trigger_point: string; cron: string | null }>(sql`
     select trigger_point, cron from user_scripts where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { trigger_point: string; cron: string | null }[] }
+  `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const kind = existing.rows[0].trigger_point
 

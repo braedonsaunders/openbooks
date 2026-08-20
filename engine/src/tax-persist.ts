@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
@@ -15,7 +15,7 @@ import { cmp } from "./money.ts";
  * these rows — this module is the shared way to do it without importing web/lib.
  */
 
-type Runner = { execute: (q: ReturnType<typeof sql>) => Promise<unknown> };
+type Runner = SqlExecutor;
 
 /** Effective tax-code config (single code) for a date — mirrors web taxProfileMap. */
 export async function loadTaxComponentConfig(
@@ -24,7 +24,7 @@ export async function loadTaxComponentConfig(
   dateIso: string,
   runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<Record<string, any>>(sql`
     select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
            tc.recoverable_percent::text as recoverable_percent, tc.calculation_type,
            tc.price_includes_tax, tc.compound_on_previous, tc.rounding_scale,
@@ -36,7 +36,7 @@ export async function loadTaxComponentConfig(
            and (effective_to is null or effective_to >= ${dateIso})
          order by effective_from desc limit 1) tr on true
      where tc.id = ${taxCodeId} and tc.org_id = ${orgId} and tc.is_active
-  `)) as unknown as { rows: Record<string, any>[] };
+  `));
   const row = r.rows[0];
   if (!row) return [];
   return [

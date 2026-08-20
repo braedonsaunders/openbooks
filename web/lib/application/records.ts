@@ -162,9 +162,9 @@ async function assertExistingRecordAccess(
 ): Promise<void> {
   const table = sql.raw(`"${scope.resolved.table}"`);
   const where = baseWhere(context, scope, { id });
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ "?column?": number }>(sql`
     select 1 from ${table} where ${where} limit 1
-  `)) as unknown as { rows: { "?column?": number }[] };
+  `));
   if (!row.rows[0]) throw notFound();
 }
 
@@ -221,9 +221,9 @@ export async function getRecord(
   const scope = await scopeFor(context, input.typeKey, "get");
   const table = sql.raw(`"${scope.resolved.table}"`);
   const where = baseWhere(context, scope, { id: input.id });
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, unknown>>(sql`
     select * from ${table} where ${where} limit 1
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   if (!result.rows[0]) throw notFound();
   return result.rows[0];
 }

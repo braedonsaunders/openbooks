@@ -42,12 +42,12 @@ export type BudgetScenarioOption = {
 }
 
 export async function budgetScenarioOptions(orgId: string): Promise<BudgetScenarioOption[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; name: string; fiscal_year: number; kind: string; status: string }>(sql`
     select id, name, fiscal_year, kind, status
       from budget_scenarios
      where org_id = ${orgId} and status <> 'archived'
      order by fiscal_year desc, name
-  `)) as unknown as { rows: { id: string; name: string; fiscal_year: number; kind: string; status: string }[] }
+  `))
   return r.rows.map((x) => ({ id: x.id, name: x.name, fiscalYear: x.fiscal_year, kind: x.kind, status: x.status }))
 }
 
@@ -127,21 +127,21 @@ export async function budgetVsActualView(
   labels: BudgetLabels,
   dims: Partial<BudgetDimensions> = {},
 ): Promise<StatementView | null> {
-  const sc = (await db.execute(sql`
+  const sc = (await db.execute<{ id: string; book_id: string; fiscal_year: number; name: string }>(sql`
     select id, book_id, fiscal_year, name from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; book_id: string; fiscal_year: number; name: string }[] }
+  `))
   const scenario = sc.rows[0]
   if (!scenario) return null
-  const periodRange = (await db.execute(sql`
+  const periodRange = (await db.execute<{ from: string | null; to: string | null }>(sql`
     select min(starts_on)::text as "from", max(ends_on)::text as "to"
       from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment
-  `)) as unknown as { rows: { from: string | null; to: string | null }[] }
+  `))
   const range = periodRange.rows[0]
   if (!range?.from || !range?.to) return null
   const fy = { from: range.from, to: range.to }
 
-  const actualRows = (await db.execute(sql`
+  const actualRows = (await db.execute<{ account_id: string; amt: string }>(sql`
     select l.account_id, coalesce(sum(l.amount), 0) as amt
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
@@ -154,9 +154,9 @@ export async function budgetVsActualView(
        ${dims.locationId ? sql`and l.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and l.class_id = ${dims.classId}` : sql``}
      group by l.account_id
-  `)) as unknown as { rows: { account_id: string; amt: string }[] }
+  `))
 
-  const budgetRows = (await db.execute(sql`
+  const budgetRows = (await db.execute<{ account_id: string; amt: string }>(sql`
     select bl.account_id, coalesce(sum(bl.amount), 0) as amt
       from budget_lines bl
      where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId}
@@ -165,13 +165,13 @@ export async function budgetVsActualView(
        ${dims.locationId ? sql`and bl.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and bl.class_id = ${dims.classId}` : sql``}
      group by bl.account_id
-  `)) as unknown as { rows: { account_id: string; amt: string }[] }
+  `))
 
-  const accounts = (await db.execute(sql`
+  const accounts = (await db.execute<Acct>(sql`
     select id, parent_id, number, name, type, is_summary
       from accounts where org_id = ${orgId} and type in ${PNL_TYPES}
      order by number nulls last, name
-  `)) as unknown as { rows: Acct[] }
+  `))
 
   const leaf = new Map<string, [ExactDecimal, ExactDecimal]>()
   for (const r of actualRows.rows) leaf.set(r.account_id, [String(r.amt), '0.0000'])

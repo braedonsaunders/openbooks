@@ -5,10 +5,10 @@ import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type 
 type SqlExecutor = Pick<typeof db, "execute">;
 
 async function crmFeatureEnabled(executor: SqlExecutor, orgId: string): Promise<boolean> {
-  const result = (await executor.execute(sql`
+  const result = (await executor.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'crm')::boolean, true) as enabled
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { enabled: boolean }[] };
+  `));
   return result.rows[0]?.enabled === true;
 }
 
@@ -72,31 +72,31 @@ export async function promoteCrmAccount(
   },
 ): Promise<boolean> {
   if (!(await crmFeatureEnabled(executor, input.orgId))) return false;
-  const existing = (await executor.execute(sql`
+  const existing = (await executor.execute<{ id: string; lifecycle_stage: CrmLifecycleStage }>(sql`
     select id, lifecycle_stage from crm_account_profiles
      where org_id = ${input.orgId} and party_id = ${input.partyId} for update
-  `)) as unknown as { rows: { id: string; lifecycle_stage: CrmLifecycleStage }[] };
+  `));
 
   let profileId = existing.rows[0]?.id;
   let fromStage = existing.rows[0]?.lifecycle_stage;
   if (!profileId) {
-    const status = (await executor.execute(sql`
+    const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
-       order by sequence limit 1`)) as unknown as { rows: { id: string }[] };
-    const inserted = (await executor.execute(sql`
+       order by sequence limit 1`));
+    const inserted = (await executor.execute<{ id: string }>(sql`
       insert into crm_account_profiles
         (org_id, party_id, lifecycle_stage, status_id, converted_at, created_by, updated_by)
       values (${input.orgId}, ${input.partyId}, ${input.toStage}, ${status.rows[0]?.id ?? null},
               ${input.toStage === "customer" ? sql`now()` : null}, ${input.actorId}, ${input.actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     profileId = inserted.rows[0]!.id;
   } else {
     if (!shouldPromoteLifecycle(fromStage!, input.toStage)) return false;
-    const status = (await executor.execute(sql`
+    const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
-       order by sequence limit 1`)) as unknown as { rows: { id: string }[] };
+       order by sequence limit 1`));
     await executor.execute(sql`
       update crm_account_profiles set lifecycle_stage = ${input.toStage}, status_id = ${status.rows[0]?.id ?? null},
              qualified_at = case when ${input.toStage} = 'prospect' and qualified_at is null then now() else qualified_at end,
@@ -123,7 +123,7 @@ export async function promoteCrmAccount(
 export async function routeCrmAccount(orgId: string, profileId: string, actorId: string): Promise<string | null> {
   if (!(await crmFeatureEnabled(db, orgId))) return null;
   return db.transaction(async (tx) => {
-    const account = (await tx.execute(sql`
+    const account = (await tx.execute<any>(sql`
       select cp.id, cp.lifecycle_stage, cp.lead_source_id, cp.industry, cp.annual_revenue, cp.employee_count,
              cp.owner_user_id, cp.territory_id, a.country, a.region
         from crm_account_profiles cp
@@ -131,13 +131,13 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
           select country, region from addresses where party_id = cp.party_id
           order by is_default_billing desc, created_at limit 1
         ) a on true
-       where cp.id = ${profileId} and cp.org_id = ${orgId} for update`)) as unknown as { rows: any[] };
+       where cp.id = ${profileId} and cp.org_id = ${orgId} for update`));
     const row = account.rows[0];
     if (!row) return null;
-    const territories = (await tx.execute(sql`
+    const territories = (await tx.execute<any>(sql`
       select id, rules, match_mode, default_owner_user_id
         from crm_sales_territories where org_id = ${orgId} and is_active
-       order by priority, created_at`)) as unknown as { rows: any[] };
+       order by priority, created_at`));
     const subject: TerritorySubject = {
       country: row.country,
       region: row.region,
@@ -168,13 +168,13 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
 
 export async function nextOpportunityNumber(orgId: string): Promise<string> {
   if (!(await crmFeatureEnabled(db, orgId))) throw new Error("CRM feature is disabled");
-  const seq = (await db.execute(sql`
+  const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, 'crm_opportunity', null, 'OPP-')
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const row = seq.rows[0]!;
   return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
 }

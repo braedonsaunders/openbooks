@@ -52,18 +52,16 @@ export async function mirrorSourceDeletion(input: {
         `source deletion mirroring is unsupported for ${input.source}`,
       );
     return db.transaction(async (tx) => {
-      const documentResult = (await tx.execute(sql`
-        select id, kind, status, posted_entry_id
-          from documents
-         where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
-         limit 1 for update`)) as unknown as {
-        rows: {
+      const documentResult = (await tx.execute<{
           id: string;
           kind: string;
           status: string;
           posted_entry_id: string | null;
-        }[];
-      };
+        }>(sql`
+        select id, kind, status, posted_entry_id
+          from documents
+         where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
+         limit 1 for update`));
       const document = documentResult.rows[0] ?? null;
       if (!document) return { documentId: null, deleted: false };
       if (document.status === "voided") {
@@ -240,7 +238,7 @@ export async function resolveSourceDeletion(input: {
   reversalEntryId: string | null;
 }> {
   return withOrg(input.orgId, async () => {
-    const connection = (await db.execute(sql`
+    const connection = (await db.execute<{ source: string; actor_valid: boolean }>(sql`
       select c.source,
              exists (
                select 1 from users u
@@ -249,9 +247,7 @@ export async function resolveSourceDeletion(input: {
              ) as actor_valid
         from connections c
        where c.id = ${input.connectionId} and c.org_id = ${input.orgId}
-      for update`)) as unknown as {
-      rows: Array<{ source: string; actor_valid: boolean }>;
-    };
+      for update`));
     const source = connection.rows[0]?.source;
     if (!source)
       throw new SourceDeletionResolutionError("connection not found");
@@ -266,18 +262,16 @@ export async function resolveSourceDeletion(input: {
         `source deletion resolution is unsupported for ${source}`,
       );
 
-    const documentResult = (await db.execute(sql`
-      select id, kind, status, posted_entry_id
-        from documents
-       where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
-       limit 1 for update`)) as unknown as {
-      rows: {
+    const documentResult = (await db.execute<{
         id: string;
         kind: string;
         status: string;
         posted_entry_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select id, kind, status, posted_entry_id
+        from documents
+       where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
+       limit 1 for update`));
     const document = documentResult.rows[0] ?? null;
     let reversalEntryId: string | null = null;
 
@@ -296,7 +290,7 @@ export async function resolveSourceDeletion(input: {
            where a.unapplied_at is null and (
              exists (select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${document.posted_entry_id})
              or exists (select 1 from journal_lines jl where jl.id = a.to_line_id and jl.entry_id = ${document.posted_entry_id})
-           ) limit 1`)) as unknown as { rows: unknown[] };
+           ) limit 1`));
         if (applications.rows.length > 0) {
           throw new SourceDeletionResolutionError(
             "the source-deleted document has active payment applications; reverse or unapply them before voiding",
@@ -444,15 +438,15 @@ export async function resolveSourceDeletion(input: {
       }
     }
 
-    const previousResolution = (await db.execute(sql`
+    const previousResolution = (await db.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(r) as row
         from source_deletion_resolutions r
        where r.org_id = ${input.orgId}
          and r.connection_id = ${input.connectionId}
          and r.source_ref = ${input.sourceRef}
        for update
-    `)) as unknown as { rows: Array<{ row: Record<string, unknown> }> };
-    const resolution = (await db.execute(sql`
+    `));
+    const resolution = (await db.execute<{ id: string }>(sql`
       insert into source_deletion_resolutions
         (org_id, connection_id, source_ref, document_id, action, note, resolved_by,
          created_by, updated_by, resolved_at)
@@ -462,18 +456,18 @@ export async function resolveSourceDeletion(input: {
         document_id = excluded.document_id, action = excluded.action, note = excluded.note,
         resolved_by = excluded.resolved_by, resolved_at = now(), updated_by = excluded.updated_by,
         updated_at = now()
-      returning id`)) as unknown as { rows: Array<{ id: string }> };
+      returning id`));
     const resolutionId = resolution.rows[0]?.id;
     if (!resolutionId) {
       throw new SourceDeletionResolutionError(
         "source-deletion resolution was not persisted",
       );
     }
-    const currentResolution = (await db.execute(sql`
+    const currentResolution = (await db.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(r) as row
         from source_deletion_resolutions r
        where r.id = ${resolutionId} and r.org_id = ${input.orgId}
-    `)) as unknown as { rows: Array<{ row: Record<string, unknown> }> };
+    `));
     await db.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)

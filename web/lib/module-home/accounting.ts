@@ -34,7 +34,7 @@ export interface AccountingHome {
 export async function accountingHome(orgId: string): Promise<AccountingHome> {
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
-    db.execute(sql`
+    db.execute<any>(sql`
       select r.id, r.status, p.name as period_name,
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done
@@ -48,7 +48,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
        order by r.created_at desc
        limit 1
     `),
-    db.execute(sql`
+    db.execute<any>(sql`
       select
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft') as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
@@ -58,12 +58,12 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
         (select count(*) from fixed_assets f where f.org_id = ${orgId}) as assets
     `),
     // Continuous-close open findings by severity.
-    db.execute(sql`
+    db.execute<any>(sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
        group by severity
     `),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
+  ]))
 
   const close = closeRes.rows[0]
   const counts = countsRes.rows[0] ?? {}

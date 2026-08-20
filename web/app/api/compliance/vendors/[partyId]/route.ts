@@ -61,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   if (body.complianceClassId) {
     const exists = (await db.execute(sql`
       select 1 from compliance_classes
-       where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`)) as unknown as { rows: unknown[] }
+       where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`))
     if (exists.rows.length === 0) return NextResponse.json({ error: 'unknown compliance class' }, { status: 400 })
   }
   if (
@@ -96,11 +96,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
     }
   }
 
-  const role = (await db.execute(sql`
+  const role = (await db.execute<Record<string, unknown>>(sql`
     select party_id, compliance_class_id, information_return_form, tin_last4, tax_classification
-      from vendor_roles where org_id = ${orgId} and party_id = ${partyId}`)) as unknown as {
-    rows: Record<string, unknown>[]
-  }
+      from vendor_roles where org_id = ${orgId} and party_id = ${partyId}`))
   if (role.rows.length === 0) {
     return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
   }

@@ -38,23 +38,21 @@ export default async function PayRunsPage({
   const sp = await searchParams
 
   const schedules = canRun
-    ? (((await db.execute(sql`
+    ? (((await db.execute<{ id: string; name: string; frequency: string; pay_date_offset_days: number; last_end: string | null }>(sql`
         select s.id, s.name, s.frequency, s.pay_date_offset_days,
                coalesce(max(r.period_end), s.anchor_period_end)::text as last_end
           from pay_schedules s
           left join pay_runs r on r.pay_schedule_id = s.id and r.org_id = s.org_id
          where s.org_id = ${orgId} and s.is_active
          group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
-         order by s.name`)) as unknown as {
-        rows: { id: string; name: string; frequency: string; pay_date_offset_days: number; last_end: string | null }[]
-      }).rows)
+         order by s.name`))).rows)
     : []
 
   // A final pay run must NAME the employees it pays (it clears every accrued
   // bank), and the engine will only calculate one for people whose employment
   // has ended — so the picker offers exactly those.
   const finalPayCandidates = canRun
-    ? (((await db.execute(sql`
+    ? (((await db.execute<{ id: string; name: string; pay_schedule_id: string; terminated_on: string }>(sql`
         select distinct on (prof.employee_party_id)
                prof.employee_party_id as id, p.display_name as name,
                prof.pay_schedule_id, er.terminated_on::text as terminated_on
@@ -62,9 +60,7 @@ export default async function PayRunsPage({
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.is_active and er.terminated_on is not null
-         order by prof.employee_party_id, er.terminated_on desc`)) as unknown as {
-        rows: { id: string; name: string; pay_schedule_id: string; terminated_on: string }[]
-      }).rows)
+         order by prof.employee_party_id, er.terminated_on desc`))).rows)
     : []
 
   const newButton = canRun

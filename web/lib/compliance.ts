@@ -62,14 +62,14 @@ export async function requireLienWaiverFeature(orgId: string): Promise<void> {
 // The vendor compliance matrix
 // ---------------------------------------------------------------------------
 
-export interface ComplianceClassRow {
+export type ComplianceClassRow = {
   id: string
   code: string
   name: string
   lienWaiverEnforcement: LienWaiverEnforcement
   defaultLienWaiverType: LienWaiverType | null
   defaultInformationReturn: string
-}
+};
 
 export interface MatrixRow {
   partyId: string
@@ -94,7 +94,7 @@ export interface ComplianceMatrix {
 }
 
 export async function loadComplianceClasses(orgId: string): Promise<ComplianceClassRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ComplianceClassRow>(sql`
     select id, code, name,
            lien_waiver_enforcement as "lienWaiverEnforcement",
            default_lien_waiver_type as "defaultLienWaiverType",
@@ -102,7 +102,7 @@ export async function loadComplianceClasses(orgId: string): Promise<ComplianceCl
       from compliance_classes
      where org_id = ${orgId} and is_active
      order by code
-  `)) as unknown as { rows: ComplianceClassRow[] }
+  `))
   return r.rows
 }
 
@@ -212,7 +212,7 @@ export async function loadComplianceMatrix(args: {
 // Certificates for one vendor (the drawer)
 // ---------------------------------------------------------------------------
 
-export interface CertificateRow {
+export type CertificateRow = {
   id: string
   requirementId: string
   requirementCode: string
@@ -239,10 +239,10 @@ export interface CertificateRow {
   createdById: string | null
   createdByName: string | null
   fileCount: number
-}
+};
 
 export async function loadVendorCertificates(orgId: string, partyId: string): Promise<CertificateRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<CertificateRow>(sql`
     select cr.id, cr.requirement_id as "requirementId", req.code as "requirementCode",
            req.name as "requirementName", req.category, cr.project_id as "projectId",
            case when pj.id is null then null
@@ -267,11 +267,11 @@ export async function loadVendorCertificates(orgId: string, partyId: string): Pr
       left join users cu on cu.id = cr.created_by
      where cr.org_id = ${orgId} and cr.party_id = ${partyId}
      order by req.code, cr.effective_from desc
-  `)) as unknown as { rows: CertificateRow[] }
+  `))
   return r.rows
 }
 
-export interface ExceptionRow {
+export type ExceptionRow = {
   id: string
   requirementCode: string
   requirementName: string
@@ -281,10 +281,10 @@ export interface ExceptionRow {
   expiresOn: string
   approvedByName: string | null
   approvedAt: string
-}
+};
 
 export async function loadVendorWaivers(orgId: string, partyId: string): Promise<ExceptionRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ExceptionRow>(sql`
     select w.id, req.code as "requirementCode", req.name as "requirementName",
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as "projectName",
@@ -296,7 +296,7 @@ export async function loadVendorWaivers(orgId: string, partyId: string): Promise
       left join users u on u.id = w.approved_by
      where w.org_id = ${orgId} and w.party_id = ${partyId} and w.revoked_at is null
      order by w.expires_on desc
-  `)) as unknown as { rows: ExceptionRow[] }
+  `))
   return r.rows
 }
 
@@ -316,7 +316,17 @@ export interface BlockedBillRow extends BillReleaseDecision {
  * right now. The same function the pay run calls, over the whole AP ledger.
  */
 export async function loadBlockedBills(orgId: string, limit = 200): Promise<BlockedBillRow[]> {
-  const bills = (await db.execute(sql`
+  const bills = (await db.execute<{
+      id: string
+      document_number: string
+      party_id: string
+      vendor: string
+      project_id: string | null
+      document_date: string
+      currency: string
+      open_balance: string
+      project_name: string | null
+    }>(sql`
     select d.id, d.document_number, d.party_id, p.display_name as vendor,
            d.project_id, d.document_date, d.currency, coalesce(d.open_balance, 0) as open_balance,
            case when pj.id is null then null
@@ -330,19 +340,7 @@ export async function loadBlockedBills(orgId: string, limit = 200): Promise<Bloc
        and vr.compliance_class_id is not null
      order by d.document_date
      limit ${limit}
-  `)) as unknown as {
-    rows: {
-      id: string
-      document_number: string
-      party_id: string
-      vendor: string
-      project_id: string | null
-      document_date: string
-      currency: string
-      open_balance: string
-      project_name: string | null
-    }[]
-  }
+  `))
   if (bills.rows.length === 0) return []
   const decisions = await evaluateBillsForRelease({
     orgId,
@@ -373,7 +371,7 @@ export async function loadBlockedBills(orgId: string, limit = 200): Promise<Bloc
 // Lien waivers
 // ---------------------------------------------------------------------------
 
-export interface LienWaiverRow {
+export type LienWaiverRow = {
   id: string
   waiverNumber: string
   direction: 'received' | 'issued'
@@ -399,7 +397,7 @@ export interface LienWaiverRow {
   notes: string | null
   requestedAt: string | null
   createdAt: string
-}
+};
 
 export async function loadLienWaivers(args: {
   orgId: string
@@ -409,7 +407,7 @@ export async function loadLienWaivers(args: {
   partyId?: string | null
   limit?: number
 }): Promise<LienWaiverRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<LienWaiverRow>(sql`
     select lw.id, lw.waiver_number as "waiverNumber", lw.direction,
            lw.party_id as "partyId", p.display_name as "partyName",
            lw.project_id as "projectId",
@@ -433,7 +431,7 @@ export async function loadLienWaivers(args: {
        and (${args.partyId ?? null}::uuid is null or lw.party_id = ${args.partyId ?? null}::uuid)
      order by lw.through_date desc, lw.waiver_number desc
      limit ${args.limit ?? 300}
-  `)) as unknown as { rows: LienWaiverRow[] }
+  `))
   return r.rows
 }
 
@@ -441,7 +439,7 @@ export async function loadLienWaivers(args: {
 // Information returns
 // ---------------------------------------------------------------------------
 
-export interface FilingListRow {
+export type FilingListRow = {
   id: string
   taxYear: number
   formType: string
@@ -458,10 +456,10 @@ export interface FilingListRow {
   excludedCount: number
   missingTinCount: number
   filedTotal: string
-}
+};
 
 export async function loadFilings(orgId: string): Promise<FilingListRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<FilingListRow>(sql`
     select f.id, f.tax_year as "taxYear", f.form_type as "formType", f.status,
            f.threshold, f.currency, s.name as "subsidiaryName",
            f.computed_at as "computedAt", f.finalized_at as "finalizedAt",
@@ -493,7 +491,7 @@ export async function loadFilings(orgId: string): Promise<FilingListRow[]> {
       ) agg on true
      where f.org_id = ${orgId}
      order by f.tax_year desc, f.form_type
-  `)) as unknown as { rows: FilingListRow[] }
+  `))
   return r.rows
 }
 
@@ -560,7 +558,7 @@ export async function loadFiling(orgId: string, filingId: string): Promise<Filin
  * be empty before January. Deliberately computed against the CURRENT vendor
  * record, not the filing snapshot, so fixing a W-9 clears the row immediately.
  */
-export interface ReadinessRow {
+export type ReadinessRow = {
   partyId: string
   vendorName: string
   reportable: boolean
@@ -568,10 +566,10 @@ export interface ReadinessRow {
   hasTin: boolean
   taxClassification: string | null
   paidThisYear: string
-}
+};
 
 export async function loadInformationReturnReadiness(orgId: string, taxYear: number): Promise<ReadinessRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ReadinessRow>(sql`
     select p.id as "partyId", p.display_name as "vendorName",
            coalesce(vr.is_t4a, false) as reportable,
            coalesce(vr.information_return_form, cc.default_information_return) as "resolvedForm",
@@ -600,7 +598,7 @@ export async function loadInformationReturnReadiness(orgId: string, taxYear: num
        )
      order by paid.total desc, p.display_name
      limit 200
-  `)) as unknown as { rows: ReadinessRow[] }
+  `))
   return r.rows
 }
 

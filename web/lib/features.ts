@@ -151,9 +151,7 @@ export function featureEnabled(
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
 export async function orgFeatureState(orgId: string): Promise<FeatureState> {
-  const r = (await db.execute(sql`select settings->'features' as f from orgs where id = ${orgId}`)) as unknown as {
-    rows: { f: FeatureState | null }[]
-  }
+  const r = (await db.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`))
   return r.rows[0]?.f ?? {}
 }
 
@@ -171,9 +169,9 @@ export async function isFeatureEnabled(orgId: string, key: string): Promise<bool
 async function resolveMultiSubsidiary(orgId: string, state: FeatureState): Promise<boolean> {
   const v = state?.multiSubsidiary
   if (typeof v === 'boolean') return v
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination`)) as unknown as { rows: { n: number }[] }
+     where org_id = ${orgId} and is_active and not is_elimination`))
   return (r.rows[0]?.n ?? 0) > 1
 }
 
@@ -191,11 +189,11 @@ export async function subsidiaryFeatureEnabled(orgId: string): Promise<boolean> 
 async function resolveMultiCurrency(orgId: string, state: FeatureState): Promise<boolean> {
   const v = state?.multiCurrency
   if (typeof v === 'boolean') return v
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ on: boolean }>(sql`
     select (
       exists(select 1 from journal_lines where org_id = ${orgId} and fx_rate <> 1)
       or exists(select 1 from fx_rates where org_id = ${orgId})
-    ) as on`)) as unknown as { rows: { on: boolean }[] }
+    ) as on`))
   return Boolean(r.rows[0]?.on)
 }
 
@@ -231,7 +229,7 @@ export type FeatureImpact = { labelKey: string; count: number }
 export type FeatureDisableStatus = { blocked: boolean; impacts: FeatureImpact[] }
 
 async function countRows(query: SQL): Promise<number> {
-  const r = (await db.execute(query)) as unknown as { rows: { n: number }[] }
+  const r = (await db.execute<{ n: number }>(query))
   return Number(r.rows[0]?.n ?? 0)
 }
 

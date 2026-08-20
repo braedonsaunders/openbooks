@@ -169,12 +169,12 @@ export function subscriptionComponentTotal(lines: Array<{ quantity: string; unit
 }
 
 async function ownedPlan(orgId: string, planId: string) {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<any>(sql`
     select id, name, description, amount, currency_code as currency, interval,
            interval_count as "intervalCount", income_account_id as "incomeAccountId",
            item_id as "itemId", tax_code_id as "taxCodeId"
       from subscription_plans where id = ${planId} and org_id = ${orgId} for update
-  `)) as unknown as { rows: any[] };
+  `));
   const row = result.rows[0];
   if (!row) throw new AdvancedSubscriptionError("plan not found");
   return row;
@@ -182,21 +182,21 @@ async function ownedPlan(orgId: string, planId: string) {
 
 async function assertCommercialRefs(orgId: string, input: { incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<void> {
   if (input.incomeAccountId) {
-    const row = (await db.execute(sql`select 1 from accounts where id = ${input.incomeAccountId} and org_id = ${orgId} and type in ('income','income_other') and is_active`)) as unknown as { rows: unknown[] };
+    const row = (await db.execute(sql`select 1 from accounts where id = ${input.incomeAccountId} and org_id = ${orgId} and type in ('income','income_other') and is_active`));
     if (!row.rows.length) throw new AdvancedSubscriptionError("income account does not belong to this organization");
   }
   if (input.itemId) {
-    const row = (await db.execute(sql`select 1 from items where id = ${input.itemId} and org_id = ${orgId} and is_active`)) as unknown as { rows: unknown[] };
+    const row = (await db.execute(sql`select 1 from items where id = ${input.itemId} and org_id = ${orgId} and is_active`));
     if (!row.rows.length) throw new AdvancedSubscriptionError("item does not belong to this organization");
   }
   if (input.taxCodeId) {
-    const row = (await db.execute(sql`select 1 from tax_codes where id = ${input.taxCodeId} and org_id = ${orgId} and is_active`)) as unknown as { rows: unknown[] };
+    const row = (await db.execute(sql`select 1 from tax_codes where id = ${input.taxCodeId} and org_id = ${orgId} and is_active`));
     if (!row.rows.length) throw new AdvancedSubscriptionError("tax code does not belong to this organization");
   }
 }
 
 async function subscriptionContext(orgId: string, subscriptionId: string) {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<any>(sql`
     select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status,
            l.id as "lifecycleId", l.plan_version_id as "planVersionId",
            l.contract_revision as "contractRevision", l.term_starts_on as "termStartsOn",
@@ -206,7 +206,7 @@ async function subscriptionContext(orgId: string, subscriptionId: string) {
       from subscriptions s
       left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId}
-  `)) as unknown as { rows: any[] };
+  `));
   const row = result.rows[0];
   if (!row) throw new AdvancedSubscriptionError("subscription not found");
   return row;
@@ -227,7 +227,7 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
       nonNegativeMoney(component.unitPrice, "component price");
       await assertCommercialRefs(orgId, component);
     }
-    const version = (await db.execute(sql`
+    const version = (await db.execute<{ id: string }>(sql`
       insert into subscription_plan_versions
         (org_id, plan_id, version_number, effective_from, name, description, currency_code,
          interval, interval_count, billing_timing, change_summary, created_by, updated_by)
@@ -237,7 +237,7 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
              ${input.billingTiming ?? "advance"}, ${input.changeSummary ?? null}, ${actorId}, ${actorId}
         from subscription_plan_versions where org_id = ${orgId} and plan_id = ${input.planId}
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const versionId = version.rows[0]!.id;
     for (const [sortOrder, component] of input.components.entries()) {
       await db.execute(sql`
@@ -256,23 +256,23 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
 
 export async function publishPlanVersion(orgId: string, actorId: string, versionId: string): Promise<void> {
   await withOrg(orgId, async () => {
-    const found = (await db.execute(sql`
+    const found = (await db.execute<any>(sql`
       select id, plan_id as "planId", effective_from as "effectiveFrom", status
         from subscription_plan_versions where id = ${versionId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: any[] };
+    `));
     const version = found.rows[0];
     if (!version) throw new AdvancedSubscriptionError("plan version not found");
     assertPlanVersionMutable(version.status);
     await ownedPlan(orgId, version.planId);
-    const count = (await db.execute(sql`
+    const count = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from subscription_plan_version_components
        where version_id = ${versionId} and org_id = ${orgId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     if (!count.rows[0]?.n) throw new AdvancedSubscriptionError("a published version needs at least one component");
     const sameDate = (await db.execute(sql`
       select 1 from subscription_plan_versions where org_id = ${orgId} and plan_id = ${version.planId}
        and status = 'published' and effective_from = ${version.effectiveFrom} and id <> ${versionId} limit 1
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (sameDate.rows.length) throw new AdvancedSubscriptionError("another published version already starts on that date");
     await db.execute(sql`
       update subscription_plan_versions
@@ -288,11 +288,11 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     const sub = await subscriptionContext(orgId, input.subscriptionId);
     if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
     if (sub.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is already active");
-    const versionResult = (await db.execute(sql`
+    const versionResult = (await db.execute<any>(sql`
       select id, plan_id as "planId", interval, interval_count as "intervalCount", billing_timing as "billingTiming", status,
              effective_from as "effectiveFrom", effective_to as "effectiveTo"
         from subscription_plan_versions where id = ${input.planVersionId} and org_id = ${orgId}
-    `)) as unknown as { rows: any[] };
+    `));
     const version = versionResult.rows[0];
     if (!version || version.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required");
     if (version.planId !== sub.planId) throw new AdvancedSubscriptionError("plan version does not belong to the subscription plan");
@@ -336,25 +336,25 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
 async function snapshot(orgId: string, subscriptionId: string) {
   const lifecycle = await subscriptionContext(orgId, subscriptionId);
   if (!lifecycle.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is not active");
-  const components = (await db.execute(sql`
+  const components = (await db.execute<any>(sql`
     select component_key as "componentKey", name, description, quantity, unit_price as "unitPrice",
            income_account_id as "incomeAccountId", item_id as "itemId", tax_code_id as "taxCodeId",
            effective_from as "effectiveFrom", effective_to as "effectiveTo"
       from subscription_components where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by effective_from, sort_order, component_key
-  `)) as unknown as { rows: any[] };
+  `));
   return { lifecycle, components: components.rows };
 }
 
 export async function applyAmendment(orgId: string, actorId: string, request: AmendmentRequest): Promise<{ id: string; replayed: boolean }> {
   return withOrg(orgId, async () => {
     if (!request.idempotencyKey.trim()) throw new AdvancedSubscriptionError("idempotency key is required");
-    const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`)) as unknown as { rows: unknown[] };
+    const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
-    const replay = (await db.execute(sql`
+    const replay = (await db.execute<any>(sql`
       select id, subscription_id as "subscriptionId" from subscription_amendments
        where org_id = ${orgId} and idempotency_key = ${request.idempotencyKey}
-    `)) as unknown as { rows: any[] };
+    `));
     if (replay.rows[0]) {
       assertIdempotentReplay(replay.rows[0].subscriptionId, request.subscriptionId);
       return { id: replay.rows[0].id, replayed: true };
@@ -429,7 +429,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
     }
     await db.execute(sql`update subscription_lifecycles set contract_revision = contract_revision + 1, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     const after = await snapshot(orgId, request.subscriptionId);
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into subscription_amendments
         (org_id, subscription_id, amendment_number, amendment_type, effective_on, status, idempotency_key,
          reason, request, before_snapshot, after_snapshot, applied_at, applied_by, created_by, updated_by)
@@ -438,14 +438,14 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
              ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, now(), ${actorId}, ${actorId}, ${actorId}
         from subscription_amendments where subscription_id = ${request.subscriptionId}
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     return { id: inserted.rows[0]!.id, replayed: false };
   });
 }
 
 export async function advancedSubscriptionWorkspace(orgId: string) {
   const [versions, lifecycles, amendments] = await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select v.id, v.plan_id as "planId", v.version_number as "versionNumber", v.status, v.effective_from as "effectiveFrom",
              v.effective_to as "effectiveTo", v.name, v.currency_code as currency, v.interval,
              v.interval_count as "intervalCount", v.billing_timing as "billingTiming", v.change_summary as "changeSummary",
@@ -454,7 +454,7 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
         from subscription_plan_versions v left join subscription_plan_version_components c on c.version_id = v.id and c.org_id = v.org_id
        where v.org_id = ${orgId} group by v.id order by v.plan_id, v.version_number desc
     `),
-    db.execute(sql`
+    db.execute<any>(sql`
       select l.subscription_id as "subscriptionId", l.plan_version_id as "planVersionId", l.contract_revision as "contractRevision",
              l.term_starts_on as "termStartsOn", l.term_ends_on as "termEndsOn", l.trial_ends_on as "trialEndsOn",
              l.billing_timing as "billingTiming", l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
@@ -465,12 +465,12 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
         from subscription_lifecycles l left join subscription_components c on c.subscription_id = l.subscription_id and c.org_id = l.org_id
        where l.org_id = ${orgId} group by l.id order by l.created_at desc
     `),
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, subscription_id as "subscriptionId", amendment_number as "amendmentNumber", amendment_type as "amendmentType",
              effective_on as "effectiveOn", status, reason, applied_at as "appliedAt", request
         from subscription_amendments where org_id = ${orgId} order by applied_at desc, amendment_number desc
     `),
-  ]) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }];
+  ]);
   return { versions: versions.rows, lifecycles: lifecycles.rows, amendments: amendments.rows };
 }
 
@@ -483,13 +483,13 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
  */
 export async function prepareAdvancedSubscriptionBilling(orgId: string, subscriptionId: string, dueOn: string): Promise<boolean> {
   return withOrg(orgId, async () => {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<any>(sql`
       select l.billing_timing as "billingTiming", l.term_ends_on as "termEndsOn",
              l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
              s.created_by as "createdBy"
         from subscriptions s left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId} and s.org_id = ${orgId}
-    `)) as unknown as { rows: any[] };
+    `));
     const row = result.rows[0];
     if (!row?.billingTiming) return true;
     const action = renewalAction({ billingTiming: row.billingTiming, dueOn, termEndsOn: row.termEndsOn, policy: row.renewalPolicy });
@@ -508,14 +508,14 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
   });
 }
 
-export interface AdvancedBillingLine {
+export type AdvancedBillingLine = {
   description: string;
   quantity: string;
   unitPrice: string;
   incomeAccountId: string | null;
   itemId: string | null;
   taxCodeId: string | null;
-}
+};
 
 /** Snapshot used by the invoice engine; null means single-plan billing. */
 export async function advancedBillingSnapshot(subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
@@ -526,27 +526,27 @@ export async function advancedBillingSnapshot(subscriptionId: string, billOn: st
   lines: AdvancedBillingLine[];
   total: string;
 } | null> {
-  const lifecycle = (await db.execute(sql`
+  const lifecycle = (await db.execute<any>(sql`
     select l.contract_revision as "contractRevision", l.billing_timing as "billingTiming",
            s.current_period_start as "currentPeriodStart", s.next_bill_on as "nextBillOn",
            v.interval, v.interval_count as "intervalCount"
       from subscription_lifecycles l join subscriptions s on s.id = l.subscription_id and s.org_id = l.org_id
       join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = l.org_id
      where l.subscription_id = ${subscriptionId}
-  `)) as unknown as { rows: any[] };
+  `));
   const row = lifecycle.rows[0];
   if (!row) return null;
   const serviceAnchor = periodStartOverride ?? row.currentPeriodStart ?? billOn;
   const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({ billOn, serviceAnchor, billingTiming: row.billingTiming, interval: row.interval, intervalCount: row.intervalCount });
   const activeOn = row.billingTiming === "advance" ? periodStartsOn : periodEndsOn;
-  const components = (await db.execute(sql`
+  const components = (await db.execute<AdvancedBillingLine>(sql`
     select name as description, quantity, unit_price as "unitPrice", income_account_id as "incomeAccountId",
            item_id as "itemId", tax_code_id as "taxCodeId"
       from subscription_components
      where subscription_id = ${subscriptionId} and effective_from <= ${activeOn}
        and (effective_to is null or effective_to >= ${activeOn})
      order by sort_order, component_key
-  `)) as unknown as { rows: AdvancedBillingLine[] };
+  `));
   const total = subscriptionComponentTotal(components.rows);
   return { contractRevision: row.contractRevision, billingTiming: row.billingTiming, periodStartsOn, periodEndsOn, lines: components.rows, total };
 }

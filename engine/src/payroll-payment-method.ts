@@ -137,9 +137,9 @@ export interface PayrollPaymentMethodSettings {
 export async function payrollPaymentMethodSettings(
   orgId: string,
 ): Promise<PayrollPaymentMethodSettings> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ v: unknown }>(sql`
     select settings#>'{payroll,eftFallbackToCheque}' as v from orgs where id = ${orgId}
-  `)) as unknown as { rows: { v: unknown }[] };
+  `));
   // Absent = on. Only an explicit `false` turns the safety net off.
   return { eftFallbackToCheque: r.rows[0]?.v !== false };
 }
@@ -158,7 +158,7 @@ export async function schedulePaymentMethods(
   payScheduleId: string,
 ): Promise<EmployeePaymentMethodRow[]> {
   const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; name: string; profile_method: string | null; party_method: string | null; has_bank: boolean }>(sql`
     select p.id, p.display_name as name, prof.payment_method as profile_method,
            p.payment_method as party_method,
            exists (
@@ -169,9 +169,7 @@ export async function schedulePaymentMethods(
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${payScheduleId} and prof.is_active
      order by p.display_name
-  `)) as unknown as {
-    rows: { id: string; name: string; profile_method: string | null; party_method: string | null; has_bank: boolean }[];
-  };
+  `));
   return rows.rows.map((row) => ({
     employeePartyId: row.id,
     name: row.name,
@@ -196,7 +194,11 @@ export async function stubPaymentMethods(
   documentId: string,
 ): Promise<(EmployeePaymentMethodRow & { stubId: string; netPay: string; chequeNumber: string | null })[]> {
   const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      stub_id: string; employee_party_id: string; name: string; net_pay: string;
+      stub_method: string | null; cheque_number: string | null;
+      profile_method: string | null; party_method: string | null; has_bank: boolean;
+    }>(sql`
     select s.id as stub_id, s.employee_party_id, p.display_name as name,
            s.net_pay::text as net_pay, s.payment_method as stub_method, s.cheque_number,
            prof.payment_method as profile_method, p.payment_method as party_method,
@@ -210,13 +212,7 @@ export async function stubPaymentMethods(
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
-  `)) as unknown as {
-    rows: {
-      stub_id: string; employee_party_id: string; name: string; net_pay: string;
-      stub_method: string | null; cheque_number: string | null;
-      profile_method: string | null; party_method: string | null; has_bank: boolean;
-    }[];
-  };
+  `));
   return rows.rows.map((row) => {
     const live = resolvePayrollPaymentMethod({
       profileMethod: row.profile_method,

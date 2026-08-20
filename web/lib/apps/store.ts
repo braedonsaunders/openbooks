@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import {
   runAppEndpoint,
   type AppHostAdapters,
@@ -23,7 +23,7 @@ import { permissionSetCovers } from '@/lib/permissions'
  * never touches the DB — see engine/src/apps-runtime.ts).
  */
 
-export interface AppRow {
+export type AppRow = {
   id: string
   key: string
   name: string
@@ -34,7 +34,7 @@ export interface AppRow {
   grantedPermissions: string[]
   version: string | null
   manifest: AppManifest | null
-}
+};
 
 export interface UploadBundle {
   manifest: unknown
@@ -43,8 +43,8 @@ export interface UploadBundle {
   grantedPermissions?: string[]
 }
 
-async function rows<T = any>(q: ReturnType<typeof sql>): Promise<T[]> {
-  const r = (await db.execute(q)) as unknown as { rows: T[] }
+async function rows<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
+  const r = (await db.execute<T>(q))
   return r.rows
 }
 
@@ -101,7 +101,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
 
   await db.transaction(async (tx) => {
     // Upsert the app row (create, or update presentation on reinstall/upgrade).
-    const appRes = (await tx.execute(sql`
+    const appRes = (await tx.execute<{ id: string }>(sql`
       insert into apps (org_id, key, name, description, icon_key, status, granted_permissions, created_by, updated_by)
       values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description ?? null},
               ${manifest.icon ?? 'box'}, 'installed', ${JSON.stringify(granted)}::jsonb,
@@ -110,19 +110,19 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
         granted_permissions = excluded.granted_permissions,
         status = 'installed', updated_at = now(), updated_by = ${userId}
-      returning id`)) as unknown as { rows: { id: string }[] }
+      returning id`))
     const appId = appRes.rows[0]!.id
 
     // Reject a duplicate version rather than silently overwriting history.
     const existing = (await tx.execute(
       sql`select 1 from app_versions where app_id = ${appId} and version = ${manifest.version} limit 1`,
-    )) as unknown as { rows: unknown[] }
+    ))
     if (existing.rows.length) throw new AppError(`version ${manifest.version} already exists for this app`)
 
-    const verRes = (await tx.execute(sql`
+    const verRes = (await tx.execute<{ id: string }>(sql`
       insert into app_versions (org_id, app_id, version, manifest, status, created_by, updated_by)
       values (${orgId}, ${appId}, ${manifest.version}, ${manifestJson}::jsonb, 'active', ${userId}, ${userId})
-      returning id`)) as unknown as { rows: { id: string }[] }
+      returning id`))
     const versionId = verRes.rows[0]!.id
 
     for (const f of bundle.files) {
@@ -136,9 +136,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     // Provision declared objects (record types + custom fields). May create
     // new objects or upgrade ones THIS app provisioned before; a key collision
     // with a user-authored object aborts the whole install transaction.
-    const prevRes = (await tx.execute(sql`select provisioned from apps where id = ${appId}`)) as unknown as {
-      rows: { provisioned: { recordTypes?: string[]; customFields?: string[] } }[]
-    }
+    const prevRes = (await tx.execute<{ provisioned: { recordTypes?: string[]; customFields?: string[] } }>(sql`select provisioned from apps where id = ${appId}`))
     const prev = prevRes.rows[0]?.provisioned ?? {}
     const provisioned = await provisionObjects(tx, orgId, userId, objects, {
       recordTypes: new Set(prev.recordTypes ?? []),
@@ -156,7 +154,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
 
 /** Upsert declared objects inside the install transaction. Returns provenance. */
 async function provisionObjects(
-  tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
+  tx: SqlExecutor,
   orgId: string,
   userId: string,
   objects: ParsedObjects,
@@ -629,14 +627,14 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
   })
 }
 
-export interface AppFileRow {
+export type AppFileRow = {
   path: string
   kind: 'frontend' | 'backend' | 'asset'
   contentType: string
   isBinary: boolean
   size: number
   updatedAt: string
-}
+};
 
 export async function listAppFiles(orgId: string, key: string): Promise<AppFileRow[]> {
   const app = await getAppByKey(orgId, key)
@@ -710,7 +708,7 @@ export async function deleteAppFile(orgId: string, key: string, path: string): P
 // grants, and object provisioning apply identically.
 // ---------------------------------------------------------------------------
 
-export interface ListingRow {
+export type ListingRow = {
   id: string
   key: string
   name: string
@@ -719,7 +717,7 @@ export interface ListingRow {
   version: string
   publisherOrgId: string
   updatedAt: string
-}
+};
 
 export interface ListingPage {
   listings: ListingRow[]
@@ -783,7 +781,7 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
 
   const filesJson = JSON.stringify(files)
   const manifestJson = JSON.stringify(app.manifest)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into app_listings (publisher_org_id, key, name, description, icon_key, version, manifest, files, is_active, created_by, updated_by)
     values (${orgId}, ${key}, ${app.name}, ${app.description}, ${app.iconKey}, ${app.version},
             ${manifestJson}::jsonb, ${filesJson}::jsonb, true, ${userId}, ${userId})
@@ -791,7 +789,7 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
       name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
-    returning id`)) as unknown as { rows: { id: string }[] }
+    returning id`))
   return { id: r.rows[0]!.id }
 }
 

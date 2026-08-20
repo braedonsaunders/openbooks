@@ -146,7 +146,7 @@ export async function filingSubmissions(
   filingKey: string,
   taxYear: number,
 ): Promise<PayrollFilingSubmission[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.id, s.country, s.filing_key, s.tax_year, s.revision, s.revision_number,
            s.supersedes_id, s.issued_at, s.note, s.slip_count,
            s.artifact_filename, s.artifact_content_type,
@@ -163,7 +163,7 @@ export async function filingSubmissions(
      where s.org_id = ${orgId} and s.country = ${country}
        and s.filing_key = ${filingKey} and s.tax_year = ${taxYear}
      order by s.revision_number
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
@@ -203,17 +203,15 @@ export async function filingArtifact(
   orgId: string,
   submissionId: string,
 ): Promise<PayrollFilingFile | null> {
-  const rows = (await db.execute(sql`
-    select artifact_filename, artifact_content_type, artifact_body
-      from payroll_filing_submissions
-     where org_id = ${orgId} and id = ${submissionId}
-  `)) as unknown as {
-    rows: {
+  const rows = (await db.execute<{
       artifact_filename: string | null;
       artifact_content_type: string | null;
       artifact_body: string | null;
-    }[];
-  };
+    }>(sql`
+    select artifact_filename, artifact_content_type, artifact_body
+      from payroll_filing_submissions
+     where org_id = ${orgId} and id = ${submissionId}
+  `));
   const row = rows.rows[0];
   if (!row || row.artifact_body == null || !row.artifact_filename) return null;
   return {
@@ -799,7 +797,7 @@ async function persist(
 ): Promise<PayrollFilingSubmission> {
   const { orgId, actorId, country, filingKey, taxYear } = input;
   const submissionId = await db.transaction(async (tx) => {
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into payroll_filing_submissions
         (org_id, country, filing_key, tax_year, revision, revision_number, supersedes_id,
          note, slip_count, artifact_filename, artifact_content_type, artifact_body,
@@ -810,7 +808,7 @@ async function persist(
               ${issue.file?.contentType ?? null}, ${issue.file?.body ?? null},
               ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const id = inserted.rows[0]!.id;
     for (const slip of issue.slips) {
       await tx.execute(sql`

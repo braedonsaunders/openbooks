@@ -33,7 +33,7 @@ async function principalExists(
   const table = principalType === 'user' ? sql`users` : sql`app_roles`
   const r = (await db.execute(sql`
     select 1 from ${table} where id = ${principalId} and org_id = ${orgId} limit 1
-  `)) as unknown as { rows: unknown[] }
+  `))
   return r.rows.length > 0
 }
 

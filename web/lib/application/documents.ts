@@ -25,25 +25,24 @@ import {
 } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
-
-interface DocumentHeader {
+type DocumentHeader = {
   id: string;
   kind: string;
   status: string;
   subsidiaryId: string | null;
-}
+};
 
 async function documentHeader(
   context: ApplicationContext,
   id: string,
 ): Promise<DocumentHeader> {
   if (!isUuid(id)) throw invalidInput("documentId must be a UUID");
-  const result = (await db.execute(sql`
+  const result = (await db.execute<DocumentHeader>(sql`
     select id, kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${context.authz.user.orgId}
      limit 1
-  `)) as unknown as { rows: DocumentHeader[] };
+  `));
   const header = result.rows[0];
   if (!header) throw notFound("document");
   assertSubsidiaryAccess(context, header.subsidiaryId);

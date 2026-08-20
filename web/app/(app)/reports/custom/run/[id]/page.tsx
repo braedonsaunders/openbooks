@@ -86,7 +86,7 @@ export default async function ReportRunPage({
   // "one pay period at a time" is THE payroll reporting window.
   let extraPeriods: ExtraPeriodOption[] | undefined
   if (entity?.category === 'payroll') {
-    const runs = (await db.execute(sql`
+    const runs = (await db.execute<{ document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }>(sql`
       select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
         from pay_runs r
         join documents d on d.id = r.document_id
@@ -94,7 +94,7 @@ export default async function ReportRunPage({
        where r.org_id = ${authz.user.orgId}
        order by r.period_end desc
        limit 27
-    `)) as unknown as { rows: { document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }[] }
+    `))
     // The label names the worked period; the WINDOW is the run's pay date —
     // payroll plans filter on pay_date, which lands after the period ends.
     extraPeriods = runs.rows.map((run) => ({

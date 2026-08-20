@@ -17,7 +17,7 @@ export async function GET() {
       from report_definitions
      where org_id = ${user.orgId}
      order by kind, name
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({ definitions: rows.rows })
 }
 
@@ -51,13 +51,13 @@ export async function POST(req: Request) {
   const layout = validateReportLayout(body.layout)
   const slug = await uniqueReportSlug(user.orgId, slugifyReportName(name))
 
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into report_definitions (org_id, kind, slug, name, description, query, layout, created_by, updated_by)
     values (${user.orgId}, 'custom', ${slug}, ${name}, ${body.description?.trim() || null},
             ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
             ${user.id}, ${user.id})
     returning id, kind, slug, name, description, query, updated_at
-  `)) as unknown as { rows: { id: string }[] }
+  `))
 
   return NextResponse.json({ definition: inserted.rows[0] }, { status: 201 })
 }

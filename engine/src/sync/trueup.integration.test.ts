@@ -119,7 +119,13 @@ test(
         1,
       );
 
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<{
+          entries: number;
+          lines: number;
+          net: string;
+          audits: number;
+          attribution_complete: boolean;
+        }>(sql`
         select count(distinct entry.id)::int as entries,
                count(line.id)::int as lines,
                coalesce(sum(line.amount), 0)::text as net,
@@ -144,15 +150,7 @@ test(
            and audit.changes->>'mode' = 'migration_gl_trueup'
          where entry.org_id = ${org.orgId}
            and entry.entry_number like 'TRUEUP-2026-07-%'
-      `)) as unknown as {
-        rows: Array<{
-          entries: number;
-          lines: number;
-          net: string;
-          audits: number;
-          attribution_complete: boolean;
-        }>;
-      };
+      `));
       assert.deepEqual(evidence.rows[0], {
         entries: 3,
         lines: 6,
@@ -195,12 +193,12 @@ test(
         trueUpResidualGl(org.orgId, source, control),
         (error) => errorChainMatches(error, /GL is closed/),
       );
-      const afterFailures = (await db.execute(sql`
+      const afterFailures = (await db.execute<{ entries: number }>(sql`
         select count(*)::int as entries
           from journal_entries
          where org_id = ${org.orgId}
            and entry_number like 'TRUEUP-2026-07-%'
-      `)) as unknown as { rows: Array<{ entries: number }> };
+      `));
       assert.equal(afterFailures.rows[0]?.entries, 3);
     } finally {
       await dropScratchOrg(org.orgId);

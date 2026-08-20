@@ -21,8 +21,7 @@ import { dateTime } from '../lib/format'
 import { SearchInput } from './search-input'
 import { FilterChips } from './filter-bar'
 import { Pagination } from './pagination'
-
-interface AttachedFile {
+type AttachedFile = {
   id: string
   name: string
   fileType: string
@@ -31,7 +30,7 @@ interface AttachedFile {
   createdAt: string
   createdBy: string | null
   attachmentId: string
-}
+};
 
 const MAX_BYTES = 25 * 1024 * 1024
 const PAGE_SIZE = 12

@@ -99,14 +99,7 @@ test(
         "exactly one concurrent import creates the batch",
       );
       const batchId = imports[0].batchId;
-      const draft = (await db.execute(sql`
-        select status, gross_amount::text, fee_amount::text,
-               refund_amount::text, dispute_amount::text, fx_amount::text,
-               net_amount::text, line_count
-          from psp_settlement_batches
-         where id = ${batchId} and org_id = ${org.orgId}
-      `)) as unknown as {
-        rows: {
+      const draft = (await db.execute<{
           status: string;
           gross_amount: string;
           fee_amount: string;
@@ -115,8 +108,13 @@ test(
           fx_amount: string;
           net_amount: string;
           line_count: number;
-        }[];
-      };
+        }>(sql`
+        select status, gross_amount::text, fee_amount::text,
+               refund_amount::text, dispute_amount::text, fx_amount::text,
+               net_amount::text, line_count
+          from psp_settlement_batches
+         where id = ${batchId} and org_id = ${org.orgId}
+      `));
       assert.deepEqual(draft.rows[0], {
         status: "draft",
         gross_amount: "200.0000",
@@ -127,14 +125,12 @@ test(
         net_amount: "165.2500",
         line_count: 6,
       });
-      const evidenceLines = (await db.execute(sql`
+      const evidenceLines = (await db.execute<{ count: number; distinct_refs: number }>(sql`
         select count(*)::int as count,
                count(distinct external_ref)::int as distinct_refs
           from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${org.orgId}
-      `)) as unknown as {
-        rows: { count: number; distinct_refs: number }[];
-      };
+      `));
       assert.deepEqual(evidenceLines.rows[0], {
         count: 6,
         distinct_refs: 6,
@@ -150,13 +146,13 @@ test(
         "concurrent post retries return one journal",
       );
       const entryId = posts[0].entryId;
-      const gl = (await db.execute(sql`
+      const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
          where entry_id = ${entryId} and org_id = ${org.orgId}
          group by account_id
          order by account_id
-      `)) as unknown as { rows: { account_id: string; amount: string }[] };
+      `));
       const byAccount = new Map(
         gl.rows.map((line) => [line.account_id, line.amount]),
       );
@@ -165,19 +161,19 @@ test(
       assert.equal(byAccount.get(org.accounts.adjustment), "10.0000");
       assert.equal(byAccount.get(org.accounts.fxGainLoss), "-1.2500");
       assert.equal(byAccount.get(org.accounts.clearing), "-180.0000");
-      const balance = (await db.execute(sql`
+      const balance = (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(amount), 0)::text as amount
           from journal_lines where entry_id = ${entryId}
-      `)) as unknown as { rows: { amount: string }[] };
+      `));
       assert.equal(balance.rows[0]?.amount, "0.0000");
-      const postAudits = (await db.execute(sql`
+      const postAudits = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from audit_log
          where org_id = ${org.orgId}
            and table_name = 'psp_settlement_batches'
            and row_id = ${batchId}
            and action = 'post'
-      `)) as unknown as { rows: { count: number }[] };
+      `));
       assert.equal(postAudits.rows[0]?.count, 1);
 
       const reimport = await importSettlementBatch(
@@ -210,7 +206,15 @@ test(
       ]);
       assert.equal(reversals[0].entryId, reversals[1].entryId);
       const reversalEntryId = reversals[0].entryId;
-      const mirror = (await db.execute(sql`
+      const mirror = (await db.execute<{
+          source_amount: string;
+          reversal_amount: string;
+          source_txn_amount: string;
+          reversal_txn_amount: string;
+          same_account: boolean;
+          same_currency: boolean;
+          same_rate: boolean;
+        }>(sql`
         select source.line_number,
                source.amount::text as source_amount,
                reversal.amount::text as reversal_amount,
@@ -225,17 +229,7 @@ test(
            and reversal.line_number = source.line_number
          where source.entry_id = ${entryId}
          order by source.line_number
-      `)) as unknown as {
-        rows: {
-          source_amount: string;
-          reversal_amount: string;
-          source_txn_amount: string;
-          reversal_txn_amount: string;
-          same_account: boolean;
-          same_currency: boolean;
-          same_rate: boolean;
-        }[];
-      };
+      `));
       assert.equal(mirror.rows.length, 6);
       for (const line of mirror.rows) {
         assert.equal(
@@ -252,7 +246,16 @@ test(
         assert.equal(line.same_currency, true);
         assert.equal(line.same_rate, true);
       }
-      const lifecycle = (await db.execute(sql`
+      const lifecycle = (await db.execute<{
+          status: string;
+          journal_entry_id: string;
+          reversal_entry_id: string;
+          reversal_reason: string;
+          reversed_by: string;
+          source_status: string;
+          reversal_status: string;
+          reverses_entry_id: string;
+        }>(sql`
         select b.status, b.journal_entry_id, b.reversal_entry_id,
                b.reversal_reason, b.reversed_by,
                source.status as source_status,
@@ -262,18 +265,7 @@ test(
           join journal_entries source on source.id = b.journal_entry_id
           join journal_entries reversal on reversal.id = b.reversal_entry_id
          where b.id = ${batchId} and b.org_id = ${org.orgId}
-      `)) as unknown as {
-        rows: {
-          status: string;
-          journal_entry_id: string;
-          reversal_entry_id: string;
-          reversal_reason: string;
-          reversed_by: string;
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-        }[];
-      };
+      `));
       assert.deepEqual(lifecycle.rows[0], {
         status: "void",
         journal_entry_id: entryId,
@@ -312,13 +304,11 @@ test(
         postSettlementBatch(org.orgId, usd.batchId, actor),
         /requires explicit rate and functional-currency evidence/,
       );
-      const usdState = (await db.execute(sql`
+      const usdState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
         select status, journal_entry_id
           from psp_settlement_batches
          where id = ${usd.batchId}
-      `)) as unknown as {
-        rows: { status: string; journal_entry_id: string | null }[];
-      };
+      `));
       assert.deepEqual(usdState.rows[0], {
         status: "draft",
         journal_entry_id: null,
@@ -343,13 +333,11 @@ test(
         postSettlementBatch(org.orgId, locked.batchId, actor),
         /BANKING is closed/,
       );
-      const lockedState = (await db.execute(sql`
+      const lockedState = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
         select status, journal_entry_id
           from psp_settlement_batches
          where id = ${locked.batchId}
-      `)) as unknown as {
-        rows: { status: string; journal_entry_id: string | null }[];
-      };
+      `));
       assert.deepEqual(lockedState.rows[0], {
         status: "draft",
         journal_entry_id: null,

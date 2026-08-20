@@ -123,14 +123,14 @@ test(
 
       // Post through the kernel.
       const { entryId } = await postProvisionRun(org.orgId, runId, userId);
-      const entry = (await db.execute(sql`
+      const entry = (await db.execute<{ status: string; origin: string }>(sql`
       select status, origin from journal_entries where id = ${entryId}
-    `)) as unknown as { rows: { status: string; origin: string }[] };
+    `));
       assert.equal(entry.rows[0]!.status, "posted");
       assert.equal(entry.rows[0]!.origin, "tax_provision");
-      const lines = (await db.execute(sql`
+      const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `)) as unknown as { rows: { account_id: string; amount: string }[] };
+    `));
       const byAccount = new Map(
         lines.rows.map((l) => [l.account_id, l.amount]),
       );
@@ -176,17 +176,17 @@ test(
         runId2,
         userId,
       );
-      const states = (await db.execute(sql`
+      const states = (await db.execute<{ status: string; n: number }>(sql`
       select status, count(*)::int as n from tax_provision_runs
        where org_id = ${org.orgId} and fiscal_year = 2026 group by status
-    `)) as unknown as { rows: { status: string; n: number }[] };
+    `));
       const byStatus = new Map(states.rows.map((r) => [r.status, r.n]));
       assert.equal(byStatus.get("posted"), 1);
       assert.equal(byStatus.get("superseded"), 1);
-      const reversal = (await db.execute(sql`
+      const reversal = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${entryId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
       assert.equal(
         reversal.rows[0]!.n,
         1,
@@ -194,9 +194,9 @@ test(
       );
 
       // The DTL movement between the two runs (53,000 → 79,500) shows in entry 2.
-      const dtlLine = (await db.execute(sql`
+      const dtlLine = (await db.execute<{ amount: string }>(sql`
       select amount from journal_lines where entry_id = ${entryId2} and account_id = ${dtl}
-    `)) as unknown as { rows: { amount: string }[] };
+    `));
       assert.equal(dtlLine.rows[0]!.amount, "-79500.0000");
     } finally {
       await dropScratchOrg(org.orgId);

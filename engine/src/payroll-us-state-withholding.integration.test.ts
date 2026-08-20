@@ -204,22 +204,22 @@ async function runPayroll(fx: Fixture) {
 }
 
 const stubOf = async (fx: Fixture, documentId: string, employeePartyId: string) => {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; gross: string; factors: Record<string, string> }>(sql`
     select id, gross::text as gross, factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `)) as unknown as { rows: { id: string; gross: string; factors: Record<string, string> }[] };
+  `));
   return r.rows[0] ?? null;
 };
 
 /** Every deduction line on a stub, by the system key its component carries. */
 const deductionsOf = async (fx: Fixture, stubId: string) => {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ system_key: string; description: string; amount: string }>(sql`
     select c.system_key, l.description, l.amount::text as amount
       from pay_stub_lines l join pay_components c on c.id = l.component_id
      where l.org_id = ${fx.orgId} and l.stub_id = ${stubId} and l.kind = 'deduction'
      order by l.sequence
-  `)) as unknown as { rows: { system_key: string; description: string; amount: string }[] };
+  `));
   return r.rows;
 };
 

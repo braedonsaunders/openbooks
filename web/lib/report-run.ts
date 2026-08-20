@@ -301,19 +301,17 @@ export async function resolveDefinitionToExportData(
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<ExportData> {
-  const r = (await db.execute(sql`
-    select report_type, name, description, query, statement
-      from report_definitions
-     where id = ${id} and org_id = ${orgId}
-  `)) as unknown as {
-    rows: {
+  const r = (await db.execute<{
       report_type: string
       name: string
       description: string | null
       query: Record<string, unknown> | null
       statement: { kind?: string; params?: Record<string, string> } | null
-    }[]
-  }
+    }>(sql`
+    select report_type, name, description, query, statement
+      from report_definitions
+     where id = ${id} and org_id = ${orgId}
+  `))
   const row = r.rows[0]
   if (!row) throw new Error('report not found')
 

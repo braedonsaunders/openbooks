@@ -79,7 +79,7 @@ export async function POST(
     select 1 from sync_runs
      where org_id = ${orgId} and connection_id = ${id}
        and kind = ${runKind} and status = 'running'
-     limit 1`)) as unknown as { rows: unknown[] };
+     limit 1`));
   if (running.rows.length > 0) {
     return NextResponse.json(
       { errorCode: "RUN_ALREADY_ACTIVE" },

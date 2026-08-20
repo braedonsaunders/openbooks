@@ -9,7 +9,7 @@ import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
  * names for the linked customer / foreman / manager parties, and the WBS
  * tasks that make up the cost budget.
  */
-export interface ProjectTaskRow {
+export type ProjectTaskRow = {
   id: string
   code: string | null
   name: string
@@ -39,30 +39,30 @@ export interface ProjectPayload {
 }
 
 export async function loadProject(id: string, orgId: string): Promise<ProjectPayload | null> {
-  const proj = (await db.execute(sql`
+  const proj = (await db.execute<Record<string, unknown>>(sql`
     select * from projects where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!proj.rows[0]) return null
   const row = proj.rows[0]
 
   const [names, fieldDefs] = await Promise.all([
     Promise.all([
       row.customer_id
-        ? db.execute(sql`select display_name from parties where id = ${row.customer_id} and org_id = ${orgId}`)
+        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.customer_id} and org_id = ${orgId}`)
         : Promise.resolve({ rows: [] }),
       row.foreman_id
-        ? db.execute(sql`select display_name from parties where id = ${row.foreman_id} and org_id = ${orgId}`)
+        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.foreman_id} and org_id = ${orgId}`)
         : Promise.resolve({ rows: [] }),
       row.manager_id
-        ? db.execute(sql`select display_name from parties where id = ${row.manager_id} and org_id = ${orgId}`)
+        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.manager_id} and org_id = ${orgId}`)
         : Promise.resolve({ rows: [] }),
-      db.execute(sql`
+      db.execute<ProjectTaskRow>(sql`
         select id, code, name, status, estimated_hours, estimated_cost, updated_at
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name
       `),
-    ]) as unknown as Promise<{ rows: Record<string, unknown>[] }[]>,
+    ]),
     loadFieldDefs('projects'),
   ])
   const [customer, foreman, manager, tasks] = names
@@ -76,7 +76,7 @@ export async function loadProject(id: string, orgId: string): Promise<ProjectPay
     customerName: name(customer.rows[0]),
     foremanName: name(foreman.rows[0]),
     managerName: name(manager.rows[0]),
-    tasks: tasks.rows as unknown as ProjectTaskRow[],
+    tasks: tasks.rows,
     customFieldDefs: fieldDefs.map((d) => ({
       key: d.key,
       label: d.label,

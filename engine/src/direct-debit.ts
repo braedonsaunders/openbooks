@@ -12,17 +12,17 @@ export async function createDirectDebitRun(opts: {
   scheduledFor?: string | null;
 }): Promise<{ id: string; runNumber: string }> {
   if (!opts.invoiceDocumentIds.length) throw new PaymentError("select at least one invoice to collect");
-  const profileResult = (await db.execute(sql`
+  const profileResult = (await db.execute<{ id: string; bank_account_id: string; subsidiary_id: string | null; currency: string; rail: string; direction: string }>(sql`
     select p.id, p.bank_account_id, p.subsidiary_id, p.currency, f.rail, f.direction
       from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.is_active
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-  `)) as unknown as { rows: Array<{ id: string; bank_account_id: string; subsidiary_id: string | null; currency: string; rail: string; direction: string }> };
+  `));
   const profile = profileResult.rows[0];
   if (!profile || profile.direction === "credit" || !["nacha_debit", "sepa_debit", "custom"].includes(profile.rail)) {
     throw new PaymentError("select an active direct-debit bank profile");
   }
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ document_id: string; party_id: string; currency: string; fx_rate: string; subsidiary_id: string | null; open_line_id: string; control_account_id: string; open_base: string; open: string; mandate_id: string; party_bank_account_id: string }>(sql`
     select d.id as document_id, d.party_id, d.currency, d.fx_rate, d.subsidiary_id,
            jl.id as open_line_id, jl.account_id as control_account_id,
            abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
@@ -35,7 +35,7 @@ export async function createDirectDebitRun(opts: {
      where d.id in ${opts.invoiceDocumentIds} and d.org_id = ${opts.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and d.currency = ${profile.currency} and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
        and abs(jl.amount) - coalesce(ap.applied, 0) > 0
-  `)) as unknown as { rows: Array<{ document_id: string; party_id: string; currency: string; fx_rate: string; subsidiary_id: string | null; open_line_id: string; control_account_id: string; open_base: string; open: string; mandate_id: string; party_bank_account_id: string }> };
+  `));
   const found = new Set(result.rows.map((r) => r.document_id));
   if (opts.invoiceDocumentIds.some((id) => !found.has(id))) throw new PaymentError("some invoices are closed, outside the profile scope, or have no active debit mandate");
   const groups = new Map<string, typeof result.rows>();

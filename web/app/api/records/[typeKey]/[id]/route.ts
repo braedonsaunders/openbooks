@@ -129,9 +129,9 @@ export async function PATCH(
   // User scripts: before_submit triggers narrowed to this custom record type
   // (documentKind 'custrec:<typeKey>') gate the save exactly like they gate a
   // document submit — ob.abort('reason') vetoes with a 422.
-  const orgRow = (await db.execute(
+  const orgRow = (await db.execute<{ id: string; name: string; base_currency: string }>(
     sql`select id, name, base_currency from orgs where id = ${user.orgId}`,
-  )) as unknown as { rows: { id: string; name: string; base_currency: string }[] }
+  ))
   const org = orgRow.rows[0]!
   const outcomes = await runTriggerScripts(
     'before_submit',

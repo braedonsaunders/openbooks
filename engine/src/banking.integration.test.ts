@@ -158,14 +158,12 @@ test(
       assert.equal(imports.reduce((count, result) => count + result.imported, 0), 3);
       assert.equal(imports.reduce((count, result) => count + result.duplicates, 0), 3);
 
-      const statementRows = (await db.execute(sql`
+      const statementRows = (await db.execute<{ id: string; bank_transaction_id: string }>(sql`
         select id, bank_transaction_id
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
          order by bank_transaction_id
-      `)) as unknown as {
-        rows: { id: string; bank_transaction_id: string }[];
-      };
+      `));
       assert.equal(statementRows.rows.length, 3);
       const statementByRef = new Map(
         statementRows.rows.map((row) => [row.bank_transaction_id, row.id]),
@@ -324,7 +322,12 @@ test(
           errorChainMatches(error, /statement (content|evidence) is immutable/),
       );
 
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<{
+          exclusions: number;
+          restores: number;
+          signoffs: number;
+          stamped: number;
+        }>(sql`
         select
           (select count(*)::int
              from audit_log
@@ -349,14 +352,7 @@ test(
             where org_id = ${org.orgId}
               and reconciliation_id = ${reconciliationId}
               and reconciled_at is not null) as stamped
-      `)) as unknown as {
-        rows: {
-          exclusions: number;
-          restores: number;
-          signoffs: number;
-          stamped: number;
-        }[];
-      };
+      `));
       assert.deepEqual(evidence.rows[0], {
         exclusions: 2,
         restores: 1,

@@ -90,11 +90,11 @@ export async function POST(req: Request) {
     // Submit/release/post is one financial command. A posting rejection must
     // not strand a draft in approved status or persist partial financial work.
     const outcome = await withOrgTransaction(user.orgId, async () => {
-      const locked = (await db.execute(sql`
+      const locked = (await db.execute<{ kind: string; status: string }>(sql`
         select kind, status from documents
          where id = ${doc.id} and org_id = ${user.orgId}
          for update
-      `)) as unknown as { rows: Array<{ kind: string; status: string }> }
+      `))
       const current = locked.rows[0]
       if (!current) return { kind: 'not_found' as const }
       const previousStatus = current.status

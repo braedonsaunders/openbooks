@@ -36,27 +36,27 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "This project's billing profile does not use applications for payment" }, { status: 422 });
   }
 
-  const retAcct = (await db.execute(sql`
+  const retAcct = (await db.execute<{ acct: string | null }>(sql`
     select settings->'controlAccounts'->>'retainageReceivable' as acct from orgs where id = ${orgId}
-  `)) as unknown as { rows: { acct: string | null }[] };
+  `));
   const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
   const [sov, cos, apps, held, committed] = await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, item_no as "itemNo", description, scheduled_value as "scheduledValue",
              retainage_percent as "retainagePercent", income_account_id as "incomeAccountId",
              sort_order as "sortOrder", change_order_id as "changeOrderId"
         from sov_lines where org_id = ${orgId} and project_id = ${projectId} order by sort_order
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
              co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
              co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
         from change_orders co
         left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
        where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
              pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
              d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus",
@@ -64,15 +64,15 @@ export async function GET(req: Request) {
         from pay_applications pa
         left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
        where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
-    `) as unknown as Promise<{ rows: any[] }>,
+    `),
     retainageAccountId
-      ? (db.execute(sql`
+      ? (db.execute<{ held: string }>(sql`
           select coalesce(sum(jl.amount), 0) as held
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where jl.org_id = ${orgId} and jl.account_id = ${retainageAccountId} and jl.project_id = ${projectId}
              and je.status in ('posted', 'reversed')
-        `) as unknown as Promise<{ rows: { held: string }[] }>)
+        `))
       : Promise.resolve({ rows: [{ held: "0" }] }),
     projectCostSummary(orgId, projectId).catch(() => null),
   ]);
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
 async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from projects where id = ${projectId} and org_id = ${orgId}`,
-  )) as unknown as { rows: unknown[] };
+  ));
   return r.rows.length > 0;
 }
 
@@ -110,7 +110,7 @@ async function actionProjectId(orgId: string, action: string, body: Record<strin
   } else {
     return null;
   }
-  const result = (await db.execute(query)) as unknown as { rows: { project_id: string }[] };
+  const result = (await db.execute<{ project_id: string }>(query));
   return result.rows[0]?.project_id ?? null;
 }
 
@@ -147,15 +147,15 @@ export async function POST(req: Request) {
         if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
         if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
         const id = await db.transaction(async (tx) => {
-          const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`)) as unknown as { rows: unknown[] };
+          const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`));
           if (prior.rows.length) throw new ConstructionBillingError("After billing begins, contract value must change through an approved change order");
-          const created = (await tx.execute(sql`
+          const created = (await tx.execute<{ id: string }>(sql`
             insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, retainage_percent,
                                    income_account_id, sort_order, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${body.itemNo ?? null}, ${description}, ${scheduledValue},
                     ${retainagePercent}, ${body.incomeAccountId ?? null}, ${Number(body.sortOrder ?? 0)}, ${userId}, ${userId})
             returning id
-          `)) as unknown as { rows: { id: string }[] };
+          `));
           const createdId = created.rows[0]!.id;
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'sov_lines', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, itemNo: body.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId: body.incomeAccountId ?? null } })}::jsonb, ${userId})`);
@@ -165,20 +165,20 @@ export async function POST(req: Request) {
       }
       case "updateSov": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`)) as unknown as { rows: any[] };
+          const before = (await tx.execute<any>(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
-          const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`)) as unknown as { rows: unknown[] };
+          const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length) throw new ConstructionBillingError("A schedule line used by an application is immutable; use a change order");
           const description = String(body.description ?? "").trim();
           const scheduledValue = normalizeMoney(String(body.scheduledValue ?? "0"));
           const retainagePercent = body.retainagePercent == null || body.retainagePercent === "" ? null : normalizeMoney(String(body.retainagePercent));
           if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
           if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
-          const after = (await tx.execute(sql`
+          const after = (await tx.execute<any>(sql`
             update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
                    retainage_percent = ${retainagePercent}, income_account_id = ${body.incomeAccountId ?? null}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId} returning *
-          `)) as unknown as { rows: any[] };
+          `));
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}::jsonb, ${userId})`);
         });
@@ -186,9 +186,9 @@ export async function POST(req: Request) {
       }
       case "deleteSov": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`)) as unknown as { rows: any[] };
+          const before = (await tx.execute<any>(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
-          const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`)) as unknown as { rows: unknown[] };
+          const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length || before.rows[0].change_order_id) throw new ConstructionBillingError("A controlled schedule line cannot be deleted; use a reversing change order");
           await tx.execute(sql`delete from sov_lines where id = ${body.id} and org_id = ${orgId}`);
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -208,13 +208,13 @@ export async function POST(req: Request) {
             const target = (await tx.execute(sql`
               select 1 from sov_lines
                where id = ${targetSovLineId} and org_id = ${orgId} and project_id = ${body.projectId}
-            `)) as unknown as { rows: unknown[] };
+            `));
             if (!target.rows.length) throw new ConstructionBillingError("The target schedule line does not belong to this project");
           }
-          const created = (await tx.execute(sql`
+          const created = (await tx.execute<{ id: string }>(sql`
             insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${userId}, ${userId}) returning id
-          `)) as unknown as { rows: { id: string }[] };
+          `));
           const createdId = created.rows[0]!.id;
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'change_orders', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, number, description: body.description ?? null, amount, targetSovLineId, status: "draft" } })}::jsonb, ${userId})`);
@@ -226,10 +226,10 @@ export async function POST(req: Request) {
         // Approving a change order also lands its value as a new SOV line so the
         // contract sum and future draws reflect it.
         await db.transaction(async (tx) => {
-          const co = (await tx.execute(sql`
+          const co = (await tx.execute<any>(sql`
             select project_id, number, description, amount, target_sov_line_id, created_by from change_orders
              where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
-          `)) as unknown as { rows: any[] };
+          `));
           const row = co.rows[0];
           if (!row) throw new ConstructionBillingError("Change order not found or no longer draft");
           if (row.created_by === userId) throw new ConstructionBillingError("The preparer cannot approve the same change order");
@@ -237,7 +237,7 @@ export async function POST(req: Request) {
           const activeApplication = (await tx.execute(sql`
             select 1 from pay_applications where org_id = ${orgId} and project_id = ${row.project_id}
              and status in ('draft', 'submitted', 'approved') limit 1
-          `)) as unknown as { rows: unknown[] };
+          `));
           if (activeApplication.rows.length) throw new ConstructionBillingError("Complete or void the current application before approving a change order");
           await tx.execute(sql`
             update change_orders set status = 'approved', approved_on = ${body.approvedOn ?? new Date().toISOString().slice(0, 10)},
@@ -247,20 +247,20 @@ export async function POST(req: Request) {
           `);
           let sovLineId: string;
           if (row.target_sov_line_id) {
-            const target = (await tx.execute(sql`
+            const target = (await tx.execute<{ id: string; scheduled_value: string }>(sql`
               select id, scheduled_value
                 from sov_lines
                where id = ${row.target_sov_line_id} and org_id = ${orgId} and project_id = ${row.project_id}
                for update
-            `)) as unknown as { rows: { id: string; scheduled_value: string }[] };
+            `));
             if (!target.rows[0]) throw new ConstructionBillingError("The target schedule line no longer exists");
-            const billed = (await tx.execute(sql`
+            const billed = (await tx.execute<{ amount: string }>(sql`
               select coalesce(sum(pal.this_period_completed + pal.materials_stored), 0) as amount
                 from pay_application_lines pal
                 join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
                where pal.org_id = ${orgId} and pal.sov_line_id = ${row.target_sov_line_id}
                  and pa.status in ('invoiced', 'posted')
-            `)) as unknown as { rows: { amount: string }[] };
+            `));
             const revisedValue = revisedScheduleValue(
               String(target.rows[0].scheduled_value),
               String(row.amount),
@@ -277,7 +277,7 @@ export async function POST(req: Request) {
                       ${userId})`);
           } else {
             if (cmp(String(row.amount), "0") <= 0) throw new ConstructionBillingError("An unallocated change order must be additive");
-            const sov = (await tx.execute(sql`
+            const sov = (await tx.execute<{ id: string }>(sql`
               insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id,
                                      sort_order, created_by, updated_by)
               values (${orgId}, ${row.project_id}, ${"CO-" + row.number}, ${row.description ?? "Change order " + row.number},
@@ -285,7 +285,7 @@ export async function POST(req: Request) {
                       (select coalesce(max(sort_order), 0) + 1 from sov_lines where org_id = ${orgId} and project_id = ${row.project_id}),
                       ${userId}, ${userId})
               returning id
-            `)) as unknown as { rows: { id: string }[] };
+            `));
             sovLineId = sov.rows[0]!.id;
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${orgId}, 'sov_lines', ${sovLineId}, 'insert',
@@ -304,9 +304,9 @@ export async function POST(req: Request) {
       }
       case "voidChangeOrder": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute(sql`
+          const before = (await tx.execute<any>(sql`
             select * from change_orders where id = ${body.id} and org_id = ${orgId} for update
-          `)) as unknown as { rows: any[] };
+          `));
           if (!before.rows[0] || before.rows[0].status !== "draft") {
             throw new ConstructionBillingError("Only a draft change order can be voided");
           }

@@ -13,18 +13,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const result = await db.transaction(async (tx) => {
-    const opportunity = (await tx.execute(sql`
-      select * from crm_opportunities where id = ${id} and org_id = ${user.orgId} and is_active for update`)) as unknown as { rows: any[] }
+    const opportunity = (await tx.execute<any>(sql`
+      select * from crm_opportunities where id = ${id} and org_id = ${user.orgId} and is_active for update`))
     const op = opportunity.rows[0]
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
-    const sequence = (await tx.execute(sql`
+    const sequence = (await tx.execute<any>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${user.orgId}, 'quote', null, 'EST-')
       on conflict on constraint sequences_org_kind_sub do update set next_number = number_sequences.next_number + 1
-      returning prefix, next_number, padding`)) as unknown as { rows: any[] }
+      returning prefix, next_number, padding`))
     const seq = sequence.rows[0]
     const number = `${seq.prefix}${String(seq.next_number).padStart(seq.padding, '0')}`
-    const document = (await tx.execute(sql`
+    const document = (await tx.execute<{ id: string }>(sql`
       insert into documents
         (org_id, kind, document_number, party_id, subsidiary_id, document_date, due_date, currency,
          status, department_id, location_id, class_id, extra_dims, memo, subtotal, tax_total, total,
@@ -32,9 +32,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       values (${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, current_date,
               ${op.expected_close_date}, ${op.currency}, 'draft', ${op.department_id}, ${op.location_id},
               ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${op.projected_amount},
-              0, ${op.projected_amount}, ${user.id}, ${user.id}) returning id`)) as unknown as { rows: { id: string }[] }
+              0, ${op.projected_amount}, ${user.id}, ${user.id}) returning id`))
     const docId = document.rows[0]!.id
-    const lines = (await tx.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`)) as unknown as { rows: any[] }
+    const lines = (await tx.execute<any>(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`))
     for (const line of lines.rows) await tx.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,

@@ -32,14 +32,14 @@ export async function deleteDocument(
 
     // Drafts that already feed another record are still evidence in that
     // record's provenance chain. Delete the downstream draft first.
-    const downstream = (await tx.execute(sql`
+    const downstream = (await tx.execute<{ document_number: string }>(sql`
       select d2.document_number
         from document_links dl
         join documents d2 on d2.id = dl.to_document_id
        where dl.from_document_id = ${documentId}
          and dl.link_type <> 'reverses'
        limit 1
-    `)) as unknown as { rows: { document_number: string }[] };
+    `));
     if (downstream.rows[0]) {
       throw new DeleteError(
         `${doc.documentNumber} is the source of ${downstream.rows[0].document_number} — remove the downstream document first`,

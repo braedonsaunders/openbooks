@@ -76,11 +76,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!reason) return NextResponse.json({ error: 'voiding a filing needs a reason' }, { status: 400 })
       // A filed return is not un-filed by voiding our record of it; the void is
       // the internal note that a corrected filing supersedes it.
-      const updated = (await db.execute(sql`
+      const updated = (await db.execute<{ id: string }>(sql`
         update information_return_filings
            set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id} and status <> 'void'
-        returning id`)) as unknown as { rows: { id: string }[] }
+        returning id`))
       if (updated.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
     } else {
       return NextResponse.json({ error: 'unknown action' }, { status: 400 })

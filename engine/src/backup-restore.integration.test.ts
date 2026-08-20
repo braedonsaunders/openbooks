@@ -115,9 +115,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     const wrongDataKeySha256 = createHash("sha256").update(wrongDataKeyBytes).digest("hex");
 
     await dropScratchOrg(source.orgId);
-    const absent = (await db.execute(sql`select count(*)::int as count from orgs where id = ${source.orgId}`)) as unknown as {
-      rows: { count: number }[];
-    };
+    const absent = (await db.execute<{ count: number }>(sql`select count(*)::int as count from orgs where id = ${source.orgId}`));
     assert.equal(absent.rows[0]?.count, 0);
 
     await assert.rejects(
@@ -165,19 +163,17 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     assert.equal(report.validation.sessionSecretEmailConfig, "passed");
     assert.equal(report.validation.postedLedgerBalance, "passed");
 
-    const restored = (await db.execute(sql`
-      select o.name, o.settings -> 'email' as email,
-             (select count(*)::int from accounts where org_id = ${source.orgId}) account_count,
-             (select count(*)::int from parties where org_id = ${source.orgId}) party_count
-        from orgs o where o.id = ${source.orgId}
-    `)) as unknown as {
-      rows: {
+    const restored = (await db.execute<{
         name: string;
         email: { keyCiphertext: string; keyNonce: string };
         account_count: number;
         party_count: number;
-      }[];
-    };
+      }>(sql`
+      select o.name, o.settings -> 'email' as email,
+             (select count(*)::int from accounts where org_id = ${source.orgId}) account_count,
+             (select count(*)::int from parties where org_id = ${source.orgId}) party_count
+        from orgs o where o.id = ${source.orgId}
+    `));
     assert.match(restored.rows[0]?.name ?? "", /^Scratch /);
     assert.ok(restored.rows[0]!.account_count >= 15);
     assert.equal(restored.rows[0]!.party_count, 2);
@@ -189,7 +185,10 @@ test("offline drill exports, removes, restores, and revalidates an organization"
       emailCredential,
     );
 
-    const restoredAuth = (await db.execute(sql`
+    const restoredAuth = (await db.execute<{
+      mfa_count: number; mfa_ciphertext: string; oidc_count: number; session_count: number;
+      login_state_count: number; challenge_count: number; access_count: number;
+    }>(sql`
       select
         (select count(*)::int from auth_mfa_factors where user_id = ${authUserId}) mfa_count,
         (select min(secret_encrypted) from auth_mfa_factors where user_id = ${authUserId}) mfa_ciphertext,
@@ -200,15 +199,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         (select count(*)::int from auth_login_challenges where user_id = ${authUserId}) challenge_count,
         (select count(*)::int from user_org_access
           where org_id = ${source.orgId} and acting_user_id = ${authUserId}) access_count
-    `)) as unknown as { rows: [{
-      mfa_count: number;
-      mfa_ciphertext: string;
-      oidc_count: number;
-      session_count: number;
-      login_state_count: number;
-      challenge_count: number;
-      access_count: number;
-    }] };
+    `));
     assert.equal(restoredAuth.rows[0].mfa_count, 1);
     assert.equal(unsealSecret(restoredAuth.rows[0].mfa_ciphertext), mfaSecret);
     assert.equal(restoredAuth.rows[0].oidc_count, 1);
@@ -230,11 +221,11 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     });
     assert.equal(resetReport.validation.mfaCiphertexts, "reset");
     assert.equal(resetReport.mfaFactorsReset, 1);
-    const resetAuth = (await db.execute(sql`
+    const resetAuth = (await db.execute<{ mfa_count: number; oidc_count: number }>(sql`
       select
         (select count(*)::int from auth_mfa_factors where user_id = ${authUserId}) mfa_count,
         (select count(*)::int from auth_oidc_identities where user_id = ${authUserId}) oidc_count
-    `)) as unknown as { rows: [{ mfa_count: number; oidc_count: number }] };
+    `));
     assert.equal(resetAuth.rows[0].mfa_count, 0);
     assert.equal(resetAuth.rows[0].oidc_count, 1);
   } finally {

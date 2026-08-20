@@ -15,11 +15,11 @@ import { db } from "../db.ts";
  *                space-separated list.
  */
 
-export interface ResolvedUser {
+export type ResolvedUser = {
   id: string;
   name: string;
   email: string;
-}
+};
 
 export interface TargetResolutionCtx {
   orgId: string;
@@ -32,48 +32,48 @@ type Rows<T> = { rows: T[] };
 /** Active users explicitly assigned to `role`. */
 export async function roleUsers(orgId: string, role: string): Promise<ResolvedUser[]> {
   if (!role) return [];
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ResolvedUser>(sql`
     select distinct u.id, u.name, u.email
       from users u
       join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
       join app_roles ar on ar.id = ra.role_id and ar.org_id = u.org_id
      where u.org_id = ${orgId} and u.is_active
        and ar.key = ${role}
-  `)) as unknown as Rows<ResolvedUser>;
+  `));
   return r.rows;
 }
 
 /** One active in-org user by id (verification for user/field targets). */
 export async function verifyUser(orgId: string, userId: string): Promise<ResolvedUser | null> {
   if (!userId) return null;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ResolvedUser>(sql`
     select id, name, email from users
      where id = ${userId} and org_id = ${orgId} and is_active
-  `)) as unknown as Rows<ResolvedUser>;
+  `));
   return r.rows[0] ?? null;
 }
 
 /** The submitter's supervisor: users.partyId → employee_roles.supervisorId → user. */
 export async function supervisorOf(orgId: string, userId: string | null | undefined): Promise<ResolvedUser | null> {
   if (!userId) return null;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ResolvedUser>(sql`
     select su.id, su.name, su.email
       from users u
       join employee_roles er on er.party_id = u.party_id and er.org_id = u.org_id
       join users su on su.party_id = er.supervisor_id and su.org_id = u.org_id and su.is_active
      where u.id = ${userId} and u.org_id = ${orgId}
      limit 1
-  `)) as unknown as Rows<ResolvedUser>;
+  `));
   return r.rows[0] ?? null;
 }
 
 /** Explicit role keys assigned to the user. */
 export async function userRoleKeys(orgId: string, userId: string): Promise<Set<string>> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ key: string }>(sql`
     select ar.key from role_assignments ra
       join app_roles ar on ar.id = ra.role_id
      where ra.user_id = ${userId} and ra.org_id = ${orgId}
-  `)) as unknown as Rows<{ key: string }>;
+  `));
   return new Set(r.rows.map((x) => x.key));
 }
 

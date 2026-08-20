@@ -27,14 +27,12 @@ export async function seedProjectTypes(
         )
         on conflict (org_id, key) do nothing
       `);
-      const row = (await tx.execute(sql`
+      const row = (await tx.execute<{ id: string }>(sql`
         select id
           from project_types
          where org_id = ${orgId} and key = ${t.key}
          limit 1
-      `)) as unknown as {
-        rows: { id: string }[];
-      };
+      `));
       const type = row.rows[0]!;
       await tx.execute(sql`
         insert into project_financial_profile_versions (

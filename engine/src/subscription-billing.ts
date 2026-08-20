@@ -70,31 +70,30 @@ async function nextNumber(orgId: string, kind: string, subsidiaryId: string | nu
   const configured = subsidiaryId
     ? ((await db.execute(sql`
         select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`)) as unknown as { rows: unknown[] }).rows.length > 0
+          and subsidiary_id = ${subsidiaryId} limit 1`))).rows.length > 0
     : false;
   const seqSub = configured ? subsidiaryId : null;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${seqSub}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
     returning prefix, next_number, padding
-  `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+  `));
   const s = r.rows[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
 
 async function controlDeps(orgId: string): Promise<PostingDeps> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ c: Record<string, string> | null }>(
     sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { c: Record<string, string> | null }[] };
+  ));
   const c = r.rows[0]?.c ?? {};
   return {
     control: { ar: c.ar!, ap: c.ap!, bank: c.bank!, taxCollected: c.taxCollected, taxPaid: c.taxPaid, employeePayable: c.employeePayable },
   };
 }
-
-interface SubRow {
+type SubRow = {
   id: string;
   orgId: string;
   customerId: string;
@@ -114,7 +113,7 @@ interface SubRow {
   nextBillOn: string;
   currentPeriodStart: string | null;
   createdBy: string | null;
-}
+};
 
 /** Whole-day count b − a (both ISO). */
 function dayDiff(a: string, b: string): number {
@@ -137,10 +136,10 @@ export function prorate(fullAmount: string, periodStart: string, periodEnd: stri
 
 async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
   if (incomeAccountId) return incomeAccountId;
-  const def = (await db.execute(sql`
+  const def = (await db.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
      order by number nulls last limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const id = def.rows[0]?.id;
   if (!id) throw new SubscriptionError("no income account configured for the plan");
   return id;
@@ -220,25 +219,25 @@ export async function createSubscriptionInvoice(
 
   const kind = spec.documentKind ?? "customer_invoice";
   const documentNumber = await nextNumber(spec.orgId, kind, spec.subsidiaryId, kind === "customer_credit" ? "CM-" : "INV-");
-  const created = (await db.execute(sql`
+  const created = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
                            subsidiary_id, location_id, memo, subtotal, tax_total, total, custom, created_by)
     values (${spec.orgId}, ${kind}, ${documentNumber}, ${spec.customerId}, ${spec.invoiceDate}, ${spec.dueDate ?? null},
             ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.locationId ?? null}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total},
             ${JSON.stringify(spec.custom ?? {})}::jsonb, ${spec.actorId})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const invoiceId = created.rows[0]!.id;
 
   for (const [index, preparedLine] of prepared.entries()) {
-    const line = (await db.execute(sql`
+    const line = (await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
             unit_price, amount, tax_code_id, tax_amount, is_billable, created_by)
       values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
             ${preparedLine.input.description}, ${preparedLine.input.quantity}, ${preparedLine.input.unitPrice},
             ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount}, true, ${spec.actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (preparedLine.taxComponents.length) {
       await persistLineTaxComponents(spec.orgId, line.rows[0]!.id, preparedLine.taxComponents, spec.actorId);
     }
@@ -277,13 +276,13 @@ async function billOne(
   const advanced = await advancedBillingSnapshot(sub.id, billingDate, periodStartOverride);
   if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
   if (advanced) {
-    const prior = (await db.execute(sql`
+    const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber", d.status
         from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
        where pi.subscription_id = ${sub.id} and pi.period_starts_on = ${advanced.periodStartsOn}
          and pi.period_ends_on = ${advanced.periodEndsOn} and pi.contract_revision = ${advanced.contractRevision}
        limit 1
-    `)) as unknown as { rows: { invoiceId: string; documentNumber: string; status: string }[] };
+    `));
     if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
   }
   const generated = await createSubscriptionInvoice({
@@ -344,7 +343,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const result: SubscriptionRunResult = { billed: 0, posted: 0, failed: 0 };
 
   const due = await withBypass(async () =>
-    (await db.execute(sql`
+    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }>(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
              s.current_period_start as "currentPeriodStart",
              coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
@@ -357,9 +356,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
          and o.env_kind = 'production'
          and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
          and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
-    `)) as unknown as {
-      rows: { id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }[];
-    },
+    `)),
   );
 
   for (const row of due.rows) {
@@ -379,18 +376,18 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     }
     const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
     const claimed = await withBypass(async () =>
-      (await db.execute(sql`
+      (await db.execute<{ id: string }>(sql`
         update subscriptions
            set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
          where id = ${row.id} and next_bill_on = ${row.nextBillOn} and status = 'active'
         returning id
-      `)) as unknown as { rows: { id: string }[] },
+      `)),
     );
     if (!claimed.rows.length) continue;
 
     try {
       const sub = await withOrg(row.orgId, async () => {
-        const r = (await db.execute(sql`${SUB_SELECT} where s.id = ${row.id} limit 1`)) as unknown as { rows: SubRow[] };
+        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} limit 1`));
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart);
@@ -418,21 +415,19 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
 export async function billSubscriptionNow(subscriptionId: string, asOf?: string): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
   const today = asOf ?? toIso(new Date());
   const meta = await withBypass(async () =>
-    (await db.execute(sql`
+    (await db.execute<{ orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
       select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
              coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false) as "advancedEnabled"
         from subscriptions s join orgs o on o.id = s.org_id
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId}
-    `)) as unknown as {
-      rows: { orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }[];
-    },
+    `)),
   );
   const orgId = meta.rows[0]?.orgId;
   if (!orgId) throw new SubscriptionError("subscription not found");
   if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const gen = await withOrg(orgId, async () => {
-    const r = (await db.execute(sql`${SUB_SELECT} where s.id = ${subscriptionId} limit 1`)) as unknown as { rows: SubRow[] };
+    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} limit 1`));
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
     return billOne(s, today, s.nextBillOn, s.currentPeriodStart);
@@ -446,25 +441,22 @@ export async function billSubscriptionNow(subscriptionId: string, asOf?: string)
   });
   return gen;
 }
-
-interface SubDetail extends SubRow {
+type SubDetail = SubRow & {
   nextBillOn: string;
   currentPeriodStart: string | null;
   startOn: string;
   status: string;
   advancedLifecycle: boolean;
-}
+};
 
 async function loadSubDetail(subscriptionId: string): Promise<{ orgId: string; row: SubDetail }> {
   const meta = await withBypass(async () =>
-    (await db.execute(sql`select org_id as "orgId" from subscriptions where id = ${subscriptionId}`)) as unknown as {
-      rows: { orgId: string }[];
-    },
+    (await db.execute<{ orgId: string }>(sql`select org_id as "orgId" from subscriptions where id = ${subscriptionId}`)),
   );
   const orgId = meta.rows[0]?.orgId;
   if (!orgId) throw new SubscriptionError("subscription not found");
   const row = await withOrg(orgId, async () => {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<SubDetail>(sql`
       select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
              s.price_override as "priceOverride", s.auto_post as "autoPost",
              p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
@@ -478,7 +470,7 @@ async function loadSubDetail(subscriptionId: string): Promise<{ orgId: string; r
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
         join orgs o on o.id = s.org_id
        where s.id = ${subscriptionId} limit 1
-    `)) as unknown as { rows: SubDetail[] };
+    `));
     const d = r.rows[0];
     if (!d) throw new SubscriptionError("subscription not found");
     return d;

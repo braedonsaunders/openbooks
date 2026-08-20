@@ -31,9 +31,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function createBillingRequest(orgId: string, userId: string, input: BillingRequestInput) {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('Projects feature is disabled')
-  const proj = (await db.execute(sql`
+  const proj = (await db.execute<{ id: string; customer_po_number: string | null }>(sql`
     select id, customer_po_number from projects where id = ${input.projectId} and org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; customer_po_number: string | null }[] }
+  `))
   if (!proj.rows[0]) throw new Error('Project not found')
 
   // The project type is the authoritative classifier; snapshot its coarse
@@ -73,16 +73,16 @@ export async function createBillingRequest(orgId: string, userId: string, input:
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`billing-request-number:${orgId}`}, 0))
     `)
-    const numberRow = (await tx.execute(sql`
+    const numberRow = (await tx.execute<{ n: string }>(sql`
       select coalesce(max((regexp_replace(request_number, '\\D', '', 'g'))::bigint), 0) as n
         from billing_requests
        where org_id = ${orgId}
          and request_number ~ '^BREQ-[0-9]+$'
-    `)) as unknown as { rows: { n: string }[] }
+    `))
     const requestNumber = `BREQ-${String(Number(numberRow.rows[0]?.n ?? 0) + 1).padStart(5, '0')}`
 
     if (basis === 'field_ticket') {
-      const selected = (await tx.execute(sql`
+      const selected = (await tx.execute<{ id: string }>(sql`
         select ticket.id
           from documents ticket
          where ticket.org_id = ${orgId}
@@ -116,11 +116,11 @@ export async function createBillingRequest(orgId: string, userId: string, input:
            )
          order by ticket.id
          for update
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       if (selected.rows.length !== fieldTicketIds.length) {
         throw new Error('Every selected Field Ticket must be approved, unbilled, and belong to this project')
       }
-      const unavailable = (await tx.execute(sql`
+      const unavailable = (await tx.execute<{ document_number: string }>(sql`
         select ticket.document_number
           from billing_request_field_tickets selected
           join billing_requests request
@@ -133,13 +133,13 @@ export async function createBillingRequest(orgId: string, userId: string, input:
            and selected.field_ticket_id = any(${`{${fieldTicketIds.join(',')}}`}::uuid[])
            and request.status <> 'cancelled'
          order by ticket.document_number
-      `)) as unknown as { rows: { document_number: string }[] }
+      `))
       if (unavailable.rows.length > 0) {
         throw new Error(`Field Ticket ${unavailable.rows.map((row) => row.document_number).join(', ')} is already on another billing request`)
       }
     }
 
-    const row = (await tx.execute(sql`
+    const row = (await tx.execute<{ id: string; request_number: string }>(sql`
       insert into billing_requests (
         org_id, project_id, request_number, invoice_type, basis, draw_amount, start_date, cutoff_date,
         invoice_description, customer_po, billing_method_snapshot, backup_required, backup_type,
@@ -152,7 +152,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
         ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
         ${input.notes ?? null}, 'open', ${userId}, ${userId})
       returning id, request_number
-    `)) as unknown as { rows: { id: string; request_number: string }[] }
+    `))
     const created = row.rows[0]!
 
     for (const fieldTicketId of fieldTicketIds) {
@@ -186,7 +186,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
   })
 }
 
-export interface BillingRequestRow {
+export type BillingRequestRow = {
   id: string
   requestNumber: string
   invoiceType: string
@@ -203,10 +203,10 @@ export interface BillingRequestRow {
   invoiceTotal: string | null
   fieldTicketCount: number
   createdAt: string
-}
+};
 
 export async function listBillingRequests(orgId: string, projectId: string): Promise<BillingRequestRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<BillingRequestRow>(sql`
     select br.id, br.request_number as "requestNumber", br.invoice_type as "invoiceType",
            br.basis, br.draw_amount as "drawAmount", br.start_date as "startDate",
            br.cutoff_date as "cutoffDate", br.backup_required as "backupRequired",
@@ -221,11 +221,11 @@ export async function listBillingRequests(orgId: string, projectId: string): Pro
       left join documents d on d.id = br.invoice_document_id
      where br.org_id = ${orgId} and br.project_id = ${projectId}
      order by br.created_at desc
-  `)) as unknown as { rows: BillingRequestRow[] }
+  `))
   return r.rows
 }
 
-export interface BillableFieldTicketRow {
+export type BillableFieldTicketRow = {
   id: string
   documentNumber: string
   documentDate: string
@@ -233,13 +233,13 @@ export interface BillableFieldTicketRow {
   periodEnd: string
   customerSigned: boolean
   unbilledHours: string
-}
+};
 
 export async function listBillableFieldTickets(
   orgId: string,
   projectId: string,
 ): Promise<BillableFieldTicketRow[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<BillableFieldTicketRow>(sql`
     select ticket.id,
            ticket.document_number as "documentNumber",
            ticket.document_date::text as "documentDate",
@@ -304,18 +304,18 @@ export async function listBillableFieldTickets(
             and request.status <> 'cancelled'
        )
      order by field_ticket.period_end desc, ticket.document_number desc
-  `)) as unknown as { rows: BillableFieldTicketRow[] }
+  `))
   return rows.rows
 }
 
 export async function cancelBillingRequest(orgId: string, userId: string, id: string) {
   return db.transaction(async (tx) => {
-    const r = (await tx.execute(sql`
+    const r = (await tx.execute<{ id: string }>(sql`
       update billing_requests
          set status = 'cancelled', updated_at = now(), updated_by = ${userId}
        where id = ${id} and org_id = ${orgId} and status = 'open'
        returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (!r.rows[0]) throw new Error('Only an open billing request can be cancelled')
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

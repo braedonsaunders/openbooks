@@ -784,11 +784,9 @@ export async function canSwitchIndustry(orgId: string): Promise<boolean> {
   // "Has this org posted anything yet?" — an existence probe that stops at the
   // first row. Counting every journal line to compare against zero cost ~300ms
   // on a multi-million-line tenant.
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ posted: boolean }>(sql`
     select exists (
       select 1 from journal_lines where org_id = ${orgId} limit 1
-    ) as posted`)) as unknown as {
-    rows: { posted: boolean }[]
-  }
+    ) as posted`))
   return !(r.rows[0]?.posted ?? false)
 }

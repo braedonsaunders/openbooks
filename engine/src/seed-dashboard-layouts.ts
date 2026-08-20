@@ -11,14 +11,14 @@ import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
  * the read-focused viewer layout. Personal user layouts are never changed.
  */
 
-const orgs = (await db.execute(sql`
+const orgs = (await db.execute<{ id: string; name: string; role_keys: string[] }>(sql`
   select o.id, o.name,
          coalesce(array_agg(r.key order by r.key) filter (where r.key is not null), '{}') as role_keys
     from orgs o
     left join app_roles r on r.org_id = o.id
    group by o.id, o.name
    order by o.created_at
-`)) as unknown as { rows: Array<{ id: string; name: string; role_keys: string[] }> };
+`));
 
 if (orgs.rows.length === 0) {
   console.error("no orgs found — seed an org before seeding dashboard layouts");

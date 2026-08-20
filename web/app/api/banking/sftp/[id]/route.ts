@@ -18,10 +18,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = (await req.json().catch(() => ({}))) as { action?: string; isActive?: boolean }
   if (body.action === 'rotate') {
     const password = randomBytes(18).toString('base64url')
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ username: string }>(sql`
       update sftp_servers set password_encrypted = ${encryptSecret(password)}, updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId} returning username
-    `)) as unknown as { rows: { username: string }[] }
+    `))
     if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ username: r.rows[0].username, password })
   }

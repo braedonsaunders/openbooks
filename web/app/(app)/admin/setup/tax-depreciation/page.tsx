@@ -58,16 +58,16 @@ export default async function TaxDepreciationSetupPage({
   }
 
   const [org, installed, classes, categories] = await Promise.all([
-    db.execute(sql`select upper(country) as country from orgs where id = ${orgId}`) as unknown as Promise<{ rows: { country: string }[] }>,
-    db.execute(sql`select code from tax_regimes where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { code: string }[] }>,
-    db.execute(sql`
+    db.execute<{ country: string }>(sql`select upper(country) as country from orgs where id = ${orgId}`),
+    db.execute<{ code: string }>(sql`select code from tax_regimes where org_id = ${orgId} and is_active`),
+    db.execute<{ regime: string; regime_name: string; class_attribute: string; class_code: string; class_name: string }>(sql`
       select r.code as regime, r.name as regime_name, r.class_attribute,
              c.class_code, c.name as class_name
         from tax_regimes r
         join tax_pool_classes c on c.org_id = r.org_id and c.regime = r.code and c.is_active
        where r.org_id = ${orgId} and r.is_active
-       order by r.name, c.class_code`) as unknown as Promise<{ rows: { regime: string; regime_name: string; class_attribute: string; class_code: string; class_name: string }[] }>,
-    db.execute(sql`select id, name, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`) as unknown as Promise<{ rows: { id: string; name: string; tax_attributes: Record<string, unknown> }[] }>,
+       order by r.name, c.class_code`),
+    db.execute<{ id: string; name: string; tax_attributes: Record<string, unknown> }>(sql`select id, name, tax_attributes from asset_categories where org_id = ${orgId} and is_active order by name`),
   ])
   return (
     <div className="space-y-5">

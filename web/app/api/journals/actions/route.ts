@@ -36,11 +36,11 @@ export async function POST(req: Request) {
         const outcome = await withOrgTransaction(gate.user.orgId, async () => {
           // Serialize the lifecycle and posting decision at the aggregate root.
           // If posting fails, the draft→approved release rolls back with it.
-          const owned = (await db.execute(sql`
+          const owned = (await db.execute<{ id: string; status: string }>(sql`
             select id, status from documents
              where id = ${body.documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
              for update
-          `)) as unknown as { rows: { id: string; status: string }[] }
+          `))
           if (!owned.rows[0]) return { kind: 'not_found' as const }
           const previousStatus = owned.rows[0].status
           if (previousStatus === 'draft') {

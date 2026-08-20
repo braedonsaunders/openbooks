@@ -50,13 +50,12 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 import { promptDialog } from '../../../lib/prompt'
-
-interface Opt {
+type Opt = {
   id: string
   name?: string
   label?: string
   type?: string
-}
+};
 interface PartyPayload {
   party: Record<string, any>
   customer: Record<string, any> | null

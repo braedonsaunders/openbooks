@@ -22,12 +22,11 @@ import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 type PaymentPatch = Parameters<typeof updateDraftPayment>[1];
-
-interface PaymentHeader {
+type PaymentHeader = {
   kind: PaymentKind;
   status: string;
   subsidiaryId: string | null;
-}
+};
 
 function paymentPermission(kind: PaymentKind): "ap.pay" | "ar.pay" {
   return kind === "vendor_payment" ? "ap.pay" : "ar.pay";
@@ -49,14 +48,14 @@ async function paymentHeader(
   documentId: string,
 ): Promise<PaymentHeader> {
   if (!isUuid(documentId)) throw invalidInput("documentId must be a UUID");
-  const result = (await db.execute(sql`
+  const result = (await db.execute<PaymentHeader>(sql`
     select kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${documentId}
        and org_id = ${context.authz.user.orgId}
        and kind in ('vendor_payment', 'customer_payment')
      limit 1
-  `)) as unknown as { rows: PaymentHeader[] };
+  `));
   const header = result.rows[0];
   if (!header) throw notFound("payment");
   assertSubsidiaryAccess(context, header.subsidiaryId);

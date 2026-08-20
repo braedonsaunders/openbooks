@@ -839,10 +839,9 @@ test(
     const trailer = readTrailerTotals("cpa005", text);
     assert.equal(trailer.count, artifact.entryCount);
     assert.equal(trailer.totalCents, toUnits(artifact.controlTotal) / 100n);
-    const netTotal = ((await db.execute(sql`
+    const netTotal = ((await db.execute<{ net: string }>(sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`)) as unknown as
-      { rows: { net: string }[] }).rows[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`))).rows[0]!.net;
     assert.equal(
       cmp(add(artifact.controlTotal, artifact.excludedTotal), netTotal), 0,
       "file money + paper money = the run's net pay",
@@ -998,10 +997,9 @@ test(
     // --- the control total equals the run's EFT net pay --------------------
     assert.equal(artifact.controlTotal, population.total);
     assert.equal(artifact.excludedTotal, population.excludedTotal);
-    const netTotal = ((await db.execute(sql`
+    const netTotal = ((await db.execute<{ net: string }>(sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`)) as unknown as
-      { rows: { net: string }[] }).rows[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`))).rows[0]!.net;
     // money.ts, not JS numbers: 5185.20 + 455.25 is 5640.450000000001 in
     // binary floating point, and a payroll tie-out that only holds to within
     // an epsilon is not a tie-out.

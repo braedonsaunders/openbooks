@@ -65,12 +65,7 @@ async function resolveProfile(
   itemId: string,
   runner: Runner = db,
 ): Promise<InventoryProfile> {
-  const r = (await runner.execute(sql`
-    select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
-           variance_account_id, standard_cost, base_unit, allow_negative_inventory,
-           negative_cost_basis, provisional_unit_cost
-      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`)) as unknown as {
-    rows: {
+  const r = (await runner.execute<{
       item_id: string;
       costing_method: InventoryProfile["costingMethod"];
       tracking: InventoryProfile["tracking"];
@@ -83,8 +78,11 @@ async function resolveProfile(
       allow_negative_inventory: boolean;
       negative_cost_basis: InventoryProfile["negativeCostBasis"];
       provisional_unit_cost: string | null;
-    }[];
-  };
+    }>(sql`
+    select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
+           variance_account_id, standard_cost, base_unit, allow_negative_inventory,
+           negative_cost_basis, provisional_unit_cost
+      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`));
   const p = r.rows[0];
   if (!p) throw new InventoryError(`item ${itemId} has no inventory profile`);
   if (p.tracking !== "none" && p.costing_method === "moving_average") {
@@ -113,10 +111,8 @@ async function primaryBookId(
   orgId: string,
   runner: Runner = db,
 ): Promise<string> {
-  const r = (await runner.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const r = (await runner.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!r.rows[0]) throw new InventoryError("no primary accounting book");
   return r.rows[0].id;
 }
@@ -126,10 +122,10 @@ async function periodForDate(
   date: string,
   runner: Runner = db,
 ): Promise<string | null> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`)) as unknown as { rows: { id: string }[] };
+     limit 1`));
   return r.rows[0]?.id ?? null;
 }
 
@@ -138,10 +134,8 @@ async function subsidiaryCurrency(
   subsidiaryId: string,
   runner: Runner = db,
 ): Promise<string> {
-  const r = (await runner.execute(sql`
-    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`)) as unknown as {
-    rows: { base_currency: string }[];
-  };
+  const r = (await runner.execute<{ base_currency: string }>(sql`
+    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`));
   if (!r.rows[0]) throw new InventoryError("subsidiary not found");
   return r.rows[0].base_currency;
 }
@@ -164,7 +158,7 @@ async function getOnHandWith(
 ): Promise<{ quantity: string; value: string; unitCost: string }> {
   const lotId = selection.lotId ?? null;
   const serialId = selection.serialId ?? null;
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ quantity: string; value: string }>(sql`
     select (coalesce((select sum(remaining_quantity) from cost_layers
                        where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
                          and (${lotId}::uuid is null and ${serialId}::uuid is null
@@ -190,9 +184,7 @@ async function getOnHandWith(
                               ))),0)
             - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs
                          where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
-                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`)) as unknown as {
-    rows: { quantity: string; value: string }[];
-  };
+                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`));
   const quantity = r.rows[0]?.quantity ?? "0";
   const value = r.rows[0]?.value ?? "0";
   const unitCost = isZero(quantity)
@@ -226,12 +218,12 @@ async function validateTrackingSelection(
 ): Promise<void> {
   assertTracking(profile, selection, operation);
   if (profile.tracking === "lot") {
-    const lot = (await tx.execute(sql`
+    const lot = (await tx.execute<{ id: string }>(sql`
       select id
         from lots
        where id = ${selection.lotId} and org_id = ${orgId} and item_id = ${itemId}
        for update
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!lot.rows[0]) {
       throw new InventoryError(
         "lot must belong to the item and organization",
@@ -241,18 +233,16 @@ async function validateTrackingSelection(
   }
   if (profile.tracking !== "serial") return;
 
-  const serial = (await tx.execute(sql`
+  const serial = (await tx.execute<{
+      id: string;
+      status: string;
+      current_stock_location_id: string | null;
+    }>(sql`
     select id, status, current_stock_location_id
       from serials
      where id = ${selection.serialId} and org_id = ${orgId} and item_id = ${itemId}
      for update
-  `)) as unknown as {
-    rows: {
-      id: string;
-      status: string;
-      current_stock_location_id: string | null;
-    }[];
-  };
+  `));
   const row = serial.rows[0];
   if (!row) {
     throw new InventoryError(
@@ -266,7 +256,7 @@ async function validateTrackingSelection(
        where org_id = ${orgId} and serial_id = ${selection.serialId}
          and status = 'posted'
        limit 1
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (prior.rows.length) {
       throw new InventoryError(
         "serial already has posted inventory movement history; use a controlled return workflow",
@@ -326,12 +316,12 @@ export async function postInventoryEntry(
   const bal = sum(p.lines.map((l) => l.amount));
   if (!isZero(bal))
     throw new InventoryError(`inventory entry does not balance (sum=${bal})`);
-  const entryRes = (await tx.execute(sql`
+  const entryRes = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
     values (${p.orgId}, ${p.bookId}, ${p.subsidiaryId}, ${p.entryNumber}, ${p.date}, ${p.periodId}, ${p.memo},
             'draft', 'inventory', null, null)
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const eid = entryRes.rows[0].id;
   for (let i = 0; i < p.lines.length; i++) {
     const l = p.lines[i];
@@ -460,18 +450,16 @@ export async function receiveInventory(
       },
       "receipt",
     );
-    const deficits = (await tx.execute(sql`
+    const deficits = (await tx.execute<{
+        id: string;
+        remaining_quantity: string;
+        provisional_unit_cost: string;
+      }>(sql`
       select id,remaining_quantity,provisional_unit_cost
         from inventory_provisional_costs
        where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.stockLocationId}
          and remaining_quantity>0 order by created_at,id for update
-    `)) as unknown as {
-      rows: {
-        id: string;
-        remaining_quantity: string;
-        provisional_unit_cost: string;
-      }[];
-    };
+    `));
     let receiptUnits = toUnits(input.quantity);
     let provisionalValueUnits = 0n;
     const settlements: {
@@ -584,14 +572,14 @@ export async function receiveInventory(
         })
       : (input.linkEntryId ?? null);
 
-    const mv = (await tx.execute(sql`
+    const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${input.quantity}, ${layerUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const movementId = mv.rows[0].id;
 
     for (const settlement of settlements) {
@@ -611,12 +599,10 @@ export async function receiveInventory(
 
     if (receiptUnits > 0n && profile.costingMethod === "moving_average") {
       // Blend into the single running layer for this item+location.
-      const existing = (await tx.execute(sql`
+      const existing = (await tx.execute<{ id: string; remaining_quantity: string; unit_cost: string }>(sql`
         select id, remaining_quantity, unit_cost from cost_layers
          where org_id = ${orgId} and item_id = ${input.itemId} and stock_location_id = ${input.stockLocationId}
-         order by received_at limit 1`)) as unknown as {
-        rows: { id: string; remaining_quantity: string; unit_cost: string }[];
-      };
+         order by received_at limit 1`));
       if (existing.rows[0]) {
         const cur = existing.rows[0];
         const newQty = add(cur.remaining_quantity, excessQuantity);
@@ -812,7 +798,7 @@ export async function issueInventory(
       lines,
     });
 
-    const mv = (await tx.execute(sql`
+    const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
          quantity, unit_cost, total_value,
@@ -821,7 +807,7 @@ export async function issueInventory(
               ${input.lotId ?? null}, ${input.serialId ?? null},
               ${neg(input.quantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const movementId = mv.rows[0].id;
     await recordConsumptions(tx, orgId, consumptions, movementId, actorId);
     if (!isZero(shortfallQuantity)) {
@@ -867,12 +853,12 @@ async function resolveProvisionalUnitCost(
       );
     return profile.standardCost;
   }
-  const last = (await tx.execute(sql`
+  const last = (await tx.execute<{ unit_cost: string }>(sql`
     select unit_cost from inventory_movements
      where org_id=${orgId} and item_id=${itemId} and kind in ('receipt','return','assembly_build','transfer_in')
        and status='posted' and unit_cost is not null
      order by moved_at desc,created_at desc,id desc limit 1
-  `)) as unknown as { rows: { unit_cost: string }[] };
+  `));
   if (!last.rows[0])
     throw new InventoryError(
       "negative inventory has no prior receipt cost; configure a provisional or standard cost",
@@ -931,7 +917,7 @@ async function consumeLayers(
 }> {
   const lotId = selection.lotId ?? null;
   const serialId = selection.serialId ?? null;
-  const layersRes = (await tx.execute(sql`
+  const layersRes = (await tx.execute<{ id: string; remaining: string; unit_cost: string }>(sql`
     select layer.id, layer.remaining_quantity as remaining, layer.unit_cost
       from cost_layers layer
       join inventory_movements source
@@ -942,9 +928,7 @@ async function consumeLayers(
        and layer.remaining_quantity > 0
        and (${lotId}::uuid is null or source.lot_id = ${lotId}::uuid)
        and (${serialId}::uuid is null or source.serial_id = ${serialId}::uuid)
-     order by layer.received_at, layer.id`)) as unknown as {
-    rows: { id: string; remaining: string; unit_cost: string }[];
-  };
+     order by layer.received_at, layer.id`));
   const layers = layersRes.rows;
 
   let cost: string;
@@ -1108,12 +1092,10 @@ async function addLayerAtCost(
   date: string,
 ): Promise<void> {
   if (method === "moving_average") {
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string; remaining_quantity: string; unit_cost: string }>(sql`
       select id, remaining_quantity, unit_cost from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
-       order by received_at limit 1`)) as unknown as {
-      rows: { id: string; remaining_quantity: string; unit_cost: string }[];
-    };
+       order by received_at limit 1`));
     if (existing.rows[0]) {
       const cur = existing.rows[0];
       const newQty = add(cur.remaining_quantity, quantity);
@@ -1230,10 +1212,8 @@ async function transferInventoryTx(
     );
   }
 
-  const locDims = (await tx.execute(sql`
-    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`)) as unknown as {
-    rows: { id: string; location_id: string }[];
-  };
+  const locDims = (await tx.execute<{ id: string; location_id: string }>(sql`
+    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`));
   if (locDims.rows.length !== 2) {
     throw new InventoryError(
       "both transfer locations must belong to the organization",
@@ -1355,8 +1335,7 @@ export interface ReverseInventoryResult {
   entryId: string | null;
   alreadyReversed: boolean;
 }
-
-interface ReversibleMovement {
+type ReversibleMovement = {
   id: string;
   item_id: string;
   kind: string;
@@ -1370,7 +1349,7 @@ interface ReversibleMovement {
   journal_entry_id: string | null;
   paired_movement_id: string | null;
   status: string;
-}
+};
 
 async function restoreIssueLayers(
   tx: Runner,
@@ -1382,14 +1361,21 @@ async function restoreIssueLayers(
       from inventory_provisional_costs
      where org_id = ${orgId} and issue_movement_id = ${movement.id}
      limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (provisional.rows.length) {
     throw new InventoryError(
       "a negative-stock issue must have its provisional-cost chain reversed before the issue",
     );
   }
 
-  const consumed = (await tx.execute(sql`
+  const consumed = (await tx.execute<{
+      cost_layer_id: string;
+      quantity: string;
+      unit_cost: string;
+      remaining_quantity: string;
+      original_quantity: string;
+      current_unit_cost: string;
+    }>(sql`
     select c.cost_layer_id, c.quantity, c.unit_cost,
            l.remaining_quantity, l.original_quantity, l.unit_cost as current_unit_cost
       from cost_layer_consumptions c
@@ -1399,16 +1385,7 @@ async function restoreIssueLayers(
      where c.org_id = ${orgId} and c.issue_movement_id = ${movement.id}
      order by c.created_at, c.id
      for update of l
-  `)) as unknown as {
-    rows: {
-      cost_layer_id: string;
-      quantity: string;
-      unit_cost: string;
-      remaining_quantity: string;
-      original_quantity: string;
-      current_unit_cost: string;
-    }[];
-  };
+  `));
   const restoredQuantity = sum(consumed.rows.map((row) => row.quantity));
   if (cmp(restoredQuantity, fromUnits(-toUnits(movement.quantity))) !== 0) {
     throw new InventoryError(
@@ -1447,26 +1424,24 @@ async function removeInboundLayer(
       from inventory_provisional_settlements
      where org_id = ${orgId} and receipt_movement_id = ${movement.id}
      limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (settlements.rows.length) {
     throw new InventoryError(
       "a receipt that settled negative stock must be reversed through its full provisional-cost chain",
     );
   }
 
-  const layers = (await tx.execute(sql`
+  const layers = (await tx.execute<{
+      id: string;
+      original_quantity: string;
+      remaining_quantity: string;
+    }>(sql`
     select id, original_quantity, remaining_quantity
       from cost_layers
      where org_id = ${orgId} and source_movement_id = ${movement.id}
      order by id
      for update
-  `)) as unknown as {
-    rows: {
-      id: string;
-      original_quantity: string;
-      remaining_quantity: string;
-    }[];
-  };
+  `));
   if (layers.rows.length !== 1) {
     throw new InventoryError(
       "the inbound movement was blended into another cost layer; exact reversal requires reversing later inventory activity first",
@@ -1483,7 +1458,7 @@ async function removeInboundLayer(
             and reversal.reverses_movement_id = cost_layer_consumptions.issue_movement_id
        )
      limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (consumed.rows.length) {
     throw new InventoryError(
       "inventory from this movement has downstream consumption; reverse those issues/transfers first",
@@ -1502,7 +1477,7 @@ async function removeInboundLayer(
             and reversal.reverses_allocation_id = allocation.id
        )
      limit 1
-  `)) as unknown as { rows: unknown[] };
+  `));
   if (landed.rows.length) {
     throw new InventoryError(
       "this movement has downstream landed-cost allocations; reverse them before the inventory movement",
@@ -1535,28 +1510,26 @@ async function reverseInventoryJournal(
   reversalDate: string,
   reason: string,
 ): Promise<string> {
-  const head = (await tx.execute(sql`
-    select id, book_id, subsidiary_id, entry_number, origin, status
-      from journal_entries
-     where id = ${sourceEntryId} and org_id = ${orgId}
-     for update
-  `)) as unknown as {
-    rows: {
+  const head = (await tx.execute<{
       id: string;
       book_id: string;
       subsidiary_id: string;
       entry_number: string;
       origin: string;
       status: string;
-    }[];
-  };
+    }>(sql`
+    select id, book_id, subsidiary_id, entry_number, origin, status
+      from journal_entries
+     where id = ${sourceEntryId} and org_id = ${orgId}
+     for update
+  `));
   const source = head.rows[0];
   if (!source || source.origin !== "inventory" || source.status !== "posted") {
     throw new InventoryError(
       "the movement is not backed by a reversible posted inventory journal",
     );
   }
-  const period = (await tx.execute(sql`
+  const period = (await tx.execute<{ id: string }>(sql`
     select id
       from accounting_periods
      where org_id = ${orgId}
@@ -1564,11 +1537,11 @@ async function reverseInventoryJournal(
        and starts_on <= ${reversalDate}
        and ends_on >= ${reversalDate}
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!period.rows[0])
     throw new InventoryError(`no accounting period for ${reversalDate}`);
 
-  const lines = (await tx.execute(sql`
+  const lines = (await tx.execute<Record<string, any>>(sql`
     select line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
            memo, party_id, department_id, project_id, location_id, class_id,
            equipment_unit_id, payment_card_id, extra_dims, quantity, unit,
@@ -1576,11 +1549,11 @@ async function reverseInventoryJournal(
       from journal_lines
      where org_id = ${orgId} and entry_id = ${sourceEntryId}
      order by line_number
-  `)) as unknown as { rows: Array<Record<string, any>> };
+  `));
   if (!lines.rows.length)
     throw new InventoryError("the source inventory journal has no lines");
 
-  const reversal = (await tx.execute(sql`
+  const reversal = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
        memo, status, origin, reverses_entry_id, created_by, updated_by)
@@ -1590,7 +1563,7 @@ async function reverseInventoryJournal(
        ${`Inventory reversal: ${reason}`}, 'draft', 'inventory', ${sourceEntryId},
        ${actorId}, ${actorId})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const reversalEntryId = reversal.rows[0]!.id;
   for (const line of lines.rows) {
     await tx.execute(sql`
@@ -1650,14 +1623,14 @@ export async function reverseInventoryMovement(
   }
 
   return db.transaction(async (tx) => {
-    const sourceResult = (await tx.execute(sql`
+    const sourceResult = (await tx.execute<ReversibleMovement>(sql`
       select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
         from inventory_movements
        where org_id = ${orgId} and id = ${input.movementId}
        for update
-    `)) as unknown as { rows: ReversibleMovement[] };
+    `));
     const requested = sourceResult.rows[0];
     if (!requested) throw new InventoryError("inventory movement not found");
     if (requested.status !== "posted") {
@@ -1665,21 +1638,19 @@ export async function reverseInventoryMovement(
         "only posted inventory movements can be reversed",
       );
     }
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{
+        id: string;
+        journal_entry_id: string | null;
+        paired_movement_id: string | null;
+      }>(sql`
       select id, journal_entry_id, paired_movement_id
         from inventory_movements
        where org_id = ${orgId} and reverses_movement_id = ${requested.id}
        order by created_at, id
-    `)) as unknown as {
-      rows: {
-        id: string;
-        journal_entry_id: string | null;
-        paired_movement_id: string | null;
-      }[];
-    };
+    `));
     if (existing.rows.length) {
       const first = existing.rows[0]!;
-      const group = (await tx.execute(sql`
+      const group = (await tx.execute<{ id: string }>(sql`
         select id
           from inventory_movements
          where org_id = ${orgId}
@@ -1690,7 +1661,7 @@ export async function reverseInventoryMovement(
              or paired_movement_id = ${first.paired_movement_id}
            )
          order by id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       return {
         movementIds: group.rows.map((row) => row.id),
         entryId: first.journal_entry_id,
@@ -1708,7 +1679,7 @@ export async function reverseInventoryMovement(
         throw new InventoryError(
           "transfer movement is missing its paired source leg",
         );
-      const pair = (await tx.execute(sql`
+      const pair = (await tx.execute<ReversibleMovement>(sql`
         select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
                serial_id, quantity, unit_cost, total_value, journal_entry_id,
                paired_movement_id, status
@@ -1717,7 +1688,7 @@ export async function reverseInventoryMovement(
            and (id = ${outId} or paired_movement_id = ${outId})
          order by case when kind = 'transfer_out' then 0 else 1 end
          for update
-      `)) as unknown as { rows: ReversibleMovement[] };
+      `));
       if (
         pair.rows.length !== 2 ||
         pair.rows[0]!.kind !== "transfer_out" ||
@@ -1735,7 +1706,7 @@ export async function reverseInventoryMovement(
     }
 
     const sourceIds = sources.map((source) => source.id);
-    const prior = (await tx.execute(sql`
+    const prior = (await tx.execute<{ reverses_movement_id: string }>(sql`
       select reverses_movement_id
         from inventory_movements
        where org_id = ${orgId}
@@ -1744,7 +1715,7 @@ export async function reverseInventoryMovement(
            sql`, `,
          )})
        limit 1
-    `)) as unknown as { rows: { reverses_movement_id: string }[] };
+    `));
     if (prior.rows.length) {
       throw new InventoryError(
         "one leg of this inventory operation is already reversed",
@@ -1771,7 +1742,7 @@ export async function reverseInventoryMovement(
              sql`, `,
            )})
          limit 1
-      `)) as unknown as { rows: unknown[] };
+      `));
       if (attached.rows.length) {
         throw new InventoryError(
           "the source journal contains a compound inventory operation; use its operation-specific reversal",
@@ -1785,17 +1756,15 @@ export async function reverseInventoryMovement(
     const serialId =
       sources.find((source) => source.serial_id)?.serial_id ?? null;
     if (serialId) {
-      const serial = (await tx.execute(sql`
+      const serial = (await tx.execute<{
+          status: string;
+          current_stock_location_id: string | null;
+        }>(sql`
         select status, current_stock_location_id
           from serials
          where id = ${serialId} and org_id = ${orgId}
          for update
-      `)) as unknown as {
-        rows: {
-          status: string;
-          current_stock_location_id: string | null;
-        }[];
-      };
+      `));
       const current = serial.rows[0];
       if (!current) {
         throw new InventoryError(
@@ -1954,11 +1923,9 @@ export async function buildAssembly(
   const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
 
-  const bom = (await db.execute(sql`
+  const bom = (await db.execute<{ component_item_id: string; quantity_per: string }>(sql`
     select component_item_id, quantity_per from bom_components
-     where org_id = ${orgId} and assembly_item_id = ${input.assemblyItemId} order by sort_order`)) as unknown as {
-    rows: { component_item_id: string; quantity_per: string }[];
-  };
+     where org_id = ${orgId} and assembly_item_id = ${input.assemblyItemId} order by sort_order`));
   if (bom.rows.length === 0)
     throw new InventoryError("assembly has no bill of materials");
 
@@ -2057,13 +2024,13 @@ export async function buildAssembly(
     for (let i = 0; i < components.length; i++) {
       const c = components[i];
       const pc = perComponent[i];
-      const mv = (await tx.execute(sql`
+      const mv = (await tx.execute<{ id: string }>(sql`
         insert into inventory_movements
           (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
         values (${orgId}, ${c.itemId}, 'assembly_consume', ${input.date}, ${input.stockLocationId},
                 ${neg(c.reqQty)}, ${isZero(c.reqQty) ? "0" : fromUnits((toUnits(pc.cost) * 10_000n) / toUnits(c.reqQty))},
                 ${neg(pc.cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       await recordConsumptions(
         tx,
         orgId,
@@ -2077,12 +2044,12 @@ export async function buildAssembly(
     const unitCost = isZero(input.quantity)
       ? "0"
       : fromUnits((toUnits(totalCost) * 10_000n) / toUnits(input.quantity));
-    const buildMv = (await tx.execute(sql`
+    const buildMv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
               ${input.quantity}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     await addLayerAtCost(
       tx,
       orgId,
@@ -2121,14 +2088,14 @@ export async function reverseAssemblyBuild(
   }
 
   return db.transaction(async (tx) => {
-    const requested = (await tx.execute(sql`
+    const requested = (await tx.execute<ReversibleMovement>(sql`
       select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
         from inventory_movements
        where org_id = ${orgId} and id = ${input.movementId}
        for update
-    `)) as unknown as { rows: ReversibleMovement[] };
+    `));
     const build = requested.rows[0];
     if (!build || build.kind !== "assembly_build") {
       throw new InventoryError("assembly build movement not found");
@@ -2137,7 +2104,7 @@ export async function reverseAssemblyBuild(
       throw new InventoryError("assembly build is missing its source journal");
     }
 
-    const sources = (await tx.execute(sql`
+    const sources = (await tx.execute<ReversibleMovement>(sql`
       select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
@@ -2146,7 +2113,7 @@ export async function reverseAssemblyBuild(
          and journal_entry_id = ${build.journal_entry_id}
        order by case when kind = 'assembly_build' then 0 else 1 end, id
        for update
-    `)) as unknown as { rows: ReversibleMovement[] };
+    `));
     if (
       sources.rows.filter((row) => row.kind === "assembly_build").length !== 1 ||
       sources.rows.filter((row) => row.kind === "assembly_consume").length === 0 ||
@@ -2162,7 +2129,7 @@ export async function reverseAssemblyBuild(
     }
 
     const sourceIds = sources.rows.map((row) => row.id);
-    const prior = (await tx.execute(sql`
+    const prior = (await tx.execute<{ id: string; journal_entry_id: string | null }>(sql`
       select id, journal_entry_id
         from inventory_movements
        where org_id = ${orgId}
@@ -2171,9 +2138,7 @@ export async function reverseAssemblyBuild(
            sql`, `,
          )})
        order by id
-    `)) as unknown as {
-      rows: { id: string; journal_entry_id: string | null }[];
-    };
+    `));
     if (prior.rows.length) {
       if (prior.rows.length !== sources.rows.length) {
         throw new InventoryError(
@@ -2265,15 +2230,14 @@ export async function reverseAssemblyBuild(
 // ---------------------------------------------------------------------------
 // Landed cost (allocate freight/duty onto receipt layers)
 // ---------------------------------------------------------------------------
-
-interface RevaluableLayer {
+type RevaluableLayer = {
   id: string;
   source_movement_id: string;
   received_at: string;
   original_quantity: string;
   remaining_quantity: string;
   unit_cost: string;
-}
+};
 
 /**
  * Increase one layer's remaining value by exactly `shareUnits`.
@@ -2484,10 +2448,8 @@ async function defaultStockLocation(
   runner: Runner,
   orgId: string,
 ): Promise<string | null> {
-  const r = (await runner.execute(sql`
-    select id from stock_locations where org_id = ${orgId} and is_active`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const r = (await runner.execute<{ id: string }>(sql`
+    select id from stock_locations where org_id = ${orgId} and is_active`));
   return r.rows.length === 1 ? r.rows[0].id : null;
 }
 
@@ -2503,15 +2465,7 @@ export async function loadDocumentInventoryLines(
   documentId: string,
 ): Promise<DocumentInventoryLine[]> {
   const fallback = await defaultStockLocation(runner, orgId);
-  const r = (await runner.execute(sql`
-    select dl.id as line_id, dl.item_id, dl.quantity, dl.amount, dl.stock_location_id,
-           p.asset_account_id, p.received_not_billed_account_id, p.costing_method
-      from document_lines dl
-      join item_inventory_profiles p on p.item_id = dl.item_id
-     where dl.document_id = ${documentId} and dl.org_id = ${orgId}
-       and dl.item_id is not null and dl.quantity <> 0
-     order by dl.line_number`)) as unknown as {
-    rows: {
+  const r = (await runner.execute<{
       line_id: string;
       item_id: string;
       quantity: string;
@@ -2520,8 +2474,14 @@ export async function loadDocumentInventoryLines(
       asset_account_id: string;
       received_not_billed_account_id: string | null;
       costing_method: InventoryProfile["costingMethod"];
-    }[];
-  };
+    }>(sql`
+    select dl.id as line_id, dl.item_id, dl.quantity, dl.amount, dl.stock_location_id,
+           p.asset_account_id, p.received_not_billed_account_id, p.costing_method
+      from document_lines dl
+      join item_inventory_profiles p on p.item_id = dl.item_id
+     where dl.document_id = ${documentId} and dl.org_id = ${orgId}
+       and dl.item_id is not null and dl.quantity <> 0
+     order by dl.line_number`));
   const out: DocumentInventoryLine[] = [];
   for (const row of r.rows) {
     const loc = row.stock_location_id ?? fallback;
@@ -2580,9 +2540,7 @@ export async function applyInventoryReceiptsForBill(
   let count = 0;
   for (const l of lines) {
     const seen = (await db.execute(sql`
-      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'receipt' limit 1`)) as unknown as {
-      rows: unknown[];
-    };
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'receipt' limit 1`));
     if (seen.rows[0]) continue;
     const unitCost = isZero(l.quantity)
       ? "0"
@@ -2621,9 +2579,7 @@ export async function applyInventoryIssuesForInvoice(
   let count = 0;
   for (const l of lines) {
     const seen = (await db.execute(sql`
-      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`)) as unknown as {
-      rows: unknown[];
-    };
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`));
     if (seen.rows[0]) continue;
     await issueInventory(orgId, actorId, {
       itemId: l.itemId,
@@ -2693,7 +2649,7 @@ export async function ensureLot(
 ): Promise<string> {
   if (!lotNumber?.trim()) throw new InventoryError("lot number is required");
   return db.transaction(async (tx) => {
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into lots
         (org_id, item_id, lot_number, expires_on, created_by, updated_by)
       values
@@ -2701,16 +2657,14 @@ export async function ensureLot(
          ${actorId}, ${actorId})
       on conflict (item_id, lot_number) do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (inserted.rows[0]) return inserted.rows[0].id;
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string; org_id: string; expires_on: string | null }>(sql`
       select id, org_id, expires_on::text
         from lots
        where item_id = ${itemId} and lot_number = ${lotNumber.trim()}
        for update
-    `)) as unknown as {
-      rows: { id: string; org_id: string; expires_on: string | null }[];
-    };
+    `));
     const row = existing.rows[0];
     if (!row || row.org_id !== orgId) {
       throw new InventoryError("lot identity belongs to another organization");
@@ -2757,7 +2711,7 @@ export async function ensureSerial(
   if (!serialNumber?.trim())
     throw new InventoryError("serial number is required");
   return db.transaction(async (tx) => {
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into serials
         (org_id, item_id, serial_number, status, current_stock_location_id,
          created_by, updated_by)
@@ -2766,20 +2720,18 @@ export async function ensureSerial(
          ${actorId}, ${actorId})
       on conflict (item_id, serial_number) do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (inserted.rows[0]) return inserted.rows[0].id;
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{
+        id: string;
+        org_id: string;
+        current_stock_location_id: string | null;
+      }>(sql`
       select id, org_id, current_stock_location_id
         from serials
        where item_id = ${itemId} and serial_number = ${serialNumber.trim()}
        for update
-    `)) as unknown as {
-      rows: {
-        id: string;
-        org_id: string;
-        current_stock_location_id: string | null;
-      }[];
-    };
+    `));
     const row = existing.rows[0];
     if (!row || row.org_id !== orgId) {
       throw new InventoryError(
@@ -2807,7 +2759,7 @@ export interface LotRecallFilter {
   includeExpiryOnly?: boolean;
 }
 
-export interface LotRecallRow {
+export type LotRecallRow = {
   movementId: string;
   lotId: string;
   lotNumber: string;
@@ -2822,7 +2774,7 @@ export interface LotRecallRow {
   documentId: string | null;
   documentNumber: string | null;
   partyName: string | null;
-}
+};
 
 /**
  * Lot traceability: every movement that touched a lot, with the source
@@ -2834,7 +2786,7 @@ export async function queryLotRecall(
   orgId: string,
   filter: LotRecallFilter,
 ): Promise<LotRecallRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<LotRecallRow>(sql`
     select im.id as "movementId", l.id as "lotId", l.lot_number as "lotNumber", l.expires_on::text as "expiresOn",
            i.id as "itemId", i.code as "itemCode", i.name as "itemName", im.kind, im.moved_at::text as "movedAt",
            im.quantity::text as "quantity", sl.code as "locationCode",
@@ -2853,7 +2805,7 @@ export async function queryLotRecall(
        and (${filter.expiresOnOrBefore ?? null}::date is null or l.expires_on <= ${filter.expiresOnOrBefore ?? null}::date)
        and (${filter.includeExpiryOnly !== true} or l.expires_on is not null)
      order by im.moved_at desc
-     limit 500`)) as unknown as { rows: LotRecallRow[] };
+     limit 500`));
   return r.rows;
 }
 
@@ -2872,19 +2824,15 @@ async function nextSequenceNumber(
     ? (
         (await runner.execute(sql`
         select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
-          and subsidiary_id = ${subsidiaryId} limit 1`)) as unknown as {
-          rows: unknown[];
-        }
+          and subsidiary_id = ${subsidiaryId} limit 1`))
       ).rows.length > 0
     : false;
-  const seq = (await runner.execute(sql`
+  const seq = (await runner.execute<{ prefix: string; next_number: number; padding: number }>(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, ${kind}, ${configured ? subsidiaryId : null}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
-    returning prefix, next_number, padding`)) as unknown as {
-    rows: { prefix: string; next_number: number; padding: number }[];
-  };
+    returning prefix, next_number, padding`));
   const s = seq.rows[0];
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
@@ -2908,8 +2856,7 @@ export interface CreateTransferOrderInput {
   memo?: string | null;
   lines: TransferOrderLineInput[];
 }
-
-interface TransferOrderRow {
+type TransferOrderRow = {
   id: string;
   status: string;
   from_stock_location_id: string;
@@ -2918,7 +2865,7 @@ interface TransferOrderRow {
   in_transit_account_id: string | null;
   subsidiary_id: string;
   document_number: string;
-}
+};
 
 export async function createTransferOrder(
   orgId: string,
@@ -2941,14 +2888,14 @@ export async function createTransferOrder(
     input.subsidiaryId,
   );
   return await db.transaction(async (tx) => {
-    const order = (await tx.execute(sql`
+    const order = (await tx.execute<{ id: string }>(sql`
       insert into transfer_orders
         (org_id, document_number, status, from_stock_location_id, to_stock_location_id,
          transit_stock_location_id, in_transit_account_id, subsidiary_id, ordered_on, memo, created_by, updated_by)
       values (${orgId}, ${documentNumber}, 'draft', ${input.fromStockLocationId}, ${input.toStockLocationId},
               ${input.transitStockLocationId ?? null}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
               ${input.orderedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const id = order.rows[0].id;
     for (let i = 0; i < input.lines.length; i++) {
       const line = input.lines[i];
@@ -2967,12 +2914,10 @@ async function loadTransferOrderForUpdate(
   orgId: string,
   orderId: string,
 ): Promise<TransferOrderRow> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<TransferOrderRow>(sql`
     select id, status, from_stock_location_id, to_stock_location_id, transit_stock_location_id,
            in_transit_account_id, subsidiary_id, document_number
-      from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`)) as unknown as {
-    rows: TransferOrderRow[];
-  };
+      from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`));
   if (!r.rows[0]) throw new InventoryError("transfer order not found");
   return r.rows[0];
 }
@@ -2983,9 +2928,9 @@ async function resolveTransitLocation(
   order: TransferOrderRow,
 ): Promise<string> {
   if (order.transit_stock_location_id) return order.transit_stock_location_id;
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{ id: string }>(sql`
     select id from stock_locations where org_id = ${orgId} and kind = 'transit' and is_active
-     order by created_at limit 1`)) as unknown as { rows: { id: string }[] };
+     order by created_at limit 1`));
   if (!r.rows[0]) {
     throw new InventoryError(
       `transfer order ${order.document_number} has no transit stock location and none exists`,
@@ -3075,17 +3020,15 @@ export async function shipTransferOrder(
         `transfer order ${order.document_number} is ${order.status}`,
       );
     const transitId = await resolveTransitLocation(tx, orgId, order);
-    const lines = (await tx.execute(sql`
-      select id, item_id, quantity, lot_id, serial_id from transfer_order_lines
-       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`)) as unknown as {
-      rows: {
+    const lines = (await tx.execute<{
         id: string;
         item_id: string;
         quantity: string;
         lot_id: string | null;
         serial_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select id, item_id, quantity, lot_id, serial_id from transfer_order_lines
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`));
     const amounts: { assetAccountId: string; value: string; memo: string }[] =
       [];
     for (const line of lines.rows) {
@@ -3141,17 +3084,15 @@ export async function receiveTransferOrder(
         `transfer order ${order.document_number} is ${order.status}`,
       );
     const transitId = await resolveTransitLocation(tx, orgId, order);
-    const lines = (await tx.execute(sql`
-      select id, item_id, quantity_shipped, lot_id, serial_id from transfer_order_lines
-       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`)) as unknown as {
-      rows: {
+    const lines = (await tx.execute<{
         id: string;
         item_id: string;
         quantity_shipped: string;
         lot_id: string | null;
         serial_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select id, item_id, quantity_shipped, lot_id, serial_id from transfer_order_lines
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`));
     const amounts: { assetAccountId: string; value: string; memo: string }[] =
       [];
     for (const line of lines.rows) {
@@ -3214,8 +3155,7 @@ export interface PostLandedCostVoucherInput {
   memo?: string | null;
   targets: LandedCostVoucherTargetInput[];
 }
-
-interface OpenLayer extends RevaluableLayer {}
+type OpenLayer = RevaluableLayer;
 
 /** The apportionment weight of one target's on-hand layers under a basis. */
 function layerWeights(
@@ -3282,7 +3222,7 @@ export async function postLandedCostVoucher(
     for (const target of input.targets) {
       const profile = await resolveProfile(orgId, target.itemId, tx);
       const layers = (
-        (await tx.execute(sql`
+        (await tx.execute<OpenLayer>(sql`
         select id, source_movement_id, received_at::text, original_quantity,
                remaining_quantity, unit_cost
           from cost_layers
@@ -3290,9 +3230,7 @@ export async function postLandedCostVoucher(
            and stock_location_id = ${target.stockLocationId}
            and remaining_quantity > 0
          order by received_at, id
-         for update`)) as unknown as {
-          rows: OpenLayer[];
-        }
+         for update`))
       ).rows;
     if (layers.length === 0) {
       throw new InventoryError(
@@ -3311,11 +3249,9 @@ export async function postLandedCostVoucher(
       let weightsByLayer: Map<string, string> | undefined;
       if (input.basis === "weight") {
         weightsByLayer = new Map();
-        const w = (await tx.execute(sql`
+        const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
           select cost_layer_id, weight from cost_layer_weights
-           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`)) as unknown as {
-          rows: { cost_layer_id: string; weight: string }[];
-        };
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`));
         for (const row of w.rows)
           weightsByLayer.set(row.cost_layer_id, row.weight);
       }
@@ -3359,14 +3295,14 @@ export async function postLandedCostVoucher(
       input.subsidiaryId,
       tx,
     );
-    const voucher = (await tx.execute(sql`
+    const voucher = (await tx.execute<{ id: string }>(sql`
       insert into landed_cost_vouchers
         (org_id, document_number, status, amount, basis, freight_account_id, source_document_line_id,
          subsidiary_id, voucher_date, memo, created_by, updated_by)
       values (${orgId}, ${documentNumber}, 'draft', ${input.amount}, ${input.basis}, ${input.freightAccountId},
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const voucherId = voucher.rows[0].id;
 
     const entryLines: JournalLineInput[] = [];
@@ -3386,11 +3322,9 @@ export async function postLandedCostVoucher(
       let weightsByLayer: Map<string, string> | undefined;
       if (input.basis === "weight") {
         weightsByLayer = new Map();
-        const w = (await tx.execute(sql`
+        const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
           select cost_layer_id, weight from cost_layer_weights
-           where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`)) as unknown as {
-          rows: { cost_layer_id: string; weight: string }[];
-        };
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`));
         for (const row of w.rows)
           weightsByLayer.set(row.cost_layer_id, row.weight);
       }
@@ -3494,20 +3428,18 @@ export async function reverseLandedCostVoucher(
   }
 
   return db.transaction(async (tx) => {
-    const voucherResult = (await tx.execute(sql`
-      select id, status, amount, journal_entry_id, reversal_journal_entry_id
-        from landed_cost_vouchers
-       where id = ${input.voucherId} and org_id = ${orgId}
-       for update
-    `)) as unknown as {
-      rows: {
+    const voucherResult = (await tx.execute<{
         id: string;
         status: string;
         amount: string;
         journal_entry_id: string | null;
         reversal_journal_entry_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select id, status, amount, journal_entry_id, reversal_journal_entry_id
+        from landed_cost_vouchers
+       where id = ${input.voucherId} and org_id = ${orgId}
+       for update
+    `));
     const voucher = voucherResult.rows[0];
     if (!voucher) throw new InventoryError("landed-cost voucher not found");
     if (voucher.status === "void") {
@@ -3516,12 +3448,12 @@ export async function reverseLandedCostVoucher(
           "void landed-cost voucher is missing reversal evidence",
         );
       }
-      const count = (await tx.execute(sql`
+      const count = (await tx.execute<{ count: number }>(sql`
         select count(*)::int as count
           from landed_cost_allocations
          where org_id = ${orgId} and voucher_id = ${voucher.id}
            and reverses_allocation_id is not null
-      `)) as unknown as { rows: { count: number }[] };
+      `));
       return {
         voucherId: voucher.id,
         entryId: voucher.reversal_journal_entry_id,
@@ -3535,14 +3467,12 @@ export async function reverseLandedCostVoucher(
       );
     }
 
-    const targets = (await tx.execute(sql`
+    const targets = (await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
       select item_id, stock_location_id
         from landed_cost_voucher_targets
        where voucher_id = ${voucher.id} and org_id = ${orgId}
        order by item_id, stock_location_id
-    `)) as unknown as {
-      rows: { item_id: string; stock_location_id: string }[];
-    };
+    `));
     if (!targets.rows.length) {
       throw new InventoryError("landed-cost voucher has no target evidence");
     }
@@ -3554,7 +3484,18 @@ export async function reverseLandedCostVoucher(
       );
     }
 
-    const allocations = (await tx.execute(sql`
+    const allocations = (await tx.execute<{
+        id: string;
+        target_cost_layer_id: string;
+        basis: "value" | "quantity" | "weight" | "manual";
+        amount: string;
+        source_document_line_id: string | null;
+        source_movement_id: string;
+        received_at: string;
+        original_quantity: string;
+        remaining_quantity: string;
+        unit_cost: string;
+      }>(sql`
       select allocation.id, allocation.target_cost_layer_id, allocation.basis,
              allocation.amount::text, allocation.source_document_line_id,
              layer.source_movement_id, layer.received_at::text,
@@ -3569,20 +3510,7 @@ export async function reverseLandedCostVoucher(
          and allocation.reverses_allocation_id is null
        order by allocation.created_at desc, allocation.id desc
        for update of layer
-    `)) as unknown as {
-      rows: Array<{
-        id: string;
-        target_cost_layer_id: string;
-        basis: "value" | "quantity" | "weight" | "manual";
-        amount: string;
-        source_document_line_id: string | null;
-        source_movement_id: string;
-        received_at: string;
-        original_quantity: string;
-        remaining_quantity: string;
-        unit_cost: string;
-      }>;
-    };
+    `));
     if (!allocations.rows.length) {
       throw new InventoryError(
         "landed-cost voucher has no linked allocation evidence",
@@ -3602,7 +3530,7 @@ export async function reverseLandedCostVoucher(
            allocations.rows.map((row) => row.id),
          )})
        limit 1
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (prior.rows.length) {
       throw new InventoryError(
         "landed-cost voucher has partial reversal evidence",

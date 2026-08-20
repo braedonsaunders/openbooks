@@ -18,16 +18,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const { orgId, id: userId } = gate.user
 
-  const unitRes = (await db.execute(sql`
-    select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
-           in_service_on::text, serial_number, fixed_asset_id
-      from equipment_units where id = ${id} and org_id = ${orgId} limit 1`)) as unknown as {
-    rows: {
+  const unitRes = (await db.execute<{
       id: string; subsidiary_id: string; name: string; description: string | null
       purchase_price: string; acquired_on: string | null; in_service_on: string | null
       serial_number: string | null; fixed_asset_id: string | null
-    }[]
-  }
+    }>(sql`
+    select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
+           in_service_on::text, serial_number, fixed_asset_id
+      from equipment_units where id = ${id} and org_id = ${orgId} limit 1`))
   const unit = unitRes.rows[0]
   if (!unit) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
   if (unit.fixed_asset_id) return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
@@ -36,21 +34,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   const categoryId = await ensureDefaultCategory(orgId, userId)
-  const nextRes = (await db.execute(sql`
+  const nextRes = (await db.execute<{ n: number }>(sql`
     select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
-      from fixed_assets where org_id = ${orgId} and asset_number ~ '^FA-\\d+$'`)) as unknown as { rows: { n: number }[] }
+      from fixed_assets where org_id = ${orgId} and asset_number ~ '^FA-\\d+$'`))
   const assetNumber = `FA-${String(Number(nextRes.rows[0]?.n ?? 1)).padStart(4, '0')}`
   const status = unit.in_service_on ? 'in_service' : 'draft'
 
   const assetId = await db.transaction(async (tx) => {
-    const ins = (await tx.execute(sql`
+    const ins = (await tx.execute<{ id: string }>(sql`
       insert into fixed_assets
         (org_id, subsidiary_id, category_id, asset_number, name, description, status,
          acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
       values (${orgId}, ${unit.subsidiary_id}, ${categoryId}, ${assetNumber}, ${unit.name},
               ${unit.description}, ${status}, ${unit.acquired_on}, ${unit.in_service_on},
               ${unit.purchase_price || '0'}, '0', ${unit.serial_number}, ${userId}, ${userId})
-      returning id`)) as unknown as { rows: { id: string }[] }
+      returning id`))
     const newId = ins.rows[0].id
     await tx.execute(sql`
       update equipment_units set fixed_asset_id = ${newId}, updated_at = now(), updated_by = ${userId}

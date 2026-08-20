@@ -31,9 +31,9 @@ export interface DaemonConfig {
 
 /** Load the singleton daemon config, provisioning it (with a fresh host key) on first use. */
 export async function loadDaemonConfig(): Promise<DaemonConfig> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ enabled: boolean; port: number; host_key: string; advertised_host: string | null }>(sql`
     select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
-  `)) as unknown as { rows: { enabled: boolean; port: number; host_key: string; advertised_host: string | null }[] };
+  `));
   if (r.rows[0]) {
     const c = r.rows[0];
     return { enabled: c.enabled, port: c.port, hostKey: c.host_key, advertisedHost: c.advertised_host };
@@ -53,14 +53,13 @@ export function hostKeyFingerprint(hostKeyPem: string): string {
   const pub = (parsed as { getPublicSSH(): Buffer }).getPublicSSH();
   return "SHA256:" + createHash("sha256").update(pub).digest("base64").replace(/=+$/, "");
 }
-
-interface ServerRow { id: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null }
+type ServerRow = { id: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null };
 
 async function loadServer(username: string): Promise<ServerRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ServerRow>(sql`
     select id, username, backend, bucket, root_prefix, password_encrypted, authorized_keys
       from sftp_servers where username = ${username} and is_active limit 1
-  `)) as unknown as { rows: ServerRow[] };
+  `));
   return r.rows[0] ?? null;
 }
 async function touch(id: string) {

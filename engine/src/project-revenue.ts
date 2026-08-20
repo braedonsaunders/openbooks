@@ -71,16 +71,14 @@ export function costToCostPercent(budget: string, actual: string): string {
  * the obligation, which carries the org control accounts).
  */
 async function ensureProjectPocRule(orgId: string, actorId: string | null): Promise<string> {
-  const existing = (await db.execute(sql`
-    select id from recognition_rules where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const existing = (await db.execute<{ id: string }>(sql`
+    select id from recognition_rules where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} limit 1`));
   if (existing.rows[0]) return existing.rows[0].id;
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into recognition_rules (org_id, code, name, method, is_active, created_by, updated_by)
     values (${orgId}, ${PROJECT_POC_RULE_CODE}, 'Project percent complete', 'percent_complete', true, ${actorId}, ${actorId})
     on conflict (org_id, code) do update set updated_at = now()
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   return ins.rows[0].id;
 }
 
@@ -106,7 +104,10 @@ export async function syncProjectRevenueContracts(
     return result;
   }
 
-  const projects = (await db.execute(sql`
+  const projects = (await db.execute<{
+      id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
+      starts_on: string | null; contract_value: string; pct_override: string | null; functional_currency: string | null;
+    }>(sql`
     select p.id, p.code, p.name, p.customer_id, p.subsidiary_id, p.starts_on,
            coalesce(p.contract_value, 0)::numeric(19,4) as contract_value,
            nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override,
@@ -122,12 +123,7 @@ export async function syncProjectRevenueContracts(
      where p.org_id = ${orgId} and p.is_active
        and pt.invoicing_profile->>'recognition' = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
-     order by p.code`)) as unknown as {
-    rows: {
-      id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
-      starts_on: string | null; contract_value: string; pct_override: string | null; functional_currency: string | null;
-    }[];
-  };
+     order by p.code`));
 
   let ruleId: string | null = null;
 
@@ -151,7 +147,7 @@ export async function syncProjectRevenueContracts(
       percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
-      const cc = (await db.execute(sql`
+      const cc = (await db.execute<{ budget: string; actual: string }>(sql`
         select
           coalesce((select sum(t.estimated_cost) from project_tasks t
                      where t.project_id = ${p.id} and t.org_id = ${orgId}), 0) as budget,
@@ -159,19 +155,15 @@ export async function syncProjectRevenueContracts(
                      join journal_entries e on e.id = l.entry_id
                      join accounts a on a.id = l.account_id
                     where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
-                      and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`)) as unknown as {
-        rows: { budget: string; actual: string }[];
-      };
+                      and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
       percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");
     }
 
     // -- ensure the contract --------------------------------------------------
     const startsOn = p.starts_on ?? asOfDate;
     let created = false;
-    const existing = (await db.execute(sql`
-      select id from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+    const existing = (await db.execute<{ id: string }>(sql`
+      select id from revenue_contracts where org_id = ${orgId} and project_id = ${p.id} limit 1`));
     let contractId: string;
     if (existing.rows[0]) {
       contractId = existing.rows[0].id;
@@ -181,20 +173,18 @@ export async function syncProjectRevenueContracts(
                starts_on = coalesce(starts_on, ${startsOn}), updated_at = now(), updated_by = ${actorId}
          where id = ${contractId}`);
     } else {
-      const ins = (await db.execute(sql`
+      const ins = (await db.execute<{ id: string }>(sql`
         insert into revenue_contracts
           (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${p.functional_currency}, ${p.contract_value}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       contractId = ins.rows[0].id;
       created = true;
     }
 
     // -- ensure the (single) obligation --------------------------------------
-    const existingObl = (await db.execute(sql`
-      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+    const existingObl = (await db.execute<{ id: string }>(sql`
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`));
     let obligationId: string;
     if (existingObl.rows[0]) {
       obligationId = existingObl.rows[0].id;
@@ -206,7 +196,7 @@ export async function syncProjectRevenueContracts(
                updated_at = now(), updated_by = ${actorId}
          where id = ${obligationId}`);
     } else {
-      const ins = (await db.execute(sql`
+      const ins = (await db.execute<{ id: string }>(sql`
         insert into performance_obligations
           (org_id, contract_id, item_id, description, recognition_rule_id,
            booked_amount, standalone_selling_price, allocated_price, percent_complete,
@@ -214,7 +204,7 @@ export async function syncProjectRevenueContracts(
         values (${orgId}, ${contractId}, null, ${p.name}, ${ruleId},
                 ${p.contract_value}, ${p.contract_value}, ${p.contract_value}, ${percent},
                 ${startsOn}, ${accts.unbilledReceivable}, ${accts.projectRevenue}, 'open', ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       obligationId = ins.rows[0].id;
     }
 

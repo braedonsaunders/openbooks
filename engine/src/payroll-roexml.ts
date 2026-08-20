@@ -104,9 +104,9 @@ export async function buildRoeXml(
 ): Promise<{ filename: string; xml: string; roeCount: number }> {
   if (issues.length === 0) throw new PayrollError("select at least one employee to issue an ROE for");
 
-  const cfgRow = (await db.execute(sql`
+  const cfgRow = (await db.execute<{ cfg: Partial<EmployerConfig> | null }>(sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
-  `)) as unknown as { rows: { cfg: Partial<EmployerConfig> | null }[] };
+  `));
   const cfg = cfgRow.rows[0]?.cfg ?? {};
   const missingCfg = (["bn", "name", "contactName", "contactPhone"] as const)
     .filter((key) => !cfg[key] || !String(cfg[key]).trim());
@@ -117,11 +117,11 @@ export async function buildRoeXml(
   }
   const employer = cfg as EmployerConfig;
 
-  const sins = (await db.execute(sql`
+  const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId}
-  `)) as unknown as { rows: { employee_party_id: string; sin_encrypted: string | null }[] };
+  `));
   const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];

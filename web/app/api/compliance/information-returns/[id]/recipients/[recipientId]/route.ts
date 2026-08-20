@@ -37,14 +37,12 @@ export async function PATCH(
     exclusionReason?: string | null
   }
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string; status: string; adjustments: Record<string, string>; computed_amounts: Record<string, string>; filing_status: string; form_type: string }>(sql`
     select r.id, r.status, r.adjustments, r.computed_amounts, f.status as filing_status, f.form_type
       from information_return_recipients r
       join information_return_filings f on f.id = r.filing_id
      where r.org_id = ${orgId} and r.id = ${recipientId} and r.filing_id = ${id}
-  `)) as unknown as {
-    rows: { id: string; status: string; adjustments: Record<string, string>; computed_amounts: Record<string, string>; filing_status: string; form_type: string }[]
-  }
+  `))
   const recipient = rows.rows[0]
   if (!recipient) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (recipient.filing_status !== 'draft' && recipient.filing_status !== 'computed') {

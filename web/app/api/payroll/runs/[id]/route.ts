@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const orgId = gate.user.orgId
 
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.document_id, d.document_number, d.status as document_status, d.currency,
            r.pay_schedule_id, s.name as schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
@@ -42,12 +42,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       from pay_runs r
       join documents d on d.id = r.document_id
       left join pay_schedules s on s.id = r.pay_schedule_id
-     where r.org_id = ${orgId} and r.document_id = ${id}`)) as unknown as { rows: Record<string, unknown>[] }
+     where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const [stubs, lines] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
              st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
              st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
@@ -56,7 +56,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
        where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
        order by p.display_name`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
              c.code as component_code, pr.name as project_name, dep.name as department_name
         from pay_stub_lines l
@@ -66,7 +66,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         left join departments dep on dep.id = l.department_id
        where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
        order by l.stub_id, l.sequence`),
-  ])) as unknown as [{ rows: Record<string, unknown>[] }, { rows: Record<string, unknown>[] }]
+  ]))
 
   const linesByStub = new Map<string, Record<string, unknown>[]>()
   for (const line of lines.rows) {
@@ -76,7 +76,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     else linesByStub.set(stubId, [line])
   }
   const [adjustments, adjustableComponents] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
              a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
         from pay_run_adjustments a
@@ -84,12 +84,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         left join pay_components c on c.id = a.component_id
        where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
        order by p.display_name, a.created_at`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, code, name, kind from pay_components
        where org_id = ${orgId} and is_active
          and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
        order by sequence, code`),
-  ])) as unknown as [{ rows: Record<string, unknown>[] }, { rows: Record<string, unknown>[] }]
+  ]))
 
   return NextResponse.json({
     run,

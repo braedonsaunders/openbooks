@@ -94,9 +94,9 @@ async function gateNodeData(flowId: string, nodeId: string): Promise<GateData | 
 
 /** Recompute a run's status once gates move: waiting | completed | failed. */
 async function finalizeRunStatus(runId: string, hadFailure: boolean, error?: string | null): Promise<void> {
-  const pending = (await db.execute(sql`
+  const pending = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_gates where run_id = ${runId} and status in ('pending', 'escalated')
-  `)) as unknown as { rows: { n: number }[] };
+  `));
   const stillWaiting = (pending.rows[0]?.n ?? 0) > 0;
   const status = hadFailure ? "failed" : stillWaiting ? "waiting" : "completed";
   await db
@@ -354,11 +354,11 @@ async function subjectOpenGateCount(
   subjectKind: string,
   subjectId: string,
 ): Promise<number> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_gates
      where org_id = ${orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId}
        and status in ('pending', 'escalated')
-  `)) as unknown as { rows: { n: number }[] };
+  `));
   return r.rows[0]?.n ?? 0;
 }
 
@@ -565,14 +565,14 @@ export async function worklistGates(
   roles?: Iterable<string>,
 ): Promise<WorklistGate[]> {
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     ${WORKLIST_SELECT}
      where g.org_id = ${orgId} and g.status = 'pending'
        and (g.assignee_user_id = ${userId}
             or (g.assignee_role is not null and g.assignee_role in
                  (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
      order by g.created_at
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const out = r.rows.map((row) => mapWorklistRow(row, null));
 
   // Delegated gates: pending rows whose DIRECT assignee currently delegates
@@ -584,13 +584,13 @@ export async function worklistGates(
   if (principals.length > 0) {
     const seen = new Set(out.map((g) => g.id));
     const byId = new Map(principals.map((p) => [p.id, p]));
-    const d = (await db.execute(sql`
+    const d = (await db.execute<Record<string, unknown>>(sql`
       ${WORKLIST_SELECT}
        where g.org_id = ${orgId} and g.status = 'pending'
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
        order by g.created_at
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     for (const row of d.rows) {
       const id = String(row.id);
       if (seen.has(id)) continue;
@@ -672,21 +672,21 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   let escalated = 0;
 
   // --- Reminders -----------------------------------------------------------
-  const dueReminders = (await db.execute(sql`
+  const dueReminders = (await db.execute<{ id: string }>(sql`
     select gate.id from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
        and gate.reminded_at is null and organization.env_kind = 'production'
      order by gate.remind_at
      limit 200
-  `)) as unknown as { rows: { id: string }[] };
+  `));
 
   for (const { id } of dueReminders.rows) {
     // Claim via the reminded_at stamp so concurrent ticks fire once.
     const claimed = (await db.execute(sql`
       update flow_gates set reminded_at = ${now}
        where id = ${id} and status = 'pending' and reminded_at is null
-    `)) as unknown as { rowCount?: number };
+    `));
     if (!claimed.rowCount) continue;
     const gate = await loadGate(id);
     if (!gate) continue;
@@ -699,14 +699,14 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   }
 
   // --- Escalations -----------------------------------------------------------
-  const dueEscalations = (await db.execute(sql`
+  const dueEscalations = (await db.execute<{ id: string }>(sql`
     select gate.id from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
        and organization.env_kind = 'production'
      order by gate.escalate_at
      limit 100
-  `)) as unknown as { rows: { id: string }[] };
+  `));
 
   for (const { id } of dueEscalations.rows) {
     try {
@@ -837,7 +837,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   const claimed = (await db.execute(sql`
     update flow_gates set status = 'escalated', updated_at = now()
      where id = ${gateId} and status = 'pending'
-  `)) as unknown as { rowCount?: number };
+  `));
   if (!claimed.rowCount) return false;
 
   await db

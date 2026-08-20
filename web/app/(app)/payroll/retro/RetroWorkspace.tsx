@@ -63,10 +63,10 @@ interface RetroProposal {
   unavailable: number
 }
 
-export interface RetroSchedule {
+export type RetroSchedule = {
   id: string
   name: string
-}
+};
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 

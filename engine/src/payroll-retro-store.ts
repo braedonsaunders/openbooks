@@ -110,7 +110,14 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
     ? sql`and r.pay_schedule_id = ${input.payScheduleId}`
     : sql``;
 
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{
+      employee_party_id: string; employee_name: string;
+      source_document_id: string; source_document_number: string;
+      pay_schedule_id: string; pay_schedule_name: string;
+      period_start: string; period_end: string; pay_date: string; tax_year: number;
+      wage_detail: string | null; component_detail: string | null;
+      unclaimed_hours: string | null;
+    }>(sql`
     select s.employee_party_id, p.display_name as employee_name,
            r.document_id as source_document_id, d.document_number as source_document_number,
            r.pay_schedule_id, sch.name as pay_schedule_name,
@@ -154,16 +161,7 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
        ${scheduleFilter}
        ${employeeFilter}
      order by p.display_name, r.period_end
-  `)) as unknown as {
-    rows: {
-      employee_party_id: string; employee_name: string;
-      source_document_id: string; source_document_number: string;
-      pay_schedule_id: string; pay_schedule_name: string;
-      period_start: string; period_end: string; pay_date: string; tax_year: number;
-      wage_detail: string | null; component_detail: string | null;
-      unclaimed_hours: string | null;
-    }[];
-  };
+  `));
 
   const candidates: RetroCandidate[] = [];
   for (const row of rows.rows) {
@@ -333,7 +331,11 @@ async function committedEarningLines(
   orgId: string, sourceDocumentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, RetroEarningLine[]>> {
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{
+      employee_party_id: string; component_id: string | null; description: string;
+      project_id: string | null; department_id: string | null;
+      amount: string; hours: string | null;
+    }>(sql`
     select s.employee_party_id, l.component_id, l.description, l.project_id, l.department_id,
            l.amount, l.hours
       from pay_stub_lines l
@@ -341,13 +343,7 @@ async function committedEarningLines(
      where l.org_id = ${orgId} and s.pay_run_document_id = ${sourceDocumentId}
        and l.kind = 'earning'
      order by s.employee_party_id, l.sequence
-  `)) as unknown as {
-    rows: {
-      employee_party_id: string; component_id: string | null; description: string;
-      project_id: string | null; department_id: string | null;
-      amount: string; hours: string | null;
-    }[];
-  };
+  `));
   const byEmployee = new Map<string, RetroEarningLine[]>();
   for (const row of rows.rows) {
     const lines = byEmployee.get(row.employee_party_id) ?? [];
@@ -376,7 +372,11 @@ async function previouslySettledBuckets(
   orgId: string, sourceDocumentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<Map<string, RetroSettledBucket[]>> {
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{
+      employee_party_id: string; component_id: string | null;
+      project_id: string | null; department_id: string | null;
+      description: string | null; previously_settled: string;
+    }>(sql`
     select st.employee_party_id, a.component_id, a.project_id, a.department_id,
            min(a.description) as description, sum(a.amount)::text as previously_settled
       from payroll_retro_allocations a
@@ -385,13 +385,7 @@ async function previouslySettledBuckets(
      where st.org_id = ${orgId} and st.source_pay_run_document_id = ${sourceDocumentId}
        and rr.run_status = 'committed'
      group by st.employee_party_id, a.component_id, a.project_id, a.department_id
-  `)) as unknown as {
-    rows: {
-      employee_party_id: string; component_id: string | null;
-      project_id: string | null; department_id: string | null;
-      description: string | null; previously_settled: string;
-    }[];
-  };
+  `));
   const byEmployee = new Map<string, RetroSettledBucket[]>();
   for (const row of rows.rows) {
     const buckets = byEmployee.get(row.employee_party_id) ?? [];
@@ -416,7 +410,7 @@ async function scheduleTaxYear(
   orgId: string, payScheduleId: string, payDate: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<number> {
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{ country: string | null }>(sql`
     select coalesce(sub.country, root.country) as country
       from pay_schedules sch
       left join subsidiaries sub on sub.id = sch.subsidiary_id and sub.org_id = sch.org_id
@@ -425,7 +419,7 @@ async function scheduleTaxYear(
          where s.org_id = sch.org_id and s.parent_id is null and s.is_active
          order by s.created_at limit 1) root on true
      where sch.org_id = ${orgId} and sch.id = ${payScheduleId}
-  `)) as unknown as { rows: { country: string | null }[] };
+  `));
   const country = rows.rows[0]?.country;
   if (!country) {
     throw new RetroPayError(
@@ -573,7 +567,7 @@ export async function createRetroPayRun(
     for (const period of paying) {
       const difference = period.difference!;
       const buckets = payableRetroBuckets(difference);
-      const settlement = (await tx.execute(sql`
+      const settlement = (await tx.execute<{ id: string }>(sql`
         insert into payroll_retro_settlements
           (org_id, retro_pay_run_document_id, employee_party_id, source_pay_run_document_id,
            source_period_start, source_period_end, source_pay_date, source_tax_year,
@@ -588,7 +582,7 @@ export async function createRetroPayRun(
            ${difference.previouslySettled}, ${difference.delta},
            ${JSON.stringify(period.candidate.reasons)}::jsonb, ${actorId}, ${actorId})
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const settlementId = settlement.rows[0]!.id;
       for (const bucket of buckets) {
         await tx.execute(sql`
@@ -660,7 +654,13 @@ export async function retroEarningLinesForStub(
     nonPeriodic: boolean;
   },
 ): Promise<RetroStubEarningLine[]> {
-  const rows = (await tx.execute(sql`
+  const rows = (await tx.execute<{
+      settlement_id: string;
+      component_id: string | null; description: string;
+      project_id: string | null; department_id: string | null; amount: string;
+      vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
+      source_period_start: string; source_period_end: string; delta: string;
+    }>(sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
            c.vacationable, c.is_active, c.name as component_name,
@@ -674,15 +674,7 @@ export async function retroEarningLinesForStub(
        and st.retro_pay_run_document_id = ${input.payRunDocumentId}
        and st.employee_party_id = ${input.employeePartyId}
      order by st.source_period_start, a.description
-  `)) as unknown as {
-    rows: {
-      settlement_id: string;
-      component_id: string | null; description: string;
-      project_id: string | null; department_id: string | null; amount: string;
-      vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
-      source_period_start: string; source_period_end: string; delta: string;
-    }[];
-  };
+  `));
   if (rows.rows.length === 0) return [];
 
   const lines: RetroStubEarningLine[] = [];
@@ -775,7 +767,13 @@ export async function retroRunReview(
   orgId: string, documentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<RetroRunReview> {
-  const settlements = (await executor.execute(sql`
+  const settlements = (await executor.execute<{
+      id: string; employee_party_id: string; employee_name: string;
+      source_document_number: string; source_period_start: string;
+      source_period_end: string; source_pay_date: string;
+      original_earnings: string; recomputed_earnings: string;
+      previously_settled: string; delta: string; reasons: RetroReason[];
+    }>(sql`
     select st.id, st.employee_party_id, p.display_name as employee_name,
            d.document_number as source_document_number,
            st.source_period_start::text as source_period_start,
@@ -788,20 +786,12 @@ export async function retroRunReview(
       join documents d on d.id = st.source_pay_run_document_id and d.org_id = st.org_id
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
      order by p.display_name, st.source_period_start
-  `)) as unknown as {
-    rows: {
-      id: string; employee_party_id: string; employee_name: string;
-      source_document_number: string; source_period_start: string;
-      source_period_end: string; source_pay_date: string;
-      original_earnings: string; recomputed_earnings: string;
-      previously_settled: string; delta: string; reasons: RetroReason[];
-    }[];
-  };
+  `));
   if (settlements.rows.length === 0) {
     return { documentId, settlements: [], employees: [], total: "0" };
   }
 
-  const allocations = (await executor.execute(sql`
+  const allocations = (await executor.execute<({ settlement_id: string } & Record<string, string | null>)>(sql`
     select a.settlement_id, a.description, c.name as component_name,
            a.project_id, proj.name as project_name,
            a.department_id, dept.name as department_name,
@@ -814,9 +804,7 @@ export async function retroRunReview(
       left join departments dept on dept.id = a.department_id and dept.org_id = a.org_id
      where a.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
      order by a.amount desc
-  `)) as unknown as {
-    rows: ({ settlement_id: string } & Record<string, string | null>)[];
-  };
+  `));
   const bySettlement = new Map<string, RetroReviewAllocation[]>();
   for (const row of allocations.rows) {
     const list = bySettlement.get(row.settlement_id) ?? [];
@@ -891,14 +879,20 @@ export async function retroRunFindings(
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<RetroReadinessFinding[]> {
   const findings: RetroReadinessFinding[] = [];
-  const runRows = (await executor.execute(sql`
+  const runRows = (await executor.execute<{ run_type: string; tax_year: number }>(sql`
     select r.run_type, r.tax_year from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as { rows: { run_type: string; tax_year: number }[] };
+  `));
   const run = runRows.rows[0];
   if (!run || run.run_type !== "retro") return findings;
 
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{
+      id: string; employee_party_id: string; employee_name: string;
+      source_pay_run_document_id: string; source_tax_year: number;
+      previously_settled: string; delta: string; source_document_number: string;
+      source_run_status: string; wage_moved: boolean; component_moved: boolean;
+      other_committed: string; other_open: number; retired_components: number;
+    }>(sql`
     select st.id, st.employee_party_id, p.display_name as employee_name,
            st.source_pay_run_document_id, st.source_tax_year, st.quantified_at,
            st.previously_settled, st.delta,
@@ -947,15 +941,7 @@ export async function retroRunFindings(
       join pay_runs src on src.document_id = st.source_pay_run_document_id and src.org_id = st.org_id
       join documents d on d.id = st.source_pay_run_document_id and d.org_id = st.org_id
      where st.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
-  `)) as unknown as {
-    rows: {
-      id: string; employee_party_id: string; employee_name: string;
-      source_pay_run_document_id: string; source_tax_year: number;
-      previously_settled: string; delta: string; source_document_number: string;
-      source_run_status: string; wage_moved: boolean; component_moved: boolean;
-      other_committed: string; other_open: number; retired_components: number;
-    }[];
-  };
+  `));
 
   if (rows.rows.length === 0) {
     findings.push({
@@ -1009,10 +995,10 @@ export async function retroRunTotal(
   orgId: string, documentId: string,
   executor: Pick<typeof db, "execute"> = db,
 ): Promise<string> {
-  const rows = (await executor.execute(sql`
+  const rows = (await executor.execute<{ total: string }>(sql`
     select coalesce(sum(delta), 0)::text as total from payroll_retro_settlements
      where org_id = ${orgId} and retro_pay_run_document_id = ${documentId}
-  `)) as unknown as { rows: { total: string }[] };
+  `));
   return rows.rows[0]?.total ?? "0";
 }
 

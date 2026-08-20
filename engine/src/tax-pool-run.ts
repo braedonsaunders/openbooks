@@ -44,7 +44,7 @@ async function firstYearRule(
   onDate: string,
   defaultFraction: string | number,
 ): Promise<{ firstYearFraction: string | number; enhancedMultiplier?: string }> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ fraction: string; mult: string | null }>(sql`
     select first_year_fraction::text as fraction, enhanced_multiplier::text as mult
       from tax_first_year_rules
      where org_id = ${orgId} and regime = ${regime}
@@ -52,7 +52,7 @@ async function firstYearRule(
        and (acquired_from is null or acquired_from <= ${onDate})
        and (acquired_to is null or acquired_to >= ${onDate})
      order by class_code nulls last, acquired_from desc nulls last
-     limit 1`)) as unknown as { rows: { fraction: string; mult: string | null }[] };
+     limit 1`));
   const row = r.rows[0];
   if (!row) return { firstYearFraction: defaultFraction };
   return { firstYearFraction: row.fraction, enhancedMultiplier: row.mult ?? undefined };
@@ -61,18 +61,14 @@ async function firstYearRule(
 /** The asset-category tax_attributes key that carries a class code for a regime.
  *  An org regime row can override it; Canadian configurations use "ca_cca_class". */
 async function regimeClassAttribute(orgId: string, regime: string): Promise<string> {
-  const r = (await db.execute(sql`
-    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`)) as unknown as {
-    rows: { class_attribute: string }[];
-  };
+  const r = (await db.execute<{ class_attribute: string }>(sql`
+    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
   return r.rows[0]?.class_attribute ?? TAX_DEPRECIATION_REGIMES[regime]?.classAttribute ?? "tax_pool_class";
 }
 
 async function regimeModel(orgId: string, regime: string): Promise<"pool" | "macrs"> {
-  const r = (await db.execute(sql`
-    select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`)) as unknown as {
-    rows: { calculation_model: "pool" | "macrs" }[];
-  };
+  const r = (await db.execute<{ calculation_model: "pool" | "macrs" }>(sql`
+    select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
   return r.rows[0]?.calculation_model ?? TAX_DEPRECIATION_REGIMES[regime]?.calculationModel ?? "pool";
 }
 
@@ -81,13 +77,11 @@ async function regimeModel(orgId: string, regime: string): Promise<"pool" | "mac
 async function effectiveClasses(orgId: string, regime: string): Promise<Map<string, PoolClassDef>> {
   const map = new Map<string, PoolClassDef>();
   for (const [code, def] of Object.entries(TAX_DEPRECIATION_REGIMES[regime]?.classes ?? {})) map.set(code, def);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ class_code: string; name: string; rate: string; method: "declining" | "straight_line"; fyf: string; allow_recapture: boolean; allow_terminal_loss: boolean; cost_cap: string | null; depreciation_system: "gds" | "ads" | null; macrs_method: "200_db" | "150_db" | "straight_line" | null; recovery_period_years: string | null; convention: "half_year" | "mid_quarter" | "mid_month" | null }>(sql`
     select class_code, name, rate::text as rate, method, first_year_fraction::text as fyf,
            allow_recapture, allow_terminal_loss, cost_cap::text as cost_cap,
            depreciation_system, macrs_method, recovery_period_years::text as recovery_period_years, convention
-      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`)) as unknown as {
-    rows: { class_code: string; name: string; rate: string; method: "declining" | "straight_line"; fyf: string; allow_recapture: boolean; allow_terminal_loss: boolean; cost_cap: string | null; depreciation_system: "gds" | "ads" | null; macrs_method: "200_db" | "150_db" | "straight_line" | null; recovery_period_years: string | null; convention: "half_year" | "mid_quarter" | "mid_month" | null }[];
-  };
+      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`));
   for (const r of rows.rows) {
     map.set(r.class_code, {
       code: r.class_code, rate: r.rate, method: r.method, firstYearFraction: r.fyf,
@@ -105,15 +99,15 @@ async function effectiveClasses(orgId: string, regime: string): Promise<Map<stri
 /** Regimes available for a run/picker: company-country built-ins plus matching
  * tenant-defined regimes. An inactive tenant row can explicitly hide a built-in. */
 export async function listTaxRegimes(orgId: string): Promise<{ code: string; name: string; countryCode: string | null; calculationModel: "pool" | "macrs" }[]> {
-  const org = (await db.execute(sql`select upper(country) as country from orgs where id = ${orgId}`)) as unknown as { rows: { country: string }[] };
+  const org = (await db.execute<{ country: string }>(sql`select upper(country) as country from orgs where id = ${orgId}`));
   const country = org.rows[0]?.country ?? "";
   const byCode = new Map<string, { code: string; name: string; countryCode: string | null; calculationModel: "pool" | "macrs" }>();
   for (const r of Object.values(TAX_DEPRECIATION_REGIMES)) {
     if (r.countryCode === country) byCode.set(r.code, { code: r.code, name: r.name, countryCode: r.countryCode, calculationModel: r.calculationModel });
   }
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ code: string; name: string; country_code: string | null; calculation_model: "pool" | "macrs"; is_active: boolean }>(sql`
     select code, name, upper(country_code) as country_code, calculation_model, is_active
-      from tax_regimes where org_id = ${orgId}`)) as unknown as { rows: { code: string; name: string; country_code: string | null; calculation_model: "pool" | "macrs"; is_active: boolean }[] };
+      from tax_regimes where org_id = ${orgId}`));
   for (const r of rows.rows) {
     if (!r.is_active) { byCode.delete(r.code); continue; }
     // Explicitly installed tenant regimes remain available even when they are
@@ -139,7 +133,7 @@ export async function runTaxPool(
   }
 
   // Additions this year + whether the class still holds assets at year-end.
-  const classRows = (await db.execute(sql`
+  const classRows = (await db.execute<{ class_code: string; additions: string; has_assets: boolean }>(sql`
     select c.tax_attributes->>${attr} as class_code,
            coalesce(sum(case when coalesce(a.in_service_on, a.acquired_on) between ${opts.yearStart} and ${opts.yearEnd}
                              then a.acquisition_cost else 0 end), 0)::text as additions,
@@ -148,12 +142,10 @@ export async function runTaxPool(
       join asset_categories c on c.id = a.category_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
-     group by c.tax_attributes->>${attr}`)) as unknown as {
-    rows: { class_code: string; additions: string; has_assets: boolean }[];
-  };
+     group by c.tax_attributes->>${attr}`));
 
   // Dispositions this year: Σ least(proceeds, capital cost) per class.
-  const dispRows = (await db.execute(sql`
+  const dispRows = (await db.execute<{ class_code: string; dispositions: string }>(sql`
     select c.tax_attributes->>${attr} as class_code,
            coalesce(sum(least(e.amount, a.acquisition_cost)), 0)::text as dispositions
       from asset_events e
@@ -162,9 +154,7 @@ export async function runTaxPool(
      where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and e.kind in ('disposed', 'written_off') and e.occurred_on between ${opts.yearStart} and ${opts.yearEnd}
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
-     group by c.tax_attributes->>${attr}`)) as unknown as {
-    rows: { class_code: string; dispositions: string }[];
-  };
+     group by c.tax_attributes->>${attr}`));
   const dispByClass = new Map(dispRows.rows.map((r) => [r.class_code, r.dispositions]));
 
   const lines: TaxPoolLine[] = [];
@@ -250,7 +240,7 @@ async function runMacrs(
   attr: string,
   classes: Map<string, PoolClassDef>,
 ): Promise<TaxPoolRunResult> {
-  const assets = (await db.execute(sql`
+  const assets = (await db.execute<MacrsAssetRow>(sql`
     select a.id,
            coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode', c.tax_attributes->>${attr}) as class_code,
            a.acquisition_cost::text, coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
@@ -264,7 +254,7 @@ async function runMacrs(
       ) d on true
      where a.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and coalesce(a.in_service_on, a.acquired_on) is not null
-       and coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`)) as unknown as { rows: MacrsAssetRow[] };
+       and coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
 
   // The mid-quarter test is made per placed-in-service vintage. If more than
   // 40% of eligible basis was placed in service in the final three months,
@@ -370,18 +360,18 @@ const addStr = (a: string, b: string) => formatMoney(add(a, b), 2);
 /** Re-running a year must use that year's original opening, not the mutable
  * pool carry-forward balance. A new year opens from the latest prior close. */
 async function openingForTaxYear(orgId: string, poolId: string, taxYear: number, fallback: string): Promise<string> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ opening: string; tax_year: number }>(sql`
     select opening_balance::text as opening, tax_year
       from tax_pool_periods
      where org_id=${orgId} and pool_id=${poolId} and tax_year <= ${taxYear}
-     order by tax_year desc limit 1`)) as unknown as { rows: { opening: string; tax_year: number }[] };
+     order by tax_year desc limit 1`));
   const latest = rows.rows[0];
   if (latest?.tax_year === taxYear) return latest.opening;
   if (latest) {
-    const prior = (await db.execute(sql`
+    const prior = (await db.execute<{ closing: string }>(sql`
       select closing_balance::text as closing from tax_pool_periods
        where org_id=${orgId} and pool_id=${poolId} and tax_year < ${taxYear}
-       order by tax_year desc limit 1`)) as unknown as { rows: { closing: string }[] };
+       order by tax_year desc limit 1`));
     return prior.rows[0]?.closing ?? fallback;
   }
   return fallback;
@@ -395,15 +385,15 @@ async function ensurePool(
   classDef: { code: string; rate: string | number; method: "declining" | "straight_line" },
   actorId: string | null,
 ): Promise<{ id: string; openingBalance: string }> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string; opening: string }>(sql`
     select id, opening_balance::text as opening from tax_depreciation_pools
      where org_id = ${orgId} and book_id = ${bookId} and subsidiary_id = ${subsidiaryId}
        and regime = ${regime} and class_code = ${classDef.code} and is_separate_class = false
-     limit 1`)) as unknown as { rows: { id: string; opening: string }[] };
+     limit 1`));
   if (existing.rows[0]) return { id: existing.rows[0].id, openingBalance: existing.rows[0].opening };
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into tax_depreciation_pools (org_id, book_id, subsidiary_id, regime, class_code, rate, method, created_by, updated_by)
     values (${orgId}, ${bookId}, ${subsidiaryId}, ${regime}, ${classDef.code}, ${classDef.rate}, ${classDef.method}, ${actorId}, ${actorId})
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   return { id: ins.rows[0].id, openingBalance: "0" };
 }

@@ -171,20 +171,20 @@ export async function monthEndLaborAndPayroll(ctx: SimContext): Promise<void> {
   if (!a.laborClearing || !a.laborWip) return;
 
   // 1. Cost the month's approved time: DR billable labor cost / CR labor clearing.
-  const uncosted = (await db.execute(sql`
+  const uncosted = (await db.execute<{ id: string }>(sql`
     select id from time_entries
      where org_id = ${ctx.world.orgId} and status = 'approved'
-       and cost_journal_entry_id is null and project_id is not null`)) as unknown as { rows: { id: string }[] };
+       and cost_journal_entry_id is null and project_id is not null`));
   if (uncosted.rows.length > 0) {
     await postProjectLaborCost(ctx.world.orgId, ctx.world.actors.controller, uncosted.rows.map((r) => r.id));
   }
 
   // 2. Payroll actuals. Total payroll = headcount × fully-loaded monthly cost.
   const totalSalary = ctx.world.employees.reduce((acc, e) => acc + Number(e.costRate) * HOURS_PER_MONTH, 0);
-  const bal = (await db.execute(sql`
+  const bal = (await db.execute<{ s: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as s from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${ctx.world.orgId} and l.account_id = ${a.laborClearing}`)) as unknown as { rows: { s: string }[] };
+     where l.org_id = ${ctx.world.orgId} and l.account_id = ${a.laborClearing}`));
   const clearingCredit = -Number(bal.rows[0]?.s ?? "0"); // credit magnitude = billable labor accrued this month
   const r2 = (n: number) => Math.round(n * 100) / 100;
   const salary = r2(totalSalary);

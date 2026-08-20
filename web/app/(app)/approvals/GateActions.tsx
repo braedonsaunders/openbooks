@@ -12,10 +12,10 @@ import { useTranslations } from 'next-intl'
 import { Button, Select } from '@openbooks/ui'
 import { promptDialog } from '../../../lib/prompt'
 
-export interface DelegateOption {
+export type DelegateOption = {
   id: string
   name: string
-}
+};
 
 export function GateActions({
   gateId,

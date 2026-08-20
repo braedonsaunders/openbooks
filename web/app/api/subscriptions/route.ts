@@ -29,13 +29,13 @@ export async function GET() {
   }
   const orgId = authz.user.orgId;
   const [plans, subs] = await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, name, description, amount, currency_code as "currency", interval,
              interval_count as "intervalCount", income_account_id as "incomeAccountId",
              item_id as "itemId", tax_code_id as "taxCodeId", is_active as "isActive"
         from subscription_plans where org_id = ${orgId} order by name
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.quantity,
              s.price_override as "priceOverride", s.status, s.start_on as "startOn",
              s.next_bill_on as "nextBillOn", s.auto_post as "autoPost", s.run_count as "runCount",
@@ -47,7 +47,7 @@ export async function GET() {
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
         left join parties c on c.id = s.customer_id and c.org_id = s.org_id
        where s.org_id = ${orgId} order by s.created_at desc
-    `) as unknown as Promise<{ rows: any[] }>,
+    `),
   ]);
 
   let mrr = "0.0000";
@@ -76,14 +76,14 @@ export async function POST(req: Request) {
       case "addPlan": {
         if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         if (!INTERVALS.includes(body.interval)) return NextResponse.json({ error: "invalid interval" }, { status: 400 });
-        const r = (await db.execute(sql`
+        const r = (await db.execute<{ id: string }>(sql`
           insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
                                           interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
           values (${orgId}, ${body.name}, ${body.description ?? null}, ${String(body.amount ?? "0")},
                   ${body.currency ?? null}, ${body.interval}, ${Number(body.intervalCount ?? 1)},
                   ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         return NextResponse.json({ id: r.rows[0]!.id }, { status: 201 });
       }
       case "updatePlan": {
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "deletePlan": {
-        const inUse = (await db.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`)) as unknown as { rows: unknown[] };
+        const inUse = (await db.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`));
         if (inUse.rows.length) return NextResponse.json({ error: "plan has subscriptions — archive it instead" }, { status: 422 });
         await db.execute(sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`);
         return NextResponse.json({ ok: true });
@@ -110,14 +110,14 @@ export async function POST(req: Request) {
         // firstBillOn is when the first FULL cycle bills; if it's after the start
         // and proration is requested, we bill the partial [start, firstBillOn] now.
         const firstBillOn = body.firstBillOn || startOn;
-        const r = (await db.execute(sql`
+        const r = (await db.execute<{ id: string }>(sql`
           insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
                                      next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
           values (${orgId}, ${body.customerId}, ${body.planId}, ${String(body.quantity ?? "1")},
                   ${body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null},
                   ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const id = r.rows[0]!.id;
         let proration: unknown = null;
         if (body.prorateFirstPeriod && firstBillOn > startOn) {
@@ -126,7 +126,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ id, proration }, { status: 201 });
       }
       case "changeSubscription": {
-        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`)) as unknown as { rows: unknown[] };
+        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
         if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
         const result = await changeSubscription(body.id, {
           quantity: body.quantity != null ? String(body.quantity) : undefined,
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "billNow": {
-        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`)) as unknown as { rows: unknown[] };
+        const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
         if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
         const gen = await billSubscriptionNow(body.id);
         return NextResponse.json(gen);

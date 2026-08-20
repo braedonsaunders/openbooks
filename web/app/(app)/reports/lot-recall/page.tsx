@@ -32,9 +32,9 @@ export default async function LotRecallReport({
     includeExpiryOnly: sp.expiring === '1',
   })
 
-  const items = (await db.execute(sql`
+  const items = (await db.execute<{ id: string; code: string | null; name: string }>(sql`
     select id, code, name from items where org_id = ${authz.user.orgId} order by code nulls last, name limit 500
-  `)) as unknown as { rows: { id: string; code: string | null; name: string }[] }
+  `))
 
   return (
     <ListPageLayout

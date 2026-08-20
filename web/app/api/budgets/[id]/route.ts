@@ -48,11 +48,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<Record<string, any>>(sql`
         select name, description, kind, book_id, fiscal_year, status, revision,
                exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-      `)) as unknown as { rows: Record<string, any>[] }
+      `))
       const before = locked.rows[0]
       if (!before) throw new BudgetMutationError('not_found', 404)
       if (before.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
@@ -63,7 +63,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (nextBookId !== before.book_id) {
         const validBook = (await tx.execute(sql`
           select 1 from accounting_books where id = ${nextBookId} and org_id = ${user.orgId} and is_active
-        `)) as unknown as { rows: unknown[] }
+        `))
         if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
       }
       if (nextFiscalYear !== Number(before.fiscal_year)) {
@@ -71,7 +71,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const validYear = (await tx.execute(sql`
           select 1 from accounting_periods
            where org_id = ${user.orgId} and fiscal_year = ${nextFiscalYear} and not is_adjustment limit 1
-        `)) as unknown as { rows: unknown[] }
+        `))
         if (!validYear.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
       }
       const nextRevision = expectedRevision + 1
@@ -116,10 +116,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   try {
     await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<Record<string, any>>(sql`
         select name, status, revision from budget_scenarios
          where id = ${id} and org_id = ${user.orgId} for update
-      `)) as unknown as { rows: Record<string, any>[] }
+      `))
       const row = locked.rows[0]
       if (!row) throw new BudgetMutationError('not_found', 404)
       if (row.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_deleted', 409)

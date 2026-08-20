@@ -871,8 +871,7 @@ export function computeDerivedEarnings(input: DerivedEarningsInput): DerivedEarn
 // ---------------------------------------------------------------------------
 // Database-backed entry points
 // ---------------------------------------------------------------------------
-
-interface RuleRow {
+type RuleRow = {
   id: string; code: string; name: string; component_id: string;
   trigger: DerivedTrigger; time_type_id: string | null; project_id: string | null;
   department_id: string | null; equipment_unit_id: string | null; item_id: string | null;
@@ -881,7 +880,7 @@ interface RuleRow {
   quantity_mode: DerivedQuantityMode; rate_mode: DerivedRateMode;
   rate_value: string | null; costing_mode: DerivedCostingMode; sequence: number;
   is_active?: boolean; effective_from?: string; effective_to?: string | null;
-}
+};
 
 function toRule(row: RuleRow): DerivedRule {
   const titles = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
@@ -905,13 +904,13 @@ function toRule(row: RuleRow): DerivedRule {
 export async function loadActiveDerivedRules(
   tx: Pick<typeof db, "execute">, orgId: string, periodEnd: string,
 ): Promise<DerivedRule[]> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<RuleRow>(sql`
     select * from pay_derived_rules
      where org_id = ${orgId} and is_active
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by sequence, code
-  `)) as unknown as { rows: RuleRow[] };
+  `));
   return r.rows.map(toRule);
 }
 
@@ -919,17 +918,15 @@ async function loadComponents(
   tx: Pick<typeof db, "execute">, orgId: string, componentIds: string[],
 ): Promise<Map<string, DerivedComponent>> {
   if (componentIds.length === 0) return new Map();
-  const r = (await tx.execute(sql`
-    select id, name, value, kind, taxable, pensionable, insurable, vacationable, non_periodic
-      from pay_components
-     where org_id = ${orgId} and id = any(${`{${componentIds.join(",")}}`}::uuid[])
-  `)) as unknown as {
-    rows: {
+  const r = (await tx.execute<{
       id: string; name: string; value: string | null; kind: string;
       taxable: boolean; pensionable: boolean; insurable: boolean;
       vacationable: boolean; non_periodic: boolean;
-    }[];
-  };
+    }>(sql`
+    select id, name, value, kind, taxable, pensionable, insurable, vacationable, non_periodic
+      from pay_components
+     where org_id = ${orgId} and id = any(${`{${componentIds.join(",")}}`}::uuid[])
+  `));
   const map = new Map<string, DerivedComponent>();
   for (const row of r.rows) {
     if (row.kind !== "earning") {
@@ -950,12 +947,10 @@ async function loadComponents(
 async function loadEmployeeScope(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
 ): Promise<DerivedEmployeeScope> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{ job_title: string | null; trade_id: string | null; department_id: string | null }>(sql`
     select job_title, trade_id, department_id from employee_roles
      where org_id = ${orgId} and party_id = ${employeePartyId} limit 1
-  `)) as unknown as {
-    rows: { job_title: string | null; trade_id: string | null; department_id: string | null }[];
-  };
+  `));
   const row = r.rows[0];
   return {
     jobTitle: row?.job_title ?? null,
@@ -982,7 +977,12 @@ async function loadEmployeeScope(
 async function loadEquipmentCharges(
   tx: Pick<typeof db, "execute">, orgId: string, from: string, to: string,
 ): Promise<DerivedEquipmentCharge[]> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{
+      id: string; document_date: string | Date; employee_id: string | null;
+      equipment_unit_id: string | null; item_id: string | null;
+      project_id: string | null; department_id: string | null;
+      is_billable: boolean; base_quantity: string; bill_amount: string;
+    }>(sql`
     select dl.id, d.document_date, dl.employee_id, dl.equipment_unit_id, dl.item_id,
            coalesce(dl.project_id, d.project_id) as project_id,
            coalesce(dl.department_id, d.department_id) as department_id,
@@ -1000,14 +1000,7 @@ async function loadEquipmentCharges(
        and dl.equipment_unit_id is not null
        and d.document_date between ${from} and ${to}
      order by d.document_date, dl.id
-  `)) as unknown as {
-    rows: {
-      id: string; document_date: string | Date; employee_id: string | null;
-      equipment_unit_id: string | null; item_id: string | null;
-      project_id: string | null; department_id: string | null;
-      is_billable: boolean; base_quantity: string; bill_amount: string;
-    }[];
-  };
+  `));
   return r.rows.map((row) => ({
     id: row.id,
     day: String(row.document_date instanceof Date
@@ -1033,7 +1026,12 @@ async function loadEntries(
   // Deliberately no payroll_batch_ref filter: lookback and settled-month rows
   // were claimed by the runs that paid their wages, and reading them proves
   // the employee stayed / operated the equipment. Wages are not re-paid here.
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{
+      id: string; employee_party_id: string; worked_on: string; hours: string;
+      time_type_id: string | null; project_id: string | null;
+      department_id: string | null; is_billable: boolean;
+      started_at: string | Date | null; created_at: string | Date;
+    }>(sql`
     select id, employee_party_id, worked_on, hours, time_type_id, project_id,
            department_id, is_billable, started_at, created_at
       from time_entries
@@ -1043,14 +1041,7 @@ async function loadEntries(
      -- Same precedence the comparator applies: the recorded clock time, then
      -- capture order for entries that have none (nulls last, not first).
      order by employee_party_id, worked_on, started_at asc nulls last, created_at, id
-  `)) as unknown as {
-    rows: {
-      id: string; employee_party_id: string; worked_on: string; hours: string;
-      time_type_id: string | null; project_id: string | null;
-      department_id: string | null; is_billable: boolean;
-      started_at: string | Date | null; created_at: string | Date;
-    }[];
-  };
+  `));
   const stamp = (value: string | Date | null): string | null => value === null
     ? null
     : value instanceof Date ? value.toISOString() : String(value);
@@ -1077,14 +1068,14 @@ async function loadEntries(
 async function loadRateOverrides(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, periodEnd: string,
 ): Promise<Record<string, string>> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<{ component_id: string; value: string }>(sql`
     select component_id, value from employee_pay_components
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
        and value is not null
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by effective_from
-  `)) as unknown as { rows: { component_id: string; value: string }[] };
+  `));
   const overrides: Record<string, string> = {};
   for (const row of r.rows) overrides[row.component_id] = row.value;
   return overrides;
@@ -1213,18 +1204,21 @@ export interface DerivedRulePreview {
 export async function previewDerivedRule(
   orgId: string, ruleId: string, periodStart: string, periodEnd: string,
 ): Promise<DerivedRulePreview> {
-  const ruleRes = (await db.execute(sql`
+  const ruleRes = (await db.execute<(RuleRow & { component_name: string })>(sql`
     select r.*, c.name as component_name from pay_derived_rules r
       join pay_components c on c.id = r.component_id and c.org_id = r.org_id
      where r.org_id = ${orgId} and r.id = ${ruleId}
-  `)) as unknown as { rows: (RuleRow & { component_name: string })[] };
+  `));
   const row = ruleRes.rows[0];
   if (!row) throw new DerivedEarningsError("derived earnings rule not found");
   const rule = toRule(row);
 
   // Everyone who could be paid by this run of rules: active employees with a
   // payroll profile, which is exactly the population calculatePayRun walks.
-  const peopleRes = (await db.execute(sql`
+  const peopleRes = (await db.execute<{
+      party_id: string; display_name: string; job_title: string | null;
+      trade_id: string | null; department_id: string | null;
+    }>(sql`
     select p.id as party_id, p.display_name, er.job_title, er.trade_id, er.department_id
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -1232,12 +1226,7 @@ export async function previewDerivedRule(
      where prof.org_id = ${orgId} and prof.is_active
        and (er.terminated_on is null or er.terminated_on >= ${periodStart})
      order by p.display_name
-  `)) as unknown as {
-    rows: {
-      party_id: string; display_name: string; job_title: string | null;
-      trade_id: string | null; department_id: string | null;
-    }[];
-  };
+  `));
   const people = peopleRes.rows;
 
   const window = derivedEntryWindow([rule], periodStart, periodEnd);
@@ -1258,7 +1247,7 @@ export async function previewDerivedRule(
   // calculateStub prices wages from, labelled as the estimate it is.
   const grossByEmployee = new Map<string, string>();
   if (rule.rateMode === "percent_of_gross") {
-    const grossRes = (await db.execute(sql`
+    const grossRes = (await db.execute<{ employee_party_id: string; gross: string }>(sql`
       select te.employee_party_id,
              coalesce(sum(te.hours * coalesce(tt.cost_multiplier, 1) * lcr.rate), 0)::text as gross
         from time_entries te
@@ -1274,7 +1263,7 @@ export async function previewDerivedRule(
          and te.worked_on between ${periodStart} and ${periodEnd}
          and coalesce(tt.exclude_from_wages, false) = false
        group by te.employee_party_id
-    `)) as unknown as { rows: { employee_party_id: string; gross: string }[] };
+    `));
     for (const gross of grossRes.rows) {
       grossByEmployee.set(gross.employee_party_id, roundMoney(gross.gross, 2));
     }
@@ -1342,10 +1331,10 @@ export async function previewDerivedRule(
 
   const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
   if (projectIds.length > 0) {
-    const projects = (await db.execute(sql`
+    const projects = (await db.execute<{ id: string; label: string }>(sql`
       select id, case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
         from projects where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])
-    `)) as unknown as { rows: { id: string; label: string }[] };
+    `));
     const byId = new Map(projects.rows.map((project) => [project.id, project.label]));
     for (const preview of rows) {
       preview.projectName = preview.projectId ? (byId.get(preview.projectId) ?? null) : null;

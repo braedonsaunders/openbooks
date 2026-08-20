@@ -17,9 +17,7 @@ export default async function NavigationAdmin() {
   const tHub = await getTranslations('admin.hub')
 
   const [r, apps] = await Promise.all([
-    db.execute(sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`) as unknown as Promise<{
-      rows: { config: OrgNavConfig }[]
-    }>,
+    db.execute<{ config: OrgNavConfig }>(sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`),
     listApps(user.orgId),
   ])
   const saved = r.rows[0]?.config

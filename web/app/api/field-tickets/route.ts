@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     ],
     sql``,
   )
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select d.id, d.document_number, d.status, d.document_date::text as document_date, d.total,
            ft.period, ft.period_start::text as period_start,
            ft.period_end::text as period_end,
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
       left join parties fm on fm.id = ft.foreman_party_id
      where d.org_id = ${orgId} and d.kind = 'field_ticket'${filters}
      order by d.document_date desc, d.created_at desc
-     limit 200`)) as unknown as { rows: Record<string, unknown>[] }
+     limit 200`))
   return NextResponse.json({ tickets: rows.rows })
 }
 

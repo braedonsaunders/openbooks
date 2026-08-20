@@ -38,16 +38,16 @@ const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
 export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind) {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
-  const org = (await db.execute(
+  const org = (await db.execute<{ base_currency: string }>(
     sql`select base_currency from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { base_currency: string }[] }
+  ))
   const documentNumber = await nextDocumentNumber(orgId, cfg.kind, cfg.prefix)
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ id: string; document_number: string }>(sql`
     insert into documents (org_id, kind, document_number, document_date, currency, subtotal, tax_total, total, created_by)
     values (${orgId}, ${kind}, ${documentNumber}, ${new Date().toISOString().slice(0, 10)},
             ${org.rows[0]?.base_currency ?? 'CAD'}, '0', '0', '0', ${userId})
     returning id, document_number
-  `)) as unknown as { rows: { id: string; document_number: string }[] }
+  `))
   return row.rows[0]!
 }
 
@@ -72,11 +72,11 @@ export async function convertOrder(
 ): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
   return db.transaction(async (tx) => {
-    const src = (await tx.execute(sql`
+    const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
              department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
         from documents where id = ${sourceId} and org_id = ${orgId} for update
-    `)) as unknown as { rows: any[] }
+    `))
     const doc = src.rows[0]
     if (!doc) throw new ConversionError('Order not found')
     if (!ORDER_KINDS.includes(doc.kind)) throw new ConversionError('Not an order document')
@@ -86,12 +86,12 @@ export async function convertOrder(
     const target = (CONVERSION_TARGETS[doc.kind as OrderKind] || []).find((t) => t.kind === targetKind)
     if (!target) throw new ConversionError(`Cannot convert a ${doc.kind} into ${targetKind}`)
 
-    const lines = (await tx.execute(sql`
+    const lines = (await tx.execute<any>(sql`
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
              amount, tax_code_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
              is_billable, quantity_billed
         from document_lines where document_id = ${sourceId} and org_id = ${orgId} order by line_number
-    `)) as unknown as { rows: any[] }
+    `))
 
     // Remaining (un-pulled) quantity per line.
     const remaining = lines.rows
@@ -162,9 +162,9 @@ export async function convertOrder(
       values (${orgId}, ${sourceId}, ${newId}, ${target.link}, ${userId})
     `)
 
-    const opportunityLink = (await tx.execute(sql`
+    const opportunityLink = (await tx.execute<{ opportunity_id: string }>(sql`
       select opportunity_id from crm_opportunity_documents where document_id = ${sourceId}
-    `)) as unknown as { rows: { opportunity_id: string }[] }
+    `))
     if (opportunityLink.rows[0]) {
       await tx.execute(sql`
         insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)

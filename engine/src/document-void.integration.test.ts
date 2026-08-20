@@ -62,21 +62,19 @@ test("controlled void preserves the source and posts an exact open-period revers
     assert.equal(result.status, "voided");
     assert.ok(result.reversalEntryId);
 
-    const document = (await db.execute(sql`
-      select status, posted_entry_id, reversal_entry_id, voided_by,
-             void_reason, void_requested_at
-        from documents
-       where id = ${documentId}
-    `)) as unknown as {
-      rows: {
+    const document = (await db.execute<{
         status: string;
         posted_entry_id: string;
         reversal_entry_id: string;
         voided_by: string;
         void_reason: string;
         void_requested_at: Date | null;
-      }[];
-    };
+      }>(sql`
+      select status, posted_entry_id, reversal_entry_id, voided_by,
+             void_reason, void_requested_at
+        from documents
+       where id = ${documentId}
+    `));
     assert.deepEqual(document.rows[0], {
       status: "voided",
       posted_entry_id: sourceEntryId,
@@ -86,7 +84,14 @@ test("controlled void preserves the source and posts an exact open-period revers
       void_requested_at: null,
     });
 
-    const accounting = (await db.execute(sql`
+    const accounting = (await db.execute<{
+        source_status: string;
+        reversal_status: string;
+        reverses_entry_id: string;
+        source_balance: string;
+        reversal_balance: string;
+        exact_mirror: boolean;
+      }>(sql`
       select
         source.status as source_status,
         reversal.status as reversal_status,
@@ -117,16 +122,7 @@ test("controlled void preserves the source and posts an exact open-period revers
       from journal_entries source
       join journal_entries reversal on reversal.id = ${result.reversalEntryId}
      where source.id = ${sourceEntryId}
-    `)) as unknown as {
-      rows: {
-        source_status: string;
-        reversal_status: string;
-        reverses_entry_id: string;
-        source_balance: string;
-        reversal_balance: string;
-        exact_mirror: boolean;
-      }[];
-    };
+    `));
     assert.deepEqual(accounting.rows[0], {
       source_status: "reversed",
       reversal_status: "posted",
@@ -136,7 +132,7 @@ test("controlled void preserves the source and posts an exact open-period revers
       exact_mirror: true,
     });
 
-    const audit = (await db.execute(sql`
+    const audit = (await db.execute<{ mode: string; reason: string }>(sql`
       select changes->>'mode' as mode,
              changes->>'reason' as reason
         from audit_log
@@ -146,7 +142,7 @@ test("controlled void preserves the source and posts an exact open-period revers
          and action = 'void'
        order by at desc
        limit 1
-    `)) as unknown as { rows: { mode: string; reason: string }[] };
+    `));
     assert.deepEqual(audit.rows[0], {
       mode: "transaction_void",
       reason: "Duplicate vendor invoice entered in error",

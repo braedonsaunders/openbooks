@@ -17,8 +17,7 @@ import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
-
-interface CloseRunRow {
+type CloseRunRow = {
   id: string;
   periodId: string;
   periodName: string;
@@ -30,7 +29,7 @@ interface CloseRunRow {
   scope: { subsidiaryIds?: string[] } | null;
   startedAt: Date;
   lastValidatedAt: Date | null;
-}
+};
 
 function assertCloseSubsidiaries(context: ApplicationContext, subsidiaryIds: string[]): void {
   const allowed = context.authz.allowedSubsidiaryIds;
@@ -48,7 +47,7 @@ function mapCloseError(error: unknown): never {
 }
 
 async function closeRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -58,7 +57,7 @@ async function closeRun(context: ApplicationContext, runId: string): Promise<Clo
       join accounting_books b on b.id = r.book_id
      where r.id = ${runId} and r.org_id = ${context.authz.user.orgId}
      limit 1
-  `)) as unknown as { rows: CloseRunRow[] };
+  `));
   const row = result.rows[0];
   if (!row) throw notFound("close run");
   assertCloseSubsidiaries(context, row.scope?.subsidiaryIds ?? []);
@@ -71,7 +70,7 @@ export async function listCloseRuns(
 ): Promise<CloseRunRow[]> {
   assertApplicationPermission(context, "close.run");
   const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
-  const result = (await db.execute(sql`
+  const result = (await db.execute<CloseRunRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName",
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -83,7 +82,7 @@ export async function listCloseRuns(
        ${input.status ? sql`and r.status = ${input.status}` : sql``}
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
-  `)) as unknown as { rows: CloseRunRow[] };
+  `));
   const allowed = context.authz.allowedSubsidiaryIds;
   return allowed === null
     ? result.rows
@@ -209,10 +208,10 @@ export async function decideReopenRequest(context: ApplicationContext, input: {
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: { requestId: string; approved: boolean } }> {
   assertApplicationPermission(context, "close.reopen");
-  const scope = (await db.execute(sql`
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from close_reopen_requests
      where id = ${input.requestId} and org_id = ${context.authz.user.orgId}
-  `)) as unknown as { rows: { subsidiaryId: string | null }[] };
+  `));
   if (!scope.rows[0]) throw notFound("reopen request");
   assertSubsidiaryAccess(context, scope.rows[0].subsidiaryId);
   const outcome = await executeIdempotent({

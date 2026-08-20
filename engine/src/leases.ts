@@ -436,8 +436,7 @@ export async function createLeaseAgreement(
             '{}'::jsonb, ${actorId}, ${actorId})`);
   return { leaseId, classification };
 }
-
-interface LeaseRow {
+type LeaseRow = {
   id: string;
   subsidiary_id: string;
   lease_number: string;
@@ -461,10 +460,10 @@ interface LeaseRow {
   project_id: string | null;
   location_id: string | null;
   commencement_entry_id: string | null;
-}
+};
 
 async function leaseRow(orgId: string, leaseId: string): Promise<LeaseRow> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<LeaseRow>(sql`
     select id, subsidiary_id, lease_number, status, commencement_on::text as commencement_on, term_periods,
            payment_frequency, payment_timing, payment_amount::text as payment_amount,
            annual_discount_rate_percent::text as annual_discount_rate_percent,
@@ -472,19 +471,19 @@ async function leaseRow(orgId: string, leaseId: string): Promise<LeaseRow> {
            rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
            amortization_expense_account_id, lease_expense_account_id, payment_account_id,
            department_id, project_id, location_id, commencement_entry_id
-      from lease_agreements where org_id = ${orgId} and id = ${leaseId}`)) as unknown as { rows: LeaseRow[] };
+      from lease_agreements where org_id = ${orgId} and id = ${leaseId}`));
   const row = r.rows[0];
   if (!row) throw new LeaseError("lease not found");
   return row;
 }
 
 async function postingContext(orgId: string, subsidiaryId: string, date: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
            (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
               and starts_on <= ${date} and ends_on >= ${date} limit 1) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
-  `)) as unknown as { rows: { book_id: string | null; period_id: string | null; currency: string | null }[] };
+  `));
   const row = r.rows[0];
   if (!row?.book_id) throw new LeaseError("no primary accounting book");
   if (!row.period_id) throw new LeaseError(`no accounting period covers ${date}`);
@@ -507,12 +506,12 @@ async function postLeaseEntry(
   const residual = args.lines.reduce((a, l) => add(a, l.amount), "0");
   if (!isZero(residual)) throw new LeaseError(`lease entry does not balance (${residual})`);
   const ctx = await postingContext(args.orgId, args.lease.subsidiary_id, args.date);
-  const entry = (await tx.execute(sql`
+  const entry = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
     values (${args.orgId}, ${ctx.bookId}, ${args.lease.subsidiary_id}, ${args.entryNumber}, ${args.date},
             ${ctx.periodId}, ${args.memo}, 'draft', 'lease', ${args.actorId}, ${args.actorId})
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const entryId = entry.rows[0]!.id;
   let lineNumber = 1;
   for (const line of args.lines) {
@@ -672,17 +671,7 @@ export async function postDueLeaseSchedules(
   asOfDate: string,
   actorId: string | null,
 ): Promise<PostLeaseScheduleResult> {
-  const due = (await db.execute(sql`
-    select l.id as line_id, l.lease_id, l.sequence, l.due_on::text as due_on,
-           l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
-           l.amortization::text as amortization, l.single_cost::text as single_cost,
-           l.rou_adjustment::text as rou_adjustment
-      from lease_agreement_schedule_lines l
-      join lease_agreements a on a.id = l.lease_id and a.org_id = l.org_id
-     where l.org_id = ${orgId} and a.status = 'active'
-       and l.due_on <= ${asOfDate} and l.payment_entry_id is null
-     order by l.due_on, l.sequence`)) as unknown as {
-    rows: {
+  const due = (await db.execute<{
       line_id: string;
       lease_id: string;
       sequence: number;
@@ -693,8 +682,16 @@ export async function postDueLeaseSchedules(
       amortization: string | null;
       single_cost: string | null;
       rou_adjustment: string | null;
-    }[];
-  };
+    }>(sql`
+    select l.id as line_id, l.lease_id, l.sequence, l.due_on::text as due_on,
+           l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
+           l.amortization::text as amortization, l.single_cost::text as single_cost,
+           l.rou_adjustment::text as rou_adjustment
+      from lease_agreement_schedule_lines l
+      join lease_agreements a on a.id = l.lease_id and a.org_id = l.org_id
+     where l.org_id = ${orgId} and a.status = 'active'
+       and l.due_on <= ${asOfDate} and l.payment_entry_id is null
+     order by l.due_on, l.sequence`));
 
   const result: PostLeaseScheduleResult = { posted: 0, skipped: 0, entries: [] };
   const leases = new Map<string, LeaseRow>();

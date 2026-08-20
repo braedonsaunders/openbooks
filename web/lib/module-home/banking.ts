@@ -58,7 +58,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
     // Roster — one row per reconcilable account with balance + workflow state.
-    db.execute(sql`
+    db.execute<any>(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
              coalesce(bal.balance, 0) as balance,
              coalesce(unm.n, 0) as unmatched,
@@ -96,7 +96,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
     // 7-day figure, folded in as a second grouped shape would cost another
     // scan — computed in JS from daily-precision rows instead is overkill;
     // one extra filtered aggregate below keeps this a single pass).
-    db.execute(sql`
+    db.execute<any>(sql`
       select jl.account_id,
              (date_trunc('week', je.posting_date))::date as wk,
              sum(jl.amount) as flow,
@@ -110,7 +110,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
        group by 1, 2
     `),
     // Directory badges — org-wide counts for the workspace's other pages.
-    db.execute(sql`
+    db.execute<any>(sql`
       select
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,
@@ -123,7 +123,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
             and d.document_date >= current_date - 7
             ${subArr ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``}) as txns_7d
     `),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }]
+  ]))
 
   // Week grid, oldest → newest, aligned with date_trunc('week', …) (Monday).
   const weekStarts: string[] = []

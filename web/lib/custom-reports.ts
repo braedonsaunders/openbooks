@@ -128,14 +128,14 @@ export async function statementDefinitionId(
   kind: string,
   match: Record<string, string> = {},
 ): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     select id from report_definitions
      where org_id = ${orgId} and report_type = 'statement'
        and statement->>'kind' = ${kind}
        and coalesce(statement->'params', '{}'::jsonb) @> ${JSON.stringify(match)}::jsonb
      order by (kind = 'built_in') desc, created_at
      limit 1
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return r.rows[0]?.id ?? null
 }
 
@@ -144,11 +144,11 @@ export async function loadReportDefinition(
   orgId: string,
   id: string,
 ): Promise<ReportDefinitionRow | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ReportDefinitionRow>(sql`
     select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions
      where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: ReportDefinitionRow[] }
+  `))
   return r.rows[0] ?? null
 }
 
@@ -250,12 +250,12 @@ export async function recordReportRun(args: {
   maxRows?: number
 }): Promise<{ runId: string; result: ReportRunResult | null; error: string | null }> {
   const started = new Date().toISOString()
-  const inserted = (await db.execute(sql`
+  const inserted = (await db.execute<{ id: string }>(sql`
     insert into report_runs (org_id, definition_id, schedule_id, trigger, status, started_at, created_by)
     values (${args.orgId}, ${args.definitionId}, ${args.scheduleId ?? null}, ${args.trigger},
             'running', ${started}, ${args.userId})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   const runId = inserted.rows[0]!.id
 
   try {
@@ -307,7 +307,7 @@ export async function uniqueReportSlug(
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (clash.rows.length === 0) return slug
     slug = `${desired}-${n}`
   }

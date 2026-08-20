@@ -27,7 +27,7 @@ export default async function BankFeedsPage() {
   if (!featureEnabled(features, "bankFeeds")) redirect("/admin/setup/features");
 
   const [conns, accts, servers, sched, cfg, hdrs] = await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.last_sync_at as "lastSyncAt", c.last_result as "lastResult", c.last_error as "lastError",
@@ -36,25 +36,25 @@ export default async function BankFeedsPage() {
         from bank_feed_connections c
         join accounts a on a.id = c.account_id and a.org_id = c.org_id
        where c.org_id = ${authz.user.orgId} order by c.created_at desc
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select id, number, name from accounts
        where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
        order by number nulls last
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select id, name, username, root_prefix as "rootPrefix", is_active as "isActive",
              last_connected_at as "lastConnectedAt"
         from sftp_servers where org_id = ${authz.user.orgId} order by created_at desc
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<any>(sql`
       select sc.id, sc.sftp_server_id as "sftpServerId", sc.account_id as "accountId", sc.format, sc.folder,
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
              a.number as "accountNumber", a.name as "accountName"
         from sftp_import_schedules sc
         join accounts a on a.id = sc.account_id
        where sc.org_id = ${authz.user.orgId} order by sc.created_at desc
-    `) as unknown as Promise<{ rows: any[] }>,
+    `),
     loadDaemonConfig(),
     headers(),
   ]);

@@ -56,7 +56,15 @@ test(
       });
       assert.deepEqual(result, { documentId, deleted: true });
 
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<{
+          document_status: string;
+          open_balance: string | null;
+          original_status: string;
+          reversal_count: number;
+          reversal_total: string;
+          void_evidence_complete: boolean;
+          audited_reversal_count: number;
+        }>(sql`
         select d.status as document_status, d.open_balance::text,
                original.status as original_status,
                count(distinct reversal.id)::int as reversal_count,
@@ -84,17 +92,7 @@ test(
             on reversal_line.entry_id = reversal.id
          where d.id = ${documentId}
          group by d.status, d.open_balance, original.status
-      `)) as unknown as {
-        rows: Array<{
-          document_status: string;
-          open_balance: string | null;
-          original_status: string;
-          reversal_count: number;
-          reversal_total: string;
-          void_evidence_complete: boolean;
-          audited_reversal_count: number;
-        }>;
-      };
+      `));
       assert.deepEqual(evidence.rows[0], {
         document_status: "voided",
         open_balance: null,
@@ -111,13 +109,13 @@ test(
         sourceRef,
       });
       assert.deepEqual(repeat, { documentId, deleted: false });
-      const reversalCount = (await db.execute(sql`
+      const reversalCount = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from journal_entries
          where reverses_entry_id = (
            select posted_entry_id from documents where id = ${documentId}
          )
-      `)) as unknown as { rows: Array<{ count: number }> };
+      `));
       assert.equal(reversalCount.rows[0]?.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -183,7 +181,11 @@ test(
         reversalEntryId: null,
       });
 
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<{
+          document_audits: number;
+          resolution_audits: number;
+          voided_documents: number;
+        }>(sql`
         select
           count(*) filter (
             where a.table_name = 'documents'
@@ -204,13 +206,7 @@ test(
           ) as voided_documents
           from audit_log a
          where a.org_id = ${org.orgId}
-      `)) as unknown as {
-        rows: Array<{
-          document_audits: number;
-          resolution_audits: number;
-          voided_documents: number;
-        }>;
-      };
+      `));
       assert.deepEqual(evidence.rows[0], {
         document_audits: 2,
         resolution_audits: 1,

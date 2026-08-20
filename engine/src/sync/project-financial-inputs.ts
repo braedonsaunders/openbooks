@@ -20,8 +20,7 @@ export interface ProjectFinancialInputSyncResult {
   targetOnlyProjects: number;
   applied: boolean;
 }
-
-interface TargetBillingState {
+type TargetBillingState = {
   id: string;
   source_ref: string;
   billing_status: "unbilled" | "billed";
@@ -45,14 +44,13 @@ interface TargetBillingState {
   is_billable: boolean;
   field_ticket_id: string | null;
   field_ticket_project_ref: string | null;
-}
-
-interface TargetProjectState {
+};
+type TargetProjectState = {
   id: string;
   source_ref: string;
   project_type_key: string | null;
   contract_value: string | null;
-}
+};
 
 function duplicates(
   refs: string[],
@@ -103,7 +101,7 @@ export async function syncProjectFinancialInputs(
     );
   }
 
-  const targetResult = (await db.execute(sql`
+  const targetResult = (await db.execute<TargetBillingState>(sql`
     select time.id, time.custom ->> ${source.refKey} as source_ref,
            time.billing_status, time.costing_basis,
            time.custom ->> 'sourceBillingStatus' as source_status,
@@ -137,9 +135,9 @@ export async function syncProjectFinancialInputs(
        and ticket_project.org_id = ticket.org_id
      where time.org_id = ${options.orgId}
        and time.custom ->> ${source.refKey} is not null
-  `)) as unknown as { rows: TargetBillingState[] };
+  `));
 
-  const referenceRows = (await db.execute(sql`
+  const referenceRows = (await db.execute<{ kind: string; id: string; source_ref: string | null }>(sql`
     select 'employee' as kind, id, custom ->> ${source.refKey} as source_ref
       from parties where org_id = ${options.orgId}
     union all
@@ -154,9 +152,7 @@ export async function syncProjectFinancialInputs(
     union all
     select 'time_type', id, custom ->> ${source.refKey}
       from time_types where org_id = ${options.orgId}
-  `)) as unknown as {
-    rows: Array<{ kind: string; id: string; source_ref: string | null }>;
-  };
+  `));
   const idsByKind = new Map<string, Map<string, string>>();
   for (const row of referenceRows.rows) {
     if (!row.source_ref) continue;
@@ -218,7 +214,7 @@ export async function syncProjectFinancialInputs(
         .join(", ")}`,
     );
   }
-  const targetProjectsResult = (await db.execute(sql`
+  const targetProjectsResult = (await db.execute<TargetProjectState>(sql`
     select p.id, p.custom ->> ${source.refKey} as source_ref,
            pt.key as project_type_key, p.contract_value
       from projects p
@@ -226,7 +222,7 @@ export async function syncProjectFinancialInputs(
         on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${options.orgId}
        and p.custom ->> ${source.refKey} is not null
-  `)) as unknown as { rows: TargetProjectState[] };
+  `));
   const targetProjectByRef = new Map<string, TargetProjectState>();
   const duplicateTargetProjectRefs: string[] = [];
   for (const row of targetProjectsResult.rows) {
@@ -245,10 +241,10 @@ export async function syncProjectFinancialInputs(
         .join(", ")}`,
     );
   }
-  const projectTypeResult = (await db.execute(sql`
+  const projectTypeResult = (await db.execute<{ id: string; key: string }>(sql`
     select id, key from project_types
      where org_id = ${options.orgId} and is_active
-  `)) as unknown as { rows: { id: string; key: string }[] };
+  `));
   const projectTypeIdByKey = new Map(
     projectTypeResult.rows.map((row) => [row.key, row.id]),
   );

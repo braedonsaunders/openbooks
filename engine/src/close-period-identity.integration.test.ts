@@ -20,11 +20,11 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const calendar = (await db.execute(sql`
+      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `)) as unknown as { rows: { fiscal_calendar_id: string }[] };
+      `));
       const adjustmentPeriodId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -90,21 +90,17 @@ test(
         runId,
         actors.adminId,
       );
-      const initialDrafts = (await db.execute(sql`
+      const initialDrafts = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `)) as unknown as {
-        rows: { status: string; details: { count: number } }[];
-      };
+      `));
       assert.equal(initialDrafts.rows.length, 0);
-      const initialFx = (await db.execute(sql`
+      const initialFx = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'fx-unrevalued'
-      `)) as unknown as {
-        rows: { status: string; details: { count: number } }[];
-      };
+      `));
       assert.equal(initialFx.rows.length, 0);
 
       await db.execute(sql`
@@ -138,21 +134,17 @@ test(
         actors.adminId,
       );
       assert.notEqual(afterUnassignedDocument.fingerprint, initial.fingerprint);
-      const exactPeriodDrafts = (await db.execute(sql`
+      const exactPeriodDrafts = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `)) as unknown as {
-        rows: { status: string; details: { count: number } }[];
-      };
+      `));
       assert.ok(exactPeriodDrafts.rows.length === 0 || exactPeriodDrafts.rows[0]!.status === "resolved");
-      const missingPeriod = (await db.execute(sql`
+      const missingPeriod = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `)) as unknown as {
-        rows: { status: string; details: { count: number } }[];
-      };
+      `));
       assert.equal(missingPeriod.rows[0]!.status, "open");
       assert.equal(Number(missingPeriod.rows[0]!.details.count), 1);
 
@@ -168,13 +160,11 @@ test(
         actors.adminId,
       );
       assert.equal(afterExactAdjustmentScope.fingerprint, initial.fingerprint);
-      const resolvedPeriodIdentity = (await db.execute(sql`
+      const resolvedPeriodIdentity = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `)) as unknown as {
-        rows: { status: string; details: { count: number } }[];
-      };
+      `));
       assert.equal(resolvedPeriodIdentity.rows[0]!.status, "resolved");
     } finally {
       await dropScratchOrg(org.orgId);

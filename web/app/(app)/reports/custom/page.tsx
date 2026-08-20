@@ -95,20 +95,18 @@ export default async function CustomReports({
     ${params.q ? sql` and (name ilike ${'%' + params.q + '%'} or description ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [defs, counts, filtered] = await Promise.all([
-    db.execute(sql`
+    db.execute<any>(sql`
       select id, kind, slug, name, description, query, updated_at
         from report_definitions
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
+    `),
+    db.execute<{ kind: string; n: string }>(sql`
       select kind, count(*) as n from report_definitions
        where org_id = ${authz.user.orgId} group by kind
-    `) as unknown as Promise<{ rows: { kind: string; n: string }[] }>,
-    db.execute(sql`select count(*) as n from report_definitions where ${where}`) as unknown as Promise<{
-      rows: { n: string }[]
-    }>,
+    `),
+    db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`),
   ])
 
   const total = counts.rows.reduce((a, r) => a + Number(r.n), 0)

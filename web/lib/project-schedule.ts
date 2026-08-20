@@ -166,11 +166,9 @@ export class ScheduleError extends Error {
 
 /** Confirm a task belongs to this org AND this project before touching it. */
 async function assertTaskInProject(orgId: string, projectId: string, taskId: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Row>(sql`
     select 1 from project_tasks
-     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`)) as unknown as {
-    rows: Row[]
-  }
+     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`))
   if (!r.rows[0]) throw new ScheduleError('task not found', 404)
 }
 
@@ -297,14 +295,14 @@ export async function createScheduleTask(
   input: ScheduleTaskPatchInput & { name: string },
   userId: string | null,
 ) {
-  const next = (await db.execute(sql`
+  const next = (await db.execute<{ n: number }>(sql`
     select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
-     where org_id = ${orgId} and project_id = ${projectId}`)) as unknown as { rows: { n: number }[] }
-  const created = (await db.execute(sql`
+     where org_id = ${orgId} and project_id = ${projectId}`))
+  const created = (await db.execute<{ id: string }>(sql`
     insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
     values (${orgId}, ${projectId}, ${input.name || 'New task'},
             ${input.order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
-    returning id`)) as unknown as { rows: { id: string }[] }
+    returning id`))
   const id = created.rows[0]?.id
   if (!id) throw new ScheduleError('could not create task', 500)
   const { name: _name, order: _order, ...rest } = input
@@ -315,9 +313,9 @@ export async function createScheduleTask(
 export async function deleteScheduleTask(orgId: string, projectId: string, taskId: string) {
   await assertTaskInProject(orgId, projectId, taskId)
   // A task with posted time is job-costing history; refuse rather than orphan it.
-  const timeEntries = (await db.execute(sql`
+  const timeEntries = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from time_entries
-     where org_id = ${orgId} and project_task_id = ${taskId}`)) as unknown as { rows: { n: number }[] }
+     where org_id = ${orgId} and project_task_id = ${taskId}`))
   if ((timeEntries.rows[0]?.n ?? 0) > 0) {
     throw new ScheduleError('task has time entries and cannot be deleted', 409)
   }
@@ -348,9 +346,9 @@ export async function createScheduleDependency(
 
   // Refuse loops at the boundary: a cycle makes the critical path undefined for
   // the whole project, and the UI can only prevent the ones it can see.
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<Row>(sql`
     select id, predecessor_id, successor_id, type, lag_days from schedule_dependencies
-     where org_id = ${orgId} and project_id = ${projectId}`)) as unknown as { rows: Row[] }
+     where org_id = ${orgId} and project_id = ${projectId}`))
   const dependencies: ScheduleDependency[] = existing.rows.map((row) => ({
     id: String(row.id),
     predecessorId: String(row.predecessor_id),
@@ -389,12 +387,12 @@ export async function createScheduleBaseline(
         update schedule_baselines set is_primary = false, updated_at = now(), updated_by = ${userId}
          where org_id = ${orgId} and project_id = ${projectId} and is_primary`)
     }
-    const created = (await tx.execute(sql`
+    const created = (await tx.execute<{ id: string }>(sql`
       insert into schedule_baselines (org_id, project_id, name, description, kind, is_primary, created_by, updated_by)
       values (${orgId}, ${projectId}, ${input.name}, ${input.description ?? null},
               ${input.kind ?? (input.isPrimary ? 'primary' : 'snapshot')}, ${input.isPrimary === true},
               ${userId}, ${userId})
-      returning id`)) as unknown as { rows: { id: string }[] }
+      returning id`))
     const baselineId = created.rows[0]?.id
     if (!baselineId) throw new ScheduleError('could not create baseline', 500)
     await tx.execute(sql`
@@ -447,14 +445,14 @@ export async function upsertScheduleCalendar(
        where id = ${input.id} and org_id = ${orgId}`)
     return input.id
   }
-  const created = (await db.execute(sql`
+  const created = (await db.execute<{ id: string }>(sql`
     insert into schedule_calendars (org_id, project_id, name, description, working_days, holidays, is_default, created_by, updated_by)
     values (${orgId}, ${projectId}, ${input.name ?? 'Calendar'}, ${input.description ?? null},
             coalesce(${input.workingDays ? JSON.stringify(input.workingDays) : null}::jsonb,
                      '{"0":false,"1":true,"2":true,"3":true,"4":true,"5":true,"6":false}'::jsonb),
             coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, '[]'::jsonb),
             ${input.isDefault === true}, ${userId}, ${userId})
-    returning id`)) as unknown as { rows: { id: string }[] }
+    returning id`))
   return created.rows[0]?.id ?? null
 }
 
@@ -502,7 +500,7 @@ export async function upsertScheduleResource(
        where id = ${input.id} and org_id = ${orgId}`)
     return input.id
   }
-  const created = (await db.execute(sql`
+  const created = (await db.execute<{ id: string }>(sql`
     insert into schedule_resources
       (org_id, project_id, calendar_id, name, role, kind, default_units, capacity_per_day, cost_rate, created_by, updated_by)
     values (${orgId}, ${projectId}, ${input.calendarId ?? null}, ${input.name ?? 'Resource'},
@@ -510,7 +508,7 @@ export async function upsertScheduleResource(
             ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
             ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
             ${input.costRate ?? null}, ${userId}, ${userId})
-    returning id`)) as unknown as { rows: { id: string }[] }
+    returning id`))
   return created.rows[0]?.id ?? null
 }
 

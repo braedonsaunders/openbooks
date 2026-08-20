@@ -49,7 +49,7 @@ export default async function OverheadModelSetup({
   from.setFullYear(from.getFullYear() - 1)
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   const data = await trueCostData(authz.user.orgId, { from: iso(from), to: iso(to), label: 'TTM' })
-  const typesRes = (await db.execute(sql`
+  const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: number; ratePerHour?: number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
       from project_types pt
@@ -64,20 +64,14 @@ export default async function OverheadModelSetup({
          limit 1
       ) version on true
      where pt.org_id = ${authz.user.orgId} and pt.is_active
-     order by pt.sort_order, pt.name`)) as unknown as {
-    rows: { id: string; name: string; overhead: { method?: string; ratePercent?: number; ratePerHour?: number } | null }[]
-  }
-  const cardRes = (await db.execute(sql`
+     order by pt.sort_order, pt.name`))
+  const cardRes = (await db.execute<{ n: number; from_date: string | null }>(sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= current_date)`)) as unknown as {
-    rows: { n: number; from_date: string | null }[]
-  }
+       and (effective_to is null or effective_to >= current_date)`))
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
-  const lifecycleRes = (await db.execute(sql`
-    select settings->'overheadRateLifecycle' as c from orgs where id = ${authz.user.orgId}`)) as unknown as {
-    rows: { c: { mode?: string; cadence?: string } | null }[]
-  }
+  const lifecycleRes = (await db.execute<{ c: { mode?: string; cadence?: string } | null }>(sql`
+    select settings->'overheadRateLifecycle' as c from orgs where id = ${authz.user.orgId}`))
   const lifecycleCfg = lifecycleRes.rows[0]?.c ?? {}
   const lifecycle = {
     mode: (['manual', 'scheduled', 'live'].includes(lifecycleCfg.mode ?? '') ? lifecycleCfg.mode : 'manual') as 'manual' | 'scheduled' | 'live',

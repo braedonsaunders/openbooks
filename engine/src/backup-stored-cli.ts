@@ -36,40 +36,38 @@ if (!s3Enabled) {
   throw new Error("stored S3 backup is not configured in this runtime");
 }
 
-const org = (await db.execute(sql`
+const org = (await db.execute<{ id: string; name: string; env_kind: string }>(sql`
   select id, name, env_kind from orgs where id = ${orgId}
-`)) as unknown as {
-  rows: { id: string; name: string; env_kind: string }[];
-};
+`));
 if (!org.rows[0]) throw new Error("organization not found");
 if (org.rows[0].env_kind !== "sandbox" && !args.has("production")) {
   throw new Error("--production is required for a live tenant");
 }
-const actor = (await db.execute(sql`
+const actor = (await db.execute<{ id: string }>(sql`
   select id from users where id = ${actorId} and org_id = ${orgId}
-`)) as unknown as { rows: { id: string }[] };
+`));
 if (!actor.rows[0]) throw new Error("audit actor does not belong to organization");
 
-const active = (await db.execute(sql`
+const active = (await db.execute<{ id: string }>(sql`
   select id from backup_runs
    where org_id = ${orgId} and status in ('queued', 'running')
    limit 1
-`)) as unknown as { rows: { id: string }[] };
+`));
 if (active.rows[0]) {
   throw new Error(`backup ${active.rows[0].id} is already in progress`);
 }
-const inserted = (await db.execute(sql`
+const inserted = (await db.execute<{ id: string }>(sql`
   insert into backup_runs (org_id, kind, status, actor_id)
   values (${orgId}, 'manual', 'queued', ${actorId})
   returning id
-`)) as unknown as { rows: { id: string }[] };
+`));
 const runId = inserted.rows[0]!.id;
 await executeBackupRun(runId);
-const result = (await db.execute(sql`
+const result = (await db.execute<Record<string, unknown>>(sql`
   select id, org_id, kind, status, object_key, file_name, byte_size::text,
          sha256, table_count, row_count, started_at, completed_at, error
     from backup_runs where id = ${runId} and org_id = ${orgId}
-`)) as unknown as { rows: Array<Record<string, unknown>> };
+`));
 const report = result.rows[0];
 writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, {
   encoding: "utf8",

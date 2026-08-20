@@ -62,12 +62,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
   )
   const searchText = await buildSearchText(lint.sections, data, recordNumber)
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; record_number: string }>(sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)
     values (${user.orgId}, ${type.id}, ${typeKey}, ${recordNumber}, ${JSON.stringify(data)}::jsonb,
             ${searchText}, ${user.id}, ${user.id})
     returning id, record_number
-  `)) as unknown as { rows: { id: string; record_number: string }[] }
+  `))
 
   return NextResponse.json({ id: r.rows[0]!.id, recordNumber: r.rows[0]!.record_number })
 }

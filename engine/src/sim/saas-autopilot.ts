@@ -53,10 +53,10 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
 
   // 2. Build recognition schedules for freshly-billed, posted, not-yet-obligated
   //    subscription invoices; make each collectible.
-  const fresh = (await db.execute(sql`
+  const fresh = (await db.execute<{ id: string }>(sql`
     select d.id from documents d
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-       and coalesce((d.custom->'sim'->>'obligated')::boolean, false) = false`)) as unknown as { rows: { id: string }[] };
+       and coalesce((d.custom->'sim'->>'obligated')::boolean, false) = false`));
   for (const inv of fresh.rows) {
     try {
       const r = await createObligationsFromInvoice(inv.id, world.orgId, world.actors.controller);
@@ -107,10 +107,8 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
   // 5. Expansion + churn: seat upgrades (prorated) and the occasional cancellation.
   if (dayOfMonth(today) === 18) {
     const seed = Number(today.slice(5, 7)); // month, for a deterministic pick
-    const active = (await db.execute(sql`
-      select id, quantity from subscriptions where org_id = ${world.orgId} and status = 'active' order by id`)) as unknown as {
-      rows: { id: string; quantity: string }[];
-    };
+    const active = (await db.execute<{ id: string; quantity: string }>(sql`
+      select id, quantity from subscriptions where org_id = ${world.orgId} and status = 'active' order by id`));
     if (active.rows.length > 0) {
       // Expansion: bump seats on one subscription.
       const up = active.rows[seed % active.rows.length]!;

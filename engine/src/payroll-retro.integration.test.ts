@@ -177,10 +177,10 @@ test(
       }
 
       // The simulation is rolled back: the committed stubs are untouched.
-      const untouched = (await db.execute(sql`
+      const untouched = (await db.execute<{ gross: string }>(sql`
         select gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${sourceRuns[0]}
-      `)) as unknown as { rows: { gross: string }[] };
+      `));
       assert.equal(untouched.rows[0]!.gross, "2400.0000", "recalculating a paid period changes nothing");
 
       // ---- Pay ---------------------------------------------------------------
@@ -215,10 +215,10 @@ test(
         update pay_components set vacationable = false
          where org_id = ${org.orgId} and system_key = 'base_pay'`);
       await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
-      const noVacation = (await db.execute(sql`
+      const noVacation = (await db.execute<{ vacation_accrued: string }>(sql`
         select vacation_accrued from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}
-      `)) as unknown as { rows: { vacation_accrued: string }[] };
+      `));
       assert.equal(noVacation.rows[0]!.vacation_accrued, "0.0000");
       await db.execute(sql`
         update pay_components set vacationable = true
@@ -230,10 +230,10 @@ test(
       assert.deepEqual(calculated.errors, []);
       assert.equal(calculated.gross, "720.0000", "the retro cheque IS the difference");
 
-      const stub = (await db.execute(sql`
+      const stub = (await db.execute<{ gross: string; vacation_accrued: string; factors: Record<string, string> }>(sql`
         select gross, vacation_accrued, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}
-      `)) as unknown as { rows: { gross: string; vacation_accrued: string; factors: Record<string, string> }[] };
+      `));
       assert.equal(stub.rows[0]!.gross, "720.0000");
       assert.equal(stub.rows[0]!.vacation_accrued, "28.8000", "4% of $720.00");
       // The CA pack declares retroactive pay non-periodic (T4127 Method 2), so
@@ -243,15 +243,13 @@ test(
       assert.equal(stub.rows[0]!.factors.I, "0.0000");
 
       // Job costing: the retro earning lines carry the projects.
-      const stubLines = (await db.execute(sql`
+      const stubLines = (await db.execute<{ project_id: string | null; amount: string; hours: string | null; description: string }>(sql`
         select l.project_id, l.amount, l.hours, l.description
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${retro.documentId}
            and l.kind = 'earning'
-      `)) as unknown as {
-        rows: { project_id: string | null; amount: string; hours: string | null; description: string }[];
-      };
+      `));
       assert.equal(stubLines.rows.length, 6, "two jobs × three periods");
       const jobATotal = sum(stubLines.rows.filter((l) => l.project_id === jobA).map((l) => l.amount));
       const jobBTotal = sum(stubLines.rows.filter((l) => l.project_id === jobB).map((l) => l.amount));
@@ -267,10 +265,10 @@ test(
       );
 
       await commitPayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
-      const legs = (await db.execute(sql`
+      const legs = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from document_lines
          where org_id = ${org.orgId} and document_id = ${retro.documentId}
-      `)) as unknown as { rows: { amount: string; project_id: string | null }[] };
+      `));
       assert.equal(cmp(sum(legs.rows.map((l) => l.amount)), "0"), 0, "the GL projection balances");
       assert.equal(
         sum(legs.rows.filter((l) => l.project_id === jobA).map((l) => l.amount)),

@@ -15,7 +15,7 @@ export async function GET() {
   const r = (await db.execute(sql`
     select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at, created_at
       from sftp_servers where org_id = ${gate.user.orgId} order by created_at desc
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({ servers: r.rows })
 }
 
@@ -37,11 +37,11 @@ export async function POST(req: Request) {
   const bucket = backend === 's3' ? appBucket() : null
   const rootPrefix = (body.rootPrefix?.trim() || `sftp/${user.orgId}/${username}`).replace(/^\/+|\/+$/g, '')
   const authorizedKeys = body.authorizedKeys?.trim() || null
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by)
     values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password)}, ${authorizedKeys},
             ${backend}, ${bucket}, ${rootPrefix}, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id, username, password, rootPrefix, backend })
 }

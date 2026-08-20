@@ -21,10 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const res = (await db.execute(sql`
-    select id, file_name, object_key, status, purged_at, sha256, byte_size::text as byte_size
-      from backup_runs where id = ${id} and org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const res = (await db.execute<{
       id: string;
       file_name: string | null;
       object_key: string | null;
@@ -32,8 +29,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       purged_at: string | null;
       sha256: string | null;
       byte_size: string | null;
-    }[];
-  };
+    }>(sql`
+    select id, file_name, object_key, status, purged_at, sha256, byte_size::text as byte_size
+      from backup_runs where id = ${id} and org_id = ${orgId}`));
   const run = res.rows[0];
   if (!run || run.status !== "completed" || run.purged_at || !run.object_key || !run.sha256 || !run.byte_size) {
     return NextResponse.json({ error: "backup not found" }, { status: 404 });

@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 
 export async function loadCrmAccount(partyId: string, orgId: string) {
-  const profile = (await db.execute(sql`
+  const profile = (await db.execute<Record<string, unknown>>(sql`
     select cp.*, s.name as status_name, s.is_qualified, u.name as owner_name,
            t.name as territory_name, ls.name as lead_source_name
       from crm_account_profiles cp
@@ -12,7 +12,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
       left join crm_sales_territories t on t.id = cp.territory_id
       left join crm_lead_sources ls on ls.id = cp.lead_source_id
      where cp.party_id = ${partyId} and cp.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!profile.rows[0]) return null
   const [activities, opportunities, stageEvents, assignments] = await Promise.all([
     db.execute(sql`
@@ -58,7 +58,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
 }
 
 export async function loadOpportunity(id: string, orgId: string) {
-  const opportunity = (await db.execute(sql`
+  const opportunity = (await db.execute<Record<string, unknown>>(sql`
     select o.*, p.display_name as party_name, c.name as contact_name,
            s.name as status_name, s.is_closed, s.is_won,
            u.name as owner_name, st.name as sales_team_name, ls.name as lead_source_name
@@ -70,7 +70,7 @@ export async function loadOpportunity(id: string, orgId: string) {
       left join crm_sales_teams st on st.id = o.sales_team_id
       left join crm_lead_sources ls on ls.id = o.lead_source_id
      where o.id = ${id} and o.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!opportunity.rows[0]) return null
   const [lines, team, documents, activities, history] = await Promise.all([
     db.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${orgId} order by line_number`),
@@ -100,12 +100,12 @@ export async function loadOpportunity(id: string, orgId: string) {
 }
 
 export async function loadActivity(id: string, orgId: string) {
-  const activity = (await db.execute(sql`
+  const activity = (await db.execute<Record<string, unknown>>(sql`
     select a.*, ou.name as owner_name, au.name as assigned_name
       from crm_activities a
       left join users ou on ou.id = a.owner_user_id
       left join users au on au.id = a.assigned_user_id
-     where a.id = ${id} and a.org_id = ${orgId}`)) as unknown as { rows: Record<string, unknown>[] }
+     where a.id = ${id} and a.org_id = ${orgId}`))
   if (!activity.rows[0]) return null
   const [links, participants] = await Promise.all([
     db.execute(sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`),
@@ -131,7 +131,7 @@ export interface ForecastScope {
 export async function calculateForecast(scope: ForecastScope) {
   const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
   const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, string>>(sql`
     with opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
         from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id
@@ -159,6 +159,6 @@ export async function calculateForecast(scope: ForecastScope) {
       left join opportunity_base o on o.currency = c.currency
       left join actuals a on a.currency = c.currency
      group by c.currency order by c.currency
-  `)) as unknown as { rows: Record<string, string>[] }
+  `))
   return rows.rows
 }

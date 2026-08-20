@@ -18,14 +18,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
   if (!isUuid(runId)) return NextResponse.json({ error: 'invalid_report' }, { status: 422 })
   const readable = readableContinuousCloseAgents(gate)
   if (!readable.length) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ agent_key: 'accounting' | 'finance'; finished_at: Date; narrative: Record<string, unknown> }>(sql`
     select r.agent_key, r.finished_at, r.stats->'enrichment'->'narrative' as narrative
       from ai_agent_runs r
      where r.id = ${runId} and r.org_id = ${gate.user.orgId}
        and r.agent_key in (${sql.join(readable.map((agent) => sql`${agent}`), sql`, `)})
        and r.status = 'completed'
        and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'
-  `)) as unknown as { rows: { agent_key: 'accounting' | 'finance'; finished_at: Date; narrative: Record<string, unknown> }[] }
+  `))
   const run = result.rows[0]
   if (!run) return NextResponse.json({ error: 'report_not_found' }, { status: 404 })
 

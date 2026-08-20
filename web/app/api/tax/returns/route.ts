@@ -11,14 +11,12 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ code: string; name: string; country: string | null; submission_channel: string; government_format: string; submission_url: string | null; has_official: boolean }>(sql`
     select code, name, country, submission_channel, government_format, submission_url,
            official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${gate.user.orgId} and is_active
-     order by name`)) as unknown as {
-    rows: { code: string; name: string; country: string | null; submission_channel: string; government_format: string; submission_url: string | null; has_official: boolean }[]
-  }
+     order by name`))
   return NextResponse.json({ forms: r.rows })
 }
 
@@ -27,9 +25,9 @@ export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const body = await req.json().catch(() => null)
-  const installedRows = (await db.execute(sql`
+  const installedRows = (await db.execute<{ code: string }>(sql`
     select code from tax_return_forms where org_id = ${gate.user.orgId}
-  `)) as unknown as { rows: { code: string }[] }
+  `))
   const plan = planTaxReturnLibraryChange(
     body,
     new Set(TAX_RETURN_PACKS.map((pack) => pack.code)),

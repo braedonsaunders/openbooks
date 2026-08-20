@@ -11,12 +11,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ filename: string; content_type: string; bytes: Buffer; content_hash: string }>(sql`
     select a.filename, a.content_type, a.bytes, a.content_hash
       from report_run_artifacts a
       join report_runs r on r.id=a.run_id and r.org_id=a.org_id
      where r.id=${id} and r.org_id=${gate.user.orgId}
-  `)) as unknown as { rows: { filename: string; content_type: string; bytes: Buffer; content_hash: string }[] }
+  `))
   const row = result.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return blobResponse(req, {

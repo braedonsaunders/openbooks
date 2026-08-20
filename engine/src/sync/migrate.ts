@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../db.ts";
+import { db, withOrg, type SqlExecutor } from "../db.ts";
 import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
 import type {
   EntityStream,
@@ -725,7 +725,7 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
 }
 
 async function auditTimeBillingChange(
-  tx: { execute: (query: any) => Promise<any> },
+  tx: SqlExecutor,
   ctx: Ctx,
   timeEntryId: string,
   sourceRef: string,
@@ -859,7 +859,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
           continue;
         }
         const changed = await db.transaction(async (tx) => {
-          const updated = (await tx.execute(sql`
+          const updated = (await tx.execute<{ id: string }>(sql`
             update time_entries
                set billing_status = ${effectiveBillingStatus},
                    costing_basis = ${sourceCostingBasis},
@@ -872,7 +872,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
                  billing_status is distinct from ${effectiveBillingStatus}
                  or costing_basis is distinct from ${sourceCostingBasis}
                )
-             returning id`)) as unknown as { rows: { id: string }[] };
+             returning id`));
           if (updated.rows.length) {
             await auditTimeBillingChange(
               tx,
@@ -896,7 +896,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       const billingChanged =
         effectiveBillingStatus !== prior.billingStatus;
       const costingChanged = sourceCostingBasis !== prior.costingBasis;
-      const update = (tx: { execute: (query: any) => Promise<any> }) =>
+      const update = (tx: SqlExecutor) =>
         tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
           time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
           project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},

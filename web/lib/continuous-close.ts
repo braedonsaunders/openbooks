@@ -22,9 +22,9 @@ export function readableContinuousCloseAgents(authz: Authz): ("accounting" | "fi
 }
 
 export async function loadWorkItemAccess(orgId: string, itemId: string): Promise<WorkItemAccess | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ agent_key: "accounting" | "finance"; status: WorkItemAccess["status"] }>(sql`
     select agent_key, status from ai_work_items where id = ${itemId} and org_id = ${orgId}
-  `)) as unknown as { rows: { agent_key: "accounting" | "finance"; status: WorkItemAccess["status"] }[] };
+  `));
   const row = result.rows[0];
   return row ? { agentKey: row.agent_key, status: row.status } : null;
 }

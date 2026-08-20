@@ -54,26 +54,26 @@ export async function runOwnershipConsolidation(
       const context = await loadSubsidiaryContext(tx as any, orgId);
       const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
       if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
-      const periodResult = (await tx.execute(sql`
+      const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string }>(sql`
         select id, starts_on, ends_on, name from accounting_periods where id=${periodId} and org_id=${orgId}
-      `)) as unknown as { rows: { id: string; starts_on: string; ends_on: string; name: string }[] };
+      `));
       const period = periodResult.rows[0];
       if (!period) throw new ConsolidationError(`period ${periodId} not found`);
-      const bookResult = (await tx.execute(sql`
+      const bookResult = (await tx.execute<{ id: string }>(sql`
         select id from accounting_books where org_id=${orgId} and is_primary and is_active limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const bookId = bookResult.rows[0]?.id;
       if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
-      const interests = (await tx.execute(sql`
+      const interests = (await tx.execute<OwnershipInterest>(sql`
         select * from subsidiary_ownership_interests
          where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
            and (effective_to is null or effective_to >= ${period.starts_on})
          order by subsidiary_id, effective_from
-      `)) as unknown as { rows: OwnershipInterest[] };
-      const run = (await tx.execute(sql`
+      `));
+      const run = (await tx.execute<{ id: string }>(sql`
         insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
         values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const runId = run.rows[0]!.id;
       const entryIds: string[] = [];
       let sequence = 0;
@@ -83,13 +83,13 @@ export async function runOwnershipConsolidation(
         if (material.length === 0) return null;
         assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
         sequence++;
-        const inserted = (await tx.execute(sql`
+        const inserted = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
           values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId.slice(0,8)}-${sequence}`},
                   ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const entryId = inserted.rows[0]!.id;
         for (let index = 0; index < material.length; index++) {
           const line = material[index]!;
@@ -116,28 +116,28 @@ export async function runOwnershipConsolidation(
         return entryId;
       };
 
-      const prior = (await tx.execute(sql`
+      const prior = (await tx.execute<{ interest_id: string; id: string; entry_number: string }>(sql`
         select oce.interest_id, je.id, je.entry_number
           from ownership_consolidation_entries oce
           join ownership_consolidation_runs r on r.id=oce.run_id and r.period_id=${periodId}
           join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
          where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
            and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted')
-      `)) as unknown as { rows: { interest_id: string; id: string; entry_number: string }[] };
+      `));
       for (const old of prior.rows) {
-        const oldLines = (await tx.execute(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} order by line_number`)) as unknown as { rows: { account_id: string; amount: string; memo: string | null }[] };
+        const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} order by line_number`));
         await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
       }
 
       for (const interest of interests.rows) {
-        const periodActivity = (await tx.execute(sql`
+        const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
           select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
                  coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
            from journal_lines l join journal_entries e on e.id=l.entry_id
             join accounts a on a.id=l.account_id
            where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
              and e.period_id=${periodId}
-        `)) as unknown as { rows: { profit: string; distributions: string }[] };
+        `));
         const profit = periodActivity.rows[0]!.profit;
         const distributions = periodActivity.rows[0]!.distributions;
 
@@ -147,16 +147,16 @@ export async function runOwnershipConsolidation(
              join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
             where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
               and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted') limit 1
-          `)) as unknown as { rows: unknown[] };
+          `));
           if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
-            const equity = (await tx.execute(sql`
+            const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
               select l.account_id,coalesce(sum(l.amount),0)::text as amount
                 from journal_lines l join journal_entries e on e.id=l.entry_id
                 join accounts a on a.id=l.account_id and a.type='equity'
                where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
                  and e.posting_date <= ${interest.acquisition_date}
                group by l.account_id having sum(l.amount)<>0
-            `)) as unknown as { rows: { account_id: string; amount: string }[] };
+            `));
             const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
             const bookNetAssets = sum(translatedEquity.map((line) => neg(line.balance)));
             const nciPercent = fromUnits(toUnits("100") - toUnits(interest.ownership_percent));
@@ -231,18 +231,16 @@ async function neededPairs(orgId: string): Promise<{ from: string; to: string }[
  * Upserts source='derived' rows; rows a controller set to 'manual' are kept.
  */
 export async function deriveConsolidatedRates(orgId: string, periodId: string): Promise<number> {
-  const periodRes = (await db.execute(sql`
+  const periodRes = (await db.execute<{ id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number }>(sql`
     select id, starts_on, ends_on, fiscal_year, period_number from accounting_periods
-     where id = ${periodId} and org_id = ${orgId}`)) as unknown as {
-    rows: { id: string; starts_on: string; ends_on: string; fiscal_year: number; period_number: number }[];
-  };
+     where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
   if (!period) throw new ConsolidationError(`period ${periodId} not found`);
 
   const pairs = await neededPairs(orgId);
   let written = 0;
   for (const pair of pairs) {
-    const rates = (await db.execute(sql`
+    const rates = (await db.execute<{ current: string | null; average: string | null; historical: string | null }>(sql`
       select
         (select rate from fx_rates
           where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
@@ -257,7 +255,7 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
           where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
             and p.ends_on < ${period.starts_on}
           order by p.ends_on desc limit 1) as historical
-    `)) as unknown as { rows: { current: string | null; average: string | null; historical: string | null }[] };
+    `));
     const r = rates.rows[0];
     if (!r?.current) {
       throw new ConsolidationError(
@@ -310,7 +308,7 @@ export async function runAutoElimination(
   // what to reverse or create happens after this transaction-scoped lock.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
 
-  const activity = (await tx.execute(sql`
+  const activity = (await tx.execute<{ accountId: string; subsidiaryId: string; total: string | null; missingRate: boolean }>(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
            sum(round(l.amount * case
              when source_sub.base_currency = ${elim.baseCurrency} then 1
@@ -330,9 +328,7 @@ export async function runAutoElimination(
      where e.org_id = ${orgId} and e.period_id = ${periodId} and e.status in ('posted', 'reversed')
        and a.eliminate and l.subsidiary_id <> ${elim.id}
      group by l.account_id, l.subsidiary_id
-    having sum(l.amount) <> 0`)) as unknown as {
-    rows: { accountId: string; subsidiaryId: string; total: string | null; missingRate: boolean }[];
-  };
+    having sum(l.amount) <> 0`));
 
   const missing = activity.rows.find((row) => row.missingRate || row.total === null);
   if (missing) {
@@ -345,7 +341,7 @@ export async function runAutoElimination(
 
   // Prior effective elimination entries are reversed on a re-run. Posted
   // ledger rows are never deleted or rewritten.
-  const prior = (await tx.execute(sql`
+  const prior = (await tx.execute<{ id: string; entryNumber: string }>(sql`
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}
@@ -357,9 +353,7 @@ export async function runAutoElimination(
           where reversal.org_id = original.org_id
             and reversal.reverses_entry_id = original.id
             and reversal.status = 'posted'
-       )`)) as unknown as {
-    rows: { id: string; entryNumber: string }[];
-  };
+       )`));
 
   if (translatedActivity.length === 0 && prior.rows.length === 0) {
     return { entryId: null, lineCount: 0 };
@@ -378,10 +372,8 @@ export async function runAutoElimination(
     );
   }
 
-  const periodRes = (await tx.execute(sql`
-    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`)) as unknown as {
-    rows: { ends_on: string; name: string }[];
-  };
+  const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
+    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
   const period = periodRes.rows[0];
   const [book] = await tx
     .select()
@@ -392,13 +384,13 @@ export async function runAutoElimination(
 
     let lastReversalId: string | null = null;
     for (const p of prior.rows) {
-      const rev = (await tx.execute(sql`
+      const rev = (await tx.execute<{ id: string }>(sql`
         insert into journal_entries
           (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
            memo, status, origin, reverses_entry_id, created_by)
         values (${orgId}, ${book.id}, ${elim.id}, ${`${p.entryNumber}-R`}, ${period.ends_on},
                 ${periodId}, ${`Reversal of ${p.entryNumber}`}, 'draft', 'intercompany', ${p.id}, ${userId ?? null})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       const reversalId = rev.rows[0]!.id;
       await tx.execute(sql`
         insert into journal_lines
@@ -419,13 +411,13 @@ export async function runAutoElimination(
     }
     if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
 
-    const ins = (await tx.execute(sql`
+    const ins = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
          memo, status, origin, created_by)
       values (${orgId}, ${book.id}, ${elim.id}, ${`ELIM-${period.name}`}, ${period.ends_on},
               ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const entryId = ins.rows[0].id;
 
     let n = 0;

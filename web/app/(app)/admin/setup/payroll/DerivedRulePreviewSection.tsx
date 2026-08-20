@@ -34,16 +34,13 @@ export async function DerivedRulePreviewSection({
   const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
 
   const [rulesRes, lastRunRes] = (await Promise.all([
-    db.execute(sql`
+    db.execute<{ id: string; code: string; name: string; is_active: boolean }>(sql`
       select id, code, name, is_active from pay_derived_rules
        where org_id = ${orgId} order by sequence, code`),
-    db.execute(sql`
+    db.execute<{ period_start: string; period_end: string }>(sql`
       select period_start, period_end from pay_runs
        where org_id = ${orgId} order by period_end desc limit 1`),
-  ])) as unknown as [
-    { rows: { id: string; code: string; name: string; is_active: boolean }[] },
-    { rows: { period_start: string; period_end: string }[] },
-  ]
+  ]))
   const rules = rulesRes.rows
 
   // Default to the period the last run covered — the operator is almost always

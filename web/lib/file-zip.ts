@@ -10,10 +10,10 @@ import { getFileBlob, type FileViewer } from './file-cabinet'
 export const MAX_ZIP_FILES = 300
 export const MAX_ZIP_BYTES = 250 * 1024 * 1024 // 250 MB (uncompressed source)
 
-export interface ZipEntry {
+export type ZipEntry = {
   id: string
   path: string
-}
+};
 
 /**
  * File ids + archive-relative paths for a folder subtree (the folder, its
@@ -21,7 +21,7 @@ export interface ZipEntry {
  * so callers can detect "too many".
  */
 export async function folderZipManifest(orgId: string, folderId: string): Promise<ZipEntry[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ZipEntry>(sql`
     with recursive tree as (
       select id, name, parent_folder_id, name::text as prefix
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -35,20 +35,20 @@ export async function folderZipManifest(orgId: string, folderId: string): Promis
      where fi.org_id = ${orgId} and not fi.is_inactive
      order by path
      limit ${MAX_ZIP_FILES + 1}
-  `)) as unknown as { rows: ZipEntry[] }
+  `))
   return r.rows
 }
 
 /** File ids + names for an explicit set of file ids (bulk selection). */
 export async function filesZipManifest(orgId: string, fileIds: string[]): Promise<ZipEntry[]> {
   if (fileIds.length === 0) return []
-  const r = (await db.execute(sql`
+  const r = (await db.execute<ZipEntry>(sql`
     select id, name as path from files
      where org_id = ${orgId} and not is_inactive
        and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(fileIds)}::jsonb) as _f(value))
      order by name
      limit ${MAX_ZIP_FILES + 1}
-  `)) as unknown as { rows: ZipEntry[] }
+  `))
   return r.rows
 }
 

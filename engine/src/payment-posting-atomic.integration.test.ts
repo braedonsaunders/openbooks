@@ -54,19 +54,17 @@ test(
       );
 
       const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute(sql`
-          select status, submitted_at, posted_entry_id,
-                 (select count(*)::int from journal_entries
-                   where source_document_id = ${payment.id}) as entry_count
-            from documents where id = ${payment.id}
-        `)) as unknown as {
-          rows: Array<{
+        (await db.execute<{
             status: string;
             submitted_at: string | null;
             posted_entry_id: string | null;
             entry_count: number;
-          }>;
-        },
+          }>(sql`
+          select status, submitted_at, posted_entry_id,
+                 (select count(*)::int from journal_entries
+                   where source_document_id = ${payment.id}) as entry_count
+            from documents where id = ${payment.id}
+        `)),
       );
       assert.deepEqual(state.rows[0], {
         status: "draft",

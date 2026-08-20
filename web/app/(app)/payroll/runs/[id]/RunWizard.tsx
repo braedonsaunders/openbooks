@@ -112,7 +112,7 @@ export interface StubChange {
   }[]
 }
 
-export interface RunHeader {
+export type RunHeader = {
   document_id: string
   document_number: string
   document_status: string
@@ -132,9 +132,9 @@ export interface RunHeader {
   net_total: string
   employer_cost_total: string
   employee_count: number
-}
+};
 
-export interface StubRow {
+export type StubRow = {
   id: string
   employee_party_id: string
   employee_name: string
@@ -158,9 +158,9 @@ export interface StubRow {
     project_name: string | null
     department_name: string | null
   }[]
-}
+};
 
-export interface RosterRow {
+export type RosterRow = {
   employee_party_id: string
   name: string
   pay_basis: 'hourly' | 'salary'
@@ -176,12 +176,12 @@ export interface RosterRow {
   hired_on: string | null
   /** Another committed run's period already covers this one — double-pay risk. */
   paid_in_period: boolean
-}
+};
 
-export interface RemittanceRow {
+export type RemittanceRow = {
   account_label: string
   amount: string
-}
+};
 
 interface GlLeg {
   accountId: string

@@ -20,7 +20,7 @@ export interface UsNexusResult {
 }
 
 export async function computeUsNexusStatus(orgId: string, from: string, to: string): Promise<UsNexusResult> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ state: string; sales_usd: string; txn_count: number }>(sql`
     with sales as (
       select d.id, d.party_id,
              case when d.kind = 'customer_credit' then -d.subtotal else d.subtotal end as amount,
@@ -37,9 +37,7 @@ export async function computeUsNexusStatus(orgId: string, from: string, to: stri
       from sales s
       left join addresses a
         on a.party_id = s.party_id and a.is_default_shipping and a.country = 'US'
-     group by coalesce(a.region, '')`)) as unknown as {
-    rows: { state: string; sales_usd: string; txn_count: number }[]
-  }
+     group by coalesce(a.region, '')`))
 
   const attributed: StateSales[] = []
   let unattributed = { salesUsd: 0, txnCount: 0 }

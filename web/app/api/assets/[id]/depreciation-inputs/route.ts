@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const visible = (await db.execute(sql`
     select 1 from fixed_assets where id = ${id} and org_id = ${gate.user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   try {

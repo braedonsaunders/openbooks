@@ -55,9 +55,9 @@ const whoami: AssistantToolDef = {
   gate: { mode: "public" },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    const org = (await db.execute(
+    const org = (await db.execute<{ name: string; base_currency: string }>(
       sql`select name, base_currency from orgs where id = ${authz.user.orgId}`,
-    )) as unknown as { rows: { name: string; base_currency: string }[] };
+    ));
     return {
       ok: true,
       data: {
@@ -201,7 +201,7 @@ const findJournalEntries: AssistantToolDef = {
     if (a.origin) where = sql`${where} and e.origin = ${a.origin}`;
     if (a.fromDate) where = sql`${where} and e.posting_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and e.posting_date <= ${a.toDate}`;
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<any>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
              e.source_document_id,
              count(l.id) as line_count,
@@ -212,10 +212,10 @@ const findJournalEntries: AssistantToolDef = {
        group by e.id
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
-    `)) as unknown as { rows: any[] };
-    const c = (await db.execute(
+    `));
+    const c = (await db.execute<{ n: string }>(
       sql`select count(*) as n from journal_entries e where ${where}`,
-    )) as unknown as { rows: { n: string }[] };
+    ));
     const total = Number(c.rows[0]?.n ?? 0);
     return {
       ok: true,
@@ -350,7 +350,7 @@ const findDocuments: AssistantToolDef = {
     if (a.partyQuery) where = sql`${where} and p.display_name ilike ${`%${a.partyQuery}%`}`;
     if (a.fromDate) where = sql`${where} and d.document_date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<any>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
              p.id as party_id, p.display_name as party
@@ -359,13 +359,13 @@ const findDocuments: AssistantToolDef = {
        where ${where}
        order by d.document_date desc, d.document_number desc
        limit ${limit}
-    `)) as unknown as { rows: any[] };
-    const c = (await db.execute(sql`
+    `));
+    const c = (await db.execute<{ n: string }>(sql`
       select count(*) as n
         from documents d
         left join parties p on p.id = d.party_id
        where ${where}
-    `)) as unknown as { rows: { n: string }[] };
+    `));
     const total = Number(c.rows[0]?.n ?? 0);
     return {
       ok: true,
@@ -405,17 +405,17 @@ const getDocument: AssistantToolDef = {
   inputSchema: z.object({ documentId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { documentId: string };
-    const doc = (await db.execute(sql`
+    const doc = (await db.execute<any>(sql`
       select d.*, p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
-    `)) as unknown as { rows: any[] };
+    `));
     const d = doc.rows[0];
     if (!d) return { ok: false, error: "document_not_found" };
     const perm = KIND_PERM[d.kind];
     if (!perm || !can(authz, perm)) return { ok: false, error: "forbidden" };
-    const lines = (await db.execute(sql`
+    const lines = (await db.execute<any>(sql`
       select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount,
              l.tax_amount, a.number as account_number, a.name as account_name,
              i.name as item_name
@@ -424,7 +424,7 @@ const getDocument: AssistantToolDef = {
        left join items i on i.id = l.item_id
        where l.document_id = ${a.documentId} and l.org_id = ${authz.user.orgId}
        order by l.line_number
-    `)) as unknown as { rows: any[] };
+    `));
     return {
       ok: true,
       data: {
@@ -483,15 +483,15 @@ const findParties: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (display_name ilike ${like} or short_code ilike ${like} or email ilike ${like})`;
     }
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<any>(sql`
       select id, kind, display_name, short_code, email, phone, is_active
         from parties where ${where}
        order by display_name
        limit ${limit}
-    `)) as unknown as { rows: any[] };
-    const c = (await db.execute(
+    `));
+    const c = (await db.execute<{ n: string }>(
       sql`select count(*) as n from parties where ${where}`,
-    )) as unknown as { rows: { n: string }[] };
+    ));
     const total = Number(c.rows[0]?.n ?? 0);
     return {
       ok: true,
@@ -725,7 +725,7 @@ const financialPeriods: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { completedOnly?: boolean; limit?: number };
     const limit = Math.min(a.limit ?? 15, 24);
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select p.id, p.name, p.fiscal_year, p.period_number,
              p.starts_on::text, p.ends_on::text, p.is_adjustment,
              r.status as close_status, r.readiness_score,
@@ -739,7 +739,7 @@ const financialPeriods: AssistantToolDef = {
        group by p.id, r.id
        order by p.ends_on desc, p.period_number desc
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {
@@ -843,7 +843,7 @@ const partyConcentration: AssistantToolDef = {
       ? ["customer_invoice", "customer_credit"]
       : ["vendor_bill", "vendor_credit"];
     const limit = Math.min(a.limit ?? 20, 50);
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       with ranked as (
         select p.id, p.display_name,
                sum(case when d.kind in ('customer_credit','vendor_credit') then -abs(d.total) else abs(d.total) end) as amount,
@@ -858,7 +858,7 @@ const partyConcentration: AssistantToolDef = {
              case when t.total = 0 then 0 else round((r.amount / t.total) * 100, 2) end::text as share_percent
         from ranked r cross join totals t
        order by r.amount desc limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return { ok: true, data: { side: a.side, periodLabel: range.label, fromDate: range.from, toDate: range.to, rows: rows.rows, href: a.side === "customer" ? "/ar" : "/ap" } };
   },
 };
@@ -878,22 +878,22 @@ const projectProfitability: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
     const a = raw as { projectId?: string; query?: string; limit?: number };
     if (a.projectId) {
-      const exists = (await db.execute(sql`
+      const exists = (await db.execute<{ id: string; name: string; status: string }>(sql`
         select id, name, status from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}
-      `)) as unknown as { rows: { id: string; name: string; status: string }[] };
+      `));
       if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
       return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects/${a.projectId}` } };
     }
     const limit = Math.min(a.limit ?? 20, 50);
     const like = a.query ? `%${a.query}%` : null;
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select p.id, p.name, p.status, p.starts_on, p.ends_on, c.display_name as customer
         from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.org_id = ${authz.user.orgId}
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
        order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return { ok: true, data: { returned: rows.rows.length, projects: rows.rows, href: "/projects" } };
   },
 };
@@ -930,7 +930,7 @@ const continuousCloseFindings: AssistantToolDef = {
     const statuses = a.status ? [a.status] : ["open", "in_review"];
     const limit = Math.min(a.limit ?? 20, 50);
     const q = a.query?.trim();
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select w.id, w.agent_key, w.finding_type, w.severity, w.status,
              w.confidence::text, w.materiality::text, w.summary,
              w.last_detected_at,
@@ -945,7 +945,7 @@ const continuousCloseFindings: AssistantToolDef = {
        order by case w.severity when 'critical' then 3 when 'warning' then 2 else 1 end desc,
                 w.materiality desc, w.last_detected_at desc
        limit ${limit}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {
@@ -978,25 +978,25 @@ const getContinuousCloseFinding: AssistantToolDef = {
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const findingId = (raw as { findingId: string }).findingId;
-    const item = (await db.execute(sql`
+    const item = (await db.execute<Record<string, unknown>>(sql`
       select id, agent_key, finding_type, detector_version, severity, status,
              confidence::text, materiality::text, subject_type, subject_id,
              summary, first_detected_at, last_detected_at
         from ai_work_items
        where id = ${findingId} and org_id = ${authz.user.orgId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const row = item.rows[0];
     if (!row) return { ok: false, error: "finding_not_found" };
     if (!readableContinuousCloseAgents(authz).includes(row.agent_key as "accounting" | "finance")) {
       return { ok: false, error: "forbidden" };
     }
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<Record<string, unknown>>(sql`
       select id, kind, source_type, source_id, data, created_at
         from ai_work_item_evidence
        where org_id = ${authz.user.orgId} and work_item_id = ${findingId}
        order by created_at, id
        limit 100
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return {
       ok: true,
       data: {

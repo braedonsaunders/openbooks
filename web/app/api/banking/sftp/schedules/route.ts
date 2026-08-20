@@ -18,7 +18,7 @@ export async function GET() {
       join sftp_servers sv on sv.id = sc.sftp_server_id
       join accounts a on a.id = sc.account_id
      where sc.org_id = ${gate.user.orgId} order by sc.created_at desc
-  `)) as unknown as { rows: unknown[] }
+  `))
   return NextResponse.json({ schedules: r.rows })
 }
 
@@ -33,11 +33,11 @@ export async function POST(req: Request) {
   }
   const format = FORMATS.has(String(body.format)) ? body.format : 'auto'
   const folder = (String(body.folder ?? 'inbound').trim() || 'inbound').replace(/^\/+|\/+$/g, '')
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into sftp_import_schedules (org_id, sftp_server_id, account_id, format, folder, csv_mapping, created_by)
     values (${user.orgId}, ${body.sftpServerId}, ${body.accountId}, ${format}, ${folder},
             ${body.csvMapping ? JSON.stringify(body.csvMapping) : null}::jsonb, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }

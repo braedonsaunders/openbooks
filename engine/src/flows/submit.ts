@@ -43,7 +43,7 @@ export async function submitForApproval(
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft") throw new Error(`document is ${doc.status}, not draft`);
-  const blockedCorrection = (await db.execute(sql`
+  const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
     select source.document_number
       from document_links link
       join documents source on source.id = link.to_document_id
@@ -51,7 +51,7 @@ export async function submitForApproval(
        and link.link_type = 'reverses'
        and source.status <> 'voided'
      limit 1
-  `)) as unknown as { rows: { document_number: string }[] };
+  `));
   if (blockedCorrection.rows[0]) {
     throw new Error(
       `the correction cannot be submitted until ${blockedCorrection.rows[0].document_number}'s void is approved and completed`,

@@ -78,12 +78,12 @@ test(
       });
       assert.equal(impairment.kind, "impaired");
       assert.equal(impairment.delta, "-100.0000");
-      const impairmentEvent = (await db.execute(sql`
+      const impairmentEvent = (await db.execute<{ id: string }>(sql`
         select id from asset_events
          where org_id = ${org.orgId}
            and asset_id = ${assetId}
            and journal_entry_id = ${impairment.entryId}
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const impairmentEntryBefore = await db.execute(sql`
         select id, line_number, account_id, amount::text, txn_amount::text
           from journal_lines
@@ -120,12 +120,12 @@ test(
       });
       assert.equal(disposal.status, "written_off");
       assert.equal(disposal.nbv, "900.0000");
-      const disposalEvent = (await db.execute(sql`
+      const disposalEvent = (await db.execute<{ id: string }>(sql`
         select id from asset_events
          where org_id = ${org.orgId}
            and asset_id = ${assetId}
            and journal_entry_id = ${disposal.entryId}
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const disposalRuns = await Promise.all([
         reverseAssetLifecycleEvent(org.orgId, disposalEvent.rows[0]!.id, {
           date: org.date,
@@ -147,7 +147,13 @@ test(
         [false, true],
       );
 
-      const evidence = (await db.execute(sql`
+      const evidence = (await db.execute<{
+          status: string;
+          sources: number;
+          reversals: number;
+          reversal_entries: number;
+          lifecycle_net: string;
+        }>(sql`
         select asset.status,
                count(distinct event.id) filter (
                  where event.kind in ('impaired', 'written_off')
@@ -170,15 +176,7 @@ test(
             )
          where asset.id = ${assetId}
          group by asset.id
-      `)) as unknown as {
-        rows: Array<{
-          status: string;
-          sources: number;
-          reversals: number;
-          reversal_entries: number;
-          lifecycle_net: string;
-        }>;
-      };
+      `));
       assert.deepEqual(evidence.rows, [
         {
           status: "in_service",

@@ -11,7 +11,7 @@ export async function GET() {
   const gate = await guardPermission('ap.pay')
   if (gate instanceof NextResponse) return gate
 
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.run_number, r.status, r.method, r.scheduled_for, r.exported_at, r.created_at,
            a.number as bank_number, a.name as bank_name,
            count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
@@ -23,7 +23,7 @@ export async function GET() {
      group by r.id, a.number, a.name
      order by r.created_at desc
      limit 200
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return NextResponse.json({ runs: runs.rows })
 }
 

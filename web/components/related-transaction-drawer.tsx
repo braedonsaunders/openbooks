@@ -77,7 +77,7 @@ export async function loadRelatedTransactionDrawerData({
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
   if (projectId) {
-    const related = (await db.execute(sql`
+    const related = (await db.execute<{ id: string }>(sql`
       select d.id
         from documents d
        where d.id = ${id}
@@ -96,7 +96,7 @@ export async function loadRelatedTransactionDrawerData({
              ? sql`and d.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
              : sql`and false`
            : sql``}
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (!related.rows[0]) return null
   }
   if (kind === 'field_ticket') {

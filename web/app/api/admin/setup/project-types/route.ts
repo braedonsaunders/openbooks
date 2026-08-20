@@ -61,14 +61,14 @@ export async function POST(req: Request) {
   }
   try {
     const id = await db.transaction(async (tx) => {
-      const r = (await tx.execute(sql`
+      const r = (await tx.execute<{ id: string }>(sql`
         insert into project_types (org_id, key, name, description, is_built_in, is_active, sort_order,
           billing_method, invoicing_profile, backup_profile, created_by, updated_by)
         values (${orgId}, ${key}, ${name}, ${b.description ?? null}, false, true, ${Number(b.sortOrder ?? 50)},
           ${b.billingMethod}, ${JSON.stringify(b.invoicingProfile)}::jsonb,
           ${JSON.stringify(b.backupProfile)}::jsonb,
           ${gate.user.id}, ${gate.user.id})
-        returning id`)) as unknown as { rows: { id: string }[] }
+        returning id`))
       const createdId = r.rows[0].id
       await publishProjectFinancialProfileInTransaction(tx, {
         orgId,
@@ -124,7 +124,7 @@ export async function PATCH(req: Request) {
   let updated: boolean
   try {
     updated = await db.transaction(async (tx) => {
-      const before = (await tx.execute(sql`
+      const before = (await tx.execute<(Record<string, unknown> & { financial_profile: unknown })>(sql`
         select pt.key, pt.name, pt.description, pt.is_active, pt.sort_order,
                pt.billing_method, pt.invoicing_profile, pt.backup_profile,
                version.financial_profile as financial_profile
@@ -141,7 +141,7 @@ export async function PATCH(req: Request) {
           ) version on true
          where pt.id = ${b.id} and pt.org_id = ${orgId}
          for update of pt
-      `)) as unknown as { rows: (Record<string, unknown> & { financial_profile: unknown })[] }
+      `))
       if (!before.rows[0]) return false
       const beforeInvoicing = before.rows[0].invoicing_profile as { allowedBases?: string[] } | null
       if (
@@ -154,11 +154,11 @@ export async function PATCH(req: Request) {
 
       let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
       if (b.financialProfile) {
-        const comparison = (await tx.execute(sql`
+        const comparison = (await tx.execute<{ changed: boolean }>(sql`
           select ${JSON.stringify(b.financialProfile)}::jsonb
                  is distinct from
                  ${JSON.stringify(before.rows[0].financial_profile)}::jsonb as changed
-        `)) as unknown as { rows: { changed: boolean }[] }
+        `))
         if (comparison.rows[0]?.changed) {
           financialVersion = await publishProjectFinancialProfileInTransaction(tx, {
             orgId,
@@ -171,12 +171,12 @@ export async function PATCH(req: Request) {
         }
       }
 
-      const after = (await tx.execute(sql`
+      const after = (await tx.execute<Record<string, unknown>>(sql`
         update project_types set ${sql.join(sets, sql`, `)}
          where id = ${b.id} and org_id = ${orgId}
          returning key, name, description, is_active, sort_order, billing_method,
                    invoicing_profile, backup_profile
-      `)) as unknown as { rows: Record<string, unknown>[] }
+      `))
       const projectTypeBefore = { ...before.rows[0] }
       delete projectTypeBefore.financial_profile
       await tx.execute(sql`
@@ -209,9 +209,9 @@ export async function DELETE(req: Request) {
   // Once a financial policy exists the project type is accounting configuration.
   // Archive it; do not erase the type or its policy history even if unused.
   const result = await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
+    const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from project_types where id = ${id} and org_id = ${orgId} for update
-    `)) as unknown as { rows: Record<string, unknown>[] }
+    `))
     if (!before.rows[0]) return null
     await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId}`)
     await tx.execute(sql`

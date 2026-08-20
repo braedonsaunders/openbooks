@@ -75,13 +75,13 @@ type BudgetRow = {
 };
 
 async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<BudgetRow>(sql`
     select bs.id, bs.name, bs.description, bs.book_id, b.name as book_name,
            bs.fiscal_year, bs.kind, bs.status, bs.revision, bs.created_by
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
      where bs.id = ${subjectId}
-  `)) as unknown as { rows: BudgetRow[] };
+  `));
   return result.rows[0] ?? null;
 }
 
@@ -93,7 +93,7 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const budget = await loadBudget(subjectId);
     if (!budget) return null;
-    const lines = (await db.execute(sql`
+    const lines = (await db.execute<Record<string, unknown>>(sql`
       select bl.account_id as "accountId", bl.period_id as "periodId",
              bl.department_id as "departmentId", bl.project_id as "projectId",
              bl.location_id as "locationId", bl.class_id as "classId",
@@ -101,13 +101,13 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
         from budget_lines bl
        where bl.scenario_id = ${subjectId}
        order by bl.created_at, bl.id
-    `)) as unknown as { rows: Array<Record<string, unknown>> };
-    const total = (await db.execute(sql`
+    `));
+    const total = (await db.execute<{ total: string }>(sql`
       select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
         join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
        where bl.scenario_id = ${subjectId}
-    `)) as unknown as { rows: { total: string }[] };
+    `));
     return {
       values: {
         id: budget.id,
@@ -144,11 +144,11 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
 
   async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
     await db.transaction(async (tx) => {
-      const locked = (await tx.execute(sql`
+      const locked = (await tx.execute<{ id: string; name: string; status: string; revision: number }>(sql`
         select id, name, status, revision from budget_scenarios
          where id = ${subjectId} and org_id = ${ctx.orgId}
          for update
-      `)) as unknown as { rows: { id: string; name: string; status: string; revision: number }[] };
+      `));
       const budget = locked.rows[0];
       if (!budget) throw new Error(`budget scenario ${subjectId} not found`);
       if (budget.status === to) return;
@@ -181,9 +181,9 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
   },
 
   async findCandidateIds(limit: number): Promise<string[]> {
-    const result = (await db.execute(sql`
+    const result = (await db.execute<{ id: string }>(sql`
       select id from budget_scenarios where status <> 'archived' order by created_at desc limit ${limit}
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     return result.rows.map((row) => row.id);
   },
 };

@@ -52,9 +52,9 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
   const { org, assetId, actorId, evidenceFileId } = await seedAsset("manual");
   try {
     const unattachedFileId = randomUUID();
-    const schedule = (await db.execute(sql`
+    const schedule = (await db.execute<{ id: string }>(sql`
       select id from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId} and book_id=${org.bookId}
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await db.execute(sql`
       insert into files (id, org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
       select ${unattachedFileId}, ${org.orgId}, folder_id, 'unattached.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}
@@ -79,8 +79,8 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
       orgId: org.orgId, assetId, effectiveDate: org.date, kind: "manual", value: "100.0000",
       memo: "Approved manual adjustment", evidenceFileId, actorId,
     });
-    const attachment = (await db.execute(sql`
-      select id from file_attachments where org_id=${org.orgId} and file_id=${evidenceFileId} and target_id=${assetId}`)) as unknown as { rows: { id: string }[] };
+    const attachment = (await db.execute<{ id: string }>(sql`
+      select id from file_attachments where org_id=${org.orgId} and file_id=${evidenceFileId} and target_id=${assetId}`));
     await assert.rejects(
       db.execute(sql`delete from file_attachments where id=${attachment.rows[0]!.id}`),
       (error: unknown) => {
@@ -97,12 +97,10 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
     assert.equal(second.replacedInputId, first.inputId);
     assert.equal(second.plannedAmount, "125.4321");
 
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{ total: number; voided: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where voided_at is not null)::int as voided
-        from depreciation_inputs where org_id = ${org.orgId}`)) as unknown as {
-      rows: { total: number; voided: number }[];
-    };
+        from depreciation_inputs where org_id = ${org.orgId}`));
     assert.deepEqual(evidence.rows[0], { total: 2, voided: 1 });
 
     const runs = await Promise.all([
@@ -110,15 +108,13 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
       runDepreciation(org.orgId, "2026-07-31", actorId, assetId),
     ]);
     assert.equal(runs.reduce((total, run) => total + run.posted, 0), 1);
-    const ledger = (await db.execute(sql`
+    const ledger = (await db.execute<{ entries: number; balance: string; posted_amount: string }>(sql`
       select count(distinct je.id)::int as entries, coalesce(sum(jl.amount), 0)::text as balance,
              min(l.posted_amount)::text as posted_amount
         from depreciation_schedule_lines l
         join journal_entries je on je.id = l.journal_entry_id
         join journal_lines jl on jl.entry_id = je.id
-       where l.org_id = ${org.orgId} and l.id = ${second.scheduleLineId}`)) as unknown as {
-      rows: { entries: number; balance: string; posted_amount: string }[];
-    };
+       where l.org_id = ${org.orgId} and l.id = ${second.scheduleLineId}`));
     assert.deepEqual(ledger.rows[0], { entries: 1, balance: "0.0000", posted_amount: "125.4321" });
 
     await assert.rejects(
@@ -136,13 +132,13 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
     assert.equal(correction.replacedInputId, null, "posted evidence remains intact instead of being superseded");
     const correctionRun = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
     assert.equal(correctionRun.posted, 1);
-    const corrected = (await db.execute(sql`
+    const corrected = (await db.execute<{ accumulated: string; postings: number }>(sql`
       select coalesce(sum(posted_amount), 0)::text as accumulated,
              count(*) filter (where posted_amount is not null)::int as postings
         from depreciation_schedule_lines
        where org_id = ${org.orgId} and schedule_id = (
          select schedule_id from depreciation_schedule_lines where id = ${second.scheduleLineId})
-    `)) as unknown as { rows: { accumulated: string; postings: number }[] };
+    `));
     assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -160,7 +156,7 @@ test("custom formulas operate independently on an alternate depreciation book", 
     await db.execute(sql`
       insert into accounting_books (id, org_id, code, name, is_primary, posts_gl, is_active, created_by, updated_by)
       values (${alternateBookId}, ${org.orgId}, 'ALT', 'Alternate reporting', false, false, true, ${actorId}, ${actorId})`);
-    const category = (await db.execute(sql`select category_id from fixed_assets where id=${assetId}`)) as unknown as { rows: { category_id: string }[] };
+    const category = (await db.execute<{ category_id: string }>(sql`select category_id from fixed_assets where id=${assetId}`));
     await db.execute(sql`update fixed_assets set useful_life_months=12 where id=${assetId}`);
     await db.execute(sql`
       insert into depreciation_book_policies
@@ -169,11 +165,11 @@ test("custom formulas operate independently on an alternate depreciation book", 
 
     const results = await buildAllSchedules(assetId, org.orgId, actorId);
     assert.equal(results.length, 2);
-    const alternate = (await db.execute(sql`
+    const alternate = (await db.execute<{ depreciation_method_id: string; lines: number; total: string }>(sql`
       select s.depreciation_method_id, count(l.id)::int as lines, coalesce(sum(l.planned_amount),0)::text as total
         from depreciation_schedules s left join depreciation_schedule_lines l on l.schedule_id=s.id
        where s.asset_id=${assetId} and s.book_id=${alternateBookId}
-       group by s.id`)) as unknown as { rows: { depreciation_method_id: string; lines: number; total: string }[] };
+       group by s.id`));
     assert.deepEqual(alternate.rows[0], { depreciation_method_id: formulaId, lines: 1, total: "833.3333" });
     await assert.rejects(
       db.execute(sql`update depreciation_methods set formula='OC/AL' where id=${formulaId}`),
@@ -206,13 +202,11 @@ test("production evidence calculates exact charges and refuses lifetime overrun"
       }),
       /recorded production must remain between zero and expected lifetime units/,
     );
-    const stored = (await db.execute(sql`
+    const stored = (await db.execute<{ source: string; planned_amount: string; production_units: string; evidence_file_name: string }>(sql`
       select l.source, l.planned_amount::text, i.production_units::text, f.name as evidence_file_name
         from depreciation_schedule_lines l join depreciation_inputs i on i.id = l.input_id
         join files f on f.id=i.evidence_file_id
-       where l.id = ${result.scheduleLineId}`)) as unknown as {
-      rows: { source: string; planned_amount: string; production_units: string; evidence_file_name: string }[];
-    };
+       where l.id = ${result.scheduleLineId}`));
     assert.deepEqual(stored.rows[0], {
       source: "production_usage", planned_amount: "3333.3330",
       production_units: "333.3333", evidence_file_name: "meter-evidence.pdf",

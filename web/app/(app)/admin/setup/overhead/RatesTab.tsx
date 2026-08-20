@@ -54,10 +54,8 @@ export async function RatesTab({ orgId, rowParam }: { orgId: string; rowParam: s
       ? { creating: true, row: null as Record<string, any> | null }
       : rowParam
         ? await (async () => {
-            const r = (await db.execute(sql`
-              select * from overhead_rates where id = ${rowParam} and org_id = ${orgId}`)) as unknown as {
-              rows: Record<string, any>[]
-            }
+            const r = (await db.execute<Record<string, any>>(sql`
+              select * from overhead_rates where id = ${rowParam} and org_id = ${orgId}`))
             return r.rows[0] ? { creating: false, row: r.rows[0] } : null
           })()
         : null

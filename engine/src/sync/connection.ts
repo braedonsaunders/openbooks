@@ -290,7 +290,7 @@ export function validateSourceSecret(source: string, key: string, value: string)
 
 // --- Stored connections ------------------------------------------------------
 
-export interface ConnectionRow {
+export type ConnectionRow = {
   id: string;
   orgId: string;
   source: string;
@@ -307,7 +307,7 @@ export interface ConnectionRow {
   cursor: Date | null;
   lastRunAt: Date | null;
   lastError: string | null;
-}
+};
 
 const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayName",
   auth_kind as "authKind", status, config, secrets, mirror_enabled as "mirrorEnabled",
@@ -317,18 +317,14 @@ const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayN
   cursor, last_run_at as "lastRunAt", last_error as "lastError"`;
 
 export async function listConnections(orgId: string): Promise<ConnectionRow[]> {
-  const r = (await db.execute(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`)) as unknown as {
-    rows: ConnectionRow[];
-  };
+  const r = (await db.execute<ConnectionRow>(sql`
+    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`));
   return r.rows;
 }
 
 export async function getConnection(orgId: string, id: string): Promise<ConnectionRow | null> {
-  const r = (await db.execute(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`)) as unknown as {
-    rows: ConnectionRow[];
-  };
+  const r = (await db.execute<ConnectionRow>(sql`
+    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`));
   return r.rows[0] ?? null;
 }
 

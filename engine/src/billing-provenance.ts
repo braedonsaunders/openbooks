@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { type SqlExecutor } from "./db.ts";
 
 /**
  * Release the billing provenance a project invoice consumed. Called when a
@@ -13,14 +14,13 @@ import { sql } from "drizzle-orm";
  * for non-invoice documents.
  */
 export async function releaseBillingProvenance(
-  // deno-lint-ignore no-explicit-any — accepts any drizzle tx/db with .execute
-  tx: { execute: (q: any) => Promise<any> },
+  tx: SqlExecutor,
   orgId: string,
   documentId: string,
 ): Promise<void> {
-  const lineRes = (await tx.execute(sql`
+  const lineRes = (await tx.execute<{ id: string }>(sql`
     select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const lineIds = lineRes.rows.map((r) => r.id);
   if (lineIds.length > 0) {
     const idArr = `{${lineIds.join(",")}}`;

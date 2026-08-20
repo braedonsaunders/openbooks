@@ -81,7 +81,7 @@ export default async function ComplianceVendorsPage({
   const drawerData = openVendor
     ? await (async () => {
         const [vendor, certificates, exceptions, policies, classes, projects] = await Promise.all([
-          db.execute(sql`
+          db.execute<Record<string, unknown>>(sql`
             select p.id, p.display_name as name, p.legal_name as "legalName",
                    vr.compliance_class_id as "complianceClassId",
                    vr.information_return_form as "informationReturnForm",
@@ -92,16 +92,14 @@ export default async function ComplianceVendorsPage({
                    coalesce(vr.is_t4a, false) as reportable
               from parties p
               join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
-             where p.org_id = ${orgId} and p.id = ${openVendor}`) as unknown as Promise<{ rows: Record<string, unknown>[] }>,
+             where p.org_id = ${orgId} and p.id = ${openVendor}`),
           loadVendorCertificates(orgId, openVendor),
           loadVendorWaivers(orgId, openVendor),
           loadRequirementPolicies(orgId),
           loadComplianceClasses(orgId),
-          db.execute(sql`
+          db.execute<{ id: string; label: string }>(sql`
             select id, coalesce(code || ' · ' || name, name) as label from projects
-             where org_id = ${orgId} and is_active order by code nulls last, name limit 500`) as unknown as Promise<{
-            rows: { id: string; label: string }[]
-          }>,
+             where org_id = ${orgId} and is_active order by code nulls last, name limit 500`),
         ])
         const row = vendor.rows[0]
         if (!row) return null

@@ -142,9 +142,9 @@ test("the SQL ladder gives the same answer as the resolver", { skip: !DB }, asyn
             hasBank: sql`${hasBank}::boolean`,
             fallbackToCheque,
           });
-          const row = (await db.execute(
+          const row = (await db.execute<{ method: string }>(
             sql`select ${expression} as method`,
-          )) as unknown as { rows: { method: string }[] };
+          ));
           assert.equal(
             row.rows[0]!.method,
             resolve({ profileMethod, partyMethod, hasApprovedBankDetails: hasBank, fallbackToCheque }).method,

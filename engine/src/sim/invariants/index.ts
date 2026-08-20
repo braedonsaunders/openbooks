@@ -26,7 +26,7 @@ export interface InvariantResult {
 }
 
 async function scalar(q: ReturnType<typeof sql>): Promise<string> {
-  const r = (await db.execute(q)) as unknown as { rows: Record<string, unknown>[] };
+  const r = (await db.execute<Record<string, unknown>>(q));
   const row = r.rows[0] ?? {};
   return String(Object.values(row)[0] ?? "");
 }

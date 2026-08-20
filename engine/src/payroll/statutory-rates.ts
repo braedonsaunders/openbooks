@@ -392,7 +392,7 @@ export async function listStatutoryRates(
   orgId: string,
   filter: { country?: string; taxYear?: number } = {},
 ): Promise<StatutoryRateRow[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.country, r.rate_key, r.region, r.sub_region, r.filing_account_id,
            r.tax_year, r.rate_values, fa.account_number, fa.name as account_name
       from payroll_statutory_rates r
@@ -403,7 +403,7 @@ export async function listStatutoryRates(
        and (${filter.taxYear ?? null}::int is null or r.tax_year = ${filter.taxYear ?? null})
      order by r.country, r.rate_key, r.tax_year desc,
               r.region nulls first, r.sub_region nulls first, fa.account_number nulls first
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
@@ -438,14 +438,14 @@ export async function upsertStatutoryRate(input: {
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string; rate_values: Record<string, string> }>(sql`
     select id, rate_values from payroll_statutory_rates
      where org_id = ${input.orgId} and country = ${input.country}
        and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
        and region is not distinct from ${region}
        and sub_region is not distinct from ${subRegion}
        and filing_account_id is not distinct from ${input.filingAccountId}
-  `)) as unknown as { rows: { id: string; rate_values: Record<string, string> }[] };
+  `));
   const before = existing.rows[0];
   const id = before?.id ?? randomUUID();
   if (before) {
@@ -480,11 +480,11 @@ export async function deleteStatutoryRate(
   actorId: string,
   id: string,
 ): Promise<boolean> {
-  const gone = (await db.execute(sql`
+  const gone = (await db.execute<Record<string, unknown>>(sql`
     delete from payroll_statutory_rates
      where org_id = ${orgId} and id = ${id}
     returning country, rate_key, region, sub_region, filing_account_id, tax_year, rate_values
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const row = gone.rows[0];
   if (!row) return false;
   await db.execute(sql`
@@ -558,8 +558,7 @@ export async function resolveStatutoryRates(
   const pack = packRates(country);
   const [rows, blobRes] = await Promise.all([
     listStatutoryRates(orgId, { country, taxYear }),
-    db.execute(sql`select settings->'payroll' as p from orgs where id = ${orgId}`) as unknown as
-      Promise<{ rows: { p: Record<string, unknown> | null }[] }>,
+    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
   ]);
   const legacy = pack.legacyRows?.(blobRes.rows[0]?.p ?? {}) ?? [];
   return buildResolution({ country, taxYear, pack, rows, legacy });
