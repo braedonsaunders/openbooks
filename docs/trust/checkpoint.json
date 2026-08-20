@@ -1,19 +1,19 @@
 {
-  "orgId": "fc0924bc-7561-495a-b12d-753e48bebb43",
+  "orgId": "59e2ef40-d4d8-450a-be2e-2f2a8775d686",
   "orgName": "SIM · Summit Ridge Construction",
-  "at": "2026-08-04T23:44:50.267Z",
-  "gitSha": "7761fe4a",
+  "at": "2026-08-20T13:58:27.522Z",
+  "gitSha": "656fbdb",
   "cutoff": "2026-02-28",
   "cutoffSource": "last-closed-gl-period",
   "counts": {
-    "documents": 1037,
-    "postedDocuments": 401,
-    "postedEntries": 404,
-    "postedLines": 1275
+    "documents": 935,
+    "postedDocuments": 432,
+    "postedEntries": 435,
+    "postedLines": 1370
   },
   "trialBalance": {
-    "debits": "8477460.7444",
-    "credits": "8477460.7444",
+    "debits": "8473928.2652",
+    "credits": "8473928.2652",
     "accounts": 41
   },
   "controlTieOut": [
@@ -21,8 +21,8 @@
       "account": "Contracts Receivable",
       "number": "1200",
       "kind": "asset_receivable",
-      "gl": "1129883.7544",
-      "subledger": "482383.7544",
+      "gl": "1122122.2452",
+      "subledger": "474622.2452",
       "direct": "647500.0000",
       "diff": "0.0000"
     },
@@ -30,17 +30,17 @@
       "account": "Retainage Receivable",
       "number": "1210",
       "kind": "asset_receivable",
-      "gl": "21012.0000",
+      "gl": "20436.0000",
       "subledger": "0",
-      "direct": "21012.0000",
+      "direct": "20436.0000",
       "diff": "0.0000"
     },
     {
       "account": "Accounts Payable — Trade",
       "number": "2010",
       "kind": "liability_payable",
-      "gl": "-458013.2100",
-      "subledger": "-115013.2100",
+      "gl": "-453778.4300",
+      "subledger": "-110778.4300",
       "direct": "-343000.0000",
       "diff": "0.0000"
     }
@@ -85,22 +85,22 @@
   "timings": [
     {
       "report": "trial_balance",
-      "ms": 2,
-      "rows": 40
+      "ms": 3,
+      "rows": 39
     },
     {
       "report": "balance_sheet",
-      "ms": 1,
+      "ms": 3,
       "rows": 13
     },
     {
       "report": "profit_and_loss",
-      "ms": 2,
+      "ms": 3,
       "rows": 16
     },
     {
       "report": "ar_aging",
-      "ms": 2,
+      "ms": 3,
       "rows": 5
     }
   ],
