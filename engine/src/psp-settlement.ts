@@ -299,9 +299,9 @@ export function parseChargebeeSettlement(payload: {
 }
 
 async function primaryBookId(orgId: string): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const id = r.rows[0]?.id;
   if (!id) throw new PspSettlementError("no primary accounting book");
   return id;
@@ -311,11 +311,11 @@ async function periodForDate(
   orgId: string,
   date: string,
 ): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false and starts_on <= ${date} and ends_on >= ${date}
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return r.rows[0]?.id ?? null;
 }
 
@@ -359,7 +359,7 @@ export async function importSettlementBatch(
   const totals = summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string }>(sql`
       insert into psp_settlement_batches (
         id, org_id, provider, external_ref, status, currency,
         gross_amount, fee_amount, refund_amount, dispute_amount, net_amount, fx_amount,
@@ -377,16 +377,16 @@ export async function importSettlementBatch(
       )
       on conflict (org_id, provider, external_ref) do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const created = inserted.rows.length === 1;
-    const current = (await db.execute(sql`
+    const current = (await db.execute<{ id: string; status: string }>(sql`
       select id, status
         from psp_settlement_batches
        where org_id = ${orgId}
          and provider = ${parsed.provider}
          and external_ref = ${parsed.externalRef}
        for update
-    `)) as unknown as { rows: { id: string; status: string }[] };
+    `));
     const row = current.rows[0];
     if (!row)
       throw new PspSettlementError("settlement batch could not be locked");
@@ -466,15 +466,7 @@ export async function postSettlementBatch(
 ): Promise<{ entryId: string }> {
   await assertNotSandbox(orgId, "post a PSP settlement");
   return await withOrg(orgId, async () => {
-    const batch = (await db.execute(sql`
-      select b.*, s.base_currency as subsidiary_base_currency
-        from psp_settlement_batches b
-        left join subsidiaries s
-          on s.id = b.subsidiary_id and s.org_id = b.org_id
-       where b.id = ${batchId} and b.org_id = ${orgId}
-       for update of b
-    `)) as unknown as {
-      rows: {
+    const batch = (await db.execute<{
         id: string;
         status: string;
         currency: string;
@@ -496,8 +488,14 @@ export async function postSettlementBatch(
         memo: string | null;
         journal_entry_id: string | null;
         subsidiary_base_currency: string | null;
-      }[];
-    };
+      }>(sql`
+      select b.*, s.base_currency as subsidiary_base_currency
+        from psp_settlement_batches b
+        left join subsidiaries s
+          on s.id = b.subsidiary_id and s.org_id = b.org_id
+       where b.id = ${batchId} and b.org_id = ${orgId}
+       for update of b
+    `));
     const b = batch.rows[0];
     if (!b) throw new PspSettlementError("settlement batch not found");
     if (b.status === "posted") {
@@ -528,9 +526,9 @@ export async function postSettlementBatch(
       );
     }
 
-    const controls = (await db.execute(sql`
+    const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `)) as unknown as { rows: { c: Record<string, string> | null }[] };
+    `));
     const c = controls.rows[0]?.c ?? {};
     const fxAcct = b.fx_account_id ?? c.fxRealizedGainLoss ?? null;
     const disputeAcct = b.dispute_account_id ?? b.fee_account_id;
@@ -671,22 +669,20 @@ export async function reverseSettlementBatch(
     );
   }
   return withOrg(orgId, async () => {
-    const batch = (await db.execute(sql`
-      select status, journal_entry_id, reversal_entry_id, provider,
-             external_ref, subsidiary_id
-        from psp_settlement_batches
-       where id = ${batchId} and org_id = ${orgId}
-       for update
-    `)) as unknown as {
-      rows: {
+    const batch = (await db.execute<{
         status: string;
         journal_entry_id: string | null;
         reversal_entry_id: string | null;
         provider: string;
         external_ref: string;
         subsidiary_id: string | null;
-      }[];
-    };
+      }>(sql`
+      select status, journal_entry_id, reversal_entry_id, provider,
+             external_ref, subsidiary_id
+        from psp_settlement_batches
+       where id = ${batchId} and org_id = ${orgId}
+       for update
+    `));
     const b = batch.rows[0];
     if (!b) throw new PspSettlementError("settlement batch not found");
     if (b.status === "void") {
@@ -701,20 +697,18 @@ export async function reverseSettlementBatch(
       );
     }
 
-    const source = (await db.execute(sql`
-      select book_id, subsidiary_id, entry_number, status, origin
-        from journal_entries
-       where id = ${b.journal_entry_id} and org_id = ${orgId}
-       for update
-    `)) as unknown as {
-      rows: {
+    const source = (await db.execute<{
         book_id: string;
         subsidiary_id: string;
         entry_number: string;
         status: string;
         origin: string;
-      }[];
-    };
+      }>(sql`
+      select book_id, subsidiary_id, entry_number, status, origin
+        from journal_entries
+       where id = ${b.journal_entry_id} and org_id = ${orgId}
+       for update
+    `));
     const original = source.rows[0];
     if (!original || original.status !== "posted") {
       throw new PspSettlementError(
@@ -734,7 +728,7 @@ export async function reverseSettlementBatch(
       subsidiaryIds: [original.subsidiary_id],
       modules: ["banking"],
     });
-    const lines = (await db.execute(sql`
+    const lines = (await db.execute<Record<string, unknown>>(sql`
       select line_number, account_id, subsidiary_id, amount::text, currency,
              txn_amount::text, fx_rate::text, memo, party_id, department_id,
              project_id, location_id, class_id, equipment_unit_id,
@@ -742,7 +736,7 @@ export async function reverseSettlementBatch(
         from journal_lines
        where entry_id = ${b.journal_entry_id} and org_id = ${orgId}
        order by line_number
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     if (lines.rows.length === 0) {
       throw new PspSettlementError("settlement source journal has no lines");
     }

@@ -88,9 +88,9 @@ export async function POST(req: Request): Promise<Response> {
     return conversationResponse("AI is not configured.", 503, conversationId);
   }
 
-  const org = (await db.execute(
+  const org = (await db.execute<{ base_currency: string }>(
     sql`select base_currency from orgs where id = ${authz.user.orgId}`,
-  )) as unknown as { rows: { base_currency: string }[] };
+  ));
 
   const today = new Date().toISOString().slice(0, 10);
   const tools = buildToolRegistry(authz);

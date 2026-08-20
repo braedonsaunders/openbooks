@@ -68,7 +68,10 @@ const listReportDefinitions: AssistantToolDef = {
     const a = raw as { query?: string; reportType?: "statement" | "query"; limit?: number };
     const limit = Math.min(a.limit ?? 50, 100);
     const like = a.query ? `%${a.query}%` : null;
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{
+        id: string; name: string; description: string | null; kind: string;
+        report_type: string; slug: string | null; entity: string | null;
+      }>(sql`
       select id, name, description, kind, coalesce(report_type, 'query') as report_type,
              slug, query->>'entity' as entity, updated_at
         from report_definitions
@@ -77,12 +80,7 @@ const listReportDefinitions: AssistantToolDef = {
          ${like ? sql`and name ilike ${like}` : sql``}
        order by updated_at desc
        limit 500
-    `)) as unknown as {
-      rows: {
-        id: string; name: string; description: string | null; kind: string;
-        report_type: string; slug: string | null; entity: string | null;
-      }[];
-    };
+    `));
     const visible = rows.rows.filter((row) => entityPermitted(authz, row.entity));
     return {
       ok: true,
@@ -121,10 +119,10 @@ const runReport: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
-    const def = (await db.execute(sql`
+    const def = (await db.execute<{ entity: string | null }>(sql`
       select query->>'entity' as entity from report_definitions
        where id = ${a.definitionId} and org_id = ${orgId}
-    `)) as unknown as { rows: { entity: string | null }[] };
+    `));
     if (!def.rows[0]) return { ok: false, error: "report_not_found" };
     if (!entityPermitted(authz, def.rows[0].entity)) return { ok: false, error: "forbidden" };
 
@@ -319,7 +317,7 @@ const listReportSchedules: AssistantToolDef = {
   inputSchema: z.object({ definitionId: uuidInput.optional() }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { definitionId?: string };
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<Record<string, unknown>>(sql`
       select s.id, s.definition_id, d.name as definition_name, s.cadence,
              s.day_of_week, s.day_of_month, s.hour, s.minute, s.timezone,
              s.recipient_emails, s.next_run_at, s.active
@@ -329,7 +327,7 @@ const listReportSchedules: AssistantToolDef = {
          ${a.definitionId ? sql`and s.definition_id = ${a.definitionId}` : sql``}
        order by s.next_run_at
        limit 200
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     return { ok: true, data: { schedules: rows.rows, href: "/reports" } };
   },
 };
@@ -342,19 +340,17 @@ const listReportingPackages: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["close.read"] },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{
+        id: string; name: string; description: string | null;
+        reports: unknown; recipients: unknown; delivery: unknown;
+        is_default: boolean; is_active: boolean;
+      }>(sql`
       select id, name, description, reports, recipients, delivery, is_default, is_active
         from close_reporting_packages
        where org_id = ${authz.user.orgId}
        order by is_default desc, name
        limit 100
-    `)) as unknown as {
-      rows: {
-        id: string; name: string; description: string | null;
-        reports: unknown; recipients: unknown; delivery: unknown;
-        is_default: boolean; is_active: boolean;
-      }[];
-    };
+    `));
     return {
       ok: true,
       data: {

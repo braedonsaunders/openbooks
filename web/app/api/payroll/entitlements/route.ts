@@ -27,13 +27,13 @@ export async function GET(req: Request) {
 
   // Money balances are denominated in the employee's legal entity's functional
   // currency (the same currency their wage and pay run carry).
-  const currencyRes = (await db.execute(sql`
+  const currencyRes = (await db.execute<{ currency: string | null }>(sql`
     select coalesce(s.base_currency, o.base_currency) as currency
       from parties p
       join orgs o on o.id = p.org_id
       left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${employee}
-  `)) as unknown as { rows: { currency: string | null }[] }
+  `))
   const currency = currencyRes.rows[0]?.currency ?? 'CAD'
 
   const balances = await entitlementBalances(orgId, employee)
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
      where l.org_id = ${orgId} and l.employee_party_id = ${employee}
      order by l.movement_date desc, l.created_at desc
      limit 200
-  `)) as unknown as { rows: unknown[] }
+  `))
 
   return NextResponse.json({
     currency,

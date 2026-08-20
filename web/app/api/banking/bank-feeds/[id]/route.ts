@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 async function owned(orgId: string, id: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from bank_feed_connections where id = ${id} and org_id = ${orgId}`,
-  )) as unknown as { rows: unknown[] };
+  ));
   return r.rows.length > 0;
 }
 

@@ -494,6 +494,7 @@
         "label": "Zeiterfassungen",
         "description": "Zeiterfassungseinträge – Mitarbeiter, Datum, Stunden, Abrechenbarkeitsstatus, Projekt und Genehmigungsstatus."
       },
+      "timesheet_weeks": "Stundenzettel-Wochen",
       "fixed_assets": {
         "label": "Anlagevermögen",
         "description": "Das Anlagenverzeichnis – Status, Anschaffung, Kosten, Verantwortlicher und Dimensionen."
@@ -666,6 +667,20 @@
         "memo": "Notiz",
         "created_at": "Erstellt am",
         "id": "Zeiterfassung (ID)"
+      },
+      "timesheet_weeks": {
+        "employee_name": "Mitarbeiter",
+        "week_start": "Woche ab",
+        "week_end": "Woche bis",
+        "status": "Status",
+        "total_hours": "Gesamtstunden",
+        "billable_hours": "Abrechenbare Stunden",
+        "submitted_by": "Eingereicht von",
+        "submitted_at": "Eingereicht am",
+        "approved_by": "Genehmigt von",
+        "approved_at": "Genehmigt am",
+        "rejection_reason": "Ablehnungsgrund",
+        "id": "Woche (id)"
       },
       "fixed_assets": {
         "asset_number": "Anlagennummer",

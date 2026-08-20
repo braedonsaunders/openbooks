@@ -97,10 +97,10 @@ export interface SourceProjectAccountMonthRow {
 }
 
 /** Source ground truth for one open item (invoice/bill): remaining unpaid. */
-export interface SourceOpenItem {
+export type SourceOpenItem = {
   ref: string;
   unpaid: string;
-}
+};
 
 export interface SourceLedgerContext {
   /** Source-native identifier of the authoritative ledger/book. */
@@ -141,6 +141,7 @@ export interface SourceProjectCommercialState {
     | "time_and_materials"
     | "fixed_price"
     | "cost_plus"
+    | "not_to_exceed"
     | null;
   /** Source contract/ceiling amount; null means the source has no such fact. */
   contractValue: string | null;

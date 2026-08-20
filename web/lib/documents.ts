@@ -49,9 +49,9 @@ export {
 
 /** Resolve the org's base currency (used when minting a draft). */
 async function orgBaseCurrency(orgId: string): Promise<string> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ base_currency: string }>(
     sql`select base_currency from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { base_currency: string }[] }
+  ))
   return r.rows[0]?.base_currency ?? 'CAD'
 }
 
@@ -81,10 +81,8 @@ export async function createDocumentDraft(
   const cfg = docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   const currency = await orgBaseCurrency(orgId)
-  const root = (await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)) as unknown as {
-    rows: { id: string }[]
-  }
+  const root = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`))
   const subsidiaryId = root.rows[0]?.id ?? null
   const documentNumber = await nextDocumentNumber(orgId, kind, cfg.numberPrefix, subsidiaryId)
   const [doc] = await db
@@ -224,7 +222,7 @@ export async function createPostedCorrectionDraft(
  */
 export async function loadDocument(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
@@ -238,9 +236,9 @@ export async function loadDocument(id: string, orgId?: string) {
          where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
       ) ap on true
      where d.id = ${id} and d.org_id = ${resolvedOrgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!doc.rows[0]) return null
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
            l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
@@ -249,7 +247,7 @@ export async function loadDocument(id: string, orgId?: string) {
       from document_lines l
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return { doc: doc.rows[0], lines: lines.rows }
 }
 
@@ -310,7 +308,7 @@ export interface DocumentEditInput {
 }
 
 /** The pre-edit snapshot a caller loads under its own org scope. */
-export interface DocumentEditCurrent {
+export type DocumentEditCurrent = {
   kind: string
   status: string
   total: string
@@ -318,7 +316,7 @@ export interface DocumentEditCurrent {
   partyId: string | null
   documentDate: string
   updatedAt?: string
-}
+};
 
 export interface DocumentEditContext {
   orgId: string
@@ -470,11 +468,11 @@ export async function applyDocumentEdit(
 
   // Pre-edit line snapshot for line-level change detection (the on_update
   // "re-approval on material edit" pattern).
-  const oldLines = ((await db.execute(sql`
+  const oldLines = ((await db.execute<{ lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }>(sql`
     select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
            project_id as "projectId", amount
       from document_lines where document_id = ${id} order by line_number
-  `)) as unknown as { rows: { lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }[] }).rows
+  `))).rows
 
   // All writes + the GL-Impact re-materialization happen in one transaction, so
   // a GL edit into a closed period rolls the whole edit back (nothing partial).
@@ -486,7 +484,7 @@ export async function applyDocumentEdit(
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          const inserted = (await tx.execute(sql`
+          const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, item_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                         tax_amount, tax_overridden,
@@ -497,7 +495,7 @@ export async function applyDocumentEdit(
                     ${l.partyId}, ${l.departmentId}, ${l.projectId}, ${l.locationId}, ${l.classId},
                     ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
             returning id
-          `)) as unknown as { rows: { id: string }[] }
+          `))
           await persistLineTaxComponents(tx, {
             orgId,
             documentLineId: inserted.rows[0]!.id,
@@ -614,7 +612,7 @@ export async function applyDocumentEdit(
 // Picker option loaders (shared by every list page's drawer hydration)
 // ---------------------------------------------------------------------------
 
-export interface Opt {
+export type Opt = {
   id: string
   display_name?: string
   number?: string
@@ -628,7 +626,7 @@ export interface Opt {
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
   tax_components?: import('@openbooks/engine/src/tax.ts').TaxComponentConfig[]
-}
+};
 
 export async function partyOptions(role: 'vendor' | 'customer', orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
@@ -642,11 +640,11 @@ export async function partyOptions(role: 'vendor' | 'customer', orgId?: string):
                      where cr.org_id = ${resolvedOrgId}
                        and cr.party_id = parties.id
                        and cr.is_active)`
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Opt>(sql`
     select id, display_name, subsidiary_id from parties
      where org_id = ${resolvedOrgId} and ${filter} and is_active
      order by display_name limit 2000
-  `)) as unknown as { rows: Opt[] }
+  `))
   return r.rows
 }
 
@@ -655,18 +653,18 @@ export async function accountOptions(cfg: DocKindConfig, orgId?: string): Promis
   const typeFilter = cfg.accountTypes
     ? sql` and a.type in (${sql.join(cfg.accountTypes.map((ty) => sql`${ty}`), sql`, `)})`
     : sql``
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Opt>(sql`
     select id, number, name from accounts a
      where a.org_id = ${resolvedOrgId} and a.is_active and not a.is_summary ${typeFilter}
      order by a.number nulls last
-  `)) as unknown as { rows: Opt[] }
+  `))
   return r.rows
 }
 
 export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const profiles = await taxProfileMap(resolvedOrgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Opt>(sql`
     select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
       from tax_codes tc
       left join lateral (
@@ -674,17 +672,17 @@ export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
          where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= now()
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active order by tc.code
-  `)) as unknown as { rows: Opt[] }
+  `))
   return r.rows.map((row) => ({ ...row, tax_components: profiles.codes.get(row.id) ?? [] }))
 }
 
 export async function taxGroupOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const profiles = await taxProfileMap(resolvedOrgId)
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Opt>(sql`
     select id, code, name from tax_groups
      where org_id = ${resolvedOrgId} and is_active order by code
-  `)) as unknown as { rows: Opt[] }
+  `))
   return result.rows.map((row) => ({ ...row, tax_components: profiles.groups.get(row.id) ?? [] }))
 }
 
@@ -710,22 +708,22 @@ export async function dimensionOptions(orgId?: string) {
 /** Active catalog items (for the optional line `item` column). */
 export async function itemOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Opt>(sql`
     select id, code, name from items where org_id = ${resolvedOrgId} and is_active order by coalesce(code, name), name limit 2000
-  `)) as unknown as { rows: Opt[] }
+  `))
   return r.rows
 }
 
 /** Active corporate cards (for card_charge / card_refund funding source). */
 export async function cardOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<any>(sql`
     select pc.id, pc.label, pc.last_four, pc.network, pc.liability_account_id, p.display_name as holder
       from payment_cards pc
       left join parties p on p.id = pc.holder_party_id and p.org_id = pc.org_id
      where pc.org_id = ${resolvedOrgId} and pc.is_active
      order by pc.label
-  `)) as unknown as { rows: any[] }
+  `))
   return r.rows.map((c) => ({
     id: c.id,
     label: c.last_four ? `${c.label}` : c.label,
@@ -739,10 +737,10 @@ export async function cardOptions(orgId?: string): Promise<Opt[]> {
 /** Reconcilable bank accounts (for check funding source + transfer legs). */
 export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Opt>(sql`
     select id, number, name from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
      order by number nulls last
-  `)) as unknown as { rows: Opt[] }
+  `))
   return r.rows
 }

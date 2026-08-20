@@ -28,18 +28,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ${status ? sql`and d.status = ${status}` : sql``}`
 
   const [rows, total, filters] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.open_balance, d.memo
         from documents d where ${where}
        order by d.document_date desc, d.created_at desc
        limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
-    db.execute(sql`select count(*)::int as count from documents d where ${where}`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`select count(*)::int as count from documents d where ${where}`),
+    db.execute<Record<string, unknown>>(sql`
       select array_remove(array_agg(distinct kind order by kind), null) as kinds,
              array_remove(array_agg(distinct status order by status), null) as statuses
         from documents where org_id = ${gate.user.orgId} and party_id = ${id}`),
-  ])) as unknown as { rows: Record<string, unknown>[] }[]
+  ]))
 
   return NextResponse.json({
     rows: rows.rows,

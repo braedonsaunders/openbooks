@@ -25,7 +25,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'valid settlement date is required' }, { status: 400 })
   }
 
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string; toCurrency: string; rate: string; asOf: string; source: string }>(sql`
     select id, to_currency as "toCurrency", rate::text, as_of::text as "asOf", source
       from (
         select r.*,
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
       ) ranked
      where ordinal <= 10
      order by "toCurrency", "asOf" desc
-  `)) as unknown as { rows: Array<{ id: string; toCurrency: string; rate: string; asOf: string; source: string }> }
+  `))
 
   return NextResponse.json({ rates: result.rows })
 }

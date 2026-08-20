@@ -197,12 +197,12 @@ export async function createScratchUser(
   userId = randomUUID(),
 ): Promise<string> {
   await db.transaction(async (tx) => {
-    const role = (await tx.execute(sql`
+    const role = (await tx.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, ${roleKey}, ${roleKey.replaceAll('_', ' ')}, false, '[]'::jsonb)
       on conflict (org_id, key) do update set updated_at = now()
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     await tx.execute(sql`
       insert into users (id, org_id, email, name, password_hash, is_active)
       values (${userId}, ${orgId}, ${`u-${userId.slice(0, 8)}@scratch.test`}, ${name}, 'x', true)
@@ -329,7 +329,7 @@ async function setTeardownGucs(tx: TeardownTx): Promise<void> {
 
 /** Every base table in public that carries an org_id column. */
 export async function listOrgIdTables(): Promise<string[]> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ tableName: string }>(sql`
     select c.table_name as "tableName"
       from information_schema.columns c
       join information_schema.tables t
@@ -337,7 +337,7 @@ export async function listOrgIdTables(): Promise<string[]> {
      where c.table_schema = 'public'
        and c.column_name = 'org_id'
        and t.table_type = 'BASE TABLE'
-     order by c.table_name`)) as unknown as { rows: { tableName: string }[] };
+     order by c.table_name`));
   return result.rows.map((r) => r.tableName);
 }
 
@@ -366,7 +366,7 @@ async function orgRowCountsCommitted(orgId: string): Promise<Record<string, numb
       ],
       sql` union all `,
     );
-    const result = (await tx.execute(union)) as unknown as { rows: { tableName: string; n: number }[] };
+    const result = (await tx.execute<{ tableName: string; n: number }>(union));
     for (const row of result.rows) if (Number(row.n) > 0) counts[row.tableName] = Number(row.n);
   });
   return counts;
@@ -475,10 +475,8 @@ async function bulkDeletePass(
         end loop;
       end
       $teardown$`);
-    const r = (await tx.execute(sql`
-      select table_name as "table", error from scratch_teardown_failures`)) as unknown as {
-      rows: { table: string; error: string }[];
-    };
+    const r = (await tx.execute<{ table: string; error: string }>(sql`
+      select table_name as "table", error from scratch_teardown_failures`));
     return r.rows;
   });
 }
@@ -550,9 +548,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // (orgs is deleted last); if it exists under any other name, refuse.
   const orgRow = await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
-    const r = (await tx.execute(sql`select name from orgs where id = ${orgId}`)) as unknown as {
-      rows: { name: string }[];
-    };
+    const r = (await tx.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`));
     return r.rows[0];
   });
   if (!orgRow) {
@@ -599,7 +595,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
     // when such rows exist.
     const bankFiles = (await tx.execute(
       sql`select 1 as x from pay_run_bank_files where org_id = ${orgId} limit 1`,
-    )) as unknown as { rows: unknown[] };
+    ));
     const hasBankFiles = bankFiles.rows.length > 0;
     if (hasBankFiles) {
       await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
@@ -627,7 +623,7 @@ async function dropScratchOrgEscaped(orgId: string): Promise<void> {
       await setTeardownGucs(tx);
       const r = (await tx.execute(
         sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`,
-      )) as unknown as { rows: unknown[] };
+      ));
       if (r.rows.length === 0) return;
       await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
       await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);

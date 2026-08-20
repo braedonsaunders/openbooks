@@ -54,7 +54,7 @@ export async function reconcileApplications(
   // the document's original `document` entry with an append-only `migration`
   // or `intercompany` entry; that replacement is the only legal settlement
   // endpoint and must remain visible to a later source application.
-  const lineRows = (await db.execute(sql`
+  const lineRows = (await db.execute<{ ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }>(sql`
     select d.custom->>${refKey} as ref, l.id as line_id, e.posting_date::text as pdate,
            l.line_number as line_no, abs(l.amount) as amt,
            l.account_id as account_id, l.party_id as party_id,
@@ -65,9 +65,7 @@ export async function reconcileApplications(
       join accounts a on a.id = l.account_id
      where e.status = 'posted' and d.org_id = ${orgId}
        and a.type in ('liability_payable', 'asset_receivable')
-       and d.custom->>${refKey} is not null`)) as unknown as {
-    rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }[];
-  };
+       and d.custom->>${refKey} is not null`));
 
   interface OpenLine { lineId: string; remaining: bigint; date: string; lineNo: number; accountId: string; partyId: string | null; subsidiaryId: string; currency: string; fxRate: string; sign: string }
   const linesByRef = new Map<string, OpenLine[]>();
@@ -82,11 +80,9 @@ export async function reconcileApplications(
   // per line (both roles), to reduce remaining capacity:
   const usedByLine = new Map<string, bigint>();
   for (const side of ["from_line_id", "to_line_id"] as const) {
-    const used = (await db.execute(sql`
+    const used = (await db.execute<{ line_id: string; amt: string }>(sql`
       select ${sql.raw(side)} as line_id, sum(amount) as amt
-        from applications where org_id = ${orgId} and unapplied_at is null group by 1`)) as unknown as {
-      rows: { line_id: string; amt: string }[];
-    };
+        from applications where org_id = ${orgId} and unapplied_at is null group by 1`));
     for (const r of used.rows) {
       usedByLine.set(r.line_id, (usedByLine.get(r.line_id) ?? 0n) + toUnits(r.amt));
     }
@@ -100,7 +96,7 @@ export async function reconcileApplications(
 
   // per (payment, applied) pair, to compute the missing delta:
   const existingPair = new Map<string, bigint>();
-  const pairRows = (await db.execute(sql`
+  const pairRows = (await db.execute<{ pay_ref: string; app_ref: string; amt: string }>(sql`
     select df.custom->>${refKey} as pay_ref, dt.custom->>${refKey} as app_ref, sum(ap.amount) as amt
       from applications ap
       join journal_lines lf on lf.id = ap.from_line_id
@@ -111,7 +107,7 @@ export async function reconcileApplications(
       join documents dt on dt.id = et.source_document_id
      where ap.org_id = ${orgId} and ap.unapplied_at is null
        and df.custom->>${refKey} is not null and dt.custom->>${refKey} is not null
-     group by 1, 2`)) as unknown as { rows: { pay_ref: string; app_ref: string; amt: string }[] };
+     group by 1, 2`));
   for (const r of pairRows.rows) {
     existingPair.set(`${r.pay_ref}|${r.app_ref}`, toUnits(r.amt));
   }
@@ -264,6 +260,6 @@ export async function recomputeOpenBalances(orgId: string): Promise<number> {
          where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
          group by d.id
       ) c
-     where d.id = c.id and d.open_balance is distinct from c.ob`)) as unknown as { rowCount?: number };
+     where d.id = c.id and d.open_balance is distinct from c.ob`));
   return res.rowCount ?? 0;
 }

@@ -30,10 +30,10 @@ export async function POST() {
   // concurrent requests and the scheduler.
   let run: { rows: { id: string }[] };
   try {
-    run = (await db.execute(sql`
+    run = (await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status, actor_id)
       values (${orgId}, 'manual', 'queued', ${actor.id})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
   } catch (error) {
     const postgresError = error as { code?: string; constraint?: string };
     if (

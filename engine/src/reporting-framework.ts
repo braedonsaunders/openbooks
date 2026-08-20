@@ -19,10 +19,10 @@ import { db } from "./db.ts";
 export type ReportingFramework = "us_gaap" | "ifrs";
 
 export async function orgReportingFramework(orgId: string): Promise<ReportingFramework> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ rf: string | null; tf: string | null }>(sql`
     select settings->>'reportingFramework' as rf, settings->>'taxFramework' as tf
       from orgs where id = ${orgId}
-  `)) as unknown as { rows: { rf: string | null; tf: string | null }[] };
+  `));
   const row = r.rows[0];
   if (row?.rf === "ifrs" || row?.rf === "us_gaap") return row.rf;
   return row?.tf === "ias12" ? "ifrs" : "us_gaap";

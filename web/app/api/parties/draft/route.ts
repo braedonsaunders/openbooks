@@ -45,11 +45,11 @@ export async function POST(req: NextRequest) {
       .returning({ id: schema.parties.id })
 
     if (role === 'customer') {
-      const terms = (await tx.execute(sql`
+      const terms = (await tx.execute<{ id: string }>(sql`
         select id from payment_terms
          where org_id = ${user.orgId} and is_active
          order by net_days, name limit 1
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       await tx.insert(schema.customerRoles).values({
         orgId: user.orgId,
         partyId: p.id,

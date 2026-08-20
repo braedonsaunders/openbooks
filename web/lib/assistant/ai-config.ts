@@ -28,6 +28,7 @@ import {
   type StoredDocumentCapture,
 } from "@openbooks/engine/src/ap-capture-config.ts";
 import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/ap-capture.ts";
+import { type SqlExecutor } from '@openbooks/engine/src/db.ts'
 
 /**
  * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config
@@ -91,9 +92,9 @@ export type AiSettingsInput = {
 };
 
 async function readAi(orgId: string): Promise<{ ai: RawAi; orgName: string | null }> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ ai: unknown; name: string }>(sql`
     select settings->'ai' as ai, name from orgs where id = ${orgId}
-  `)) as unknown as { rows: { ai: unknown; name: string }[] };
+  `));
   const raw = r.rows[0]?.ai;
   return {
     ai: (raw && typeof raw === "object" ? raw : {}) as RawAi,
@@ -212,9 +213,9 @@ export async function saveOrgAiSettings(
 ): Promise<void> {
   const baseUrl = validateAiBaseUrl(input.provider, input.baseUrl) ?? "";
   await db.transaction(async (tx) => {
-    const r = (await tx.execute(sql`
+    const r = (await tx.execute<{ ai: unknown }>(sql`
       select settings->'ai' as ai from orgs where id = ${orgId} for update
-    `)) as unknown as { rows: { ai: unknown }[] };
+    `));
     const raw = r.rows[0]?.ai;
     const prev = (raw && typeof raw === "object" ? raw : {}) as RawAi;
     const next: RawAi = {
@@ -262,18 +263,18 @@ export async function saveOrgAiSettings(
 }
 
 async function persistAgentPolicy(
-  tx: any,
+  tx: SqlExecutor,
   orgId: string,
   userId: string,
   globalEnabled: boolean,
   agent: AgentSettingsInput,
 ): Promise<void> {
-  const prior = (await tx.execute(sql`
+  const prior = (await tx.execute<{ id: string; enabled: boolean; automatic_runs: boolean; cadence: AgentCadence; next_run_at: Date | null }>(sql`
     select id, enabled, automatic_runs, cadence, next_run_at
       from ai_agent_policies
      where org_id = ${orgId} and agent_key = ${agent.agentKey}
      for update
-  `)) as unknown as { rows: { id: string; enabled: boolean; automatic_runs: boolean; cadence: AgentCadence; next_run_at: Date | null }[] };
+  `));
   const previous = prior.rows[0];
   const schedulable = globalEnabled && agent.enabled && agent.automaticRuns;
   const scheduleChanged = !previous || !previous.enabled || !previous.automatic_runs || previous.cadence !== agent.cadence;
@@ -283,7 +284,7 @@ async function persistAgentPolicy(
       : previous.next_run_at
     : null;
   const detectorSettings = serializeContinuousCloseDetectors(agent.detectors);
-  const saved = (await tx.execute(sql`
+  const saved = (await tx.execute<{ id: string }>(sql`
     insert into ai_agent_policies (
       org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
       detector_settings, analysis_settings, next_run_at, created_by, updated_by
@@ -303,7 +304,7 @@ async function persistAgentPolicy(
       updated_at = now(),
       updated_by = excluded.updated_by
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'ai_agent_policies', ${saved.rows[0]!.id}, 'update', ${JSON.stringify({
@@ -329,10 +330,10 @@ export async function saveOrgAiAgentSettings(
   if (!CONTINUOUS_CLOSE_AGENT_KEYS.includes(agentKey as ContinuousCloseAgentKey)) throw new Error("invalid agent");
   const agent = normalizeAgentSettingInput(agentKey as ContinuousCloseAgentKey, raw);
   await db.transaction(async (tx) => {
-    const org = (await tx.execute(sql`
+    const org = (await tx.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${orgId} for update
-    `)) as unknown as { rows: { enabled: boolean }[] };
+    `));
     await persistAgentPolicy(tx, orgId, userId, org.rows[0]?.enabled !== false, agent);
   });
   return (await getContinuousClosePolicies(orgId)).find((policy) => policy.agentKey === agent.agentKey)!;

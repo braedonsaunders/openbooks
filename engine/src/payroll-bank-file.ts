@@ -267,15 +267,14 @@ export interface PayrollOriginatorConfig {
 export type PayrollOriginatorResult =
   | { ok: true; config: PayrollOriginatorConfig }
   | { ok: false; profileName: string; missing: string[] };
-
-interface ProfileRow {
+type ProfileRow = {
   id: string;
   name: string;
   currency: string | null;
   rail: string;
   settings: Record<string, unknown> | null;
   originator_secrets_encrypted: string | null;
-}
+};
 
 /** CPA-005 is CRLF-terminated per the bank implementation guides; NACHA is per-ODFI. */
 function lineEndingFor(row: ProfileRow, format: PayRunBankFileFormat): "lf" | "crlf" {
@@ -288,14 +287,14 @@ export async function payrollBankProfiles(orgId: string): Promise<
   { id: string; name: string; format: PayRunBankFileFormat; currency: string | null; configured: boolean }[]
 > {
   const rails = Object.values(PAYROLL_BANK_FILE_FORMATS).flatMap((spec) => spec.rails);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<ProfileRow>(sql`
     select p.id, p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.is_active
        and f.rail = any(${`{${rails.join(",")}}`}::text[])
      order by p.name
-  `)) as unknown as { rows: ProfileRow[] };
+  `));
   return rows.rows.map((row) => {
     const format = formatForRail(row.rail)!;
     return {
@@ -479,12 +478,12 @@ export async function payrollOriginatorConfig(
   orgId: string,
   paymentBankProfileId: string,
 ): Promise<PayrollOriginatorResult & { format?: PayRunBankFileFormat }> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<ProfileRow>(sql`
     select p.id, p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${paymentBankProfileId} and p.is_active and f.is_active
-  `)) as unknown as { rows: ProfileRow[] };
+  `));
   const row = rows.rows[0];
   if (!row) throw new PayrollError("payment bank profile not found or inactive");
   const format = formatForRail(row.rail);
@@ -535,7 +534,12 @@ export async function loadCredits(
     );
   }
   const partyIds = population.entries.map((entry) => entry.employeePartyId);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      party_id: string;
+      employee_number: string | null;
+      routing: Record<string, string> | null;
+      account_number_encrypted: string | null;
+    }>(sql`
     select p.id as party_id, er.employee_number,
            b.routing, b.account_number_encrypted
       from parties p
@@ -549,14 +553,7 @@ export async function loadCredits(
          limit 1) b on true
      where p.org_id = ${orgId}
        and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
-  `)) as unknown as {
-    rows: {
-      party_id: string;
-      employee_number: string | null;
-      routing: Record<string, string> | null;
-      account_number_encrypted: string | null;
-    }[];
-  };
+  `));
   const byParty = new Map(rows.rows.map((row) => [row.party_id, row]));
 
   const problems: string[] = [];

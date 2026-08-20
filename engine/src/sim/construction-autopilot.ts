@@ -43,24 +43,20 @@ async function stampCollectible(world: SimOrg, invoiceId: string, today: string)
 
 /** Sum of posted customer-invoice totals tagged to a job (billed-to-date). */
 async function billedToDate(world: SimOrg, projectId: string): Promise<number> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ billed: string }>(sql`
     select coalesce(sum(d.total), 0)::text as billed from documents d
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and (d.custom->'sim'->>'projectId' = ${projectId}
-            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`)) as unknown as {
-    rows: { billed: string }[];
-  };
+            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`));
   return Number(r.rows[0]?.billed ?? "0");
 }
 
 /** Distinct field-ticket days of unbilled crew time on a job (for equipment days). */
 async function unbilledCrewDays(world: SimOrg, projectId: string): Promise<number> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ days: string }>(sql`
     select count(distinct worked_on)::text as days from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`)) as unknown as {
-    rows: { days: string }[];
-  };
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`));
   return Number(r.rows[0]?.days ?? "0");
 }
 
@@ -73,12 +69,12 @@ async function jobPostedCost(
   const a = world.accounts;
   const labor = new Set([a.laborWip, a.directLabor].filter(Boolean) as string[]);
   const purchase = new Set([a.materials, a.subcontractor, a.equipmentRental, a.jobTravel, a.cogs].filter(Boolean) as string[]);
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ acct: string; amt: string }>(sql`
     select l.account_id as acct, coalesce(sum(l.amount), 0)::text as amt
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${world.orgId} and l.project_id = ${projectId}
        and to_char(e.posting_date, 'YYYY-MM') = ${month}
-     group by l.account_id`)) as unknown as { rows: { acct: string; amt: string }[] };
+     group by l.account_id`));
   let lab = 0;
   let pur = 0;
   for (const row of r.rows) {
@@ -154,9 +150,9 @@ export async function autopilotConstruction(
         if (r) actions++;
       } else if (job.method === "schedule_of_values") {
         // AIA progress draw sized to this month's posted cost × markup.
-        const sovTotal = (await db.execute(sql`
+        const sovTotal = (await db.execute<{ t: string }>(sql`
           select coalesce(sum(scheduled_value), 0)::text as t from sov_lines
-           where org_id = ${world.orgId} and project_id = ${job.id}`)) as unknown as { rows: { t: string }[] };
+           where org_id = ${world.orgId} and project_id = ${job.id}`));
         const sov = Number(sovTotal.rows[0]?.t ?? "0");
         const billed = await billedToDate(world, job.id);
         if (sov > 0 && billed < sov * 0.9) {
@@ -167,12 +163,10 @@ export async function autopilotConstruction(
             actions++;
           }
         } else if (sov > 0 && billed >= sov * 0.9) {
-          const ret = (await db.execute(sql`
+          const ret = (await db.execute<{ bal: string }>(sql`
             select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
               join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`)) as unknown as {
-            rows: { bal: string }[];
-          };
+             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`));
           const retBal = Number(ret.rows[0]?.bal ?? "0");
           if (retBal > 1) {
             const inv = await releaseProjectRetainage(world, job.id, today, retBal.toFixed(2), world.actors.controller);

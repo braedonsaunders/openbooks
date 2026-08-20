@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { FinancialProfile } from "@openbooks/schema";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MEASURES = new Set([
@@ -225,7 +225,7 @@ export interface PublishProjectFinancialProfileInput {
 }
 
 type TransactionExecutor = {
-  execute: (query: any) => Promise<any>;
+  execute: SqlExecutor["execute"];
 };
 
 export interface CorrectProjectFinancialProfileInput {
@@ -257,7 +257,14 @@ export async function correctProjectFinancialProfile(
   assertValidProjectFinancialProfile(input.correctedFinancialProfile);
 
   return db.transaction(async (tx) => {
-    const current = (await tx.execute(sql`
+    const current = (await tx.execute<{
+        id: string;
+        effective_from: string;
+        effective_to: string | null;
+        financial_profile: FinancialProfile;
+        matches_expected: boolean;
+        matches_corrected: boolean;
+      }>(sql`
       select id, effective_from::text as effective_from,
              effective_to::text as effective_to, financial_profile,
              financial_profile = ${JSON.stringify(input.expectedFinancialProfile)}::jsonb
@@ -267,16 +274,7 @@ export async function correctProjectFinancialProfile(
         from project_financial_profile_versions
        where id = ${input.versionId} and org_id = ${input.orgId}
        for update
-    `)) as unknown as {
-      rows: Array<{
-        id: string;
-        effective_from: string;
-        effective_to: string | null;
-        financial_profile: FinancialProfile;
-        matches_expected: boolean;
-        matches_corrected: boolean;
-      }>;
-    };
+    `));
     const row = current.rows[0];
     if (!row) throw new Error("project financial profile version not found");
     const expected = JSON.stringify(input.expectedFinancialProfile);
@@ -381,7 +379,7 @@ export async function publishProjectFinancialProfileInTransaction(
   await tx.execute(
     sql`select set_config('openbooks.publish_project_profile', 'on', true)`,
   );
-  const type = (await tx.execute(sql`
+  const type = (await tx.execute<{ id: string; accounting_today: string }>(sql`
     select pt.id,
            (
              current_timestamp at time zone coalesce(
@@ -401,7 +399,7 @@ export async function publishProjectFinancialProfileInTransaction(
       join orgs o on o.id = pt.org_id
      where pt.id = ${input.projectTypeId} and pt.org_id = ${input.orgId}
      for update of pt
-  `)) as unknown as { rows: { id: string; accounting_today: string }[] };
+  `));
   if (!type.rows[0]) throw new Error("project type not found");
   if (input.effectiveFrom < type.rows[0].accounting_today) {
     throw new Error(
@@ -409,20 +407,20 @@ export async function publishProjectFinancialProfileInTransaction(
     );
   }
 
-  const sameDate = (await tx.execute(sql`
+  const sameDate = (await tx.execute<{ id: string }>(sql`
     select id from project_financial_profile_versions
      where org_id = ${input.orgId}
        and project_type_id = ${input.projectTypeId}
        and effective_from = ${input.effectiveFrom}
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (sameDate.rows.length) {
     throw new Error(
       `a financial profile version already starts on ${input.effectiveFrom}`,
     );
   }
 
-  const next = (await tx.execute(sql`
+  const next = (await tx.execute<{ effective_from: string }>(sql`
     select effective_from::text as effective_from
       from project_financial_profile_versions
      where org_id = ${input.orgId}
@@ -430,12 +428,12 @@ export async function publishProjectFinancialProfileInTransaction(
        and effective_from > ${input.effectiveFrom}
      order by effective_from
      limit 1
-  `)) as unknown as { rows: { effective_from: string }[] };
+  `));
   const effectiveTo = next.rows[0]
     ? (
-        (await tx.execute(sql`
+        (await tx.execute<{ d: string }>(sql`
           select (${next.rows[0].effective_from}::date - 1)::text as d
-        `)) as unknown as { rows: { d: string }[] }
+        `))
       ).rows[0]!.d
     : null;
 
@@ -474,7 +472,11 @@ export async function publishProjectFinancialProfileInTransaction(
       from closed
   `);
 
-  const inserted = (await tx.execute(sql`
+  const inserted = (await tx.execute<{
+      id: string;
+      effective_from: string;
+      effective_to: string | null;
+    }>(sql`
     insert into project_financial_profile_versions (
       org_id, project_type_id, effective_from, effective_to,
       financial_profile, reason, created_by, updated_by
@@ -486,13 +488,7 @@ export async function publishProjectFinancialProfileInTransaction(
     )
     returning id, effective_from::text as effective_from,
               effective_to::text as effective_to
-  `)) as unknown as {
-    rows: {
-      id: string;
-      effective_from: string;
-      effective_to: string | null;
-    }[];
-  };
+  `));
   const version = inserted.rows[0]!;
   await tx.execute(sql`
     insert into audit_log

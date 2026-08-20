@@ -83,7 +83,7 @@ export type PayRunBankFileStatus = "generated" | "released" | "superseded";
  */
 type Executor = Pick<typeof db, "execute">;
 
-export interface PayRunBankFileArtifact {
+export type PayRunBankFileArtifact = {
   id: string;
   payRunDocumentId: string;
   paymentBankProfileId: string;
@@ -109,7 +109,7 @@ export interface PayRunBankFileArtifact {
   releaseCount: number;
   supersededAt: string | null;
   supersedeReason: string | null;
-}
+};
 
 // ---------------------------------------------------------------------------
 // Entitlement — may this run have a file at all?
@@ -141,8 +141,7 @@ export interface PayRunBankFileEntitlement {
   netTotal: string;
   paidAt: string | null;
 }
-
-interface RunRow {
+type RunRow = {
   run_status: string;
   pay_date: string;
   paid_at: string | null;
@@ -151,17 +150,17 @@ interface RunRow {
   document_number: string;
   currency: string;
   subsidiary_id: string | null;
-}
+};
 
 async function loadRun(orgId: string, documentId: string): Promise<RunRow | null> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<RunRow>(sql`
     select r.run_status, r.pay_date::text as pay_date, r.paid_at::text as paid_at,
            r.net_total::text as net_total, d.status as doc_status,
            d.document_number, d.currency, d.subsidiary_id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)) as unknown as { rows: RunRow[] };
+  `));
   return rows.rows[0] ?? null;
 }
 
@@ -288,11 +287,11 @@ export async function listPayRunBankFiles(
   orgId: string,
   documentId: string,
 ): Promise<PayRunBankFileArtifact[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<PayRunBankFileArtifact>(sql`
     select ${artifactColumns()} from pay_run_bank_files
      where org_id = ${orgId} and pay_run_document_id = ${documentId}
      order by sequence_number desc
-  `)) as unknown as { rows: PayRunBankFileArtifact[] };
+  `));
   return rows.rows;
 }
 
@@ -326,18 +325,18 @@ async function ensureBankFileFolder(
   orgId: string,
   actorId: string,
 ): Promise<string> {
-  const existing = (await tx.execute(sql`
+  const existing = (await tx.execute<{ id: string }>(sql`
     select id from folders where org_id = ${orgId} and system_kind = ${PAYROLL_BANK_FILE_FOLDER_KIND}
      limit 1
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (existing.rows[0]) return existing.rows[0].id;
-  const created = (await tx.execute(sql`
+  const created = (await tx.execute<{ id: string }>(sql`
     insert into folders (org_id, name, is_system, system_kind, is_private, owner_id,
                          created_by, updated_by, created_at, updated_at)
     values (${orgId}, ${PAYROLL_BANK_FILE_FOLDER_NAME}, true, ${PAYROLL_BANK_FILE_FOLDER_KIND},
             true, null, ${actorId}, ${actorId}, now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (!created.rows[0]) throw new PayrollError("could not create the payroll bank-file folder");
   return created.rows[0].id;
 }
@@ -363,7 +362,7 @@ async function storeBankFileBytes(
     ? input.filename.split(".").pop()!.toLowerCase()
     : null;
   const kind = activeStorageKind();
-  const file = (await tx.execute(sql`
+  const file = (await tx.execute<{ id: string }>(sql`
     insert into files (org_id, folder_id, name, extension, file_type, content_type,
                        size_bytes, storage_kind, content_hash, created_by, updated_by,
                        created_at, updated_at)
@@ -371,15 +370,15 @@ async function storeBankFileBytes(
             ${input.contentType}, ${input.bytes.length}, ${kind}, ${input.contentHash},
             ${input.actorId}, ${input.actorId}, now(), now())
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const fileId = file.rows[0]!.id;
-  const version = (await tx.execute(sql`
+  const version = (await tx.execute<{ id: string }>(sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                content_hash, created_by, created_at)
     values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind},
             ${input.contentHash}, ${input.actorId}, now())
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const versionId = version.rows[0]!.id;
   await tx.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId}`);
   // Same ordering as the cabinet: the object-store put happens inside the
@@ -434,7 +433,7 @@ async function recordBankFileEvent(
   `);
 }
 
-export interface PayRunBankFileAuditEntry {
+export type PayRunBankFileAuditEntry = {
   id: string;
   event: string;
   artifactId: string;
@@ -442,7 +441,7 @@ export interface PayRunBankFileAuditEntry {
   actorName: string | null;
   at: string;
   changes: Record<string, unknown>;
-}
+};
 
 /** The run's bank-file audit trail: who generated and who released what. */
 export async function payRunBankFileAudit(
@@ -450,7 +449,7 @@ export async function payRunBankFileAudit(
   documentId: string,
   limit = 100,
 ): Promise<PayRunBankFileAuditEntry[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<PayRunBankFileAuditEntry>(sql`
     select a.id, coalesce(a.changes->>'event', a.action) as event,
            a.row_id as "artifactId", a.actor_id as "actorId",
            coalesce(u.name, u.email) as "actorName", a.at, a.changes
@@ -461,7 +460,7 @@ export async function payRunBankFileAudit(
        and f.pay_run_document_id = ${documentId}
      order by a.at desc
      limit ${limit}
-  `)) as unknown as { rows: PayRunBankFileAuditEntry[] };
+  `));
   return rows.rows;
 }
 
@@ -550,12 +549,12 @@ export async function generatePayRunBankFile(
     // Serialize against a concurrent generate for the same run: without this,
     // two operators pressing the button at once each see "no live file" and
     // each produce one the other does not know about.
-    const locked = (await tx.execute(sql`
+    const locked = (await tx.execute<{ run_status: string; paid_at: string | null }>(sql`
       select r.run_status, r.paid_at
         from pay_runs r
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r
-    `)) as unknown as { rows: { run_status: string; paid_at: string | null }[] };
+    `));
     const lockedRun = locked.rows[0];
     if (!lockedRun) throw new PayrollError("pay run not found");
     if (lockedRun.run_status !== "committed") {
@@ -564,11 +563,11 @@ export async function generatePayRunBankFile(
     if (lockedRun.paid_at) {
       throw new PayrollError("this pay run is already recorded as paid");
     }
-    const live = (await tx.execute(sql`
+    const live = (await tx.execute<{ id: string; file_number: string }>(sql`
       select id, file_number, coalesce(max(sequence_number) over (), 0) as _ignored
         from pay_run_bank_files
        where org_id = ${orgId} and pay_run_document_id = ${documentId} and status <> 'superseded'
-    `)) as unknown as { rows: { id: string; file_number: string }[] };
+    `));
     if (live.rows.length > 0 && supersedeReason.length < 5) {
       throw new PayrollError(
         `this pay run already has bank file ${live.rows[0]!.file_number} — a reason is required to replace it`,
@@ -579,10 +578,10 @@ export async function generatePayRunBankFile(
     // One allocation per artifact off the org's own sequence machinery. Both
     // the artifact's sequence within the run and the bank-facing number are
     // stored; neither is ever recomputed from a count at download time.
-    const seqRow = (await tx.execute(sql`
+    const seqRow = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(sequence_number), 0) + 1 as n from pay_run_bank_files
        where org_id = ${orgId} and pay_run_document_id = ${documentId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     const sequenceNumber = Number(seqRow.rows[0]?.n ?? 1);
 
     const scoped = entitlement.subsidiaryId
@@ -590,16 +589,16 @@ export async function generatePayRunBankFile(
           select 1 from number_sequences
            where org_id = ${orgId} and document_kind = ${PAYROLL_BANK_FILE_SEQUENCE_KIND}
              and subsidiary_id = ${entitlement.subsidiaryId} limit 1
-        `)) as unknown as { rows: unknown[] }).rows.length > 0
+        `))).rows.length > 0
       : false;
-    const allocated = (await tx.execute(sql`
+    const allocated = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${orgId}, ${PAYROLL_BANK_FILE_SEQUENCE_KIND},
               ${scoped ? entitlement.subsidiaryId : null}, ${PAYROLL_BANK_FILE_PREFIX})
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       returning prefix, next_number, padding
-    `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+    `));
     const seq = allocated.rows[0]!;
     const sequenceValue = Number(seq.next_number);
     const fileNumber = `${seq.prefix}${String(sequenceValue).padStart(seq.padding, "0")}`;
@@ -660,7 +659,7 @@ export async function generatePayRunBankFile(
       contentHash,
     });
 
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<PayRunBankFileArtifact>(sql`
       insert into pay_run_bank_files (
         org_id, pay_run_document_id, payment_bank_profile_id, format,
         sequence_number, file_number, sequence_value, file_creation_number, file_id_modifier,
@@ -676,7 +675,7 @@ export async function generatePayRunBankFile(
         ${JSON.stringify(rendered.excludedCheque)}::jsonb, ${rendered.excludedTotal},
         'generated', ${now.toISOString()}, ${actorId}, ${actorId}, ${actorId})
       returning ${artifactColumns()}
-    `)) as unknown as { rows: PayRunBankFileArtifact[] };
+    `));
     const artifact = inserted.rows[0]!;
 
     for (const previous of live.rows) {
@@ -756,20 +755,18 @@ export async function releasePayRunBankFile(
   artifactId: string,
   actorId: string,
 ): Promise<ReleasedPayRunBankFile> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<(PayRunBankFileArtifact & {
+      storageKind: string;
+      dbBytes: Buffer | null;
+      versionId: string;
+    })>(sql`
     select ${artifactColumns("f")}, fv.storage_kind as "storageKind",
            fb.bytes as "dbBytes", f.file_version_id as "versionId"
       from pay_run_bank_files f
       join file_versions fv on fv.id = f.file_version_id
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${artifactId}
-  `)) as unknown as {
-    rows: (PayRunBankFileArtifact & {
-      storageKind: string;
-      dbBytes: Buffer | null;
-      versionId: string;
-    })[];
-  };
+  `));
   const row = rows.rows[0];
   if (!row) throw new PayrollError("payroll bank file not found");
 
@@ -814,9 +811,9 @@ export async function releasePayRunBankFile(
     });
   });
 
-  const refreshed = (await db.execute(sql`
+  const refreshed = (await db.execute<PayRunBankFileArtifact>(sql`
     select ${artifactColumns()} from pay_run_bank_files where org_id = ${orgId} and id = ${artifactId}
-  `)) as unknown as { rows: PayRunBankFileArtifact[] };
+  `));
 
   return {
     artifact: refreshed.rows[0] ?? row,

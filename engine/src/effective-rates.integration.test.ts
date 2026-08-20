@@ -149,16 +149,7 @@ test("activated rate evidence is immutable while controlled dating and retiremen
     await assert.rejects(() => db.execute(sql`
       update item_rate_lines set cost_rate = 76 where id = ${lineId}`));
 
-    const evidence = (await db.execute(sql`
-      select version.status, version.effective_to, line.cost_rate, line.bill_rate,
-             policy.derivation_policy, adjustment.value, term.content
-        from item_rate_versions version
-        join item_rate_lines line on line.version_id = version.id
-        join labor_rate_version_policies policy on policy.version_id = version.id
-        join labor_rate_adjustments adjustment on adjustment.version_id = version.id
-        join labor_rate_terms term on term.version_id = version.id
-       where version.id = ${versionId}`)) as unknown as {
-      rows: Array<{
+    const evidence = (await db.execute<{
         status: string;
         effective_to: string;
         cost_rate: string;
@@ -166,8 +157,15 @@ test("activated rate evidence is immutable while controlled dating and retiremen
         derivation_policy: string;
         value: string;
         content: string;
-      }>;
-    };
+      }>(sql`
+      select version.status, version.effective_to, line.cost_rate, line.bill_rate,
+             policy.derivation_policy, adjustment.value, term.content
+        from item_rate_versions version
+        join item_rate_lines line on line.version_id = version.id
+        join labor_rate_version_policies policy on policy.version_id = version.id
+        join labor_rate_adjustments adjustment on adjustment.version_id = version.id
+        join labor_rate_terms term on term.version_id = version.id
+       where version.id = ${versionId}`));
     assert.deepEqual(evidence.rows, [{
       status: "retired",
       effective_to: "2026-11-30",

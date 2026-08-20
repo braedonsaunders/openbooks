@@ -28,7 +28,7 @@ export async function guardPaymentRunPermission(
 ): Promise<Authz | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const row = (await db.execute(sql`select direction from payment_runs where id = ${runId} and org_id = ${authz.user.orgId}`)) as unknown as { rows: { direction: string }[] }
+  const row = (await db.execute<{ direction: string }>(sql`select direction from payment_runs where id = ${runId} and org_id = ${authz.user.orgId}`))
   const run = row.rows[0]
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const permission = `${run.direction === 'inbound' ? 'ar' : 'ap'}.${capability}`

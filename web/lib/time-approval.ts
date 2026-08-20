@@ -47,7 +47,7 @@ export async function approveSubmittedTimeEntries(
   options: ApproveSubmittedTimeEntriesOptions,
 ): Promise<string[]> {
   return withOrg(options.orgId, async () => {
-    const approved = (await db.execute(sql`
+    const approved = (await db.execute<{ id: string }>(sql`
       update time_entries
          set status = 'approved',
              approved_by = ${options.actorId},
@@ -60,7 +60,7 @@ export async function approveSubmittedTimeEntries(
          and worked_on <= ${options.to}
          and status = 'submitted'
        returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
 
     const ids = approved.rows.map((row) => row.id)
     await runTimeApprovalEffects(options.orgId, options.actorId, ids)

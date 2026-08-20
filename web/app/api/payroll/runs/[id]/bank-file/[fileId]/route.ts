@@ -44,7 +44,7 @@ export async function POST(
   const owned = (await db.execute(sql`
     select 1 from pay_run_bank_files
      where org_id = ${gate.user.orgId} and id = ${fileId} and pay_run_document_id = ${id}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   try {

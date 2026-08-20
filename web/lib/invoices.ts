@@ -17,7 +17,7 @@ import { resolveOrgId } from './org-scope'
  */
 export async function loadInvoice(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute(sql`
+  const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as customer_name, e.id as entry_id,
            case when d.status = 'posted' then ap.applied end as applied,
            case when d.status = 'posted' then d.total - ap.applied end as balance_due
@@ -31,14 +31,14 @@ export async function loadInvoice(id: string, orgId?: string) {
          where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
       ) ap on true
      where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'customer_invoice'
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!doc.rows[0]) return null
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.description, l.amount, l.tax_code_id, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.custom
       from document_lines l
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return { doc: doc.rows[0], lines: lines.rows }
 }

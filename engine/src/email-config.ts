@@ -17,9 +17,9 @@ import { db } from "./db.ts";
 
 /** Read the raw stored config for an org (secret still sealed), or null. */
 export async function readOrgEmailConfig(orgId: string): Promise<RawEmailConfig | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ email: RawEmailConfig | null }>(sql`
     select settings -> 'email' as email from orgs where id = ${orgId}
-  `)) as unknown as { rows: { email: RawEmailConfig | null }[] };
+  `));
   return r.rows[0]?.email ?? null;
 }
 
@@ -87,7 +87,7 @@ export async function insertEmailLog(row: {
   meta?: Record<string, unknown>;
   errorMessage?: string | null;
 }): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into email_log (org_id, job_id, provider, recipients, recipient_primary, from_addr, reply_to_addr, subject, status, category_key, meta, error_message, sent_at)
     values (
       ${row.orgId}, ${row.jobId ?? null}, ${row.provider ?? null},
@@ -97,7 +97,7 @@ export async function insertEmailLog(row: {
       ${row.errorMessage ?? null}, ${row.status === "sent" ? sql`now()` : null}
     )
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   return r.rows[0]!.id;
 }
 

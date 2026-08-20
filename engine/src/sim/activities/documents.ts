@@ -170,7 +170,7 @@ export async function collectibleOpenItems(
   kindsOverride?: string[],
 ): Promise<OpenItemRow[]> {
   const kinds = kindsOverride ?? (side === "ar" ? ["customer_invoice", "customer_credit"] : ["vendor_bill", "vendor_credit"]);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ line_id: string; document_id: string; kind: string; due_date: string | null; expected_pay_date: string | null; custom: Record<string, unknown>; open: string }>(sql`
     with lines as (
       select l.id as line_id, d.id as document_id, d.kind, d.due_date, d.expected_pay_date, d.custom, l.amount,
              coalesce((
@@ -185,9 +185,7 @@ export async function collectibleOpenItems(
     select line_id, document_id, kind, due_date, expected_pay_date, custom,
            (abs(amount) - applied)::text as open
       from lines
-     where abs(amount) - applied > 0.005`)) as unknown as {
-    rows: { line_id: string; document_id: string; kind: string; due_date: string | null; expected_pay_date: string | null; custom: Record<string, unknown>; open: string }[];
-  };
+     where abs(amount) - applied > 0.005`));
   return rows.rows.map((r) => ({
     lineId: r.line_id,
     documentId: r.document_id,

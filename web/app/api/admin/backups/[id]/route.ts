@@ -20,10 +20,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const res = (await db.execute(sql`
-    select id, file_name, object_key, status, kind, byte_size, sha256, purged_at
-      from backup_runs where id = ${id} and org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const res = (await db.execute<{
       id: string;
       file_name: string | null;
       object_key: string | null;
@@ -32,8 +29,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       byte_size: number | null;
       sha256: string | null;
       purged_at: string | null;
-    }[];
-  };
+    }>(sql`
+    select id, file_name, object_key, status, kind, byte_size, sha256, purged_at
+      from backup_runs where id = ${id} and org_id = ${orgId}`));
   const run = res.rows[0];
   if (!run) return NextResponse.json({ error: "backup not found" }, { status: 404 });
   if (run.purged_at) {

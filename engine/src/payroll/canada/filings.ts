@@ -377,10 +377,10 @@ async function t4ConfidentialFields(
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId.split(":")[0] ?? "";
   if (!UUID_RE.test(employeePartyId)) return [];
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `)) as unknown as { rows: { sin_encrypted: string | null }[] };
+  `));
   const sin = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
   return [{
     label: "Social insurance number",

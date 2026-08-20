@@ -15,17 +15,17 @@ import { db } from '@openbooks/engine/src/db.ts'
  * only defaults — they are always overridable per asset in the drawer.
  */
 export async function ensureDefaultCategory(orgId: string, actorId: string | null): Promise<string> {
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ id: string }>(sql`
     select id from asset_categories where org_id = ${orgId} and name = 'Uncategorised' limit 1
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (existing.rows[0]) return existing.rows[0].id
 
   // best-effort account guesses from the COA
   const pick = async (whereSql: ReturnType<typeof sql>) => {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ id: string }>(sql`
       select id from accounts
        where org_id = ${orgId} and is_active and not is_summary ${whereSql}
-       order by number nulls last limit 1`)) as unknown as { rows: { id: string }[] }
+       order by number nulls last limit 1`))
     return r.rows[0]?.id ?? null
   }
   const assetAcct = await pick(sql`and type = 'asset_fixed' and name not ilike '%accumulat%' and name not ilike '%amortiz%'`)
@@ -40,13 +40,13 @@ export async function ensureDefaultCategory(orgId: string, actorId: string | nul
   const anyAcct = assetAcct ?? (await pick(sql``))
   if (!anyAcct) throw new Error('no accounts exist to seed an asset category')
 
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into asset_categories
       (org_id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id,
        default_method, default_life_months, created_by, updated_by)
     values (${orgId}, 'Uncategorised',
             ${assetAcct ?? anyAcct}, ${accumAcct ?? anyAcct}, ${expenseAcct ?? anyAcct},
             'straight_line', 60, ${actorId}, ${actorId})
-    returning id`)) as unknown as { rows: { id: string }[] }
+    returning id`))
   return ins.rows[0].id
 }

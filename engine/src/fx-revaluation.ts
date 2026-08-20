@@ -104,9 +104,9 @@ export class RevaluationError extends Error {
 
 /** org unrealized-FX gain/loss control account (orgs.settings.controlAccounts.fxUnrealizedGainLoss). */
 async function unrealizedAccount(orgId: string): Promise<string> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ acct: string | null }>(
     sql`select settings->'controlAccounts'->>'fxUnrealizedGainLoss' as acct from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { acct: string | null }[] };
+  ));
   const acct = r.rows[0]?.acct;
   if (!acct) {
     throw new RevaluationError(
@@ -117,9 +117,9 @@ async function unrealizedAccount(orgId: string): Promise<string> {
 }
 
 async function primaryBookId(orgId: string): Promise<string> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ id: string }>(
     sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`,
-  )) as unknown as { rows: { id: string }[] };
+  ));
   const id = r.rows[0]?.id;
   if (!id) throw new RevaluationError("primary accounting book is not configured");
   return id;
@@ -145,7 +145,7 @@ async function loadPositions(
   functionalCurrency: string,
   asOfDate: string,
 ): Promise<RevaluationPosition[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ account_id: string; currency: string; carrying_base: string; foreign_balance: string }>(sql`
     select l.account_id                         as account_id,
            l.currency                           as currency,
            sum(l.amount)::text                  as carrying_base,
@@ -167,9 +167,7 @@ async function loadPositions(
              else a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
            end
      group by l.account_id, l.currency
-     having sum(l.txn_amount) <> 0`)) as unknown as {
-    rows: { account_id: string; currency: string; carrying_base: string; foreign_balance: string }[];
-  };
+     having sum(l.txn_amount) <> 0`));
 
   const positions: RevaluationPosition[] = [];
   for (const row of r.rows) {
@@ -198,7 +196,7 @@ async function periodEndRate(
   to: string,
   asOfDate: string,
 ): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ rate: string }>(sql`
     select rate::text from (
       select rate, as_of from fx_rates
        where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
@@ -207,7 +205,7 @@ async function periodEndRate(
       select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${asOfDate}
-    ) candidates order by as_of desc limit 1`)) as unknown as { rows: { rate: string }[] };
+    ) candidates order by as_of desc limit 1`));
   return r.rows[0]?.rate ?? null;
 }
 
@@ -227,7 +225,7 @@ export async function runRevaluation(
   const gainLossAccount = await unrealizedAccount(orgId);
   const ctx = await loadSubsidiaryContext(db, orgId);
 
-  const periodRes = (await db.execute(sql`
+  const periodRes = (await db.execute<{ ends_on: string; name: string; next_starts_on: string | null; next_period_id: string | null }>(sql`
     select p.ends_on as ends_on, p.name as name,
            (select n.starts_on from accounting_periods n
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
@@ -236,9 +234,7 @@ export async function runRevaluation(
              where n.org_id = ${orgId} and n.starts_on > p.ends_on and n.is_adjustment = false
              order by n.starts_on asc limit 1) as next_period_id
       from accounting_periods p
-     where p.org_id = ${orgId} and p.id = ${periodId}`)) as unknown as {
-    rows: { ends_on: string; name: string; next_starts_on: string | null; next_period_id: string | null }[];
-  };
+     where p.org_id = ${orgId} and p.id = ${periodId}`));
   const period = periodRes.rows[0];
   if (!period) throw new RevaluationError(`accounting period ${periodId} not found`);
   const asOfDate = period.ends_on;
@@ -258,7 +254,7 @@ export async function runRevaluation(
       select 1 from journal_entries
        where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
          and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
-         and reverses_entry_id is null limit 1`)) as unknown as { rows: unknown[] };
+         and reverses_entry_id is null limit 1`));
     if (existing.rows.length > 0) {
       result.skipped.push({ subsidiaryId, reason: "already revalued for this period" });
       continue;
@@ -328,13 +324,13 @@ async function postRevaluationEntry(
       reversesEntryId: string | null,
       entryLines: RevaluationLine[],
     ): Promise<string> => {
-      const entryRes = (await tx.execute(sql`
+      const entryRes = (await tx.execute<{ id: string }>(sql`
         insert into journal_entries
           (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo,
            status, origin, reverses_entry_id, created_by, updated_by)
         values (${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${postingDate}, ${periodIdForEntry},
                 ${memo}, 'draft', 'fx_revaluation', ${reversesEntryId}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       const eid = entryRes.rows[0].id;
       for (let i = 0; i < entryLines.length; i++) {
         const l = entryLines[i]!;

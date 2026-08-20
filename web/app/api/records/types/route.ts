@@ -30,18 +30,18 @@ export async function POST() {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ key: string }>(sql`
     select key from custom_record_types
      where org_id = ${user.orgId} and key like 'new-record-type%'
-  `)) as unknown as { rows: { key: string }[] }
+  `))
   const taken = new Set(existing.rows.map((r) => r.key))
   let key = 'new-record-type'
   for (let n = 2; taken.has(key); n++) key = `new-record-type-${n}`
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into custom_record_types (org_id, key, name, plural_name, created_by, updated_by)
     values (${user.orgId}, ${key}, 'New record type', 'New records', ${user.id}, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }

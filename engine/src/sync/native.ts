@@ -165,10 +165,8 @@ export async function buildNativeContext(
   baseCurrency: string,
 ): Promise<NativeContext> {
   const [org] = (
-    (await db.execute(sql`
-      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`)) as unknown as {
-      rows: { ctrl: Record<string, string> }[];
-    }
+    (await db.execute<{ ctrl: Record<string, string> }>(sql`
+      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`))
   ).rows;
   const ctrl = org?.ctrl ?? {};
   const control: PostingDeps["control"] = {
@@ -184,11 +182,9 @@ export async function buildNativeContext(
   const accountRefById = new Map<string, string>();
   const ownedAccountIds = new Set<string>();
   for (const r of (
-    (await db.execute(sql`
+    (await db.execute<{ id: string; number: string | null; name: string; type: string; ref: string | null }>(sql`
       select id, number, name, type, custom->>${refKey} as ref
-        from accounts where org_id = ${orgId}`)) as unknown as {
-      rows: { id: string; number: string | null; name: string; type: string; ref: string | null }[];
-    }
+        from accounts where org_id = ${orgId}`))
   ).rows) {
     ownedAccountIds.add(r.id);
     if (r.ref) {
@@ -205,11 +201,9 @@ export async function buildNativeContext(
   }
 
   const idMap = async (table: string): Promise<Map<string, string>> => {
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{ id: string; ref: string }>(sql`
       select id, custom->>${refKey} as ref from ${sql.raw(table)}
-       where org_id = ${orgId} and custom->>${refKey} is not null`)) as unknown as {
-      rows: { id: string; ref: string }[];
-    };
+       where org_id = ${orgId} and custom->>${refKey} is not null`));
     return new Map(rows.rows.map((r) => [r.ref, r.id]));
   };
   const [partyByRef, deptByRef, projectByRef, itemByRef, subsidiaryByRef] = await Promise.all([
@@ -221,13 +215,13 @@ export async function buildNativeContext(
   ]);
 
   const segmentValueByRef = new Map<string, Map<string, string>>();
-  const segmentRows = (await db.execute(sql`
+  const segmentRows = (await db.execute<{ key: string; id: string; ref: string }>(sql`
     select sd.key, sv.id, sv.custom->>${refKey} as ref
       from segment_definitions sd
       join segment_values sv on sv.segment_id = sd.id and sv.org_id = sd.org_id
      where sd.org_id = ${orgId} and sd.source_kind = 'custom'
        and sv.custom->>${refKey} is not null
-  `)) as unknown as { rows: { key: string; id: string; ref: string }[] };
+  `));
   for (const row of segmentRows.rows) {
     const values = segmentValueByRef.get(row.key) ?? new Map<string, string>();
     values.set(row.ref, row.id);
@@ -237,13 +231,11 @@ export async function buildNativeContext(
   const taxByRate = new Map<string, { id: string; rate: string }>();
   const taxCodeByRef = new Map<string, string>();
   for (const r of (
-    (await db.execute(sql`
+    (await db.execute<{ id: string; rate: string | null; ref: string | null }>(sql`
       select tc.id, tr.rate_percent as rate, tc.custom->>${refKey} as ref from tax_codes tc
         left join tax_rates tr on tr.tax_code_id = tc.id
        where tc.org_id = ${orgId}
-       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`)) as unknown as {
-      rows: { id: string; rate: string | null; ref: string | null }[];
-    }
+       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`))
   ).rows) {
     const rate = r.rate ?? "0";
     const key = normalizeMoney(rate);
@@ -254,20 +246,18 @@ export async function buildNativeContext(
   }
 
   const periods = (
-    (await db.execute(sql`
-      select id, starts_on, ends_on, is_adjustment,
-             custom->>${refKey} as source_ref
-        from accounting_periods
-       where org_id = ${orgId}
-       order by starts_on, ends_on, period_number`)) as unknown as {
-      rows: {
+    (await db.execute<{
         id: string;
         starts_on: string;
         ends_on: string;
         is_adjustment: boolean;
         source_ref: string | null;
-      }[];
-    }
+      }>(sql`
+      select id, starts_on, ends_on, is_adjustment,
+             custom->>${refKey} as source_ref
+        from accounting_periods
+       where org_id = ${orgId}
+       order by starts_on, ends_on, period_number`))
   ).rows;
   const periodFor = (d: string) =>
     periods.find(
@@ -292,10 +282,8 @@ export async function buildNativeContext(
       isAdjustment: period.is_adjustment,
     });
   }
-  const root = (await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const root = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
   if (!root.rows[0]) throw new Error(`org ${orgId} has no root subsidiary`);
 
   return {

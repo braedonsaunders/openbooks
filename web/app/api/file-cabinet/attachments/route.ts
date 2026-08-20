@@ -12,7 +12,7 @@ async function fixedAssetVisible(authz: Awaited<ReturnType<typeof getAuthz>>, ta
   if (!authz || targetTable !== 'fixed_assets') return targetTable !== 'fixed_assets'
   const visible = (await db.execute(sql`
     select 1 from fixed_assets where id=${targetId} and org_id=${authz.user.orgId}
-    ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`)) as unknown as { rows: unknown[] }
+    ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`))
   return Boolean(visible.rows[0])
 }
 
@@ -31,7 +31,7 @@ export async function GET(req: Request) {
   if (targetTable === 'fixed_assets') {
     const visible = (await db.execute(sql`
       select 1 from fixed_assets where id=${targetId} and org_id=${gate.user.orgId}
-      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`)) as unknown as { rows: unknown[] }
+      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`))
     if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const items = await listAttachments(gate.user.orgId, targetTable, targetId)

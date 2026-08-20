@@ -494,6 +494,7 @@
         "label": "作業時間入力",
         "description": "タイムシート入力 — 従業員、日付、時間、請求可否、プロジェクト、承認ステータス。"
       },
+      "timesheet_weeks": "タイムシート週",
       "fixed_assets": {
         "label": "固定資産",
         "description": "固定資産台帳 — ステータス、取得、原価、管理者、ディメンション。"
@@ -666,6 +667,20 @@
         "memo": "摘要",
         "created_at": "作成日時",
         "id": "作業時間入力（ID）"
+      },
+      "timesheet_weeks": {
+        "employee_name": "従業員",
+        "week_start": "週の開始",
+        "week_end": "週の終了",
+        "status": "ステータス",
+        "total_hours": "合計時間",
+        "billable_hours": "請求可能時間",
+        "submitted_by": "提出者",
+        "submitted_at": "提出日時",
+        "approved_by": "承認者",
+        "approved_at": "承認日時",
+        "rejection_reason": "却下理由",
+        "id": "週 (id)"
       },
       "fixed_assets": {
         "asset_number": "資産番号",

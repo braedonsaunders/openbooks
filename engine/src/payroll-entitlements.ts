@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import {
-  add, cmp, divRate, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum,
+  add, cmp, div, isZero, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum,
 } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
 
@@ -497,11 +497,11 @@ export async function entitlementPlans(
   orgId: string,
   executor: Executor = db,
 ): Promise<EntitlementPlan[]> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<Record<string, unknown>>(sql`
     select * from entitlement_plans
      where org_id = ${orgId} and is_active
      order by code
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return r.rows.map(planFromRow);
 }
 
@@ -525,17 +525,15 @@ export function vacationPlanOf(
 async function employeeScope(
   executor: Executor, orgId: string, employeePartyId: string,
 ): Promise<EntitlementScopeKeys> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{
+      job_title: string | null; trade_id: string | null;
+      department_id: string | null; subsidiary_id: string | null;
+    }>(sql`
     select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-  `)) as unknown as {
-    rows: {
-      job_title: string | null; trade_id: string | null;
-      department_id: string | null; subsidiary_id: string | null;
-    }[];
-  };
+  `));
   const row = r.rows[0];
   return {
     employeePartyId,
@@ -561,14 +559,14 @@ export async function resolvePlanLimit(
   knownScope?: EntitlementScopeKeys,
 ): Promise<EntitlementPlanLimit | null> {
   const scope = knownScope ?? await employeeScope(executor, orgId, employeePartyId);
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<Record<string, unknown>>(sql`
     select id, plan_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id,
            max_balance, notify_balance, effective_from, effective_to, is_active
       from entitlement_plan_limits
      where org_id = ${orgId} and plan_id = ${planId} and is_active
        and effective_from <= ${onDate}
        and (effective_to is null or effective_to >= ${onDate})
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const rows: EntitlementLimitRow[] = r.rows.map((row) => ({
     id: String(row.id),
     planId: String(row.plan_id),
@@ -597,17 +595,17 @@ export async function resolveServiceTier(
   employeePartyId: string,
   onDate: string,
 ): Promise<ResolvedServiceTiers> {
-  const hire = (await executor.execute(sql`
+  const hire = (await executor.execute<{ hired_on: string | null }>(sql`
     select hired_on from employee_roles
      where org_id = ${orgId} and party_id = ${employeePartyId}
-  `)) as unknown as { rows: { hired_on: string | null }[] };
+  `));
   const hiredOn = hire.rows[0]?.hired_on ? String(hire.rows[0].hired_on).slice(0, 10) : null;
-  const tiers = (await executor.execute(sql`
+  const tiers = (await executor.execute<Record<string, unknown>>(sql`
     select id, plan_id, component_id, after_months, accrual_value, eligible, is_active
       from entitlement_service_tiers
      where org_id = ${orgId} and is_active
      order by after_months
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const rows: ServiceTierRow[] = tiers.rows.map((row) => ({
     id: String(row.id),
     planId: row.plan_id != null ? String(row.plan_id) : null,
@@ -669,7 +667,7 @@ export async function entitlementBalances(
   const plans = opts.plans ?? await entitlementPlans(orgId, executor);
   if (plans.length === 0) return [];
   const onDate = asOf ?? new Date().toISOString().slice(0, 10);
-  const sums = (await executor.execute(sql`
+  const sums = (await executor.execute<{ plan_id: string; balance: string; last_movement: string | null }>(sql`
     select plan_id, sum(amount) as balance, max(movement_date) as last_movement
       from entitlement_ledger
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
@@ -677,9 +675,7 @@ export async function entitlementBalances(
        and (${excludeRunDocumentId}::uuid is null
             or pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
      group by plan_id
-  `)) as unknown as {
-    rows: { plan_id: string; balance: string; last_movement: string | null }[];
-  };
+  `));
   const byPlan = new Map(sums.rows.map((row) => [row.plan_id, row]));
 
   // One wage lookup serves every plan's hours view.
@@ -698,7 +694,10 @@ export async function entitlementBalances(
       : (wage ? roundMoney(mulDecimal(balance, wage), 2) : null);
     const balanceHours = plan.unit === "hours"
       ? balance
-      : (wage ? divRate(balance, wage) : null);
+      // `wage ?` does not screen a zero wage — the string "0" is truthy — and
+      // divRate then rejected it as an invalid FX rate. Money cannot be
+      // expressed as hours at a zero wage, so report no hours instead.
+      : (wage && !isZero(String(wage)) ? div(balance, String(wage)) : null);
     balances.push({
       plan,
       balance,
@@ -736,7 +735,7 @@ export async function planBalanceExcludingRun(
   onDate: string,
   excludeRunDocumentId: string | null,
 ): Promise<string> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ balance: string }>(sql`
     select coalesce(sum(amount), 0) as balance
       from entitlement_ledger
      where org_id = ${orgId} and plan_id = ${planId}
@@ -744,7 +743,7 @@ export async function planBalanceExcludingRun(
        and movement_date <= ${onDate}
        and (${excludeRunDocumentId}::uuid is null
             or pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
-  `)) as unknown as { rows: { balance: string }[] };
+  `));
   return roundMoney(String(r.rows[0]?.balance ?? "0"), 4);
 }
 
@@ -989,7 +988,7 @@ export async function entitlementOpeningLocks(
   orgId: string,
   executor: Executor = db,
 ): Promise<Map<string, EntitlementOpeningLock>> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ plan_id: string; employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
     select distinct on (l.plan_id, l.employee_party_id)
            l.plan_id, l.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from entitlement_ledger l
@@ -999,9 +998,7 @@ export async function entitlementOpeningLocks(
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where l.org_id = ${orgId} and l.kind = 'opening' and r.run_status = 'committed'
      order by l.plan_id, l.employee_party_id, s.pay_date
-  `)) as unknown as {
-    rows: { plan_id: string; employee_party_id: string; document_number: string | null; pay_date: string }[];
-  };
+  `));
   return new Map(
     r.rows.map((row) => [
       `${row.plan_id}:${row.employee_party_id}`,
@@ -1021,7 +1018,7 @@ export async function entitlementOpeningBlocks(
   asOf: string,
   executor: Executor = db,
 ): Promise<Map<string, EntitlementOpeningLock>> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ employee_party_id: string; document_number: string | null; pay_date: string }>(sql`
     select distinct on (s.employee_party_id)
            s.employee_party_id, d.document_number, s.pay_date::text as pay_date
       from pay_stubs s
@@ -1029,9 +1026,7 @@ export async function entitlementOpeningBlocks(
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where s.org_id = ${orgId} and r.run_status = 'committed' and s.pay_date >= ${asOf}
      order by s.employee_party_id, s.pay_date
-  `)) as unknown as {
-    rows: { employee_party_id: string; document_number: string | null; pay_date: string }[];
-  };
+  `));
   return new Map(
     r.rows.map((row) => [
       row.employee_party_id,
@@ -1054,7 +1049,7 @@ export async function entitlementOpenings(
   const asOf = opts.asOf ? assertMovementDate(opts.asOf) : new Date().toISOString().slice(0, 10);
   const plans = await entitlementPlans(orgId);
 
-  const people = (await db.execute(sql`
+  const people = (await db.execute<Record<string, unknown>>(sql`
     select p.id as employee_party_id, p.display_name as employee_name, er.employee_number,
            coalesce((
              select b.vacation_balance from payroll_opening_balances b
@@ -1066,15 +1061,13 @@ export async function entitlementOpenings(
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
      order by p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
 
-  const openings = (await db.execute(sql`
+  const openings = (await db.execute<{ plan_id: string; employee_party_id: string; amount: string; movement_date: string }>(sql`
     select plan_id, employee_party_id, amount::text as amount, movement_date::text as movement_date
       from entitlement_ledger
      where org_id = ${orgId} and kind = 'opening'
-  `)) as unknown as {
-    rows: { plan_id: string; employee_party_id: string; amount: string; movement_date: string }[];
-  };
+  `));
   const byEmployee = new Map<string, typeof openings.rows>();
   for (const row of openings.rows) {
     byEmployee.set(row.employee_party_id, [...(byEmployee.get(row.employee_party_id) ?? []), row]);
@@ -1206,20 +1199,20 @@ export async function saveEntitlementOpenings(input: {
       planByKey.set(plan.code.trim().toLowerCase(), plan);
     }
 
-    const names = (await tx.execute(sql`
+    const names = (await tx.execute<{ id: string; display_name: string }>(sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${input.orgId} and p.id in (
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `)) as unknown as { rows: { id: string; display_name: string }[] };
+    `));
     const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
 
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ plan_id: string; employee_party_id: string; amount: string }>(sql`
       select plan_id, employee_party_id, amount::text as amount
         from entitlement_ledger
        where org_id = ${input.orgId} and kind = 'opening'
-    `)) as unknown as { rows: { plan_id: string; employee_party_id: string; amount: string }[] };
+    `));
     const storedKeys = new Set(existing.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
     const locks = await entitlementOpeningLocks(input.orgId, tx);
@@ -1417,7 +1410,10 @@ export async function employeesNearLimit(
   opts: { asOf?: string; planId?: string } = {},
 ): Promise<NearLimitEmployee[]> {
   const onDate = opts.asOf ?? new Date().toISOString().slice(0, 10);
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      plan_id: string; plan_code: string; plan_name: string; unit: string;
+      employee_party_id: string; employee_name: string; balance: string;
+    }>(sql`
     select l.plan_id, pl.code as plan_code, pl.name as plan_name, pl.unit,
            l.employee_party_id, p.display_name as employee_name,
            sum(l.amount) as balance
@@ -1429,12 +1425,7 @@ export async function employeesNearLimit(
      group by l.plan_id, pl.code, pl.name, pl.unit, l.employee_party_id, p.display_name
      having sum(l.amount) <> 0
      order by pl.code, p.display_name
-  `)) as unknown as {
-    rows: {
-      plan_id: string; plan_code: string; plan_name: string; unit: string;
-      employee_party_id: string; employee_name: string; balance: string;
-    }[];
-  };
+  `));
 
   const results: NearLimitEmployee[] = [];
   for (const row of rows.rows) {
@@ -1488,7 +1479,7 @@ export async function milestonesReachedInPeriod(
   from: string,
   to: string,
 ): Promise<ServiceMilestone[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select er.party_id as employee_party_id, p.display_name as employee_name,
            er.hired_on, t.after_months, t.accrual_value, t.eligible,
            t.plan_id, pl.name as plan_name, t.component_id, c.name as component_name,
@@ -1502,7 +1493,7 @@ export async function milestonesReachedInPeriod(
        and (er.terminated_on is null or er.terminated_on >= ${from})
        and (er.hired_on + make_interval(months => t.after_months))::date between ${from} and ${to}
      order by milestone_date, p.display_name
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   return rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.employee_name),

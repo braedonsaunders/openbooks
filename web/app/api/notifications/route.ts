@@ -22,17 +22,17 @@ export async function GET() {
   const { id: userId, orgId } = authz.user
 
   const [items, unread] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, kind, title, body, href, read_at as "readAt", created_at as "createdAt"
         from notifications
        where org_id = ${orgId} and user_id = ${userId}
        order by created_at desc
        limit 30`),
-    db.execute(sql`
+    db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from notifications
        where org_id = ${orgId} and user_id = ${userId} and read_at is null`),
-  ])) as unknown as [{ rows: Record<string, unknown>[] }, { rows: { n: number }[] }]
+  ]))
 
   return NextResponse.json({ items: items.rows, unread: unread.rows[0]?.n ?? 0 })
 }

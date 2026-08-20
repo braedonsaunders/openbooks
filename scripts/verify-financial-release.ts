@@ -100,7 +100,7 @@ function countMatch(output: string, label: string): number {
 async function queryOne<T>(
   query: ReturnType<typeof sql>,
 ): Promise<T> {
-  const result = (await db.execute(query)) as unknown as { rows: T[] };
+  const result = (await db.execute<T>(query));
   if (!result.rows[0]) throw new Error("release audit query returned no row");
   return result.rows[0];
 }

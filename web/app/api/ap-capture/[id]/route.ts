@@ -68,11 +68,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const gate = await guardPermission('ap.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
       from ap_capture_items ci join files f on f.id = ci.file_id
      where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!result.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const [fields, events] = await Promise.all([
     db.execute(sql`
@@ -99,10 +99,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid_capture' }, { status: 422 })
   }
-  const current = (await db.execute(sql`
+  const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
     select normalized, status, document_kind, vendor_candidate_id, purchase_order_id from ap_capture_items
      where org_id = ${gate.user.orgId} and id = ${id}
-  `)) as unknown as { rows: { normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }[] }
+  `))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
     return NextResponse.json({ error: 'not_editable' }, { status: 409 })
@@ -119,10 +119,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const kind = body.documentKind === 'vendor_credit' ? 'vendor_credit' : 'vendor_bill'
   try {
     await db.transaction(async (tx) => {
-    const locked = (await tx.execute(sql`
+    const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
       select normalized, status, document_kind, vendor_candidate_id, purchase_order_id
         from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id} for update
-    `)) as unknown as { rows: { normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }[] }
+    `))
     const live = locked.rows[0]
     if (!live) throw new Error('capture_not_found')
     if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')

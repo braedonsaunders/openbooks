@@ -83,11 +83,11 @@ const MUTABLE_FIELDS = new Set([
 
 /** Domain-boundary gate for every script execution path. */
 export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ enabled: string | null }>(sql`
     select settings #>> '{features,scripts}' as enabled
       from orgs
      where id = ${orgId}
-  `)) as unknown as { rows: { enabled: string | null }[] };
+  `));
   return result.rows[0]?.enabled === "true";
 }
 

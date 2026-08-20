@@ -44,12 +44,12 @@ export interface Checkpoint {
   pass: boolean;
 }
 
-async function one<T = Record<string, unknown>>(q: ReturnType<typeof sql>): Promise<T> {
-  const r = (await db.execute(q)) as unknown as { rows: T[] };
+async function one<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
+  const r = (await db.execute<T>(q));
   return r.rows[0]!;
 }
-async function all<T = Record<string, unknown>>(q: ReturnType<typeof sql>): Promise<T[]> {
-  const r = (await db.execute(q)) as unknown as { rows: T[] };
+async function all<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
+  const r = (await db.execute<T>(q));
   return r.rows;
 }
 

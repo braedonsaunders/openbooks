@@ -88,9 +88,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ name: string; is_active: boolean }>(sql`
     select name, is_active from items where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { name: string; is_active: boolean }[] }
+  `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
@@ -141,7 +141,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v !== null) {
       const r = (await db.execute(
         sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      )) as unknown as { rows: unknown[] }
+      ))
       if (!r.rows[0]) return bad('Income account not found')
     }
     incomeAccountId = v
@@ -154,7 +154,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v !== null) {
       const r = (await db.execute(
         sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      )) as unknown as { rows: unknown[] }
+      ))
       if (!r.rows[0]) return bad('Expense account not found')
     }
     expenseAccountId = v
@@ -165,7 +165,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const v = uuidOrNull(body.costRecoveryAccountId)
     if (v === 'invalid') return bad('Invalid recovery account')
     if (v !== null) {
-      const r = (await db.execute(sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`)) as unknown as { rows: unknown[] }
+      const r = (await db.execute(sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`))
       if (!r.rows[0]) return bad('Recovery account not found')
     }
     costRecoveryAccountId = v
@@ -178,7 +178,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v !== null) {
       const r = (await db.execute(
         sql`select 1 from tax_codes where id = ${v} and org_id = ${user.orgId}`,
-      )) as unknown as { rows: unknown[] }
+      ))
       if (!r.rows[0]) return bad('Tax code not found')
     }
     taxCodeId = v
@@ -192,7 +192,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v !== null) {
       const r = (await db.execute(
         sql`select 1 from recognition_rules where id = ${v} and org_id = ${user.orgId}`,
-      )) as unknown as { rows: unknown[] }
+      ))
       if (!r.rows[0]) return bad('Recognition rule not found')
     }
     recognitionRuleId = v
@@ -205,7 +205,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v !== null) {
       const r = (await db.execute(
         sql`select 1 from accounts where id = ${v} and org_id = ${user.orgId}`,
-      )) as unknown as { rows: unknown[] }
+      ))
       if (!r.rows[0]) return bad('Deferred revenue account not found')
     }
     deferredAccountId = v

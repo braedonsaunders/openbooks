@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   const created = await db.transaction(async (tx) => {
     const ids: string[] = []
     for (const row of forecast) {
-      const result = (await tx.execute(sql`
+      const result = (await tx.execute<{ id: string }>(sql`
         insert into crm_forecast_snapshots
           (org_id, owner_user_id, sales_team_id, period_start, period_end, snapshot_kind, currency,
            pipeline_amount, weighted_amount, worst_case_amount, most_likely_amount, upside_amount,
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         values (${user.orgId}, ${ownerUserId}, ${salesTeamId}, ${periodStart}, ${periodEnd}, ${kind}, ${row.currency},
                 ${row.pipeline_amount}, ${row.weighted_amount}, ${row.worst_case_amount}, ${row.most_likely_amount},
                 ${row.upside_amount}, ${row.closed_amount}, ${overrideAmount}, ${body.note ?? null},
-                ${JSON.stringify({ calculatedAt: new Date().toISOString() })}::jsonb, ${user.id}, ${user.id}) returning id`)) as unknown as { rows: { id: string }[] }
+                ${JSON.stringify({ calculatedAt: new Date().toISOString() })}::jsonb, ${user.id}, ${user.id}) returning id`))
       ids.push(result.rows[0]!.id)
     }
     return ids

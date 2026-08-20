@@ -25,13 +25,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const reason = (body.reason ?? '').trim()
   if (!reason) return NextResponse.json({ error: 'a revocation needs a reason' }, { status: 400 })
 
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update compliance_waivers
        set revoked_at = now(), revoked_by = ${actorId}, revoke_reason = ${reason},
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${id} and revoked_at is null
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (updated.rows.length === 0) {
     return NextResponse.json({ error: 'not found or already revoked' }, { status: 404 })
   }

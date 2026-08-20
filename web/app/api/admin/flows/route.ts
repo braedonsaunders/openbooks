@@ -15,7 +15,7 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('flows.manage')
   if (gate instanceof NextResponse) return gate
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     select f.id, f.name, f.description, f.subject_kind, f.enabled, f.updated_at,
            jsonb_array_length(f.graph->'nodes') as node_count,
            (select count(*) from flow_runs r where r.flow_id = f.id) as run_count,
@@ -27,7 +27,7 @@ export async function GET() {
       ) lr on true
      where f.org_id = ${gate.user.orgId}
      order by f.name
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return NextResponse.json({ flows: r.rows })
 }
 
@@ -46,11 +46,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
   }
 
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string }>(sql`
     insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
     values (${user.orgId}, ${name}, ${subjectKind}, false,
             ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
     returning id
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return NextResponse.json({ id: r.rows[0]!.id })
 }

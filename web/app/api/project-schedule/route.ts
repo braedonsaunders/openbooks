@@ -39,11 +39,9 @@ async function resolveProject(gate: Gate, projectId: string | null) {
   if (!projectId || !isUuid(projectId)) {
     return { error: NextResponse.json({ error: 'projectId required' }, { status: 400 }) }
   }
-  const project = (await db.execute(sql`
+  const project = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from projects
-     where id = ${projectId} and org_id = ${gate.user.orgId}`)) as unknown as {
-    rows: { id: string; subsidiary_id: string | null }[]
-  }
+     where id = ${projectId} and org_id = ${gate.user.orgId}`))
   const row = project.rows[0]
   if (!row || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
     return { error: NextResponse.json({ error: 'not found' }, { status: 404 }) }

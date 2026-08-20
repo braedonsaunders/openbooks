@@ -112,10 +112,8 @@ export function computeRemeasurement(args: {
 }
 
 async function primaryBookId(orgId: string): Promise<string> {
-  const r = (await db.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const r = (await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!r.rows[0]) throw new AssetLifecycleError("no primary accounting book");
   return r.rows[0].id;
 }
@@ -130,7 +128,7 @@ async function primaryBookId(orgId: string): Promise<string> {
  * impairment credit on the accumulated-depreciation account.
  */
 async function netRemeasurementDelta(orgId: string, assetId: string): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ delta: string }>(sql`
     select coalesce(sum(event.amount), 0)::text as delta
       from asset_events event
      where event.org_id = ${orgId} and event.asset_id = ${assetId}
@@ -138,7 +136,7 @@ async function netRemeasurementDelta(orgId: string, assetId: string): Promise<st
        and not exists (
          select 1 from asset_events reversal
           where reversal.org_id = event.org_id
-            and reversal.reverses_event_id = event.id)`)) as unknown as { rows: { delta: string }[] };
+            and reversal.reverses_event_id = event.id)`));
   return r.rows[0]?.delta ?? "0";
 }
 
@@ -214,7 +212,12 @@ export async function disposeAsset(
   const bookId = await primaryBookId(orgId);
   const proceeds = opts.writeOff ? "0" : opts.proceeds ?? "0";
 
-  const assetRes = (await db.execute(sql`
+  const assetRes = (await db.execute<{
+      id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
+      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+      location_id: string | null; base_currency: string; asset_account_id: string;
+      accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
+    }>(sql`
     select a.id, a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.custom,
            a.department_id, a.project_id, a.location_id, sub.base_currency,
            c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
@@ -224,14 +227,7 @@ export async function disposeAsset(
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
-     where a.org_id = ${orgId} and a.id = ${assetId}`)) as unknown as {
-    rows: {
-      id: string; asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string;
-      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
-      location_id: string | null; base_currency: string; asset_account_id: string;
-      accumulated_depreciation_account_id: string; gain_loss_account_id: string | null; accumulated: string;
-    }[];
-  };
+     where a.org_id = ${orgId} and a.id = ${assetId}`));
   const asset = assetRes.rows[0];
   if (!asset) throw new AssetLifecycleError("asset not found");
   if (asset.status === "disposed" || asset.status === "written_off") {
@@ -260,7 +256,7 @@ export async function disposeAsset(
   const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
 
   const entryId = await db.transaction(async (tx) => {
-    const entryRes = (await tx.execute(sql`
+    const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
       values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`DISP-${asset.asset_number}`}, ${opts.date},
@@ -268,7 +264,7 @@ export async function disposeAsset(
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
               ${`${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`},
               'draft', 'disposal', ${opts.actorId}, ${opts.actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const eid = entryRes.rows[0].id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
@@ -335,20 +331,7 @@ export async function reverseAssetLifecycleEvent(
   }
 
   return db.transaction(async (tx) => {
-    const sourceResult = (await tx.execute(sql`
-      select event.id, event.asset_id, event.kind, event.journal_entry_id,
-             event.created_at, asset.asset_number, asset.status,
-             asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
-             entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status
-        from asset_events event
-        join fixed_assets asset
-          on asset.id = event.asset_id and asset.org_id = event.org_id
-        join journal_entries entry
-          on entry.id = event.journal_entry_id and entry.org_id = event.org_id
-       where event.id = ${eventId} and event.org_id = ${orgId}
-       for update of event, asset, entry
-    `)) as unknown as {
-      rows: Array<{
+    const sourceResult = (await tx.execute<{
         id: string;
         asset_id: string;
         kind: string;
@@ -363,12 +346,27 @@ export async function reverseAssetLifecycleEvent(
         entry_number: string;
         origin: "disposal" | "revaluation";
         entry_status: string;
-      }>;
-    };
+      }>(sql`
+      select event.id, event.asset_id, event.kind, event.journal_entry_id,
+             event.created_at, asset.asset_number, asset.status,
+             asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
+             entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status
+        from asset_events event
+        join fixed_assets asset
+          on asset.id = event.asset_id and asset.org_id = event.org_id
+        join journal_entries entry
+          on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+       where event.id = ${eventId} and event.org_id = ${orgId}
+       for update of event, asset, entry
+    `));
     const source = sourceResult.rows[0];
     if (!source) throw new AssetLifecycleError("asset lifecycle event not found");
 
-    const prior = (await tx.execute(sql`
+    const prior = (await tx.execute<{
+        id: string;
+        journal_entry_id: string;
+        restored_status: "in_service" | "fully_depreciated" | null;
+      }>(sql`
       select event.id, event.journal_entry_id,
              case
                when asset.status = 'fully_depreciated' then 'fully_depreciated'
@@ -380,13 +378,7 @@ export async function reverseAssetLifecycleEvent(
        where event.org_id = ${orgId}
          and event.reverses_event_id = ${source.id}
        limit 1
-    `)) as unknown as {
-      rows: Array<{
-        id: string;
-        journal_entry_id: string;
-        restored_status: "in_service" | "fully_depreciated" | null;
-      }>;
-    };
+    `));
     if (prior.rows[0]) {
       return {
         assetId: source.asset_id,
@@ -412,7 +404,7 @@ export async function reverseAssetLifecycleEvent(
         "the source asset journal is not an unreversed posted entry",
       );
     }
-    const later = (await tx.execute(sql`
+    const later = (await tx.execute<{ kind: string }>(sql`
       select kind
         from asset_events
        where org_id = ${orgId}
@@ -422,25 +414,25 @@ export async function reverseAssetLifecycleEvent(
          and created_at > ${source.created_at}
        order by created_at
        limit 1
-    `)) as unknown as { rows: { kind: string }[] };
+    `));
     if (later.rows[0]) {
       throw new AssetLifecycleError(
         `reverse the later ${later.rows[0].kind} asset event first`,
       );
     }
-    const period = (await tx.execute(sql`
+    const period = (await tx.execute<{ id: string }>(sql`
       select id from accounting_periods
        where org_id = ${orgId} and not is_adjustment
          and starts_on <= ${opts.date} and ends_on >= ${opts.date}
        limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (!period.rows[0]) {
       throw new AssetLifecycleError(
         `no accounting period covers ${opts.date}`,
       );
     }
 
-    const reversalEntry = (await tx.execute(sql`
+    const reversalEntry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
          memo, status, origin, reverses_entry_id, created_by, updated_by)
@@ -450,7 +442,7 @@ export async function reverseAssetLifecycleEvent(
          ${`Reversal — ${reason}`}, 'draft', ${source.origin},
          ${source.journal_entry_id}, ${opts.actorId}, ${opts.actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const reversalEntryId = reversalEntry.rows[0]!.id;
     await tx.execute(sql`
       insert into journal_lines
@@ -484,14 +476,14 @@ export async function reverseAssetLifecycleEvent(
 
     let restoredStatus: "in_service" | "fully_depreciated" | null = null;
     if (source.kind === "disposed" || source.kind === "written_off") {
-      const depreciation = (await tx.execute(sql`
+      const depreciation = (await tx.execute<{ accumulated: string }>(sql`
         select coalesce(sum(line.posted_amount), 0)::text as accumulated
           from depreciation_schedule_lines line
           join depreciation_schedules schedule
             on schedule.id = line.schedule_id
          where schedule.asset_id = ${source.asset_id}
            and schedule.book_id = ${source.book_id}
-      `)) as unknown as { rows: { accumulated: string }[] };
+      `));
       restoredStatus =
         toUnits(depreciation.rows[0]?.accumulated ?? "0") >=
         toUnits(source.acquisition_cost) - toUnits(source.salvage_value)
@@ -505,7 +497,7 @@ export async function reverseAssetLifecycleEvent(
       `);
     }
 
-    const reversalEvent = (await tx.execute(sql`
+    const reversalEvent = (await tx.execute<{ id: string }>(sql`
       insert into asset_events
         (org_id, asset_id, kind, occurred_on, amount, journal_entry_id,
          reverses_event_id, reversal_reason, memo, created_by, updated_by)
@@ -515,7 +507,7 @@ export async function reverseAssetLifecycleEvent(
          ${`Reversal of ${source.kind} for ${source.asset_number}`},
          ${opts.actorId}, ${opts.actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
 
     if (source.kind === "revalued" || source.kind === "impaired") {
       await buildScheduleWithRunner(
@@ -550,7 +542,12 @@ export async function remeasureAsset(
   opts: { newCarryingValue: string; date: string; actorId: string | null },
 ): Promise<RemeasureResult> {
   const bookId = await primaryBookId(orgId);
-  const res = (await db.execute(sql`
+  const res = (await db.execute<{
+      asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
+      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
+      location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
+      gain_loss_account_id: string | null; accumulated: string;
+    }>(sql`
     select a.asset_number, a.status, a.subsidiary_id, a.acquisition_cost, a.salvage_value, a.custom,
            a.department_id, a.project_id, a.location_id, sub.base_currency,
            c.accumulated_depreciation_account_id, c.gain_loss_account_id,
@@ -560,14 +557,7 @@ export async function remeasureAsset(
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id
       join asset_categories c on c.id = a.category_id
-     where a.org_id = ${orgId} and a.id = ${assetId}`)) as unknown as {
-    rows: {
-      asset_number: string; status: string; subsidiary_id: string; acquisition_cost: string; salvage_value: string;
-      custom: Record<string, unknown> | null; department_id: string | null; project_id: string | null;
-      location_id: string | null; base_currency: string; accumulated_depreciation_account_id: string;
-      gain_loss_account_id: string | null; accumulated: string;
-    }[];
-  };
+     where a.org_id = ${orgId} and a.id = ${assetId}`));
   const asset = res.rows[0];
   if (!asset) throw new AssetLifecycleError("asset not found");
   if (asset.status === "disposed" || asset.status === "written_off") {
@@ -601,7 +591,7 @@ export async function remeasureAsset(
   const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
   const entryId = await db.transaction(async (tx) => {
-    const entryRes = (await tx.execute(sql`
+    const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
       values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}`},
@@ -610,7 +600,7 @@ export async function remeasureAsset(
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),
               ${`${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`},
               'draft', 'revaluation', ${opts.actorId}, ${opts.actorId})
-      returning id`)) as unknown as { rows: { id: string }[] };
+      returning id`));
     const eid = entryRes.rows[0].id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
@@ -630,11 +620,11 @@ export async function remeasureAsset(
   });
 
   // Rebuild remaining unposted lines: straight-line (newCV − salvage) over them.
-  const remaining = (await db.execute(sql`
+  const remaining = (await db.execute<{ id: string }>(sql`
     select l.id from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
      where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
-     order by l.sequence`)) as unknown as { rows: { id: string }[] };
+     order by l.sequence`));
   const count = remaining.rows.length;
   let rebuilt = 0;
   if (count > 0) {

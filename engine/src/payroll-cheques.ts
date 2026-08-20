@@ -53,20 +53,23 @@ export async function issuePayRunCheques(input: {
 }): Promise<PayRunChequeBatch> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
+    const runRows = (await tx.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
       select r.run_status, d.subsidiary_id
         from pay_runs r
         join documents d on d.id = r.document_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r
-    `)) as unknown as { rows: { run_status: string; subsidiary_id: string | null }[] };
+    `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.run_status !== "committed") {
       throw new PayrollError("commit the pay run before printing its cheques");
     }
 
-    const stubs = (await tx.execute(sql`
+    const stubs = (await tx.execute<{
+        id: string; employee_party_id: string; name: string; net_pay: string;
+        cheque_number: string | null;
+      }>(sql`
       select s.id, s.employee_party_id, p.display_name as name, s.net_pay::text as net_pay,
              s.cheque_number
         from pay_stubs s
@@ -75,12 +78,7 @@ export async function issuePayRunCheques(input: {
          and s.payment_method = 'cheque'
        order by p.display_name, s.id
        for update of s
-    `)) as unknown as {
-      rows: {
-        id: string; employee_party_id: string; name: string; net_pay: string;
-        cheque_number: string | null;
-      }[];
-    };
+    `));
 
     // A per-subsidiary sequence is used only when the employer has configured
     // one; otherwise the org-wide row. Same probe as engine/src/payments.ts.
@@ -89,7 +87,7 @@ export async function issuePayRunCheques(input: {
           select 1 from number_sequences
            where org_id = ${orgId} and document_kind = ${PAYROLL_CHEQUE_SEQUENCE_KIND}
              and subsidiary_id = ${run.subsidiary_id} limit 1
-        `)) as unknown as { rows: unknown[] }).rows.length > 0
+        `))).rows.length > 0
       : false;
     const sequenceSubsidiaryId = scoped ? run.subsidiary_id : null;
 
@@ -98,14 +96,14 @@ export async function issuePayRunCheques(input: {
     for (const stub of stubs.rows) {
       let number = stub.cheque_number;
       if (!number) {
-        const seq = (await tx.execute(sql`
+        const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
           insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
           values (${orgId}, ${PAYROLL_CHEQUE_SEQUENCE_KIND}, ${sequenceSubsidiaryId},
                   ${PAYROLL_CHEQUE_PREFIX})
           on conflict on constraint sequences_org_kind_sub
           do update set next_number = number_sequences.next_number + 1
           returning prefix, next_number, padding
-        `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+        `));
         const s = seq.rows[0]!;
         number = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
         await tx.execute(sql`
@@ -128,7 +126,10 @@ export async function issuePayRunCheques(input: {
 
 /** The batch as it stands, without allocating anything (list/preview). */
 export async function payRunCheques(orgId: string, documentId: string): Promise<PayRunChequeBatch> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      id: string; employee_party_id: string; name: string; net_pay: string;
+      cheque_number: string | null;
+    }>(sql`
     select s.id, s.employee_party_id, p.display_name as name, s.net_pay::text as net_pay,
            s.cheque_number
       from pay_stubs s
@@ -136,12 +137,7 @@ export async function payRunCheques(orgId: string, documentId: string): Promise<
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        and s.payment_method = 'cheque'
      order by p.display_name, s.id
-  `)) as unknown as {
-    rows: {
-      id: string; employee_party_id: string; name: string; net_pay: string;
-      cheque_number: string | null;
-    }[];
-  };
+  `));
   const cheques = rows.rows.map((row) => ({
     stubId: row.id,
     employeePartyId: row.employee_party_id,

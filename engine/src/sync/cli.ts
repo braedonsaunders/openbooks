@@ -23,11 +23,9 @@ if (!ORG_ID || !/^[0-9a-f-]{36}$/i.test(ORG_ID)) {
   console.error("--org <uuid> is required; sync never guesses a tenant");
   process.exit(1);
 }
-const [org] = ((await db.execute(sql`
+const [org] = ((await db.execute<{ id: string; name: string; env_kind: string }>(sql`
   select id, name, env_kind from orgs where id = ${ORG_ID}
-`)) as unknown as {
-  rows: { id: string; name: string; env_kind: string }[];
-}).rows;
+`))).rows;
 if (!org) { console.error("organization not found"); process.exit(1); }
 if (org.env_kind !== "sandbox" && !argv.includes("--production")) {
   console.error(

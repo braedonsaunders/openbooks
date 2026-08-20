@@ -62,7 +62,7 @@ export async function validateSigningRequest(
   claims: NonNullable<ReturnType<typeof verifySigningToken>>,
   options: { allowResponded?: boolean } = {},
 ): Promise<boolean> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string }>(sql`
     select request.id
       from field_ticket_signature_requests request
       join email_log email
@@ -77,6 +77,6 @@ export async function validateSigningRequest(
        and email.status = 'sent'
        and (${options.allowResponded === true}
             or request.responded_at is null)
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   return result.rows.length === 1
 }

@@ -26,13 +26,13 @@ export interface PartyPayload {
 }
 
 export async function loadParty(id: string, orgId: string): Promise<PartyPayload | null> {
-  const party = (await db.execute(sql`
+  const party = (await db.execute<Record<string, unknown>>(sql`
     select * from parties where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   if (!party.rows[0]) return null
 
   const [customer, vendor, employee, addresses, contacts, bankAccounts, partySubs, txnSummary, currencySummary] = (await Promise.all([
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select r.*, a.name as ar_account_name, a.number as ar_account_number,
              tc.code as tax_code, sp.display_name as sales_rep_name
         from customer_roles r
@@ -40,7 +40,7 @@ export async function loadParty(id: string, orgId: string): Promise<PartyPayload
         left join tax_codes tc on tc.id = r.tax_code_id
         left join parties sp on sp.id = r.sales_rep_id
        where r.party_id = ${id} and r.org_id = ${orgId}`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select r.*, ap.name as ap_account_name, ap.number as ap_account_number,
              ex.name as expense_account_name, ex.number as expense_account_number,
              tc.code as tax_code
@@ -49,39 +49,39 @@ export async function loadParty(id: string, orgId: string): Promise<PartyPayload
         left join accounts ex on ex.id = r.default_expense_account_id
         left join tax_codes tc on tc.id = r.tax_code_id
        where r.party_id = ${id} and r.org_id = ${orgId}`),
-    db.execute(sql`select * from employee_roles where party_id = ${id} and org_id = ${orgId}`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`select * from employee_roles where party_id = ${id} and org_id = ${orgId}`),
+    db.execute<Record<string, unknown>>(sql`
       select id, label, line1, line2, city, region, postal_code, country,
              is_default_billing, is_default_shipping
         from addresses where party_id = ${id} and org_id = ${orgId} order by created_at
     `),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, first_name, last_name, name, title, role, email, phone,
              mobile_phone, fax, is_primary, is_active
         from contacts where party_id = ${id} and org_id = ${orgId}
        order by is_primary desc, name
     `),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, bank_name, country, currency, routing, account_last_four,
              approval_status, approved_at, approved_by, submitted_by,
              submitted_at, retired_at, retired_by, retirement_reason,
              is_active, updated_at
         from party_bank_accounts where party_id = ${id} and org_id = ${orgId} order by created_at
     `),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select subsidiary_id from party_subsidiaries where party_id = ${id} and org_id = ${orgId} order by created_at
     `),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select count(*)::int as count,
              count(*) filter (where coalesce(open_balance, 0) <> 0)::int as open_count,
              max(document_date)::text as last_date
         from documents where party_id = ${id} and org_id = ${orgId}`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select currency, coalesce(sum(abs(total)), 0)::text as total,
              coalesce(sum(abs(open_balance)), 0)::text as open_balance
         from documents where party_id = ${id} and org_id = ${orgId}
        group by currency order by currency`),
-  ])) as unknown as { rows: Record<string, unknown>[] }[]
+  ]))
 
   const summary = txnSummary.rows[0] ?? {}
 

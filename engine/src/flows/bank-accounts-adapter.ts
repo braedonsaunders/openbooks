@@ -100,9 +100,9 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     const row = await loadRow(subjectId);
     if (!row) return null;
     let partyName: string | null = null;
-    const r = (await db.execute(
+    const r = (await db.execute<{ display_name: string }>(
       sql`select display_name from parties where id = ${row.partyId}`,
-    )) as unknown as { rows: { display_name: string }[] };
+    ));
     partyName = r.rows[0]?.display_name ?? null;
     const routing = (row.routing ?? {}) as Record<string, string>;
     return {

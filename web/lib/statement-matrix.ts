@@ -244,18 +244,18 @@ async function buildAmountColumns(opts: {
 
   if (breakout.startsWith('segment:')) {
     const segmentKey = breakout.slice('segment:'.length)
-    const definition = (await db.execute(sql`
+    const definition = (await db.execute<{ id: string }>(sql`
       select id from segment_definitions
        where org_id = ${orgId} and key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
        limit 1
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     if (!definition.rows[0]) {
       return { cols: [{ key: 'current', label: periodLabel, from: period.from, to: period.to }], truncated: false }
     }
     const periodWhere = mode === 'balance'
       ? sql`e.posting_date <= ${period.to}`
       : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
-    const values = (await db.execute(sql`
+    const values = (await db.execute<{ id: string; name: string }>(sql`
       select sv.id, sv.name from segment_values sv
        where sv.org_id = ${orgId} and sv.segment_id = ${definition.rows[0].id} and sv.is_active
          and exists (
@@ -265,13 +265,13 @@ async function buildAmountColumns(opts: {
               and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
-    `)) as unknown as { rows: { id: string; name: string }[] }
+    `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId}
          and not (l.extra_dims ? ${segmentKey}) and ${periodWhere}
          and ${dimFilterSql(dims, subsidiary)} limit 1
-    `)) as unknown as { rows: unknown[] }
+    `))
     const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
     if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
     const periods = comparePeriods(period, compare, periodLabel)
@@ -302,7 +302,7 @@ async function buildAmountColumns(opts: {
       mode === 'balance'
         ? sql`e.posting_date <= ${period.to}`
         : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
-    const rows = (await db.execute(sql`
+    const rows = (await db.execute<{ id: string; name: string }>(sql`
       select d.id, d.name
         from ${sql.raw(table)} d
        where d.org_id = ${orgId}
@@ -312,13 +312,13 @@ async function buildAmountColumns(opts: {
           where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
-    `)) as unknown as { rows: { id: string; name: string }[] }
+    `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
        limit 1
-    `)) as unknown as { rows: unknown[] }
+    `))
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
     const groups = rows.rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }))
     if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
@@ -526,7 +526,7 @@ export async function statementMatrix(opts: {
     // Aggregate the buckets first, then join accounts to the tiny per-account
     // result — joining accounts against the raw union invites a plan that
     // re-executes the union once per account.
-    res = (await db.execute(sql`
+    res = (await db.execute<Record<string, unknown>>(sql`
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${outCols}
         from accounts a
         left join (
@@ -537,7 +537,7 @@ export async function statementMatrix(opts: {
         ) s on s.account_id = a.id
        where a.org_id = ${orgId}
        order by a.number nulls last, a.name
-    `)) as unknown as { rows: Record<string, unknown>[] }
+    `))
   } else {
     const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
     const filterCols = sql.join(
@@ -551,7 +551,7 @@ export async function statementMatrix(opts: {
     // (org_id, status, posting_date)) and hash-joins to the lines; joining the
     // entries table per line re-fetched the entry heap for every journal line
     // in the tenant on every statement render.
-    res = (await db.execute(sql`
+    res = (await db.execute<Record<string, unknown>>(sql`
       with e as materialized (
         select id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
@@ -564,7 +564,7 @@ export async function statementMatrix(opts: {
        where a.org_id = ${orgId}
        group by a.id
        order by a.number nulls last, a.name
-    `)) as unknown as { rows: Record<string, unknown>[] }
+    `))
   }
 
   const parsed = res.rows.map((r) => ({

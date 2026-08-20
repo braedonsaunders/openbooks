@@ -52,6 +52,23 @@
     "lineItemAria": "Artikel in Zeile {line}",
     "lineBillableAria": "Abrechenbar in Zeile {line}",
     "lineHoursAria": "Stunden für {day} in Zeile {line}",
-    "removeLineAria": "Zeile {line} entfernen"
+    "removeLineAria": "Zeile {line} entfernen",
+    "reject": "Ablehnen",
+    "rejectTitle": "Diesen Stundenzettel ablehnen",
+    "rejectReasonLabel": "Grund",
+    "rejectPlaceholder": "Was muss vor der Genehmigung geändert werden?",
+    "rejectedToast": "Stundenzettel abgelehnt",
+    "rejectedBecause": "Abgelehnt: {reason}",
+    "reopen": "Wieder öffnen",
+    "reopenTitle": "Diesen Stundenzettel wieder öffnen?",
+    "reopenMessage": "Die Woche wird wieder zum Entwurf und die Genehmigung entfällt; sie muss erneut genehmigt werden.",
+    "reopenedToast": "Stundenzettel wieder geöffnet",
+    "lockedBecause": "Diese Woche kann nicht mehr geöffnet werden — {count} Einträge sind bereits {reasons}.",
+    "lockReason": {
+      "invoiced": "dem Kunden berechnet",
+      "paid": "über einen Lauf bezahlt",
+      "costed": "im Hauptbuch gebucht",
+      "ticketed": "in einem Arbeitsschein"
+    }
   }
 }

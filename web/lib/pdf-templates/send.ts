@@ -86,11 +86,11 @@ export async function sendRecordPdfEmail(args: {
   // attached for invoices without one.
   let paymentUrl: string | undefined
   if (args.recordType === 'customer_invoice') {
-    const link = (await db.execute(sql`
+    const link = (await db.execute<{ token: string }>(sql`
       select token from payment_links
        where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
        order by created_at desc limit 1
-    `)) as unknown as { rows: { token: string }[] }
+    `))
     if (link.rows[0]) paymentUrl = `${appBaseUrl()}/pay/${link.rows[0].token}`
   }
   const body = documentEmail({

@@ -36,10 +36,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json() as Record<string, unknown>
-  const current = (await db.execute(sql`
+  const current = (await db.execute<any>(sql`
     select cp.*, p.display_name, p.is_active as party_active
       from crm_account_profiles cp join parties p on p.id = cp.party_id
-     where cp.party_id = ${id} and cp.org_id = ${user.orgId}`)) as unknown as { rows: any[] }
+     where cp.party_id = ${id} and cp.org_id = ${user.orgId}`))
   const row = current.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -66,7 +66,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (statusId && typeof statusId === 'string') {
     const valid = (await db.execute(sql`
       select 1 from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId}
-        and lifecycle_stage = ${stage ?? row.lifecycle_stage} and is_active`)) as unknown as { rows: unknown[] }
+        and lifecycle_stage = ${stage ?? row.lifecycle_stage} and is_active`))
     if (!valid.rows[0]) return NextResponse.json({ error: 'status does not belong to this stage' }, { status: 422 })
   }
   const referenceChecks = await Promise.all([

@@ -121,7 +121,14 @@ test(
         org.date,
       );
       assert.ok(reversalId);
-      const lineage = (await db.execute(sql`
+      const lineage = (await db.execute<{
+          source_status: string;
+          reversal_status: string;
+          reverses_entry_id: string;
+          audit_events: number;
+          exact_lines: number;
+          source_lines: number;
+        }>(sql`
         select source.status as source_status,
                reversal.status as reversal_status,
                reversal.reverses_entry_id,
@@ -152,16 +159,7 @@ test(
           from journal_entries source
           join journal_entries reversal on reversal.id = ${reversalId}
          where source.id = ${sourceId}
-      `)) as unknown as {
-        rows: {
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-          audit_events: number;
-          exact_lines: number;
-          source_lines: number;
-        }[];
-      };
+      `));
       assert.deepEqual(lineage.rows[0], {
         source_status: "reversed",
         reversal_status: "posted",

@@ -93,14 +93,14 @@ function dimensionWhere(alias: string, dims: BudgetDimensions) {
 }
 
 export async function loadBudgetScenario(id: string, orgId: string): Promise<BudgetScenario | null> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<Record<string, any>>(sql`
     select bs.id, bs.name, bs.description, bs.fiscal_year, bs.kind, bs.status,
            bs.revision, bs.book_id, b.name as book_name, b.code as book_code,
            bs.submitted_at, bs.approved_at, bs.updated_at
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
      where bs.id = ${id} and bs.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, any>[] }
+  `))
   const row = result.rows[0]
   if (!row) return null
   return {
@@ -165,13 +165,13 @@ export async function loadBudgetWorkspace(
 
   const accountIds = accountRows.rows.map((row) => String(row.id))
   const lineRows = accountIds.length
-    ? ((await db.execute(sql`
+    ? ((await db.execute<Record<string, any>>(sql`
         select bl.id, bl.account_id, bl.period_id, bl.amount::text, bl.note
           from budget_lines bl
          where bl.org_id = ${orgId} and bl.scenario_id = ${id}
            and bl.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])
            and ${dimensionWhere('bl', opts.dims)}
-      `)) as unknown as { rows: Record<string, any>[] }).rows
+      `))).rows
     : []
 
   return {
@@ -206,16 +206,11 @@ export async function loadBudgetWorkspace(
 
 export async function loadBudgetDimensionOptions(orgId: string): Promise<BudgetWorkspace['dimensions']> {
   const [departments, projects, locations, classes] = (await Promise.all([
-    db.execute(sql`select id, code, name from departments where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute(sql`select id, code, name from projects where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute(sql`select id, code, name from locations where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute(sql`select id, code, name from classes where org_id = ${orgId} and is_active order by code nulls last, name`),
-  ])) as unknown as [
-    { rows: DimensionOption[] },
-    { rows: DimensionOption[] },
-    { rows: DimensionOption[] },
-    { rows: DimensionOption[] },
-  ]
+    db.execute<DimensionOption>(sql`select id, code, name from departments where org_id = ${orgId} and is_active order by code nulls last, name`),
+    db.execute<DimensionOption>(sql`select id, code, name from projects where org_id = ${orgId} and is_active order by code nulls last, name`),
+    db.execute<DimensionOption>(sql`select id, code, name from locations where org_id = ${orgId} and is_active order by code nulls last, name`),
+    db.execute<DimensionOption>(sql`select id, code, name from classes where org_id = ${orgId} and is_active order by code nulls last, name`),
+  ]))
   return {
     departments: departments.rows,
     projects: projects.rows,

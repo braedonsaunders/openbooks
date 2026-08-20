@@ -99,22 +99,20 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // deleted definition in the immutable audit log in the same transaction so
   // a deletion can never occur without its evidence.
   const deleted = await db.transaction(async (tx) => {
-    const dependents = (await tx.execute(sql`
+    const dependents = (await tx.execute<{ schedule_count: string; run_count: string }>(sql`
       select
         (select count(*)::text from report_schedules
           where org_id = ${user.orgId} and definition_id = ${id}) as schedule_count,
         (select count(*)::text from report_runs
           where org_id = ${user.orgId} and definition_id = ${id}) as run_count
-    `)) as unknown as {
-      rows: { schedule_count: string; run_count: string }[]
-    }
+    `))
 
-    const result = (await tx.execute(sql`
+    const result = (await tx.execute<Record<string, unknown>>(sql`
       delete from report_definitions
        where id = ${id} and org_id = ${user.orgId} and kind = 'custom'
        returning id, kind, report_type, slug, name, description, query, statement,
                  system, layout, created_at, updated_at, created_by, updated_by
-    `)) as unknown as { rows: Record<string, unknown>[] }
+    `))
     const snapshot = result.rows[0]
     if (!snapshot) return null
 

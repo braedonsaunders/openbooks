@@ -58,14 +58,14 @@ export async function POST(req: Request) {
 
   try {
     const id = await db.transaction(async (tx) => {
-      const inserted = (await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into compliance_waivers
           (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
            approved_by, created_by, updated_by)
         values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
                 ${reason}, ${effectiveFrom}, ${body.expiresOn}, ${actorId}, ${actorId}, ${actorId})
         returning id
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       const newId = inserted.rows[0]!.id
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)

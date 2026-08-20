@@ -115,7 +115,18 @@ test(
       const recognitionReversalId =
         concurrent[0]!.recognitionReversalEntryIds[0]!;
 
-      const lineage = (await db.execute(sql`
+      const lineage = (await db.execute<{
+          document_status: string;
+          invoice_reversal_id: string;
+          obligation_status: string;
+          cancellation_reason: string;
+          schedule_status: string;
+          journal_entry_id: string;
+          reversal_journal_entry_id: string;
+          source_status: string;
+          reversal_status: string;
+          reverses_entry_id: string;
+        }>(sql`
         select document.status as document_status,
                document.reversal_entry_id as invoice_reversal_id,
                obligation.status as obligation_status,
@@ -141,20 +152,7 @@ test(
           join journal_entries reversal
             on reversal.id = schedule_line.reversal_journal_entry_id
          where document.id = ${documentId}
-      `)) as unknown as {
-        rows: {
-          document_status: string;
-          invoice_reversal_id: string;
-          obligation_status: string;
-          cancellation_reason: string;
-          schedule_status: string;
-          journal_entry_id: string;
-          reversal_journal_entry_id: string;
-          source_status: string;
-          reversal_status: string;
-          reverses_entry_id: string;
-        }[];
-      };
+      `));
       assert.equal(lineage.rows.length, 1);
       assert.deepEqual(lineage.rows[0], {
         document_status: "voided",
@@ -180,7 +178,7 @@ test(
       `);
       assert.deepEqual(reversalLines.rows, sourceLines.rows);
 
-      const net = (await db.execute(sql`
+      const net = (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(line.amount), 0)::text as amount
           from journal_lines line
           join journal_entries entry on entry.id = line.entry_id
@@ -197,7 +195,7 @@ test(
              from recognition_schedule_lines
             where journal_entry_id = ${sourceRecognitionId}
          )
-      `)) as unknown as { rows: { amount: string }[] };
+      `));
       assert.equal(net.rows[0]!.amount, "0.0000");
 
       const rerun = await runRevenueRecognition(

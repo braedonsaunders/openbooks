@@ -52,6 +52,23 @@
     "lineItemAria": "行 {line} の品目",
     "lineBillableAria": "行 {line} の請求可能",
     "lineHoursAria": "行 {line} の {day} の時間",
-    "removeLineAria": "行 {line} を削除"
+    "removeLineAria": "行 {line} を削除",
+    "reject": "却下",
+    "rejectTitle": "このタイムシートを却下",
+    "rejectReasonLabel": "理由",
+    "rejectPlaceholder": "承認前に修正が必要な点は何ですか？",
+    "rejectedToast": "タイムシートを却下しました",
+    "rejectedBecause": "却下: {reason}",
+    "reopen": "再開",
+    "reopenTitle": "このタイムシートを再開しますか？",
+    "reopenMessage": "週は下書きに戻り承認が取り消されるため、再度承認が必要になります。",
+    "reopenedToast": "タイムシートを再開しました",
+    "lockedBecause": "この週は再開できません — {count} 件の記録がすでに{reasons}です。",
+    "lockReason": {
+      "invoiced": "顧客へ請求済み",
+      "paid": "給与支払済み",
+      "costed": "元帳に計上済み",
+      "ticketed": "フィールドチケット内"
+    }
   }
 }

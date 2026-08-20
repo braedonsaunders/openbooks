@@ -374,7 +374,7 @@ export async function setContractPricing(
     : null;
   const transactionPrice = financing ? financing.cashSellingPrice : fromUnits(toUnits(promised));
 
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<{ id: string }>(sql`
     update revenue_contracts
        set pricing = ${JSON.stringify({
          fixedConsideration: fromUnits(toUnits(input.fixedConsideration)),
@@ -393,7 +393,7 @@ export async function setContractPricing(
            total_transaction_price = ${transactionPrice},
            updated_at = now(), updated_by = ${actorId}
      where id = ${contractId} and org_id = ${orgId}
-     returning id`)) as unknown as { rows: { id: string }[] };
+     returning id`));
   if (!updated.rows[0]) throw new TransactionPriceError("revenue contract not found");
 
   return {
@@ -558,21 +558,19 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
 
 /** Primary accounting book id (schedules are book-aware). */
 async function primaryBookId(orgId: string): Promise<string> {
-  const res = (await db.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const res = (await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`));
   if (!res.rows[0]) throw new Error("no primary accounting book");
   return res.rows[0].id;
 }
 
 /** Resolve the (non-adjustment) accounting period covering a date, or null. */
 async function periodForDate(orgId: string, date: string): Promise<string | null> {
-  const res = (await db.execute(sql`
+  const res = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
        and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`)) as unknown as { rows: { id: string }[] };
+     limit 1`));
   return res.rows[0]?.id ?? null;
 }
 
@@ -601,16 +599,7 @@ export async function buildRecognitionSchedule(
   forBookId?: string,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult> {
-  const oblRes = (await db.execute(sql`
-    select o.id, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on,
-           o.percent_complete, c.starts_on as contract_starts, c.ends_on as contract_ends,
-           r.method, r.recognition_periods, r.period_offset, r.start_offset_days,
-           r.initial_amount_percent, r.start_date_source, r.end_date_source
-      from performance_obligations o
-      join revenue_contracts c on c.id = o.contract_id
-      join recognition_rules r on r.id = o.recognition_rule_id
-     where o.id = ${obligationId} and o.org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const oblRes = (await db.execute<{
       id: string;
       allocated_price: string;
       recognition_starts_on: string | null;
@@ -625,8 +614,15 @@ export async function buildRecognitionSchedule(
       initial_amount_percent: string;
       start_date_source: string;
       end_date_source: string;
-    }[];
-  };
+    }>(sql`
+    select o.id, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on,
+           o.percent_complete, c.starts_on as contract_starts, c.ends_on as contract_ends,
+           r.method, r.recognition_periods, r.period_offset, r.start_offset_days,
+           r.initial_amount_percent, r.start_date_source, r.end_date_source
+      from performance_obligations o
+      join revenue_contracts c on c.id = o.contract_id
+      join recognition_rules r on r.id = o.recognition_rule_id
+     where o.id = ${obligationId} and o.org_id = ${orgId}`));
   const o = oblRes.rows[0];
   if (!o) throw new Error("obligation not found");
 
@@ -638,11 +634,9 @@ export async function buildRecognitionSchedule(
   const bookId = forBookId ?? (await primaryBookId(orgId));
 
   return await db.transaction(async (tx) => {
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id from recognition_schedules
-       where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+       where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
     let scheduleId: string;
     if (existing.rows[0]) {
       scheduleId = existing.rows[0].id;
@@ -651,18 +645,16 @@ export async function buildRecognitionSchedule(
            set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
          where id = ${scheduleId}`);
     } else {
-      const ins = (await tx.execute(sql`
+      const ins = (await tx.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
         values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       scheduleId = ins.rows[0].id;
     }
 
-    const posted = (await tx.execute(sql`
+    const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
       select period_id, planned_amount, sequence from recognition_schedule_lines
-       where schedule_id = ${scheduleId} and journal_entry_id is not null`)) as unknown as {
-      rows: { period_id: string; planned_amount: string; sequence: number }[];
-    };
+       where schedule_id = ${scheduleId} and journal_entry_id is not null`));
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
     const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
     const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
@@ -715,9 +707,9 @@ export async function buildAllRecognitionSchedules(
   actorId: string | null,
   asOfDate?: string,
 ): Promise<BuildRecognitionResult[]> {
-  const books = (await db.execute(sql`
+  const books = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
-     order by is_primary desc, code`)) as unknown as { rows: { id: string }[] };
+     order by is_primary desc, code`));
   const results: BuildRecognitionResult[] = [];
   for (const b of books.rows) results.push(await buildRecognitionSchedule(obligationId, orgId, actorId, b.id, asOfDate));
   return results;
@@ -748,23 +740,27 @@ export async function createObligationsFromInvoice(
   orgId: string,
   actorId: string | null,
 ): Promise<CreateObligationsResult> {
-  const docRes = (await db.execute(sql`
+  const docRes = (await db.execute<{ id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }>(sql`
     select id, document_number, party_id, currency, document_date, subsidiary_id
-      from documents where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'`)) as unknown as {
-    rows: { id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }[];
-  };
+      from documents where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'`));
   const doc = docRes.rows[0];
   if (!doc || !doc.party_id) return { created: 0, contractId: null, obligationIds: [] };
 
   // Fair-value range policy: 'warn' (default) flags out-of-range allocations
   // for review; 'off' disables the check. Configured in Company & Accounting.
-  const policyRes = (await db.execute(sql`
+  const policyRes = (await db.execute<{ policy: string }>(sql`
     select coalesce(settings->'revenue'->>'fairValueRangePolicy', 'warn') as policy
-      from orgs where id = ${orgId}`)) as unknown as { rows: { policy: string }[] };
+      from orgs where id = ${orgId}`));
   const rangePolicy = policyRes.rows[0]?.policy === "off" ? "off" : "warn";
 
   const currency = doc.currency ?? "";
-  const lineRes = (await db.execute(sql`
+  const lineRes = (await db.execute<{
+      line_id: string; description: string | null; amount: string; quantity: string | null; item_id: string;
+      line_custom: Record<string, any> | null; income_account_id: string | null; item_deferred: string | null;
+      item_ssp: string | null; revenue_allocation: string; rule_id: string; rule_deferred: string | null;
+      rule_recognized: string | null; end_date_source: string; fair_value: string | null;
+      fair_value_low: string | null; fair_value_high: string | null;
+    }>(sql`
     select dl.id as line_id, dl.description, dl.amount, dl.quantity, dl.item_id, dl.custom as line_custom,
            it.income_account_id, it.deferred_account_id as item_deferred, it.standalone_selling_price as item_ssp,
            it.revenue_allocation,
@@ -783,23 +779,13 @@ export async function createObligationsFromInvoice(
          order by f.effective_from desc nulls last limit 1
       ) fv on true
      where dl.document_id = ${documentId}
-     order by dl.line_number`)) as unknown as {
-    rows: {
-      line_id: string; description: string | null; amount: string; quantity: string | null; item_id: string;
-      line_custom: Record<string, any> | null; income_account_id: string | null; item_deferred: string | null;
-      item_ssp: string | null; revenue_allocation: string; rule_id: string; rule_deferred: string | null;
-      rule_recognized: string | null; end_date_source: string; fair_value: string | null;
-      fair_value_low: string | null; fair_value_high: string | null;
-    }[];
-  };
+     order by dl.line_number`));
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
   // Skip lines that already produced an obligation (idempotent replay).
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<{ document_line_id: string }>(sql`
     select document_line_id from performance_obligations
-     where org_id = ${orgId} and document_line_id = any(${`{${lineRes.rows.map((l) => l.line_id).join(",")}}`}::uuid[])`)) as unknown as {
-    rows: { document_line_id: string }[];
-  };
+     where org_id = ${orgId} and document_line_id = any(${`{${lineRes.rows.map((l) => l.line_id).join(",")}}`}::uuid[])`));
   const already = new Set(existing.rows.map((r) => r.document_line_id));
   const lines = lineRes.rows.filter((l) => !already.has(l.line_id));
   if (lines.length === 0) return { created: 0, contractId: null, obligationIds: [] };
@@ -819,18 +805,16 @@ export async function createObligationsFromInvoice(
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
     // One contract per invoice, reused on replay.
-    const existingContract = (await tx.execute(sql`
-      select id from revenue_contracts where org_id = ${orgId} and contract_number = ${doc.document_number} limit 1`)) as unknown as {
-      rows: { id: string }[];
-    };
+    const existingContract = (await tx.execute<{ id: string }>(sql`
+      select id from revenue_contracts where org_id = ${orgId} and contract_number = ${doc.document_number} limit 1`));
     let cId: string;
     if (existingContract.rows[0]) {
       cId = existingContract.rows[0].id;
     } else {
-      const ins = (await tx.execute(sql`
+      const ins = (await tx.execute<{ id: string }>(sql`
         insert into revenue_contracts (org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${doc.party_id}, ${doc.document_number}, 'active', ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       cId = ins.rows[0].id;
     }
 
@@ -843,7 +827,7 @@ export async function createObligationsFromInvoice(
       const fvFlag = rangePolicy === "warn"
         ? fairValueRangeFlag(allocated, l.quantity, l.fair_value_low, l.fair_value_high)
         : null;
-      const insObl = (await tx.execute(sql`
+      const insObl = (await tx.execute<{ id: string }>(sql`
         insert into performance_obligations
           (org_id, contract_id, document_line_id, item_id, description, recognition_rule_id,
            booked_amount, standalone_selling_price, allocated_price,
@@ -854,7 +838,7 @@ export async function createObligationsFromInvoice(
                 ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
                 ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
                 ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
-        returning id`)) as unknown as { rows: { id: string }[] };
+        returning id`));
       obligationIds.push(insObl.rows[0].id);
     }
     return cId;
@@ -894,7 +878,7 @@ export async function runRevenueRecognition(
 ): Promise<RunRecognitionResult> {
   const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
 
-  const due = (await db.execute(sql`
+  const due = (await db.execute<any>(sql`
     select l.id             as line_id,
            l.planned_amount as planned,
            l.period_id      as period_id,
@@ -952,7 +936,7 @@ export async function runRevenueRecognition(
             or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        ${allowedSubsidiaryIds ? sql`and coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-     order by c.contract_number, o.description, l.sequence`)) as unknown as { rows: any[] };
+     order by c.contract_number, o.description, l.sequence`));
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
 
@@ -1019,7 +1003,7 @@ export async function runRevenueRecognition(
         // satisfies journal_entry_id is null and cannot create a second entry.
         // Recheck the GL close under the same lock so a period cannot close
         // between the preliminary scan and the actual ledger write.
-        const claim = (await tx.execute(sql`
+        const claim = (await tx.execute<{ id: string; period_closed: boolean }>(sql`
           select l.id,
                  period_module_is_closed(
                    ${orgId}, l.period_id, s.book_id, ${row.subsidiary_id}, 'gl'
@@ -1029,13 +1013,11 @@ export async function runRevenueRecognition(
            where l.id = ${row.line_id}
              and l.org_id = ${orgId}
              and l.journal_entry_id is null
-           for update of l`)) as unknown as {
-          rows: { id: string; period_closed: boolean }[];
-        };
+           for update of l`));
         if (!claim.rows[0]) return { status: "already_posted" as const };
         if (claim.rows[0].period_closed) return { status: "period_closed" as const };
 
-        const entryRes = (await tx.execute(sql`
+        const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
@@ -1045,7 +1027,7 @@ export async function runRevenueRecognition(
                   ${postingDate}, ${row.period_id},
                   ${`Revenue recognition — ${row.obligation_desc} (${row.period_name})`},
                   'draft', 'revenue_recognition', ${actorId}, ${actorId})
-          returning id`)) as unknown as { rows: { id: string }[] };
+          returning id`));
         const eid = entryRes.rows[0].id;
 
         for (let i = 0; i < lines.length; i++) {
@@ -1188,14 +1170,14 @@ export async function cancelRevenueRecognitionForInvoice(input: {
 
   const recognitionReversalEntryIds = await withOrg(input.orgId, () =>
     db.transaction(async (tx) => {
-      const document = (await tx.execute(sql`
+      const document = (await tx.execute<{ id: string; status: string }>(sql`
         select id, status
           from documents
          where id = ${input.documentId}
            and org_id = ${input.orgId}
            and kind = 'customer_invoice'
          for update
-      `)) as unknown as { rows: { id: string; status: string }[] };
+      `));
       const doc = document.rows[0];
       if (!doc) {
         throw new RevenueRecognitionCancellationError(
@@ -1208,7 +1190,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
         );
       }
 
-      const obligations = (await tx.execute(sql`
+      const obligations = (await tx.execute<{ id: string; contract_id: string; status: string }>(sql`
         select obligation.id, obligation.contract_id, obligation.status
           from performance_obligations obligation
           join document_lines line
@@ -1218,9 +1200,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            and line.document_id = ${input.documentId}
          order by obligation.created_at, obligation.id
          for update of obligation
-      `)) as unknown as {
-        rows: { id: string; contract_id: string; status: string }[];
-      };
+      `));
       if (obligations.rows.length === 0) {
         throw new RevenueRecognitionCancellationError(
           "invoice has no revenue-recognition obligations",
@@ -1228,7 +1208,15 @@ export async function cancelRevenueRecognitionForInvoice(input: {
       }
 
       const obligationIds = obligations.rows.map((row) => row.id);
-      const sources = (await tx.execute(sql`
+      const sources = (await tx.execute<{
+          line_id: string;
+          journal_entry_id: string;
+          reversal_journal_entry_id: string | null;
+          entry_number: string;
+          book_id: string;
+          subsidiary_id: string;
+          entry_status: string;
+        }>(sql`
         select schedule_line.id as line_id,
                schedule_line.journal_entry_id,
                schedule_line.reversal_journal_entry_id,
@@ -1246,17 +1234,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              any(${`{${obligationIds.join(",")}}`}::uuid[])
          order by schedule_line.created_at, schedule_line.id
          for update of schedule_line, entry
-      `)) as unknown as {
-        rows: {
-          line_id: string;
-          journal_entry_id: string;
-          reversal_journal_entry_id: string | null;
-          entry_number: string;
-          book_id: string;
-          subsidiary_id: string;
-          entry_status: string;
-        }[];
-      };
+      `));
 
       const reversalIds: string[] = [];
       for (const source of sources.rows) {
@@ -1269,7 +1247,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
             `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
           );
         }
-        const period = (await tx.execute(sql`
+        const period = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
           select period.id,
                  period_module_is_closed(
                    ${input.orgId}, period.id, ${source.book_id},
@@ -1281,9 +1259,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              and period.ends_on >= ${reversalDate}
            order by period.is_adjustment, period.starts_on
            limit 1
-        `)) as unknown as {
-          rows: { id: string; is_closed: boolean }[];
-        };
+        `));
         if (!period.rows[0]) {
           throw new RevenueRecognitionCancellationError(
             `no accounting period covers ${reversalDate}`,
@@ -1295,7 +1271,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           );
         }
 
-        const inserted = (await tx.execute(sql`
+        const inserted = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date,
              period_id, memo, status, origin, reverses_entry_id,
@@ -1307,7 +1283,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              'draft', 'revenue_recognition', ${source.journal_entry_id},
              ${input.actorId}, ${input.actorId})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         const reversalId = inserted.rows[0]!.id;
 
         await tx.execute(sql`
@@ -1408,17 +1384,15 @@ export async function cancelRevenueRecognitionForInvoice(input: {
     requestDocumentVoid,
   } = await import("./document-void.ts");
   for (let attempt = 0; attempt < 3; attempt++) {
-    const current = (await db.execute(sql`
-      select status, reversal_entry_id, void_requested_at
-        from documents
-       where id = ${input.documentId} and org_id = ${input.orgId}
-    `)) as unknown as {
-      rows: {
+    const current = (await db.execute<{
         status: string;
         reversal_entry_id: string | null;
         void_requested_at: Date | null;
-      }[];
-    };
+      }>(sql`
+      select status, reversal_entry_id, void_requested_at
+        from documents
+       where id = ${input.documentId} and org_id = ${input.orgId}
+    `));
     const doc = current.rows[0];
     if (!doc) {
       throw new RevenueRecognitionCancellationError(

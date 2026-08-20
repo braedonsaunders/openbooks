@@ -98,9 +98,9 @@ export async function POST(req: Request) {
   // Default to the org's primary/first subsidiary when the caller didn't scope one.
   let subsidiaryId = body.subsidiaryId
   if (!subsidiaryId || !isUuid(subsidiaryId)) {
-    const r = (await db.execute(
+    const r = (await db.execute<{ id: string }>(
       sql`select id from subsidiaries where org_id = ${user.orgId} order by created_at limit 1`,
-    )) as unknown as { rows: { id: string }[] }
+    ))
     subsidiaryId = r.rows[0]?.id
     if (!subsidiaryId) return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
   }

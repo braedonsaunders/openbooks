@@ -45,10 +45,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const existing = (await db.execute(sql`
+  const existing = (await db.execute<any>(sql`
     select o.*, s.is_closed, s.is_won from crm_opportunities o
     join crm_opportunity_statuses s on s.id = o.status_id
-    where o.id = ${id} and o.org_id = ${user.orgId}`)) as unknown as { rows: any[] }
+    where o.id = ${id} and o.org_id = ${user.orgId}`))
   const current = existing.rows[0]
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json() as Record<string, any>
@@ -66,8 +66,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
   if (!statusId || !isUuid(statusId)) return NextResponse.json({ error: 'status is required' }, { status: 422 })
-  const status = (await db.execute(sql`
-    select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: any[] }
+  const status = (await db.execute<any>(sql`
+    select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
   const nextStatus = status.rows[0]
   if (!nextStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
   if (nextStatus.is_closed) {
@@ -172,7 +172,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const linked = (await db.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${gate.user.orgId} limit 1`)) as unknown as { rows: unknown[] }
+  const linked = (await db.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${gate.user.orgId} limit 1`))
   if (linked.rows[0]) return NextResponse.json({ error: 'An opportunity with linked sales documents cannot be deleted; close it instead' }, { status: 422 })
   const deleted = await db.transaction(async (tx) => {
     await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${gate.user.orgId}`)

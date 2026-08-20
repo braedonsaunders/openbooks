@@ -72,9 +72,9 @@ test("component tax evidence posts exact recoverability, withholding, and revers
     const entryId = await postDocument(documentId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const gl = (await db.execute(sql`
+    const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `)) as unknown as { rows: { account_id: string; amount: string }[] };
+    `));
     assert.deepEqual(gl.rows, [
       { account_id: org.accounts.cogs, amount: "106.0000" },
       { account_id: org.accounts.taxInput, amount: "5.0000" },

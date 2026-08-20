@@ -424,6 +424,18 @@ export const db = new Proxy(poolDb, {
 type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
 
 /**
+ * Anything a raw statement can run on: the pooled `db`, a transaction handed
+ * out by `db.transaction`, or the transaction `withOrg` pins.
+ *
+ * Helpers that work either inside or outside a transaction used to declare this
+ * inline as `{ execute: (query: any) => Promise<unknown> }` — a dozen separate
+ * copies, each of which threw the row type away and made every caller assert it
+ * back with `as unknown as { rows: … }`. Borrowing drizzle's own signature keeps
+ * the row generic intact, so `executor.execute<Row>(sql`…`)` is typed end to end.
+ */
+export type SqlExecutor = { execute: typeof poolDb.execute };
+
+/**
  * Run one database transaction, reusing the transaction pinned by `withOrg`
  * when the caller already owns the atomic boundary. This prevents nested
  * helpers from issuing a second BEGIN/COMMIT on the same PostgreSQL client and

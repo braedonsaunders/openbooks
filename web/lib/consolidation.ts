@@ -57,7 +57,7 @@ export async function resolveSubsidiaryView(
   let inView = consolidated ? members : [node];
   let weights: StatementSubsidiaryContext["weights"];
   if (consolidated) {
-    const ownership = (await db.execute(sql`
+    const ownership = (await db.execute<{ id: string; factor: string }>(sql`
       with recursive ownership_scope as (
         select s.id, 1::numeric as factor
           from subsidiaries s where s.id=${node.id}
@@ -80,7 +80,7 @@ export async function resolveSubsidiaryView(
           ) interest on true
       )
       select id,factor::text from ownership_scope
-    `)) as unknown as { rows: { id: string; factor: string }[] };
+    `));
     const factorById = new Map(ownership.rows.map((row) => [row.id, row.factor]));
     inView = inView.filter((member) => factorById.get(member.id) !== "0");
     weights = inView
@@ -91,15 +91,13 @@ export async function resolveSubsidiaryView(
   const foreign = [...new Set(inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency))];
   let rates: StatementSubsidiaryContext["rates"];
   if (consolidated && foreign.length > 0) {
-    const r = (await db.execute(sql`
+    const r = (await db.execute<{ from: string; avg: string; cur: string; hist: string }>(sql`
       select cf.from_currency as "from", cf.average_rate as avg, cf.current_rate as cur, cf.historical_rate as hist
         from consolidated_fx_rates cf
         join accounting_periods p on p.id = cf.period_id
        where cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
-         and p.starts_on <= ${periodTo} and p.ends_on >= ${periodTo}`)) as unknown as {
-      rows: { from: string; avg: string; cur: string; hist: string }[];
-    };
+         and p.starts_on <= ${periodTo} and p.ends_on >= ${periodTo}`));
     const byCcy = new Map(r.rows.map((x) => [x.from, x]));
     const missing = foreign.filter((c) => !byCcy.has(c));
     if (missing.length > 0) {

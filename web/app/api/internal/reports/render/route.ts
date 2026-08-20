@@ -47,10 +47,10 @@ export async function GET(req: Request) {
     const runId = p.get('runId')
     let extraFilters: ReportRuleGroup | null = null
     if (runId) {
-      const run = (await db.execute(sql`
+      const run = (await db.execute<{ filters: Record<string, unknown> | null }>(sql`
         select filters from report_runs
          where id=${runId} and org_id=${orgId} and definition_id=${definitionId} and trigger='scheduled'
-      `)) as unknown as { rows: { filters: Record<string, unknown> | null }[] }
+      `))
       if (!run.rows[0]) return NextResponse.json({ error: 'scheduled report run not found' }, { status: 404 })
       const stored = run.rows[0].filters
       // A schedule's filters carry either a query-report extra rule group

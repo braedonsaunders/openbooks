@@ -14,7 +14,7 @@ const connectionIndex = argv.indexOf("--connection");
 const requestedId = connectionIndex >= 0 ? argv[connectionIndex + 1] : null;
 
 await db.execute(sql`set app.bypass_rls = on`);
-const result = (await db.execute(sql`
+const result = (await db.execute<ConnectionRow>(sql`
   select id, org_id as "orgId", source, display_name as "displayName",
          auth_kind as "authKind", status, config, secrets,
          mirror_enabled as "mirrorEnabled", mirror_schedule as "mirrorSchedule",
@@ -23,7 +23,7 @@ const result = (await db.execute(sql`
    where status = 'active'
      ${requestedId ? sql`and id = ${requestedId}` : sql``}
    order by created_at
-`)) as unknown as { rows: ConnectionRow[] };
+`));
 
 if (result.rows.length === 0) throw new Error("no active source connection matched");
 for (const connection of result.rows) {

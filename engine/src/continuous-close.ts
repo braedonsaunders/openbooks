@@ -108,7 +108,7 @@ export function nextContinuousCloseRunAt(cadence: AgentCadence, from = new Date(
 }
 
 export async function getContinuousClosePolicies(orgId: string): Promise<ContinuousClosePolicy[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select p.id, p.agent_key, p.enabled, p.automatic_runs, p.cadence,
            p.materiality_threshold, p.detector_settings, p.analysis_settings,
            p.last_run_at, p.next_run_at,
@@ -117,7 +117,7 @@ export async function getContinuousClosePolicies(orgId: string): Promise<Continu
              order by r.started_at desc limit 1) as last_run_status
       from ai_agent_policies p
      where p.org_id = ${orgId}
-  `)) as unknown as { rows: Record<string, unknown>[] };
+  `));
   const byKey = new Map(rows.rows.map((row) => [String(row.agent_key), row]));
   return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) => {
     const row = byKey.get(agentKey);
@@ -224,7 +224,14 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
   const unmatchedPolicy = byKey.get("unmatched_bank_activity");
   if (unmatchedPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(unmatchedPolicy, agentThreshold);
-    const unmatched = (await db.execute(sql`
+    const unmatched = (await db.execute<{
+        account_id: string;
+        number: string | null;
+        name: string;
+        line_count: number;
+        oldest_date: string;
+        materiality: string;
+      }>(sql`
       select a.id as account_id, a.number, a.name, count(*)::int as line_count,
              min(l.posted_on) as oldest_date, sum(abs(l.amount))::text as materiality
       from bank_statement_lines l
@@ -232,19 +239,10 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         join accounts a on a.id = s.account_id and a.org_id = s.org_id
        where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= current_date
        group by a.id, a.number, a.name
-    `)) as unknown as {
-      rows: {
-        account_id: string;
-        number: string | null;
-        name: string;
-        line_count: number;
-        oldest_date: string;
-        materiality: string;
-      }[];
-    };
+    `));
 
     for (const row of unmatched.rows) {
-      const top = (await db.execute(sql`
+      const top = (await db.execute<Record<string, unknown>>(sql`
       select l.id, l.posted_on, l.amount::text, l.description, l.counterparty_ref
         from bank_statement_lines l
         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -252,7 +250,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
          and l.match_status = 'unmatched' and l.posted_on <= current_date
        order by abs(l.amount) desc, l.posted_on
        limit 10
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const materiality = moneyAbs(row.materiality);
     findings.push({
         agentKey: "accounting",
@@ -296,7 +294,15 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
   const reconciliationPolicy = byKey.get("reconciliation_difference");
   if (reconciliationPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(reconciliationPolicy, agentThreshold);
-    const reconciliations = (await db.execute(sql`
+    const reconciliations = (await db.execute<{
+        id: string;
+        account_id: string;
+        through_date: string;
+        statement_balance: string;
+        number: string | null;
+        name: string;
+        difference: string;
+      }>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance::text,
              a.number, a.name,
            (r.statement_balance - coalesce((
@@ -312,17 +318,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.status = 'in_progress'
-    `)) as unknown as {
-      rows: {
-        id: string;
-        account_id: string;
-        through_date: string;
-        statement_balance: string;
-        number: string | null;
-        name: string;
-        difference: string;
-      }[];
-    };
+    `));
 
     for (const row of reconciliations.rows) {
       if (toUnits(row.difference) === 0n) continue;
@@ -364,30 +360,28 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
   if (stalePolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(stalePolicy, agentThreshold);
     const staleAfterDays = stalePolicy.parameters.staleAfterDays;
-    const stale = (await db.execute(sql`
+    const stale = (await db.execute<{
+        document_count: number;
+        oldest_date: string | null;
+        materiality: string;
+      }>(sql`
       select count(*)::int as document_count, min(document_date) as oldest_date,
              coalesce(sum(abs(total)), 0)::text as materiality
         from documents
        where org_id = ${orgId} and status in ('draft','pending_approval')
          and document_date <= current_date - (${staleAfterDays} * interval '1 day')
          and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
-    `)) as unknown as {
-      rows: {
-        document_count: number;
-        oldest_date: string | null;
-        materiality: string;
-      }[];
-    };
+    `));
     const staleRow = stale.rows[0];
     if (staleRow && Number(staleRow.document_count) > 0) {
-      const documents = (await db.execute(sql`
+      const documents = (await db.execute<Record<string, unknown>>(sql`
         select id, kind, document_number, document_date, status, total::text
           from documents
          where org_id = ${orgId} and status in ('draft','pending_approval')
            and document_date <= current_date - (${staleAfterDays} * interval '1 day')
            and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
          order by document_date, abs(total) desc limit 10
-      `)) as unknown as { rows: Record<string, unknown>[] };
+      `));
     const materiality = moneyAbs(staleRow.materiality);
     findings.push({
         agentKey: "accounting",
@@ -427,7 +421,14 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
   const missingBudgetPolicy = byKey.get("missing_approved_budget");
   const budgetVariancePolicy = byKey.get("unfavorable_budget_variance");
   if (missingBudgetPolicy?.enabled || budgetVariancePolicy?.enabled) {
-    const scenario = (await db.execute(sql`
+    const scenario = (await db.execute<{
+        id: string;
+        book_id: string;
+        name: string;
+        fiscal_year: number;
+        starts_on: string;
+        ends_on: string;
+      }>(sql`
       select bs.id, bs.book_id, bs.name, bs.fiscal_year,
              min(p.starts_on) as starts_on, least(current_date, max(p.ends_on)) as ends_on
       from budget_scenarios bs
@@ -438,16 +439,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
        group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
        order by bs.fiscal_year desc, bs.updated_at desc
        limit 1
-    `)) as unknown as {
-      rows: {
-        id: string;
-        book_id: string;
-        name: string;
-        fiscal_year: number;
-        starts_on: string;
-        ends_on: string;
-      }[];
-    };
+    `));
     const budget = scenario.rows[0];
     if (!budget && missingBudgetPolicy?.enabled) {
       findings.push({
@@ -463,7 +455,14 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
       });
     } else if (budget && budgetVariancePolicy?.enabled) {
       const threshold = effectiveDetectorMateriality(budgetVariancePolicy, agentThreshold);
-      const variances = (await db.execute(sql`
+      const variances = (await db.execute<{
+          id: string;
+          number: string | null;
+          name: string;
+          type: string;
+          budget: string;
+          actual: string;
+        }>(sql`
       with selected_periods as (
         select p.id
           from accounting_periods p
@@ -496,16 +495,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
        where a.org_id = ${orgId}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and (b.account_id is not null or actual.account_id is not null)
-      `)) as unknown as {
-        rows: {
-          id: string;
-          number: string | null;
-          name: string;
-          type: string;
-          budget: string;
-          actual: string;
-        }[];
-      };
+      `));
       for (const row of variances.rows) {
         const classification = classifyBudgetVariance({
           budget: row.budget,
@@ -561,20 +551,18 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
   const revenuePolicy = byKey.get("period_revenue_decline");
   const marginPolicy = byKey.get("gross_margin_decline");
   if (revenuePolicy?.enabled || marginPolicy?.enabled) {
-    const periods = (await db.execute(sql`
+    const periods = (await db.execute<{ id: string; name: string; starts_on: string; ends_on: string }>(sql`
     select p.id, p.name, p.starts_on, p.ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
        and not p.is_adjustment and p.ends_on < current_date
      order by p.ends_on desc limit 2
-    `)) as unknown as {
-      rows: { id: string; name: string; starts_on: string; ends_on: string }[];
-    };
+    `));
     if (periods.rows.length === 2) {
       const [current, prior] = periods.rows;
       const metrics = async (period: { id: string }) => {
-      const result = (await db.execute(sql`
+      const result = (await db.execute<{ revenue: string; cogs: string; opex: string }>(sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs,
                coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0)::text as opex
@@ -583,9 +571,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
           join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.period_id = ${period.id}
-        `)) as unknown as {
-          rows: { revenue: string; cogs: string; opex: string }[];
-        };
+        `));
         return result.rows[0] ?? { revenue: "0", cogs: "0", opex: "0" };
       };
       const [currentMetrics, priorMetrics] = await Promise.all([metrics(current), metrics(prior)]);
@@ -666,7 +652,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
 }
 
 async function persistFinding(orgId: string, runId: string, finding: Finding): Promise<string> {
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ id: string }>(sql`
     insert into ai_work_items (
       org_id, agent_key, finding_type, detector_version, fingerprint, severity,
       confidence, materiality, subject_type, subject_id, summary,
@@ -693,7 +679,7 @@ async function persistFinding(orgId: string, runId: string, finding: Finding): P
       resolved_by = case when ai_work_items.status = 'resolved' then null else ai_work_items.resolved_by end,
       updated_at = now()
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const itemId = result.rows[0]!.id;
   await db.execute(sql`delete from ai_work_item_evidence where org_id = ${orgId} and work_item_id = ${itemId}`);
   if (finding.evidence.length > 0) {
@@ -777,9 +763,9 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
       };
 
   const prepared = await withOrg(args.orgId, async (): Promise<PreparedRun> => {
-    const lock = (await db.execute(sql`
+    const lock = (await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
-    `)) as unknown as { rows: { acquired: boolean }[] };
+    `));
     if (!lock.rows[0]?.acquired) {
       const [skipped] = await db
         .insert(schema.aiAgentRuns)
@@ -799,12 +785,12 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
     // The advisory transaction lock closes the insert race. The durable row
     // keeps a second request from starting while the first run is outside its
     // short detector transaction and using network-bound model tools.
-    const active = (await db.execute(sql`
+    const active = (await db.execute<{ id: string }>(sql`
       select id from ai_agent_runs
        where org_id = ${args.orgId} and agent_key = ${args.agentKey}
          and status = 'running' and started_at > now() - interval '15 minutes'
        order by started_at desc limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (active.rows[0]) {
       const [skipped] = await db
         .insert(schema.aiAgentRuns)
@@ -821,21 +807,19 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
     }
-    const global = (await db.execute(sql`
+    const global = (await db.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${args.orgId}
-    `)) as unknown as { rows: { enabled: boolean }[] };
-    const policy = (await db.execute(sql`
-      select enabled, materiality_threshold::text, detector_settings, analysis_settings
-        from ai_agent_policies where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-    `)) as unknown as {
-      rows: {
+    `));
+    const policy = (await db.execute<{
         enabled: boolean;
         materiality_threshold: string;
         detector_settings: unknown;
         analysis_settings: unknown;
-      }[];
-    };
+      }>(sql`
+      select enabled, materiality_threshold::text, detector_settings, analysis_settings
+        from ai_agent_policies where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+    `));
     const configured = policy.rows[0];
     const [run] = await db
       .insert(schema.aiAgentRuns)
@@ -864,7 +848,7 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
       const resolved =
         evaluatedDetectors.length === 0
           ? { rows: [] as { id: string }[] }
-          : ((await db.execute(sql`
+          : ((await db.execute<{ id: string }>(sql`
             update ai_work_items
                set status = 'resolved', resolved_at = now(), resolved_by = null, updated_at = now()
              where org_id = ${args.orgId} and agent_key = ${args.agentKey}
@@ -874,7 +858,7 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
                )})
                and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
             returning id
-          `)) as unknown as { rows: { id: string }[] });
+          `)));
       return {
         kind: "ready",
         runId: run!.id,
@@ -951,7 +935,13 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
 
 /** Claim and execute every tenant policy whose automatic scan is due. */
 export async function runDueContinuousCloseAgents(now = new Date()): Promise<void> {
-  const due = (await db.execute(sql`
+  const due = (await db.execute<{
+      id: string;
+      org_id: string;
+      agent_key: ContinuousCloseAgentKey;
+      cadence: AgentCadence;
+      next_run_at: Date;
+    }>(sql`
     select p.id, p.org_id, p.agent_key, p.cadence, p.next_run_at
       from ai_agent_policies p
       join orgs o on o.id = p.org_id
@@ -959,22 +949,14 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
        and o.env_kind = 'production'
        and coalesce((o.settings->'ai'->>'enabled')::boolean, true)
      order by p.next_run_at
-  `)) as unknown as {
-    rows: {
-      id: string;
-      org_id: string;
-      agent_key: ContinuousCloseAgentKey;
-      cadence: AgentCadence;
-      next_run_at: Date;
-    }[];
-  };
+  `));
   for (const policy of due.rows) {
     const next = nextContinuousCloseRunAt(policy.cadence, now);
-    const claim = (await db.execute(sql`
+    const claim = (await db.execute<{ id: string }>(sql`
       update ai_agent_policies set next_run_at = ${next}, updated_at = now()
        where id = ${policy.id} and next_run_at = ${policy.next_run_at}
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (claim.rows.length === 0) continue;
     await runContinuousCloseAgent({
       orgId: policy.org_id,

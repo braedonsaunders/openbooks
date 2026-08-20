@@ -31,9 +31,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute(
+  const existing = (await db.execute<{ status: string; document_date: string }>(
     sql`select status, document_date from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
-  )) as unknown as { rows: { status: string; document_date: string }[] }
+  ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (existing.rows[0].status !== 'draft') {
     return NextResponse.json(
@@ -124,7 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          const inserted = (await tx.execute(sql`
+          const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, account_id, description,
                                         quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                         tax_amount, tax_overridden,
@@ -134,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                     ${l.taxAmount}, ${l.taxOverridden},
                     ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
             returning id
-          `)) as unknown as { rows: { id: string }[] }
+          `))
           await persistLineTaxComponents(tx, {
             orgId: user.orgId,
             documentLineId: inserted.rows[0]!.id,
@@ -182,7 +182,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   const owned = (await db.execute(
     sql`select 1 from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
-  )) as unknown as { rows: unknown[] }
+  ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
     await deleteDocument(id, gate.user.id)

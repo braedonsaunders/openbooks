@@ -22,11 +22,11 @@ async function gateForDocument(
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ kind: PaymentKind }>(sql`
     select kind from documents
      where id = ${id} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${orgId ?? authz.user.orgId}
-  `)) as unknown as { rows: { kind: PaymentKind }[] }
+  `))
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const kind = r.rows[0].kind
   const perm = paymentPermission(kind)

@@ -38,7 +38,7 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
 async function acctExists(id: string, orgId: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from accounts where id = ${id} and org_id = ${orgId} and not is_summary`,
-  )) as unknown as { rows: unknown[] }
+  ))
   return !!r.rows[0]
 }
 
@@ -100,13 +100,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existRes = (await db.execute(sql`
-    select id, status, custom, acquisition_cost, salvage_value, in_service_on,
-           depreciation_method, depreciation_method_id, useful_life_months,
-           depreciation_rate_percent, depreciation_units_total, depreciation_convention
-      from fixed_assets where id = ${id} and org_id = ${user.orgId}
-      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
-  `)) as unknown as { rows: {
+  const existRes = (await db.execute<{
     id: string
     status: string
     custom: Record<string, any> | null
@@ -119,7 +113,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     depreciation_rate_percent: string | null
     depreciation_units_total: string | null
     depreciation_convention: (typeof CONVENTIONS)[number] | null
-  }[] }
+  }>(sql`
+    select id, status, custom, acquisition_cost, salvage_value, in_service_on,
+           depreciation_method, depreciation_method_id, useful_life_months,
+           depreciation_rate_percent, depreciation_units_total, depreciation_convention
+      from fixed_assets where id = ${id} and org_id = ${user.orgId}
+      ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
+  `))
   const existing = existRes.rows[0]
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -131,9 +131,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!value || !isUuid(value)) return bad('invalid_subsidiary')
     const valid = (await db.execute(sql`
       select 1 from subsidiaries
-       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)) as unknown as {
-      rows: unknown[]
-    }
+       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`))
     if (!valid.rows[0]) return bad('invalid_subsidiary')
     subsidiaryId = value
   }
@@ -145,7 +143,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!c || !isUuid(c)) return bad('Invalid category')
     const r = (await db.execute(
       sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`,
-    )) as unknown as { rows: unknown[] }
+    ))
     if (!r.rows[0]) return bad('Category not found')
     categoryId = c
   }
@@ -214,7 +212,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (classCode) {
         const valid = (await db.execute(sql`
           select 1 from tax_pool_classes
-           where org_id=${user.orgId} and regime=${regime} and class_code=${classCode} and is_active`)) as unknown as { rows: unknown[] }
+           where org_id=${user.orgId} and regime=${regime} and class_code=${classCode} and is_active`))
         if (!valid.rows[0]) return bad('Invalid tax depreciation class')
       }
       clean[regime] = { classCode, businessUsePercent, bonusPercent, section179: section179 ?? '0' }
@@ -234,7 +232,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!isUuid(candidate)) return bad('Invalid depreciation formula')
       const formula = (await db.execute(sql`
         select 1 from depreciation_methods
-         where id = ${candidate} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: unknown[] }
+         where id = ${candidate} and org_id = ${user.orgId} and is_active`))
       if (!formula.rows[0]) return bad('Depreciation formula not found or inactive')
     }
     depreciationMethodId = candidate
@@ -319,7 +317,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       select 1 from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id
       where s.org_id = ${user.orgId} and s.asset_id = ${id} and l.source <> 'formula'
-      limit 1`)) as unknown as { rows: unknown[] }
+      limit 1`))
     if (inputEvidence.rows[0]) return bad('Depreciation method cannot change after manual or production evidence exists')
   }
 
@@ -378,7 +376,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const visible = (await db.execute(sql`
     select 1 from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const evidence = (await db.execute(sql`
@@ -387,7 +385,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       join depreciation_schedule_lines l on l.schedule_id = s.id
      where s.asset_id = ${id} and s.org_id = ${user.orgId}
        and (l.posted_amount is not null or l.input_id is not null or l.source = 'imported')
-     limit 1`)) as unknown as { rows: unknown[] }
+     limit 1`))
   if (evidence.rows[0]) {
     return NextResponse.json(
       { error: 'This asset has depreciation evidence and cannot be deleted.' },

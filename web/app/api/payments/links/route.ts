@@ -24,12 +24,12 @@ export async function GET(req: Request) {
   }
   const [links, providers] = await Promise.all([
     listPaymentLinks(gate.user.orgId, documentId),
-    db.execute(sql`
+    db.execute<{ provider: string }>(sql`
       select provider from psp_provider_configs
        where org_id = ${gate.user.orgId} and is_enabled and acceptance_enabled
          and default_bank_account_id is not null
        order by provider
-    `) as unknown as Promise<{ rows: { provider: string }[] }>,
+    `),
   ]);
   return NextResponse.json({ links, providers: providers.rows.map((r) => r.provider) });
 }

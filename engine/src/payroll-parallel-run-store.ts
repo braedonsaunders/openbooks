@@ -102,18 +102,16 @@ export async function comparableSlots(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<ComparableSlot[]> {
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<{
+      id: string; code: string; name: string; kind: ParallelSlotKind;
+      system_key: string | null; sequence: number;
+    }>(sql`
     select c.id, c.code, c.name, c.kind, c.system_key, c.sequence
       from pay_components c
      where c.org_id = ${orgId}
      order by case c.kind when 'earning' then 1 when 'deduction' then 2 else 3 end,
               c.sequence, c.code
-  `)) as unknown as {
-    rows: {
-      id: string; code: string; name: string; kind: ParallelSlotKind;
-      system_key: string | null; sequence: number;
-    }[];
-  };
+  `));
 
   const totals: ComparableSlot[] = Object.entries(TOTAL_FIELD_KEYS).map(([fieldKey, slot]) => ({
     fieldKey,
@@ -213,7 +211,7 @@ export async function upsertPriorRegister(
     throw new ParallelRunStoreError("periodEnd cannot fall before periodStart");
   }
 
-  const result = (await runner.execute(sql`
+  const result = (await runner.execute<{ id: string }>(sql`
     insert into payroll_prior_registers
       (org_id, name, provider_name, period_start, period_end, pay_date,
        currency_code, source_file_name, created_by, updated_by)
@@ -230,7 +228,7 @@ export async function upsertPriorRegister(
       source_file_name = coalesce(excluded.source_file_name, payroll_prior_registers.source_file_name),
       updated_at = now(),
       updated_by = excluded.updated_by
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const id = result.rows[0]?.id;
   if (!id) throw new ParallelRunStoreError("the prior register could not be saved");
   return id;
@@ -271,11 +269,9 @@ async function priorRegisterUnmappedColumns(
   registerId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<UnmappedSourceColumn[]> {
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<{ unmapped_columns: unknown }>(sql`
     select unmapped_columns from payroll_prior_registers
-     where org_id = ${orgId} and id = ${registerId}`)) as unknown as {
-    rows: { unmapped_columns: unknown }[];
-  };
+     where org_id = ${orgId} and id = ${registerId}`));
   return parseUnmapped(rows.rows[0]?.unmapped_columns);
 }
 
@@ -337,15 +333,13 @@ export async function savePriorStub(
     }
   };
 
-  const existing = (await runner.execute(sql`
+  const existing = (await runner.execute<{ id: string }>(sql`
     select id from payroll_prior_stubs
      where org_id = ${input.orgId} and register_id = ${input.registerId}
-       and employee_party_id = ${input.row.employeePartyId}`)) as unknown as {
-    rows: { id: string }[];
-  };
+       and employee_party_id = ${input.row.employeePartyId}`));
   const created = existing.rows.length === 0;
 
-  const upserted = (await runner.execute(sql`
+  const upserted = (await runner.execute<{ id: string }>(sql`
     insert into payroll_prior_stubs
       (org_id, register_id, employee_party_id, employee_label, gross, net_pay,
        employer_cost, created_by, updated_by)
@@ -360,7 +354,7 @@ export async function savePriorStub(
       employer_cost = excluded.employer_cost,
       updated_at = now(),
       updated_by = excluded.updated_by
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const stubId = upserted.rows[0]!.id;
 
   await runner.execute(sql`
@@ -406,7 +400,7 @@ export async function savePriorStub(
 
 /** Every imported register, newest period first, with what it actually holds. */
 export async function priorRegisters(orgId: string): Promise<PriorRegisterHeader[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.name, r.provider_name, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date,
            r.currency_code, r.source_file_name, r.unmapped_columns,
@@ -423,7 +417,7 @@ export async function priorRegisters(orgId: string): Promise<PriorRegisterHeader
       from payroll_prior_registers r
      where r.org_id = ${orgId}
      order by r.pay_date desc, r.name
-     limit 500`)) as unknown as { rows: Record<string, unknown>[] };
+     limit 500`));
 
   return rows.rows.map((row) => ({
     id: String(row.id),
@@ -485,29 +479,27 @@ export async function loadPriorSide(
   orgId: string,
   registerId: string,
 ): Promise<ParallelSide & { unmappedColumns: UnmappedSourceColumn[] }> {
-  const header = (await db.execute(sql`
+  const header = (await db.execute<{ name: string; unmapped_columns: unknown }>(sql`
     select name, unmapped_columns from payroll_prior_registers
-     where org_id = ${orgId} and id = ${registerId}`)) as unknown as {
-    rows: { name: string; unmapped_columns: unknown }[];
-  };
+     where org_id = ${orgId} and id = ${registerId}`));
   const register = header.rows[0];
   if (!register) throw new ParallelRunStoreError("that prior register does not exist");
 
-  const stubs = (await db.execute(sql`
+  const stubs = (await db.execute<Record<string, unknown>>(sql`
     select s.id, s.employee_party_id, s.employee_label, s.gross, s.net_pay, s.employer_cost,
            coalesce(p.display_name, s.employee_label) as employee_name
       from payroll_prior_stubs s
       left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.register_id = ${registerId}
      order by employee_name
-     limit ${MAX_REGISTER_ROWS}`)) as unknown as { rows: Record<string, unknown>[] };
+     limit ${MAX_REGISTER_ROWS}`));
 
-  const amounts = (await db.execute(sql`
+  const amounts = (await db.execute<Record<string, unknown>>(sql`
     select a.prior_stub_id, a.kind, a.slot, a.amount, a.source_column
       from payroll_prior_amounts a
       join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
      where a.org_id = ${orgId} and s.register_id = ${registerId}
-     order by a.slot`)) as unknown as { rows: Record<string, unknown>[] };
+     order by a.slot`));
 
   const bySt = new Map<string, ParallelAmount[]>();
   for (const row of amounts.rows) {
@@ -549,15 +541,13 @@ export async function loadOurSide(
   orgId: string,
   payRunDocumentId: string,
 ): Promise<ParallelSide> {
-  const header = (await db.execute(sql`
+  const header = (await db.execute<{ label: string; run_status: string }>(sql`
     select coalesce(d.document_number, r.document_id::text) as label,
            r.run_status, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date
       from pay_runs r
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId} and r.document_id = ${payRunDocumentId}`)) as unknown as {
-    rows: { label: string; run_status: string }[];
-  };
+     where r.org_id = ${orgId} and r.document_id = ${payRunDocumentId}`));
   const run = header.rows[0];
   if (!run) throw new ParallelRunStoreError("that pay run does not exist");
   if (run.run_status === "draft") {
@@ -571,15 +561,15 @@ export async function loadOurSide(
     throw new ParallelRunStoreError(`pay run ${run.label} is voided`);
   }
 
-  const stubs = (await db.execute(sql`
+  const stubs = (await db.execute<Record<string, unknown>>(sql`
     select s.id, s.employee_party_id, p.display_name as employee_name,
            s.gross, s.net_pay, s.employer_cost
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${payRunDocumentId}
-     order by p.display_name`)) as unknown as { rows: Record<string, unknown>[] };
+     order by p.display_name`));
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.stub_id, l.kind,
            coalesce(c.system_key, 'code:' || c.code, 'code:' || l.description) as slot,
            sum(l.amount) as amount
@@ -588,7 +578,7 @@ export async function loadOurSide(
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and s.pay_run_document_id = ${payRunDocumentId}
      group by l.stub_id, l.kind, coalesce(c.system_key, 'code:' || c.code, 'code:' || l.description)
-     order by slot`)) as unknown as { rows: Record<string, unknown>[] };
+     order by slot`));
 
   const byStub = new Map<string, ParallelAmount[]>();
   for (const row of lines.rows) {
@@ -624,11 +614,9 @@ export async function parallelTolerances(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<(ParallelTolerance & { id: string })[]> {
-  const rows = (await runner.execute(sql`
+  const rows = (await runner.execute<{ id: string; kind: string; slot: string; tolerance: string; reason: string }>(sql`
     select id, kind, slot, tolerance, reason from payroll_parallel_tolerances
-     where org_id = ${orgId} order by kind, slot`)) as unknown as {
-    rows: { id: string; kind: string; slot: string; tolerance: string; reason: string }[];
-  };
+     where org_id = ${orgId} order by kind, slot`));
   return rows.rows.map((row) => ({
     id: row.id,
     kind: row.kind as ParallelFindingKind,
@@ -665,7 +653,7 @@ export async function saveParallelTolerance(input: {
     return;
   }
 
-  const row = (await db.execute(sql`
+  const row = (await db.execute<{ id: string }>(sql`
     insert into payroll_parallel_tolerances
       (org_id, kind, slot, tolerance, reason, created_by, updated_by)
     values (${input.orgId}, ${input.kind}, ${input.slot}, ${tolerance}, ${reason},
@@ -673,7 +661,7 @@ export async function saveParallelTolerance(input: {
     on conflict (org_id, kind, slot) do update set
       tolerance = excluded.tolerance, reason = excluded.reason,
       updated_at = now(), updated_by = excluded.updated_by
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
 
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -688,10 +676,10 @@ export async function deleteParallelTolerance(
   slot: string,
   actorId: string,
 ): Promise<void> {
-  const removed = (await db.execute(sql`
+  const removed = (await db.execute<{ id: string }>(sql`
     delete from payroll_parallel_tolerances
      where org_id = ${orgId} and kind = ${kind} and slot = ${slot}
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const id = removed.rows[0]?.id;
   if (!id) return;
   await db.execute(sql`
@@ -752,7 +740,7 @@ export async function runParallelComparison(
     );
   }
 
-  const header = (await db.execute(sql`
+  const header = (await db.execute<{ id: string }>(sql`
     insert into payroll_parallel_comparisons
       (org_id, register_id, pay_run_document_id, status,
        prior_employee_count, our_employee_count, compared_employee_count,
@@ -778,7 +766,7 @@ export async function runParallelComparison(
             ${JSON.stringify(comparison.tolerancesApplied)}::jsonb,
             ${JSON.stringify(comparison.unmappedColumns)}::jsonb,
             ${comparison.blockedReason}, ${input.actorId}, ${input.actorId})
-    returning id`)) as unknown as { rows: { id: string }[] };
+    returning id`));
   const comparisonId = header.rows[0]!.id;
 
   // Findings in one multi-row insert. A per-row loop over a 400-employee
@@ -854,7 +842,7 @@ export async function parallelComparisons(
   if (opts.payRunDocumentId) filters.push(sql`c.pay_run_document_id = ${opts.payRunDocumentId}`);
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
 
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select c.*, r.name as register_name,
            coalesce(d.document_number, c.pay_run_document_id::text) as pay_run_number,
            c.compared_at::text as compared_at_text
@@ -863,7 +851,7 @@ export async function parallelComparisons(
       left join documents d on d.id = c.pay_run_document_id and d.org_id = c.org_id
      where ${sql.join(filters, sql` and `)}
      order by c.compared_at desc
-     limit ${limit}`)) as unknown as { rows: Record<string, unknown>[] };
+     limit ${limit}`));
 
   return rows.rows.map((row) => ({
     id: String(row.id),
@@ -941,14 +929,14 @@ export async function comparisonFindings(
       )})`,
     );
   }
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select f.id, f.employee_party_id, f.employee_name, f.kind, f.slot, f.slot_label,
            f.classification, f.prior_amount, f.our_amount, f.difference,
            f.tolerance_applied, f.source_column
       from payroll_parallel_findings f
      where ${sql.join(filters, sql` and `)}
      order by f.employee_name, f.sequence, f.slot
-     limit ${MAX_REGISTER_ROWS}`)) as unknown as { rows: Record<string, unknown>[] };
+     limit ${MAX_REGISTER_ROWS}`));
 
   return rows.rows.map((row) => ({
     id: String(row.id),
@@ -970,7 +958,7 @@ export async function comparisonFindings(
 export async function comparablePayRuns(
   orgId: string,
 ): Promise<{ documentId: string; label: string; periodStart: string; periodEnd: string; payDate: string; runStatus: string; employeeCount: number }[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     select r.document_id, coalesce(d.document_number, r.document_id::text) as label,
            r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.run_status, r.employee_count
@@ -978,7 +966,7 @@ export async function comparablePayRuns(
       left join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.run_status in ('calculated', 'committed')
      order by r.pay_date desc
-     limit 200`)) as unknown as { rows: Record<string, unknown>[] };
+     limit 200`));
   return rows.rows.map((row) => ({
     documentId: String(row.document_id),
     label: String(row.label),
@@ -1001,14 +989,14 @@ export async function suggestedPayRunForRegister(
   orgId: string,
   registerId: string,
 ): Promise<string | null> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ document_id: string }>(sql`
     select r.document_id
       from payroll_prior_registers g
       join pay_runs r on r.org_id = g.org_id
        and r.pay_date = g.pay_date
        and r.run_status in ('calculated', 'committed')
      where g.org_id = ${orgId} and g.id = ${registerId}
-     limit 2`)) as unknown as { rows: { document_id: string }[] };
+     limit 2`));
   return rows.rows.length === 1 ? rows.rows[0]!.document_id : null;
 }
 

@@ -111,9 +111,9 @@ export function netSuiteFamState(asset: Row, value: Row | null, histories: Row[]
 const json = (value: unknown): string => JSON.stringify(value);
 
 async function idMap(table: "accounts" | "subsidiaries" | "departments" | "projects" | "locations" | "parties", orgId: string) {
-  const result = (await db.execute(sql.raw(
+  const result = (await db.execute<{ id: string; source_ref: string }>(sql.raw(
     `select id, custom->>'nsId' as source_ref from ${table} where org_id = '${orgId.replaceAll("'", "''")}' and custom->>'nsId' is not null`,
-  ))) as unknown as { rows: { id: string; source_ref: string }[] };
+  )));
   const out = new Map<string, string>();
   for (const row of result.rows) if (!out.has(row.source_ref)) out.set(row.source_ref, row.id);
   return out;
@@ -200,11 +200,11 @@ export async function syncNetSuiteFixedAssets(
   const sourceLedgerBalances = await source.fixedAssetAccountBalances(fixedAssetAccountRefs);
   const nativePreparation = await withOrgContext(options.orgId, async () => {
     const nativeContext = await buildNativeContext(options.orgId, source.refKey, source.baseCurrency);
-    const existingResult = (await db.execute(sql`
+    const existingResult = (await db.execute<{ source_ref: string }>(sql`
       select custom->>${source.refKey} as source_ref
         from documents
        where org_id = ${options.orgId} and custom->>${source.refKey} is not null
-    `)) as unknown as { rows: { source_ref: string }[] };
+    `));
     return {
       nativeContext,
       existingRefs: new Set(existingResult.rows.map((row) => row.source_ref)),
@@ -229,15 +229,15 @@ export async function syncNetSuiteFixedAssets(
     const projects = await idMap("projects", options.orgId);
     const locations = await idMap("locations", options.orgId);
     const parties = await idMap("parties", options.orgId);
-    const books = (await db.execute(sql`
+    const books = (await db.execute<{ id: string }>(sql`
       select id from accounting_books where org_id = ${options.orgId} and is_primary order by id limit 1
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const bookId = books.rows[0]?.id;
     if (!bookId) throw new Error("the organization has no primary accounting book");
-    const periodResult = (await db.execute(sql`
+    const periodResult = (await db.execute<{ id: string; starts_on: string; ends_on: string; is_adjustment: boolean }>(sql`
       select id, starts_on::text, ends_on::text, is_adjustment
         from accounting_periods where org_id = ${options.orgId} order by starts_on, ends_on
-    `)) as unknown as { rows: { id: string; starts_on: string; ends_on: string; is_adjustment: boolean }[] };
+    `));
     const asOfPeriod = periodForDate(periodResult.rows, asOf);
     if (!asOfPeriod) throw new Error(`the organization has no accounting period for the FAM snapshot ${asOf}`);
 
@@ -268,14 +268,14 @@ export async function syncNetSuiteFixedAssets(
           orphanHistory,
         },
       };
-      const existing = (await db.execute(sql`
+      const existing = (await db.execute<{ id: string }>(sql`
         select id from asset_categories
          where org_id = ${options.orgId}
            and tax_attributes->>'source' = 'netsuite_fam'
            and tax_attributes->>'nsId' = ${sourceId}
            and tax_attributes->'netsuiteFam'->>'connectionId' = ${options.connectionId}
          limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       const assetAccountId = requiredRef(accounts, assetType.custrecord_assettypeassetacc, "asset account");
       const accumulatedAccountId = requiredRef(accounts, assetType.custrecord_assettypedepracc, "accumulated depreciation account");
       const expenseAccountId = requiredRef(accounts, assetType.custrecord_assettypedeprchargeacc, "depreciation expense account");
@@ -298,7 +298,7 @@ export async function syncNetSuiteFixedAssets(
         `);
         updatedCategories += 1;
       } else {
-        const inserted = (await db.execute(sql`
+        const inserted = (await db.execute<{ id: string }>(sql`
           insert into asset_categories
             (org_id, name, asset_account_id, accumulated_depreciation_account_id,
              depreciation_expense_account_id, gain_loss_account_id, default_method,
@@ -309,7 +309,7 @@ export async function syncNetSuiteFixedAssets(
              ${lifeMonths}, 'full_month', ${json(rawMetadata)}::jsonb, ${!truthy(assetType.isinactive)},
              ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         categoryId = inserted.rows[0]!.id;
         createdCategories += 1;
       }
@@ -361,13 +361,13 @@ export async function syncNetSuiteFixedAssets(
           alternateDepreciation: assetAlternateDepreciation,
         },
       };
-      const existing = (await db.execute(sql`
+      const existing = (await db.execute<{ id: string }>(sql`
         select id from fixed_assets
          where org_id = ${options.orgId}
            and custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
            and custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
          limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       let assetId: string;
       if (existing.rows[0]) {
         assetId = existing.rows[0].id;
@@ -389,7 +389,7 @@ export async function syncNetSuiteFixedAssets(
         `);
         updatedAssets += 1;
       } else {
-        const inserted = (await db.execute(sql`
+        const inserted = (await db.execute<{ id: string }>(sql`
           insert into fixed_assets
             (org_id, subsidiary_id, category_id, asset_number, name, description, status,
              acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number,
@@ -404,7 +404,7 @@ export async function syncNetSuiteFixedAssets(
              ${departmentId}, ${projectId}, ${locationId}, ${custodianPartyId}, ${json(custom)}::jsonb,
              ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         assetId = inserted.rows[0]!.id;
         createdAssets += 1;
       }
@@ -426,16 +426,16 @@ export async function syncNetSuiteFixedAssets(
         `);
       }
 
-      const scheduleResult = (await db.execute(sql`
+      const scheduleResult = (await db.execute<{ id: string }>(sql`
         select id from depreciation_schedules
          where org_id = ${options.orgId} and asset_id = ${assetId} and book_id = ${bookId} limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       let scheduleId = scheduleResult.rows[0]?.id;
       if (scheduleId) {
-        const localPosted = (await db.execute(sql`
+        const localPosted = (await db.execute<{ count: number }>(sql`
           select count(*)::int as count from depreciation_schedule_lines
            where org_id = ${options.orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null
-        `)) as unknown as { rows: { count: number }[] };
+        `));
         if (Number(localPosted.rows[0]?.count ?? 0) > 0) {
           throw new Error(`NetSuite-managed asset ${text(asset.name) ?? state.sourceId} has locally posted depreciation`);
         }
@@ -445,12 +445,12 @@ export async function syncNetSuiteFixedAssets(
            where id = ${scheduleId}
         `);
       } else {
-        const inserted = (await db.execute(sql`
+        const inserted = (await db.execute<{ id: string }>(sql`
           insert into depreciation_schedules
             (org_id, asset_id, book_id, method, life_months, created_by, updated_by)
           values (${options.orgId}, ${assetId}, ${bookId}, ${sourceMethod}, ${lifeMonths}, ${options.actorId ?? null}, ${options.actorId ?? null})
           returning id
-        `)) as unknown as { rows: { id: string }[] };
+        `));
         scheduleId = inserted.rows[0]!.id;
       }
       await db.execute(sql`
@@ -516,10 +516,10 @@ export async function syncNetSuiteFixedAssets(
       if (!document.postingPeriodId) {
         throw new Error(`NetSuite FAM transaction ${document.sourceRef} has no exact source period reference`);
       }
-      const existing = (await db.execute(sql`
+      const existing = (await db.execute<{ id: string }>(sql`
         select id from documents
          where org_id = ${options.orgId} and custom->>${source.refKey} = ${document.sourceRef} limit 1
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       if (existing.rows[0]) continue;
       const inserted = await db.insert(schema.documents).values({
         orgId: options.orgId,
@@ -586,7 +586,10 @@ export async function syncNetSuiteFixedAssets(
       importedLedgerTransactions += 1;
     }
 
-    const targetResult = (await db.execute(sql`
+    const targetResult = (await db.execute<{
+      assets: number; categories: number; schedules: number; schedule_lines: number;
+      acquisition_cost: string; accumulated: string;
+    }>(sql`
       select count(distinct a.id)::int as assets,
              count(distinct a.category_id)::int as categories,
              count(distinct s.id)::int as schedules,
@@ -601,19 +604,16 @@ export async function syncNetSuiteFixedAssets(
         ) a
         left join depreciation_schedules s on s.asset_id = a.id and s.book_id = ${bookId}
         left join depreciation_schedule_lines l on l.schedule_id = s.id and l.posted_amount is not null
-    `)) as unknown as { rows: {
-      assets: number; categories: number; schedules: number; schedule_lines: number;
-      acquisition_cost: string; accumulated: string;
-    }[] };
+    `));
     const target = targetResult.rows[0]!;
     // The aggregate above repeats assets across schedule lines. Recompute cost
     // separately so a multi-line depreciation history remains penny-exact.
-    const targetCostResult = (await db.execute(sql`
+    const targetCostResult = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(acquisition_cost), 0)::text as amount
         from fixed_assets
        where org_id = ${options.orgId}
          and custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
-    `)) as unknown as { rows: { amount: string }[] };
+    `));
     const targetCost = money(targetCostResult.rows[0]?.amount);
     const targetAccumulated = money(target.accumulated);
     const targetNbv = fromUnits(toUnits(targetCost) - toUnits(targetAccumulated));
@@ -626,7 +626,10 @@ export async function syncNetSuiteFixedAssets(
     }
     if (toUnits(targetNbv) !== sourceBookValue) mismatches.push(`net book value ${targetNbv} != ${fromUnits(sourceBookValue)}`);
 
-    const targetStateResult = (await db.execute(sql`
+    const targetStateResult = (await db.execute<{
+      source_id: string; cost: string; accumulated: string;
+      raw_asset_id: string | null; raw_value_id: string | null; history_count: number;
+    }>(sql`
       select a.custom->'netsuiteFam'->>'sourceId' as source_id,
              a.acquisition_cost::text as cost,
              coalesce((select sum(l.posted_amount)
@@ -640,10 +643,7 @@ export async function syncNetSuiteFixedAssets(
         from fixed_assets a
        where a.org_id = ${options.orgId}
          and a.custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
-    `)) as unknown as { rows: {
-      source_id: string; cost: string; accumulated: string;
-      raw_asset_id: string | null; raw_value_id: string | null; history_count: number;
-    }[] };
+    `));
     const targetStateBySource = new Map(targetStateResult.rows.map((row) => [row.source_id, row]));
     for (const state of states) {
       const row = targetStateBySource.get(state.sourceId);
@@ -660,7 +660,10 @@ export async function syncNetSuiteFixedAssets(
       if (Number(row.history_count) !== state.histories.length) mismatches.push(`asset ${state.sourceId} history row count differs`);
     }
 
-    const preservedGlobalResult = (await db.execute(sql`
+    const preservedGlobalResult = (await db.execute<{
+      methods: number; alternate_methods: number; alternate_definitions: number;
+      asset_lifetimes: number; orphan_history: number;
+    }>(sql`
       select jsonb_array_length(tax_attributes->'netsuiteFam'->'depreciationMethods')::int as methods,
              jsonb_array_length(tax_attributes->'netsuiteFam'->'alternateMethods')::int as alternate_methods,
              jsonb_array_length(tax_attributes->'netsuiteFam'->'alternateDefinitions')::int as alternate_definitions,
@@ -671,10 +674,7 @@ export async function syncNetSuiteFixedAssets(
          and tax_attributes->>'source' = 'netsuite_fam'
          and tax_attributes->'netsuiteFam'->>'connectionId' = ${options.connectionId}
        order by id limit 1
-    `)) as unknown as { rows: {
-      methods: number; alternate_methods: number; alternate_definitions: number;
-      asset_lifetimes: number; orphan_history: number;
-    }[] };
+    `));
     const preserved = preservedGlobalResult.rows[0];
     if (!preserved) mismatches.push("source FAM definition metadata is missing");
     else {
@@ -685,7 +685,7 @@ export async function syncNetSuiteFixedAssets(
       if (Number(preserved.orphan_history) !== orphanHistory.length) mismatches.push("orphan depreciation history differs");
     }
 
-    const targetLedgerResult = (await db.execute(sql`
+    const targetLedgerResult = (await db.execute<{ account_ref: string; balance: string }>(sql`
       select a.account_ref,
              coalesce(sum(jl.amount) filter (where je.id is not null), 0)::text as balance
         from (
@@ -697,7 +697,7 @@ export async function syncNetSuiteFixedAssets(
         left join journal_lines jl on jl.account_id = a.id
         left join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
        group by a.account_ref
-    `)) as unknown as { rows: { account_ref: string; balance: string }[] };
+    `));
     const targetLedgerBalances = new Map(targetLedgerResult.rows.map((row) => [row.account_ref, money(row.balance)]));
     const ledgerBalances = fixedAssetAccountRefs.map((accountRef) => {
       const sourceBalance = money(sourceLedgerBalances.get(accountRef) ?? "0");

@@ -31,9 +31,9 @@ async function controlDeps(orgId: string) {
 
 /** The document must be an expense report in the caller's org. */
 async function expenseReport(id: string, orgId: string) {
-  const r = (await db.execute(
+  const r = (await db.execute<{ id: string; status: string }>(
     sql`select id, status from documents where id = ${id} and kind = 'expense_report' and org_id = ${orgId}`,
-  )) as unknown as { rows: { id: string; status: string }[] }
+  ))
   return r.rows[0] ?? null
 }
 

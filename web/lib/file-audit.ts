@@ -52,14 +52,14 @@ export async function recordFileEvent(input: {
   }
 }
 
-export interface FileActivityEntry {
+export type FileActivityEntry = {
   id: string
   event: string
   actorId: string | null
   actorName: string | null
   at: string
   changes: Record<string, unknown>
-}
+};
 
 /** Activity history for a file or folder, newest first. */
 export async function listFileActivity(
@@ -68,7 +68,7 @@ export async function listFileActivity(
   rowId: string,
   limit = 50,
 ): Promise<FileActivityEntry[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<FileActivityEntry>(sql`
     select a.id, coalesce(a.changes->>'event', a.action) as event,
            a.actor_id as "actorId", coalesce(u.name, u.email) as "actorName",
            a.at, a.changes
@@ -77,6 +77,6 @@ export async function listFileActivity(
      where a.org_id = ${orgId} and a.table_name = ${table} and a.row_id = ${rowId}
      order by a.at desc
      limit ${limit}
-  `)) as unknown as { rows: FileActivityEntry[] }
+  `))
   return r.rows
 }

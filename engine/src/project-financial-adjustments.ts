@@ -80,17 +80,7 @@ export async function recordProjectFinancialAdjustment(
 
   return db.transaction(async (tx) => {
     if (sourceSystem && sourceRef) {
-      const prior = (await tx.execute(sql`
-        select id, project_id, adjustment_date::text as adjustment_date,
-               measure, amount::text, reason, reverses_adjustment_id,
-               evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
-          from project_financial_adjustments
-         where org_id = ${input.orgId}
-           and source_system = ${sourceSystem}
-           and source_ref = ${sourceRef}
-         for update
-      `)) as unknown as {
-        rows: Array<{
+      const prior = (await tx.execute<{
           id: string;
           project_id: string;
           adjustment_date: string;
@@ -99,8 +89,16 @@ export async function recordProjectFinancialAdjustment(
           reason: string;
           reverses_adjustment_id: string | null;
           evidence_matches: boolean;
-        }>;
-      };
+        }>(sql`
+        select id, project_id, adjustment_date::text as adjustment_date,
+               measure, amount::text, reason, reverses_adjustment_id,
+               evidence = ${JSON.stringify(evidence)}::jsonb as evidence_matches
+          from project_financial_adjustments
+         where org_id = ${input.orgId}
+           and source_system = ${sourceSystem}
+           and source_ref = ${sourceRef}
+         for update
+      `));
       const existing = prior.rows[0];
       if (existing) {
         const equivalent =
@@ -126,7 +124,7 @@ export async function recordProjectFinancialAdjustment(
       }
     }
 
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into project_financial_adjustments (
         org_id, project_id, adjustment_date, measure, amount, reason,
         source_system, source_ref, reverses_adjustment_id, evidence,
@@ -139,7 +137,7 @@ export async function recordProjectFinancialAdjustment(
         ${input.actorId ?? null}, ${input.actorId ?? null}
       )
       returning id
-    `)) as unknown as { rows: Array<{ id: string }> };
+    `));
     const id = inserted.rows[0]!.id;
     await tx.execute(sql`
       insert into audit_log (
@@ -176,18 +174,16 @@ export async function reverseProjectFinancialAdjustment(input: {
   sourceSystem?: string | null;
   sourceRef?: string | null;
 }): Promise<ProjectFinancialAdjustmentRecord> {
-  const original = (await db.execute(sql`
-    select project_id, measure, amount::text, evidence
-      from project_financial_adjustments
-     where org_id = ${input.orgId} and id = ${input.adjustmentId}
-  `)) as unknown as {
-    rows: Array<{
+  const original = (await db.execute<{
       project_id: string;
       measure: AdjustableProjectFinancialMeasure;
       amount: string;
       evidence: Record<string, unknown>;
-    }>;
-  };
+    }>(sql`
+    select project_id, measure, amount::text, evidence
+      from project_financial_adjustments
+     where org_id = ${input.orgId} and id = ${input.adjustmentId}
+  `));
   const row = original.rows[0];
   if (!row) throw new Error("project financial adjustment not found");
   return recordProjectFinancialAdjustment({

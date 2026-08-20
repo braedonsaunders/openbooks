@@ -121,12 +121,12 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       let partyName: string | null = null;
       let vendorEftEmail: string | null = null;
       if (doc.partyId) {
-        const r = (await db.execute(sql`
+        const r = (await db.execute<{ display_name: string; eft_notification_email: string | null }>(sql`
           select p.display_name, vr.eft_notification_email
             from parties p
             left join vendor_roles vr on vr.party_id = p.id
            where p.id = ${doc.partyId}
-        `)) as unknown as { rows: { display_name: string; eft_notification_email: string | null }[] };
+        `));
         partyName = r.rows[0]?.display_name ?? null;
         vendorEftEmail = r.rows[0]?.eft_notification_email ?? null;
       }
@@ -233,7 +233,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
              and (target_kind is null or target_kind = ${kind})
              and key = ${field} and is_active
            limit 1
-        `)) as unknown as { rows: unknown[] };
+        `));
         if (customField.rows.length === 0) {
           throw new Error(`field "${field}" is not writable by flows`);
         }
@@ -256,12 +256,12 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       // the real filtering in JS against each record's loaded context. Runs
       // inside withOrg(flow.orgId), so RLS scopes the org. Voided docs are
       // terminal and never candidates.
-      const r = (await db.execute(sql`
+      const r = (await db.execute<{ id: string }>(sql`
         select id from documents
          where kind = ${kind} and status <> 'voided'
          order by created_at desc
          limit ${limit}
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       return r.rows.map((row) => row.id);
     },
   };

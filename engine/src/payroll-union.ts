@@ -29,10 +29,10 @@ export async function upsertUnionFringe(
   orgId: string, actorId: string, input: UnionFringeInput,
 ): Promise<{ fringeId: string; componentId: string }> {
   return await db.transaction(async (tx) => {
-    const agreement = (await tx.execute(sql`
+    const agreement = (await tx.execute<{ id: string; name: string; remittance_party_id: string | null }>(sql`
       select id, name, remittance_party_id from union_agreements
        where org_id = ${orgId} and id = ${input.agreementId}
-    `)) as unknown as { rows: { id: string; name: string; remittance_party_id: string | null }[] };
+    `));
     if (!agreement.rows[0]) throw new PayrollError("union agreement not found");
     if (!input.liabilityAccountId) {
       throw new PayrollError("a union fringe needs a liability account");
@@ -41,7 +41,7 @@ export async function upsertUnionFringe(
     const componentCode = `UNION-${input.code}`.toUpperCase();
     const kind = input.paidBy === "employer" ? "employer_contribution" : "deduction";
     const taxTreatment = input.paidBy === "employee" ? "union_dues" : "none";
-    const component = (await tx.execute(sql`
+    const component = (await tx.execute<{ id: string }>(sql`
       insert into pay_components (org_id, code, name, kind, basis, taxable, pensionable, insurable,
                                   vacationable, tax_treatment, expense_account_id,
                                   liability_account_id, remittance_party_id, sequence,
@@ -57,10 +57,10 @@ export async function upsertUnionFringe(
             remittance_party_id = excluded.remittance_party_id,
             updated_by = ${actorId}, updated_at = now()
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const componentId = component.rows[0]!.id;
 
-    const fringe = (await tx.execute(sql`
+    const fringe = (await tx.execute<{ id: string }>(sql`
       insert into union_fringes (org_id, agreement_id, classification_id, code, name, calc, value,
                                  paid_by, job_costed, component_id, sequence, created_by, updated_by)
       values (${orgId}, ${input.agreementId}, ${input.classificationId ?? null}, ${input.code},
@@ -73,24 +73,24 @@ export async function upsertUnionFringe(
             classification_id = excluded.classification_id, component_id = excluded.component_id,
             sequence = excluded.sequence, updated_by = ${actorId}, updated_at = now()
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     return { fringeId: fringe.rows[0]!.id, componentId };
   });
 }
 
-export interface UnionFringeRow {
+export type UnionFringeRow = {
   id: string; code: string; name: string;
   calc: "per_hour_worked" | "percent_of_gross";
   value: string; paid_by: "employer" | "employee";
   job_costed: boolean; component_id: string | null; sequence: number;
-}
+};
 
 /** Active fringes applying to an employee's agreement + classification. */
 export async function fringesForEmployee(
   tx: Pick<typeof db, "execute">, orgId: string,
   agreementId: string, classificationId: string | null,
 ): Promise<UnionFringeRow[]> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<UnionFringeRow>(sql`
     select f.id, f.code, f.name, f.calc, f.value, f.paid_by, f.job_costed,
            f.component_id, f.sequence
       from union_fringes f
@@ -98,7 +98,7 @@ export async function fringesForEmployee(
      where f.org_id = ${orgId} and f.agreement_id = ${agreementId} and f.is_active
        and (f.classification_id is null or f.classification_id = ${classificationId})
      order by f.sequence, f.code
-  `)) as unknown as { rows: UnionFringeRow[] };
+  `));
   return r.rows;
 }
 
@@ -114,7 +114,10 @@ export interface RemittanceReportRow {
 export async function unionRemittanceReport(
   orgId: string, agreementId: string, from: string, to: string,
 ): Promise<RemittanceReportRow[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{
+      fringe_code: string; fringe_name: string; paid_by: string;
+      employees: number; hours: string | null; amount: string;
+    }>(sql`
     select f.code as fringe_code, f.name as fringe_name, f.paid_by,
            count(distinct s.employee_party_id)::int as employees,
            sum(l.hours) as hours, coalesce(sum(l.amount), 0) as amount
@@ -127,12 +130,7 @@ export async function unionRemittanceReport(
        and s.pay_date between ${from} and ${to}
      group by f.code, f.name, f.paid_by, f.sequence
      order by f.sequence, f.code
-  `)) as unknown as {
-    rows: {
-      fringe_code: string; fringe_name: string; paid_by: string;
-      employees: number; hours: string | null; amount: string;
-    }[];
-  };
+  `));
   return r.rows.map((row) => ({
     fringeCode: row.fringe_code, fringeName: row.fringe_name, paidBy: row.paid_by,
     employees: row.employees, hours: row.hours, amount: row.amount,

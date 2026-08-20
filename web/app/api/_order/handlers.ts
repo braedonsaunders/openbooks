@@ -69,9 +69,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { user } = gate
     const { id } = await params
 
-    const existing = (await db.execute(
+    const existing = (await db.execute<{ status: string; document_date: string }>(
       sql`select status, document_date from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    )) as unknown as { rows: { status: string; document_date: string }[] }
+    ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const status = existing.rows[0].status
 
@@ -88,7 +88,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         select 1 from subsidiaries
          where id = ${body.subsidiaryId} and org_id = ${user.orgId}
            and is_active and not is_elimination
-      `)) as unknown as { rows: unknown[] }
+      `))
       if (!subsidiary.rows[0]) {
         return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
       }
@@ -100,9 +100,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (status !== 'draft') {
           return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
         }
-        const doc = (await db.execute(
+        const doc = (await db.execute<{ party_id: string | null; total: string }>(
           sql`select party_id, total from documents where id = ${id} and org_id = ${user.orgId}`,
-        )) as unknown as { rows: { party_id: string | null; total: string }[] }
+        ))
         const d = doc.rows[0]!
         if (!d.party_id || cmp(d.total, '0') <= 0) {
           return NextResponse.json(
@@ -111,13 +111,13 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           )
         }
         if (cfg.kind === 'sales_order') {
-          const hold = (await db.execute(sql`
+          const hold = (await db.execute<{ hold_reason: string | null }>(sql`
             select hold_reason
               from customer_roles
              where org_id = ${user.orgId} and party_id = ${d.party_id}
                and is_active and is_on_hold
              limit 1
-          `)) as unknown as { rows: { hold_reason: string | null }[] }
+          `))
           if (hold.rows[0]) {
             return NextResponse.json(
               {
@@ -216,7 +216,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          const inserted = (await tx.execute(sql`
+          const inserted = (await tx.execute<{ id: string }>(sql`
             insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                         quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                         tax_input_amount, tax_amount,
@@ -226,7 +226,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
                     ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
                     ${l.departmentId ?? null}, ${l.projectId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb)
             returning id
-          `)) as unknown as { rows: { id: string }[] }
+          `))
           await persistLineTaxComponents(tx, {
             orgId: user.orgId,
             documentLineId: inserted.rows[0]!.id,
@@ -283,7 +283,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
     const { id } = await params
     const owned = (await db.execute(
       sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    )) as unknown as { rows: unknown[] }
+    ))
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     try {
       await deleteDocument(id, user.id)
@@ -308,7 +308,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     // Scope check: the source must be this kind, in the caller's org.
     const owns = (await db.execute(
       sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    )) as unknown as { rows: unknown[] }
+    ))
     if (owns.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
     try {

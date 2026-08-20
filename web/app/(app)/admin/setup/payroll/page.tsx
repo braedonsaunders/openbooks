@@ -238,11 +238,9 @@ async function launcherData(orgId: string, canManageEntities: boolean) {
   const [setup, bankProfiles, schedulesRes] = await Promise.all([
     payrollSetupState(orgId),
     payrollBankProfiles(orgId),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select id, name from pay_schedules
-       where org_id = ${orgId} and is_active order by name`) as unknown as Promise<{
-      rows: { id: string; name: string }[]
-    }>,
+       where org_id = ${orgId} and is_active order by name`),
   ])
   // The pay-schedule form options come from the registry entity's OWN field
   // declaration — the wizard renders the same select the setup drawer does.
@@ -271,22 +269,19 @@ async function launcherData(orgId: string, canManageEntities: boolean) {
 }
 
 async function statHolidayPayEnabled(orgId: string): Promise<boolean> {
-  const res = (await db.execute(sql`
+  const res = (await db.execute<{ v: string | null }>(sql`
     select settings#>>'{payroll,statutoryHolidayPay}' as v from orgs where id = ${orgId}
-  `)) as unknown as { rows: { v: string | null }[] }
+  `))
   return res.rows[0]?.v === 'true'
 }
 
 async function PacksTab({ orgId }: { orgId: string }) {
   const [countriesRes, componentsRes] = (await Promise.all([
-    db.execute(sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`),
-    db.execute(sql`
+    db.execute<{ countries: unknown }>(sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`),
+    db.execute<{ n: number }>(sql`
       select count(*)::int as n from pay_components
        where org_id = ${orgId} and system_key is not null`),
-  ])) as unknown as [
-    { rows: { countries: unknown }[] },
-    { rows: { n: number }[] },
-  ]
+  ]))
   const raw = countriesRes.rows[0]?.countries
   const installedCountries = Array.isArray(raw) ? raw.map(String) : []
   const componentCount = Number(componentsRes.rows[0]?.n ?? 0)
@@ -317,21 +312,16 @@ async function PacksTab({ orgId }: { orgId: string }) {
 async function AccountsTab({ orgId }: { orgId: string }) {
   const [settings, blobRes, accountsRes, vendorsRes] = (await Promise.all([
     payrollSettings(orgId),
-    db.execute(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
-    db.execute(sql`
+    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
+    db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
        order by number nulls last, name`),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active order by p.display_name`),
-  ])) as unknown as [
-    Awaited<ReturnType<typeof payrollSettings>>,
-    { rows: { p: Record<string, unknown> | null }[] },
-    { rows: { id: string; number: string | null; name: string }[] },
-    { rows: { id: string; name: string }[] },
-  ]
+  ]))
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
   const packs = await packSlotState(orgId, installed, blob)

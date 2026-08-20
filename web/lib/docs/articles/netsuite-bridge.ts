@@ -66,12 +66,25 @@ supported keys are:
   "projectStatuses": {
     "Awarded": "awarded",
     "Substantially Complete": "substantially_complete"
+  },
+  "projectBillingTypes": {
+    "FBM": "not_to_exceed"
   }
 }
 ~~~
 
 Mappings belong to the tenant connection. Never add an account's custom field
 IDs to the shared connector.
+
+**projectBillingTypes** overrides how a NetSuite **jobbillingtype** resolves to
+a project type. By default **TM** imports as Time & Materials, and both
+fixed-bid members, **FBI** and **FBM**, import as Fixed Price. NetSuite's stock
+enum has no not-to-exceed member, so accounts that run budget or do-not-exceed
+work often overload one of the fixed-bid members for it and carry the ceiling
+in the job price. Map that member here so those jobs import as Not-to-Exceed
+and bill time and materials up to the ceiling, instead of reporting the ceiling
+as earned contract revenue. Valid targets are **time_and_materials**,
+**fixed_price**, **cost_plus** and **not_to_exceed**.
 
 ## Daily mirror guarantees
 

@@ -304,10 +304,10 @@ test(
       });
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute(sql`
+      const stub = ((await db.execute<{ gross: string; net_pay: string; factors: Record<string, string> }>(sql`
         select gross, net_pay, factors from pay_stubs
          where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { gross: string; net_pay: string; factors: Record<string, string> }[] })
+      `)))
         .rows[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
@@ -486,9 +486,9 @@ test(
       const after = await openingBalancesForYear(fx.orgId, 2026);
       assert.equal(after.entered, 0);
       assert.deepEqual(after.rows[0]!.componentAmounts, {});
-      const orphans = (await db.execute(sql`
+      const orphans = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from payroll_opening_balance_components
-         where org_id = ${fx.orgId}`)) as unknown as { rows: { n: number }[] };
+         where org_id = ${fx.orgId}`));
       assert.equal(orphans.rows[0]!.n, 0, "the child rows must cascade with their parent");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -902,10 +902,10 @@ test(
     // the table as it stood.
     const fx = await seedAdoption();
     try {
-      const columns = (await db.execute(sql`
+      const columns = (await db.execute<{ column_name: string }>(sql`
         select column_name from information_schema.columns
          where table_schema = 'public' and table_name = 'worker_comp_groups'
-      `)) as unknown as { rows: { column_name: string }[] };
+      `));
       const present = new Set(columns.rows.map((r) => r.column_name));
       for (const column of ["created_at", "created_by", "updated_at", "updated_by"]) {
         assert.ok(present.has(column), `worker_comp_groups is missing ${column}`);
@@ -1050,12 +1050,12 @@ test(
       );
 
       const deduction = async (documentId: string) =>
-        ((await db.execute(sql`
+        ((await db.execute<{ amount: string }>(sql`
           select l.amount from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
              and l.component_id = ${componentId}
-        `)) as unknown as { rows: { amount: string }[] }).rows[0]?.amount ?? null;
+        `))).rows[0]?.amount ?? null;
 
       // 5% of $2,400 is $120; only $100 of annual room remains.
       assert.equal(await deduction(run.documentId), "100.0000");

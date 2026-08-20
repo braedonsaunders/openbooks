@@ -19,14 +19,14 @@ export async function GET() {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
   const config = await readFxProviderConfigView(gate.user.orgId)
-  const runs = (await db.execute(sql`
+  const runs = (await db.execute<Record<string, unknown>>(sql`
     select id, trigger, status, requested_from as "requestedFrom", requested_to as "requestedTo",
            observations_received as "observationsReceived", rates_inserted as "ratesInserted",
            rates_updated as "ratesUpdated", manual_overrides_preserved as "manualOverridesPreserved",
            error_message as "errorMessage", started_at as "startedAt", finished_at as "finishedAt"
       from fx_provider_runs where org_id = ${gate.user.orgId}
      order by started_at desc limit 10
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   return NextResponse.json({ config, runs: runs.rows, providers: Object.keys(FX_PROVIDER_MANIFESTS) })
 }
 

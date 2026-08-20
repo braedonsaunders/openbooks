@@ -18,20 +18,20 @@ export async function GET(req: Request) {
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'invalid project' }, { status: 422 })
 
-  const project = (await db.execute(sql`
+  const project = (await db.execute<{ id: string; customer_name: string | null }>(sql`
     select p.id, cust.display_name as customer_name
       from projects p
       left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${gate.user.orgId} and p.is_active
-  `)) as unknown as { rows: { id: string; customer_name: string | null }[] }
+  `))
   if (!project.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const tasks = (await db.execute(sql`
+  const tasks = (await db.execute<Record<string, unknown>>(sql`
     select id, code, name, status, estimated_hours as "estimatedHours"
       from project_tasks
      where org_id = ${gate.user.orgId} and project_id = ${projectId}
      order by code nulls last, name
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
 
   return NextResponse.json({
     customerName: project.rows[0].customer_name,

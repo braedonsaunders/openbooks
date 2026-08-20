@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       : sql`and false`
     : sql``
 
-  const e = (await db.execute(sql`
+  const e = (await db.execute<Record<string, unknown>>(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo, e.origin, e.status,
            e.source_document_id,
            re.entry_number as reverses_number,
@@ -32,11 +32,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${authz.user.orgId}
        ${subsidiaryFilter}
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
   const entry = e.rows[0]
   if (!entry) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const lines = (await db.execute(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
            a.id as account_id, a.number as account_number, a.name as account_name,
            p.display_name as party, d.name as department, pr.name as project
@@ -47,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
      order by l.line_number
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
 
   return NextResponse.json({ entry, lines: lines.rows })
 }

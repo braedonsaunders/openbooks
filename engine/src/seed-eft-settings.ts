@@ -27,11 +27,11 @@ const placeholders = {
 };
 
 const [orgIdArg] = process.argv.slice(2);
-const org = (await db.execute(
+const org = (await db.execute<{ id: string; name: string }>(
   orgIdArg
     ? sql`select id, name from orgs where id = ${orgIdArg}`
     : sql`select id, name from orgs limit 1`,
-)) as unknown as { rows: { id: string; name: string }[] };
+));
 if (!org.rows[0]) {
   console.error(orgIdArg ? `org ${orgIdArg} not found` : "no orgs exist yet");
   process.exit(1);

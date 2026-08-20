@@ -90,9 +90,9 @@ test("payment link settles a signed webhook into an applied receipt with a surch
       json: async () => ({ id: "cs_test_123", url: "https://checkout.stripe.test/cs_test_123" }),
     }));
     assert.equal(session.redirectUrl, "https://checkout.stripe.test/cs_test_123");
-    const attempt = (await db.execute(sql`
+    const attempt = (await db.execute<{ status: string; amount: string; surcharge_amount: string }>(sql`
       select status, amount, surcharge_amount from payment_attempts where org_id = ${org.orgId} and external_ref = 'cs_test_123'
-    `)) as unknown as { rows: { status: string; amount: string; surcharge_amount: string }[] };
+    `));
     assert.equal(attempt.rows[0]!.status, "initiated");
     assert.equal(attempt.rows[0]!.amount, "100.0000");
     assert.equal(attempt.rows[0]!.surcharge_amount, "3.0000");
@@ -111,53 +111,53 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     assert.equal(result.orgId, org.orgId);
 
     // Receipt posted and fully applied: invoice clears.
-    const invoice = (await db.execute(sql`
+    const invoice = (await db.execute<{ open_balance: string }>(sql`
       select open_balance from documents where id = ${invoiceId}
-    `)) as unknown as { rows: { open_balance: string }[] };
+    `));
     assert.equal(invoice.rows[0]!.open_balance, "0.0000");
 
-    const payment = (await db.execute(sql`
+    const payment = (await db.execute<{ id: string; status: string; total: string }>(sql`
       select id, status, total from documents
        where org_id = ${org.orgId} and kind = 'customer_payment' and memo like '%INV-PAY-1%'
-    `)) as unknown as { rows: { id: string; status: string; total: string }[] };
+    `));
     assert.equal(payment.rows.length, 1);
     assert.equal(payment.rows[0]!.status, "posted");
     assert.equal(payment.rows[0]!.total, "103.0000");
 
     // Journal: DR bank 103 / CR AR 100 / CR fee income 3.
-    const lines = (await db.execute(sql`
+    const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
       select jl.account_id, jl.amount from journal_lines jl
         join journal_entries je on je.id = jl.entry_id
        where je.source_document_id = ${payment.rows[0]!.id} order by jl.line_number
-    `)) as unknown as { rows: { account_id: string; amount: string }[] };
+    `));
     assert.deepEqual(
       lines.rows.map((l) => [l.account_id === org.accounts.bank ? "bank" : l.account_id === org.accounts.ar ? "ar" : "fee", l.amount]),
       [["bank", "103.0000"], ["ar", "-100.0000"], ["fee", "-3.0000"]],
     );
 
     // Application row settles the invoice's AR open item.
-    const apps = (await db.execute(sql`
+    const apps = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from applications a
         join journal_lines jl on jl.id = a.to_line_id
         join journal_entries je on je.id = jl.entry_id
        where a.org_id = ${org.orgId} and a.unapplied_at is null and je.source_document_id = ${invoiceId}
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     assert.equal(apps.rows[0]!.n, 1);
 
     // Link + attempt terminal states.
-    const terminal = (await db.execute(sql`
+    const terminal = (await db.execute<{ link_status: string; attempt_status: string }>(sql`
       select (select status from payment_links where id = ${link.id}) as link_status,
              (select status from payment_attempts where org_id = ${org.orgId} and external_ref = 'cs_test_123') as attempt_status
-    `)) as unknown as { rows: { link_status: string; attempt_status: string }[] };
+    `));
     assert.equal(terminal.rows[0]!.link_status, "paid");
     assert.equal(terminal.rows[0]!.attempt_status, "succeeded");
 
     // Redelivery is a duplicate, never a second receipt.
     const replay = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${v1}` }, body);
     assert.equal(replay?.status, "duplicate");
-    const paymentCount = (await db.execute(sql`
+    const paymentCount = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'
-    `)) as unknown as { rows: { n: number }[] };
+    `));
     assert.equal(paymentCount.rows[0]!.n, 1);
 
     // A forged signature never resolves an org.

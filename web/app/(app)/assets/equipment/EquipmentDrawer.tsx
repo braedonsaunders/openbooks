@@ -9,8 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { confirmDialog } from '../../../../lib/confirm'
-
-interface Opt { id: string; name: string; code?: string | null; number?: string | null }
+type Opt = { id: string; name: string; code?: string | null; number?: string | null };
 export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage, closeHref = '/assets/equipment' }: {
   payload: any; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean; closeHref?: string
 }) {

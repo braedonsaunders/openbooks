@@ -42,14 +42,14 @@ test("concurrent posts of one document produce exactly one journal entry", { ski
     assert.ok((failed[0] as PromiseRejectedResult).reason instanceof PostingError);
 
     // The invariant: one and only one journal entry for the document.
-    const entries = (await db.execute(sql`
+    const entries = (await db.execute<{ id: string }>(sql`
       select id from journal_entries where source_document_id = ${docId} and reverses_entry_id is null
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     assert.equal(entries.rows.length, 1, "no duplicate GL entry");
 
-    const doc = (await db.execute(sql`
+    const doc = (await db.execute<{ status: string; postedEntryId: string | null }>(sql`
       select status, posted_entry_id as "postedEntryId" from documents where id = ${docId}
-    `)) as unknown as { rows: { status: string; postedEntryId: string | null }[] };
+    `));
     assert.equal(doc.rows[0]!.status, "posted");
     assert.equal(doc.rows[0]!.postedEntryId, entries.rows[0]!.id, "document points at the one entry");
   } finally {

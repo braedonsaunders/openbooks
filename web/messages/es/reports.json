@@ -494,6 +494,7 @@
         "label": "Registros de tiempo",
         "description": "Registros de hojas de horas: empleado, fecha, horas, facturable, proyecto y estado de aprobación."
       },
+      "timesheet_weeks": "Semanas de hoja de horas",
       "fixed_assets": {
         "label": "Activos fijos",
         "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."
@@ -666,6 +667,20 @@
         "memo": "Nota",
         "created_at": "Creado el",
         "id": "Registro de tiempo (id)"
+      },
+      "timesheet_weeks": {
+        "employee_name": "Empleado",
+        "week_start": "Semana desde",
+        "week_end": "Semana hasta",
+        "status": "Estado",
+        "total_hours": "Horas totales",
+        "billable_hours": "Horas facturables",
+        "submitted_by": "Enviado por",
+        "submitted_at": "Enviado el",
+        "approved_by": "Aprobado por",
+        "approved_at": "Aprobado el",
+        "rejection_reason": "Motivo del rechazo",
+        "id": "Semana (id)"
       },
       "fixed_assets": {
         "asset_number": "N.º de activo",

@@ -91,6 +91,38 @@ export function mul(a: string, b: string): string {
   return fromUnits(roundDiv(product, SCALE));
 }
 
+/**
+ * Divide money by a quantity or rate — an amount over a quantity, a balance
+ * over a wage — rounded to 4 decimals, halves away from zero.
+ *
+ * The non-FX counterpart to `divRate`, and numerically identical to it: the
+ * divisor is read at ten decimal places, because quantities are not money
+ * (`document_lines.quantity` is numeric(28,8)) and truncating one to four
+ * decimals would silently change unit rates.
+ *
+ * What differs is what it refuses. `divRate` rejects zero and negatives as
+ * invalid exchange rates; here a negative divisor is an ordinary credit
+ * quantity, and a zero divisor is an empty quantity or an unset wage — which
+ * this says plainly instead of reporting a currency fault.
+ */
+export function div(a: string, b: string): string {
+  const raw = String(b).trim();
+  const negative = raw.startsWith("-");
+  const magnitude = negative ? raw.slice(1) : raw;
+  if (!/^\+?(\d+(\.\d*)?|\.\d+)$/.test(magnitude)) {
+    throw new Error(`not a numeric divisor: "${b}"`);
+  }
+  const [whole = "0", fraction = ""] = magnitude.replace(/^\+/, "").split(".");
+  if (fraction.length > 10 && /[1-9]/.test(fraction.slice(10))) {
+    throw new Error(`divisor loses precision beyond 10 decimal places: "${b}"`);
+  }
+  const divisorUnits =
+    BigInt(whole || "0") * RATE_SCALE + BigInt((fraction + "0".repeat(10)).slice(0, 10));
+  if (divisorUnits === 0n) throw new Error(`cannot divide "${a}" by zero`);
+  const quotient = roundDiv(toUnits(a) * RATE_SCALE, divisorUnits);
+  return fromUnits(negative ? -quotient : quotient);
+}
+
 /** Multiply money by one or more exact decimal factors (up to 10dp each). */
 export function mulDecimalFactors(amount: string, factors: readonly (string | number)[]): string {
   let numerator = toUnits(amount);

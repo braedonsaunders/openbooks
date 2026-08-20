@@ -52,9 +52,9 @@ const installableCountries = (): string[] =>
     .map((pack) => pack.country)
 
 async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown>> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ p: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { p: Record<string, unknown> | null }[] }
+  ))
   return r.rows[0]?.p ?? {}
 }
 
@@ -73,18 +73,15 @@ async function writePayrollBlob(
 
 async function pickerOptions(orgId: string) {
   const [accounts, vendors] = (await Promise.all([
-    db.execute(sql`
+    db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
        order by number nulls last, name`),
-    db.execute(sql`
+    db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active order by p.display_name`),
-  ])) as unknown as [
-    { rows: { id: string; number: string | null; name: string }[] },
-    { rows: { id: string; name: string }[] },
-  ]
+  ]))
   return {
     accounts: accounts.rows.map((a) => ({ id: a.id, label: a.number ? `${a.number} · ${a.name}` : a.name })),
     vendors: vendors.rows.map((v) => ({ id: v.id, label: v.name })),

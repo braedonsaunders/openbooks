@@ -66,7 +66,7 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = {
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const base = await documentsAdapter.loadContext(subjectId);
     if (!base) return null;
-    const run = (await db.execute(sql`
+    const run = (await db.execute<Record<string, unknown>>(sql`
       select r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.run_status, r.run_type,
              r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
@@ -77,7 +77,7 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = {
         from pay_runs r
         left join pay_schedules s on s.id = r.pay_schedule_id
        where r.document_id = ${subjectId}
-    `)) as unknown as { rows: Record<string, unknown>[] };
+    `));
     const row = run.rows[0];
     if (!row) return base;
     return {

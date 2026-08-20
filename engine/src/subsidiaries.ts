@@ -13,14 +13,14 @@ import { add, isZero, mulRate, neg } from "./money.ts";
 
 type Runner = Pick<typeof db, "execute">;
 
-export interface SubsidiaryRow {
+export type SubsidiaryRow = {
   id: string;
   parentId: string | null;
   name: string;
   baseCurrency: string;
   isElimination: boolean;
   isActive: boolean;
-}
+};
 
 export interface SubsidiaryContext {
   byId: Map<string, SubsidiaryRow>;
@@ -38,10 +38,10 @@ export async function loadSubsidiaryContext(
   runner: Runner,
   orgId: string,
 ): Promise<SubsidiaryContext> {
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<SubsidiaryRow>(sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            is_elimination as "isElimination", is_active as "isActive"
-      from subsidiaries where org_id = ${orgId}`)) as unknown as { rows: SubsidiaryRow[] };
+      from subsidiaries where org_id = ${orgId}`));
   const byId = new Map(r.rows.map((s) => [s.id, s]));
   const root = r.rows.find((s) => s.parentId === null);
   if (!root) throw new SubsidiaryError(`org ${orgId} has no root subsidiary`);
@@ -122,13 +122,11 @@ export async function validateSubsidiaryRestrictions(
 
   const accountIds = [...new Set(lines.map((l) => l.accountId))];
   if (accountIds.length > 0) {
-    const r = (await runner.execute(sql`
+    const r = (await runner.execute<{ id: string; name: string; subsidiaryId: string; includeChildren: boolean }>(sql`
       select id, name, subsidiary_id as "subsidiaryId",
              subsidiary_include_children as "includeChildren"
         from accounts where id = any(${uuidArray(accountIds)}::uuid[])
-         and subsidiary_id is not null`)) as unknown as {
-      rows: { id: string; name: string; subsidiaryId: string; includeChildren: boolean }[];
-    };
+         and subsidiary_id is not null`));
     const restricted = new Map(r.rows.map((a) => [a.id, a]));
     for (const l of lines) {
       const a = restricted.get(l.accountId);
@@ -141,14 +139,12 @@ export async function validateSubsidiaryRestrictions(
   }
 
   if (opts.partyId) {
-    const r = (await runner.execute(sql`
+    const r = (await runner.execute<{ name: string; subsidiaryId: string | null; extra: string[] }>(sql`
       select p.display_name as name, p.subsidiary_id as "subsidiaryId",
              coalesce(json_agg(ps.subsidiary_id) filter (where ps.subsidiary_id is not null), '[]') as extra
         from parties p left join party_subsidiaries ps on ps.party_id = p.id
        where p.id = ${opts.partyId}
-       group by p.id`)) as unknown as {
-      rows: { name: string; subsidiaryId: string | null; extra: string[] }[];
-    };
+       group by p.id`));
     const p = r.rows[0];
     if (p) {
       const allowed = new Set([p.subsidiaryId ?? ctx.rootId, ...p.extra]);
@@ -169,14 +165,12 @@ export async function validateSubsidiaryRestrictions(
   for (const d of dimensions) {
     const ids = [...new Set(lines.map((line) => line[d.key]).filter((id): id is string => !!id))];
     if (ids.length === 0) continue;
-    const r = (await runner.execute(sql`
+    const r = (await runner.execute<{ id: string; name: string; subsidiaryId: string; includeChildren: boolean }>(sql`
       select id, name, subsidiary_id as "subsidiaryId",
              subsidiary_include_children as "includeChildren"
         from ${sql.raw(d.table)}
        where id = any(${uuidArray(ids)}::uuid[])
-         and subsidiary_id is not null`)) as unknown as {
-      rows: { id: string; name: string; subsidiaryId: string; includeChildren: boolean }[];
-    };
+         and subsidiary_id is not null`));
     const restricted = new Map(r.rows.map((row) => [row.id, row]));
     for (const line of lines) {
       const id = line[d.key];
@@ -236,15 +230,13 @@ export async function intercompanyBalancingLegs(
   if (unbalanced.length === 0 && isZero(bySub.get(originSubId) ?? "0")) return [];
 
   const pairIds = unbalanced.map(([subId]) => subId);
-  const r = (await runner.execute(sql`
+  const r = (await runner.execute<{ fromId: string; toId: string; dueFrom: string; dueTo: string }>(sql`
     select from_subsidiary_id as "fromId", to_subsidiary_id as "toId",
            due_from_account_id as "dueFrom", due_to_account_id as "dueTo"
       from intercompany_pairs
      where org_id = ${opts.orgId} and is_active
        and ((from_subsidiary_id = ${originSubId} and to_subsidiary_id = any(${uuidArray(pairIds)}::uuid[]))
-         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`)) as unknown as {
-    rows: { fromId: string; toId: string; dueFrom: string; dueTo: string }[];
-  };
+         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`));
 
   const legs: IntercompanyLeg[] = [];
   for (const [subId, total] of unbalanced) {

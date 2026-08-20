@@ -144,9 +144,9 @@ async function applyTracked(
   content: string,
 ): Promise<void> {
   const digest = sha256(content);
-  const seen = (await db.execute(sql`
+  const seen = (await db.execute<{ sha256: string }>(sql`
     select sha256 from public._applied_migrations where filename = ${filename}
-  `)) as unknown as { rows: { sha256: string }[] };
+  `));
   if (seen.rows.length > 0) {
     const recorded = seen.rows[0].sha256;
     if (recorded !== digest) {
@@ -234,7 +234,10 @@ async function applyRowLevelSecurity(): Promise<void> {
   const file = join(migrationsDir, "environments.sql");
   const content = readFileSync(file, "utf8");
   const digest = sha256(content);
-  const state = (await db.execute(sql`
+  const state = (await db.execute<{
+      applied_digest: string | null;
+      catalog_drift: boolean;
+    }>(sql`
     select
       (select sha256
          from public._applied_migrations
@@ -294,12 +297,7 @@ async function applyRowLevelSecurity(): Promise<void> {
              )
            )
       ) as catalog_drift
-  `)) as unknown as {
-    rows: Array<{
-      applied_digest: string | null;
-      catalog_drift: boolean;
-    }>;
-  };
+  `));
   const policyState = state.rows[0]!;
   if (policyState.applied_digest !== digest || policyState.catalog_drift) {
     console.log("[bootstrap] refreshing row-level security catalog");
@@ -312,7 +310,7 @@ async function applyRowLevelSecurity(): Promise<void> {
             applied_at = now()
     `);
   }
-  const unprotected = (await db.execute(sql`
+  const unprotected = (await db.execute<{ table_name: string }>(sql`
     select c.relname as table_name
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
@@ -324,7 +322,7 @@ async function applyRowLevelSecurity(): Promise<void> {
           where col.table_schema = 'public'
             and col.table_name = c.relname
             and col.column_name = 'org_id')
-  `)) as unknown as { rows: { table_name: string }[] };
+  `));
   // Fail loudly rather than booting an app whose tenant isolation has a hole.
   if (unprotected.rows.length > 0) {
     throw new Error(
@@ -531,11 +529,9 @@ async function ensureReadRole(runtimeRoleName?: string): Promise<void> {
 }
 
 async function ensureOrg(): Promise<string> {
-  const existing = (await db.execute(
+  const existing = (await db.execute<{ id: string }>(
     sql`select id from orgs order by created_at limit 1`,
-  )) as unknown as {
-    rows: { id: string }[];
-  };
+  ));
   if (existing.rows.length > 0) return existing.rows[0].id;
 
   const name = env.ORG_NAME || "OpenBooks";
@@ -549,10 +545,10 @@ async function ensureOrg(): Promise<string> {
       "ORG_COUNTRY is required as an ISO 3166-1 alpha-2 code when creating the first organization",
     );
   }
-  const ins = (await db.execute(sql`
+  const ins = (await db.execute<{ id: string }>(sql`
     insert into orgs (name, base_currency, country) values (${name}, ${currency}, ${country})
     returning id
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   const orgId = ins.rows[0].id;
   console.log(`[bootstrap] created org "${name}" (${currency}/${country})`);
 
@@ -615,9 +611,9 @@ async function ensureRootSubsidiary(orgId: string): Promise<void> {
        )
     on conflict do nothing
   `);
-  const root = (await db.execute(sql`
+  const root = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null
-  `)) as unknown as { rows: { id: string }[] };
+  `));
   if (root.rows.length !== 1) {
     throw new Error(`organization ${orgId} must have exactly one root subsidiary`);
   }
@@ -650,23 +646,23 @@ async function seedAdmin(orgId: string): Promise<void> {
   // Only set the password when the user is first created — a running instance
   // must not have its admin password silently reset on every deploy.
   const created = await db.transaction(async (tx) => {
-    const inserted = (await tx.execute(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into users (org_id, email, name, password_hash)
       values (${orgId}, ${email.toLowerCase()}, ${name}, ${hash})
       on conflict (org_id, email) do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
-    const userId = inserted.rows[0]?.id ?? ((await tx.execute(sql`
+    `));
+    const userId = inserted.rows[0]?.id ?? ((await tx.execute<{ id: string }>(sql`
       select id from users where org_id = ${orgId} and email = ${email.toLowerCase()} limit 1
-    `)) as unknown as { rows: { id: string }[] }).rows[0]?.id;
+    `))).rows[0]?.id;
     if (!userId) throw new Error(`administrator ${email} could not be resolved after seed`);
-    const assignment = (await tx.execute(sql`
+    const assignment = (await tx.execute<{ id: string }>(sql`
       insert into role_assignments (org_id, user_id, role_id)
       select ${orgId}, ${userId}, id from app_roles
        where org_id = ${orgId} and key = 'admin'
       on conflict (org_id, user_id, role_id) do nothing
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     if (inserted.rows.length > 0 && assignment.rows.length === 0) {
       throw new Error("new administrator did not receive an explicit admin role assignment");
     }
@@ -734,9 +730,9 @@ async function main(): Promise<void> {
       await ensureReadRole(runtimeConfig?.roleName);
       await seedCurrencies();
       if (restoreTarget) {
-        const organizations = (await db.execute(
+        const organizations = (await db.execute<{ count: number }>(
           sql`select count(*)::int as count from orgs`,
-        )) as unknown as { rows: { count: number }[] };
+        ));
         if (organizations.rows[0]?.count !== 0) {
           throw new Error(
             "OPENBOOKS_RESTORE_TARGET requires a new database with zero organizations",
@@ -748,9 +744,9 @@ async function main(): Promise<void> {
         return;
       }
       const primaryOrgId = await ensureOrg();
-      const organizations = (await db.execute(
+      const organizations = (await db.execute<{ id: string }>(
         sql`select id from orgs order by created_at`,
-      )) as unknown as { rows: { id: string }[] };
+      ));
       for (const { id: orgId } of organizations.rows) {
         await ensureRootSubsidiary(orgId);
         await seedRoles(orgId);

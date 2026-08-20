@@ -131,22 +131,18 @@ async function hours(
             false, 'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
 }
 
-const ledgerRows = async (orgId: string) => ((await db.execute(sql`
+const ledgerRows = async (orgId: string) => ((await db.execute<{ employee_party_id: string; kind: string; amount: string; pay_run_document_id: string | null }>(sql`
   select employee_party_id, kind, amount::text as amount, pay_run_document_id
     from entitlement_ledger where org_id = ${orgId}
-   order by employee_party_id, kind`)) as unknown as {
-  rows: { employee_party_id: string; kind: string; amount: string; pay_run_document_id: string | null }[];
-}).rows;
+   order by employee_party_id, kind`))).rows;
 
-const stubRows = async (orgId: string, documentId: string) => ((await db.execute(sql`
-  select employee_party_id, gross::text as gross, vacation_accrued::text as vacation_accrued,
-         factors, id
-    from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`)) as unknown as {
-  rows: {
+const stubRows = async (orgId: string, documentId: string) => ((await db.execute<{
     employee_party_id: string; gross: string; vacation_accrued: string;
     factors: Record<string, string>; id: string;
-  }[];
-}).rows;
+  }>(sql`
+  select employee_party_id, gross::text as gross, vacation_accrued::text as vacation_accrued,
+         factors, id
+    from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`))).rows;
 
 /* ------------------------------------------------------------------ */
 /* D1 + D2 — three employees, three banks                              */
@@ -271,13 +267,11 @@ test(
       assert.deepEqual(firstPass.errors, []);
       assert.equal(firstPass.employees, 1, "only the named employee is on a final pay run");
 
-      const payoutOf = async () => ((await db.execute(sql`
+      const payoutOf = async () => ((await db.execute<{ amount: string }>(sql`
         select l.amount::text as amount
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${final.documentId}
-           and l.description like '%payout (accrued balance)'`)) as unknown as {
-        rows: { amount: string }[];
-      }).rows.map((r) => r.amount);
+           and l.description like '%payout (accrued balance)'`))).rows.map((r) => r.amount);
       assert.deepEqual(await payoutOf(), ["96.0000"]);
 
       // D3: the SECOND Calculate used to read the balance net of its own
@@ -334,9 +328,9 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18", runType: "bonus",
       });
-      const bonusComponent = ((await db.execute(sql`
+      const bonusComponent = ((await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
-      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      `))).rows[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, note,
@@ -349,11 +343,9 @@ test(
       // The bonus run priced no hours, so it may not claim any. Claiming them
       // made every hourly employee calculate at $0 on the regular run while
       // readiness still reported the hours as present.
-      const claimed = ((await db.execute(sql`
+      const claimed = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
-         where org_id = ${fx.orgId} and payroll_batch_ref is not null`)) as unknown as {
-        rows: { n: number }[];
-      }).rows[0]!.n;
+         where org_id = ${fx.orgId} and payroll_batch_ref is not null`))).rows[0]!.n;
       assert.equal(claimed, 0, "a bonus run prices no time and therefore claims none");
 
       const regular = await createPayRun({
@@ -363,11 +355,9 @@ test(
       await calculatePayRun({ orgId: fx.orgId, documentId: regular.documentId, actorId: fx.actorId });
       assert.equal((await stubRows(fx.orgId, regular.documentId))[0]!.gross, "2400.0000");
       await commitPayRun({ orgId: fx.orgId, documentId: regular.documentId, actorId: fx.actorId });
-      const nowClaimed = ((await db.execute(sql`
+      const nowClaimed = ((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
-         where org_id = ${fx.orgId} and payroll_batch_ref = ${regular.documentId}`)) as unknown as {
-        rows: { n: number }[];
-      }).rows[0]!.n;
+         where org_id = ${fx.orgId} and payroll_batch_ref = ${regular.documentId}`))).rows[0]!.n;
       assert.equal(nowClaimed, 4, "the run that priced the hours is the run that claims them");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -548,12 +538,10 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
-      const line = ((await db.execute(sql`
+      const line = ((await db.execute<{ rate: string; amount: string }>(sql`
         select l.rate::text as rate, l.amount::text as amount
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
-         where s.pay_run_document_id = ${run.documentId} and l.hours is not null`)) as unknown as {
-        rows: { rate: string; amount: string }[];
-      }).rows[0]!;
+         where s.pay_run_document_id = ${run.documentId} and l.hours is not null`))).rows[0]!;
       assert.equal(line.rate, "69.4444");
       assert.equal(line.amount, "5555.5500"); // 69.4444 × 80, not 69.4445 × 80
     } finally {
@@ -595,9 +583,9 @@ test(
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
-      const bonusComponent = ((await db.execute(sql`
+      const bonusComponent = ((await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
-      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      `))).rows[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, note,
@@ -611,11 +599,9 @@ test(
       const stub = (await stubRows(fx.orgId, run.documentId))[0]!;
       assert.equal(stub.gross, "1000.0000");
       assert.equal(stub.factors.WCB, "50.0000");
-      const wcbLines = ((await db.execute(sql`
+      const wcbLines = ((await db.execute<{ amount: string }>(sql`
         select amount::text as amount from pay_stub_lines
-         where stub_id = ${stub.id} and description = 'WCB/WSIB'`)) as unknown as {
-        rows: { amount: string }[];
-      }).rows;
+         where stub_id = ${stub.id} and description = 'WCB/WSIB'`))).rows;
       // The stub lines and factors.WCB must agree: the remittance summary sums
       // the lines and the annual-cap tracker reads the factor, so a dropped
       // negative remainder puts the two permanently at odds.
@@ -671,13 +657,11 @@ test(
         orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
-      const fringeLines = ((await db.execute(sql`
+      const fringeLines = ((await db.execute<{ amount: string; project_id: string | null }>(sql`
         select l.amount::text as amount, l.project_id
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.description = 'Welfare fund'
-         order by l.project_id`)) as unknown as {
-        rows: { amount: string; project_id: string | null }[];
-      }).rows;
+         order by l.project_id`))).rows;
       // 10% of 1,200 = 120.00, split by the earnings it is a percent OF.
       assert.equal(fringeLines.length, 2, "the flag's whole purpose is job costing");
       assert.ok(fringeLines.every((l) => l.project_id !== null));

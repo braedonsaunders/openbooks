@@ -60,11 +60,11 @@ export async function GET(request: Request) {
        where s.org_id = ${orgId}
        order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
                 s.number
-    `)) as unknown as { rows: unknown[] };
+    `));
     return NextResponse.json({ subcontracts: rows.rows });
   }
 
-  const contract = (await db.execute(sql`
+  const contract = (await db.execute<any>(sql`
     select s.id, s.number, s.title, s.description, s.status, s.currency,
            s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
            s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
       left join lateral (select sum(amount) filter (where status = 'approved') as approved
         from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
      where s.org_id = ${orgId} and s.id = ${id}
-  `)) as unknown as { rows: any[] };
+  `));
   if (!contract.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
   const [sov, changes, applications, lines, controls, releases] = await Promise.all([
     db.execute(sql`

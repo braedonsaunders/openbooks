@@ -127,9 +127,9 @@ test(
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
 
-      const stubs = (await db.execute(sql`
+      const stubs = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: Record<string, string>[] };
+      `));
       assert.equal(stubs.rows.length, 1);
       const stub = stubs.rows[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
@@ -153,15 +153,13 @@ test(
 
       // Lines: QPP (system key cpp), EI at the QC rate, QPIP — and Québec
       // income tax as its OWN component beside the federal income tax.
-      const stubLines = (await db.execute(sql`
+      const stubLines = (await db.execute<{ system_key: string | null; code: string; kind: string; description: string; amount: string; sequence: number }>(sql`
         select c.system_key, c.code, l.kind, l.description, l.amount, l.sequence
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${stub.id}
          order by l.sequence
-      `)) as unknown as {
-        rows: { system_key: string | null; code: string; kind: string; description: string; amount: string; sequence: number }[];
-      };
+      `));
       const line = (systemKey: string, kind: string) =>
         stubLines.rows.find((row) => row.system_key === systemKey && row.kind === kind);
 
@@ -186,10 +184,10 @@ test(
       // Commit: the GL credits the Québec liability SEPARATELY from the CRA
       // payable, from the component's own slot account.
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute(sql`
+      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)) as unknown as { rows: { account_id: string; amount: string }[] };
+      `));
       assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
       const qcLegs = glLines.rows.filter((row) => row.account_id === qcPayable);
       assert.equal(qcLegs.length, 1, "one credit leg on the Québec liability account");

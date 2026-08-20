@@ -34,11 +34,10 @@ export interface RateRow {
   department_name: string | null
   subsidiary_name: string | null
 }
-
-interface Opt {
+type Opt = {
   id: string
   name: string
-}
+};
 
 interface SubsidiaryOpt extends Opt {
   currency: string

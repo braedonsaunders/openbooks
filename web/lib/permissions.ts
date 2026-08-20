@@ -84,6 +84,10 @@ export const PERMISSION_CATALOGUE = [
   "time.read",
   "time.manage",
   "time.approve",
+  // Reopening approved time is deliberately NOT part of time.approve:
+  // separation of duties. Front-line managers approve; whoever owns payroll
+  // and billing decides when a locked week may be unlocked again.
+  "time.reopen",
   // Payroll — a deliberately separate duty set: wages and deductions are
   // confidential, so none of these ride on time.* or admin.setup.manage.
   // read = see runs/stubs; manage = setup, profiles, components; run =
@@ -296,6 +300,7 @@ export const PERMISSION_GROUPS: {
       { key: "time.read", labelKey: permissionLabelKey("time.read") },
       { key: "time.manage", labelKey: permissionLabelKey("time.manage") },
       { key: "time.approve", labelKey: permissionLabelKey("time.approve") },
+      { key: "time.reopen", labelKey: permissionLabelKey("time.reopen") },
     ],
   },
   {
@@ -474,6 +479,7 @@ export const BUILT_IN_ROLES: Record<
       "time.read",
       "time.manage",
       "time.approve",
+      "time.reopen",
       "payroll.read",
       "payroll.manage",
       "payroll.run",

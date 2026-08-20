@@ -13,7 +13,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const owned = (await db.execute(sql`
     select 1 from payment_instructions i join payment_runs r on r.id = i.payment_run_id
      where i.id = ${instructionId} and r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!owned.rows[0]) return NextResponse.json({ error: 'Payment instruction not found' }, { status: 404 })
   const body = (await req.json()) as {
     status?: 'settled' | 'returned' | 'rejected'

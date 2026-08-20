@@ -33,29 +33,23 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Sum of posted journal_lines on an account (the GL balance). */
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  const r = (await db.execute(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`)) as unknown as {
-    rows: { bal: string }[];
-  };
+  const r = (await db.execute<{ bal: string }>(sql`
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
   return r.rows[0].bal;
 }
 
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
 async function totalLayerValue(orgId: string): Promise<string> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ v: string }>(sql`
     select (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers where org_id=${orgId}),0)
-            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`)) as unknown as {
-    rows: { v: string }[];
-  };
+            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`));
   return r.rows[0].v;
 }
 
 /** Assert every posted journal entry in the org balances to zero. */
 async function assertAllEntriesBalance(orgId: string): Promise<void> {
-  const r = (await db.execute(sql`
-    select entry_id, sum(amount) as bal from journal_lines where org_id = ${orgId} group by entry_id having sum(amount) <> 0`)) as unknown as {
-    rows: { entry_id: string; bal: string }[];
-  };
+  const r = (await db.execute<{ entry_id: string; bal: string }>(sql`
+    select entry_id, sum(amount) as bal from journal_lines where org_id = ${orgId} group by entry_id having sum(amount) <> 0`));
   assert.equal(r.rows.length, 0, `unbalanced entries: ${JSON.stringify(r.rows)}`);
 }
 
@@ -196,10 +190,10 @@ test("inventory subledger posts, costs, and keeps GL = Σ layer value", { skip: 
     negative = await getOnHand(org.orgId, org.items.fifo, loc);
     assert.equal(toUnits(negative.quantity), 0n);
     assert.equal(toUnits(negative.value), 0n);
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{ quantity: string; provisional_unit_cost: string; receipt_unit_cost: string; correction_amount: string }>(sql`
       select quantity,provisional_unit_cost,receipt_unit_cost,correction_amount
         from inventory_provisional_settlements where org_id=${org.orgId}
-    `)) as unknown as { rows: { quantity: string; provisional_unit_cost: string; receipt_unit_cost: string; correction_amount: string }[] };
+    `));
     assert.equal(evidence.rows.length, 1);
     assert.equal(toUnits(evidence.rows[0]!.correction_amount), toUnits("5"));
     await assertInvariant(org);
@@ -306,7 +300,16 @@ test("inventory reversals append exact lineage, restore layers, and are concurre
     );
     await assertInvariant(org);
 
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{
+        reverses_movement_id: string;
+        reversal_reason: string;
+        created_by: string;
+        action: string;
+        actor_id: string;
+        source_entry_status: string | null;
+        reversal_entry_status: string | null;
+        reverses_entry_id: string | null;
+      }>(sql`
       select m.reverses_movement_id, m.reversal_reason, m.created_by,
              a.action, a.actor_id,
              source.status as source_entry_status,
@@ -322,18 +325,7 @@ test("inventory reversals append exact lineage, restore layers, and are concurre
        where m.org_id = ${org.orgId}
          and m.reverses_movement_id is not null
        order by m.created_at, m.id
-    `)) as unknown as {
-      rows: {
-        reverses_movement_id: string;
-        reversal_reason: string;
-        created_by: string;
-        action: string;
-        actor_id: string;
-        source_entry_status: string | null;
-        reversal_entry_status: string | null;
-        reverses_entry_id: string | null;
-      }[];
-    };
+    `));
     assert.equal(evidence.rows.length, 4);
     for (const row of evidence.rows) {
       assert.ok(row.reverses_movement_id);
@@ -419,11 +411,11 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
       await assertInvariant(org);
     }
 
-    const openLayers = (await db.execute(sql`
+    const openLayers = (await db.execute<{ id: string }>(sql`
       select id
         from cost_layers
        where org_id = ${org.orgId} and remaining_quantity > 0
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     for (const layer of openLayers.rows) {
       await db.execute(sql`
         insert into cost_layer_weights (org_id, cost_layer_id, weight, created_by, updated_by)
@@ -463,7 +455,13 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
          and reverses_allocation_id is null
     `));
 
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{
+        allocated: string;
+        allocation_rows: number;
+        unlinked: number;
+        vouchers: number;
+        void_vouchers: number;
+      }>(sql`
       select coalesce(sum(amount), 0)::text as allocated,
              count(*)::int as allocation_rows,
              count(*) filter (where journal_entry_id is null)::int as unlinked,
@@ -475,15 +473,7 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
                where org_id = ${org.orgId} and status = 'void') as void_vouchers
         from landed_cost_allocations
        where org_id = ${org.orgId}
-    `)) as unknown as {
-      rows: {
-        allocated: string;
-        allocation_rows: number;
-        unlinked: number;
-        vouchers: number;
-        void_vouchers: number;
-      }[];
-    };
+    `));
     assert.equal(toUnits(evidence.rows[0]!.allocated), toUnits("0.0006"));
     assert.ok(evidence.rows[0]!.allocation_rows >= 6);
     assert.equal(evidence.rows[0]!.unlinked, 0);
@@ -670,14 +660,12 @@ test("inventory locks prevent oversell and transfer-order failures roll back eve
       ),
       0n,
     );
-    const orderState = (await db.execute(sql`
+    const orderState = (await db.execute<{ status: string; ship_movement_id: string | null }>(sql`
       select o.status, l.ship_movement_id
         from transfer_orders o
         join transfer_order_lines l on l.transfer_order_id = o.id
        where o.id = ${order.id} and o.org_id = ${org.orgId}
-    `)) as unknown as {
-      rows: { status: string; ship_movement_id: string | null }[];
-    };
+    `));
     assert.deepEqual(orderState.rows[0], {
       status: "draft",
       ship_movement_id: null,
@@ -797,13 +785,11 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
       org.stockLocationId,
       actor,
     );
-    const registered = (await db.execute(sql`
+    const registered = (await db.execute<{ status: string; current_stock_location_id: string | null }>(sql`
       select status, current_stock_location_id
         from serials
        where id = ${serialId}
-    `)) as unknown as {
-      rows: { status: string; current_stock_location_id: string | null }[];
-    };
+    `));
     assert.deepEqual(registered.rows[0], {
       status: "registered",
       current_stock_location_id: null,
@@ -868,13 +854,11 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
       subsidiaryId: org.subsidiaryId,
       date: org.date,
     });
-    let serial = (await db.execute(sql`
+    let serial = (await db.execute<{ status: string; current_stock_location_id: string | null }>(sql`
       select status, current_stock_location_id
         from serials
        where id = ${serialId}
-    `)) as unknown as {
-      rows: { status: string; current_stock_location_id: string | null }[];
-    };
+    `));
     assert.deepEqual(serial.rows[0], {
       status: "shipped",
       current_stock_location_id: null,
@@ -884,13 +868,11 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
       reversalDate: org.date,
       reason: "Customer shipment was entered in error",
     });
-    serial = (await db.execute(sql`
+    serial = (await db.execute<{ status: string; current_stock_location_id: string | null }>(sql`
       select status, current_stock_location_id
         from serials
        where id = ${serialId}
-    `)) as unknown as {
-      rows: { status: string; current_stock_location_id: string | null }[];
-    };
+    `));
     assert.deepEqual(serial.rows[0], {
       status: "in_stock",
       current_stock_location_id: org.stockLocationId2,

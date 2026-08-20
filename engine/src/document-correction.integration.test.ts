@@ -97,7 +97,16 @@ test(
       );
       const replacementDocumentId = attempts[0]!.replacementDocumentId;
 
-      const retained = (await db.execute(sql`
+      const retained = (await db.execute<{
+          status: string;
+          posted_entry_id: string | null;
+          amount: string;
+          quantity_fulfilled: string;
+          quantity_billed: string;
+          reason: string;
+          requested_by: string;
+          requested: boolean;
+        }>(sql`
         select replacement.status, replacement.posted_entry_id,
                line.amount::text, line.quantity_fulfilled::text,
                line.quantity_billed::text,
@@ -108,18 +117,7 @@ test(
          where replacement.id = ${replacementDocumentId}
            and link.to_document_id = ${sourceDocumentId}
            and link.link_type = 'reverses'
-      `)) as unknown as {
-        rows: Array<{
-          status: string;
-          posted_entry_id: string | null;
-          amount: string;
-          quantity_fulfilled: string;
-          quantity_billed: string;
-          reason: string;
-          requested_by: string;
-          requested: boolean;
-        }>;
-      };
+      `));
       assert.deepEqual(retained.rows, [
         {
           status: "draft",
@@ -188,7 +186,16 @@ test(
         { audit: { actorId, source: "document_correction" } },
       );
 
-      const chain = (await db.execute(sql`
+      const chain = (await db.execute<{
+          source_entry_status: string;
+          source_document_status: string;
+          reversal_entry_id: string;
+          reverses_entry_id: string;
+          replacement_status: string;
+          replacement_entry_id: string;
+          correction_edges: number;
+          correction_audits: number;
+        }>(sql`
         select
           source.status as source_entry_status,
           original.status as source_document_status,
@@ -215,18 +222,7 @@ test(
           join journal_entries reversal on reversal.id = original.reversal_entry_id
           join documents replacement on replacement.id = ${replacementDocumentId}
          where original.id = ${sourceDocumentId}
-      `)) as unknown as {
-        rows: Array<{
-          source_entry_status: string;
-          source_document_status: string;
-          reversal_entry_id: string;
-          reverses_entry_id: string;
-          replacement_status: string;
-          replacement_entry_id: string;
-          correction_edges: number;
-          correction_audits: number;
-        }>;
-      };
+      `));
       assert.deepEqual(chain.rows, [
         {
           source_entry_status: "reversed",
@@ -253,7 +249,7 @@ test(
         "the original posted entry remains byte-for-byte intact",
       );
 
-      const net = (await db.execute(sql`
+      const net = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, sum(amount)::text as amount
           from journal_lines
          where entry_id in (
@@ -261,9 +257,7 @@ test(
          )
          group by account_id
          order by account_id
-      `)) as unknown as {
-        rows: Array<{ account_id: string; amount: string }>;
-      };
+      `));
       assert.deepEqual(net.rows, [
         { account_id: org.accounts.ap, amount: "-120.0000" },
         { account_id: org.accounts.cogs, amount: "120.0000" },

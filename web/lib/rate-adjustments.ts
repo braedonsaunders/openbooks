@@ -33,12 +33,10 @@ export async function resolveRateAdjustments(input: {
   locationId?: string | null
   classId?: string | null
 }): Promise<ResolvedAdjustment[]> {
-  const context = (await db.execute(sql`
+  const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null }>(sql`
     select p.customer_id, p.starts_on, p.subsidiary_id
       from projects p where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `)) as unknown as {
-    rows: { customer_id: string | null; starts_on: string | null; subsidiary_id: string | null }[]
-  }
+  `))
   const ctx = context.rows[0]
   if (!ctx) return []
   const projectStart = ctx.starts_on ?? input.onDate
@@ -46,7 +44,7 @@ export async function resolveRateAdjustments(input: {
   // The first candidate card that actually carries adjustments wins. A card
   // with none falls through, so a customer override of prices alone does not
   // silently drop the surcharges configured on the default card.
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<Record<string, unknown>>(sql`
     with scoped as (
       select a.rate_book_id, a.rate_version_id,
              case when a.project_id is not null then 1
@@ -118,7 +116,7 @@ export async function resolveRateAdjustments(input: {
       join ranked r on r.version_id = a.version_id and r.rn = 1
      where a.org_id = ${input.orgId} and a.is_active
      order by a.sort_order, a.code
-  `)) as unknown as { rows: Record<string, unknown>[] }
+  `))
 
   return rows.rows.map((r) => ({
     id: String(r.id),
@@ -151,7 +149,7 @@ export async function findLapsedRateCard(input: {
    *  says nothing about whether their mechanical card has run out. */
   departmentId?: string | null
 }): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ customer_id: string; last_effective_to: string | null }>(sql`
     with context as (
       select p.id as project_id, p.customer_id, p.starts_on, p.subsidiary_id
         from projects p
@@ -245,7 +243,7 @@ export async function findLapsedRateCard(input: {
       from context c cross join coverage
      where exists (select 1 from selected)
        and coverage.covering_versions = 0
-  `)) as unknown as { rows: { customer_id: string; last_effective_to: string | null }[] }
+  `))
   const row = r.rows[0]
   return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null
 }

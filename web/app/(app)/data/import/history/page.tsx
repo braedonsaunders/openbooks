@@ -19,8 +19,7 @@ import { requirePermission } from '../../../../../lib/authz'
 import { dateTime } from '../../../../../lib/format'
 
 export const dynamic = 'force-dynamic'
-
-interface JobRow {
+type JobRow = {
   id: string
   resource_key: string
   resource_label: string | null
@@ -33,13 +32,13 @@ interface JobRow {
   failed_count: number
   created_at: string
   actor_name: string | null
-}
+};
 
 export default async function ImportHistoryPage() {
   const authz = await requirePermission('data.import')
   const t = await getTranslations('data')
 
-  const result = (await db.execute(sql`
+  const result = (await db.execute<JobRow>(sql`
     select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
            j.total_rows, j.created_count, j.updated_count, j.failed_count, j.created_at,
            u.name as actor_name
@@ -47,7 +46,7 @@ export default async function ImportHistoryPage() {
       left join users u on u.id = j.created_by
      where j.org_id = ${authz.user.orgId}
      order by j.created_at desc
-     limit 200`)) as unknown as { rows: JobRow[] }
+     limit 200`))
   const jobs = result.rows
 
   return (

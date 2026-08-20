@@ -29,12 +29,10 @@ export async function subsidiaryOptions(
   includeInactive = false,
   includeElimination = false,
 ): Promise<SubsidiaryOption[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<Omit<SubsidiaryOption, "depth">>(sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            country, is_elimination as "isElimination", is_active as "isActive"
-      from subsidiaries order by name`)) as unknown as {
-    rows: Omit<SubsidiaryOption, "depth">[];
-  };
+      from subsidiaries order by name`));
   const rows = r.rows.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
   const byParent = new Map<string | null, typeof rows>();
   for (const s of rows) {
@@ -72,10 +70,8 @@ export async function subsidiaryUiOptions(
 
 /** The org's root subsidiary id. */
 export async function rootSubsidiaryId(): Promise<string> {
-  const r = (await db.execute(sql`
-    select id from subsidiaries where parent_id is null limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
+  const r = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where parent_id is null limit 1`));
   if (!r.rows[0]) throw new Error("org has no root subsidiary");
   return r.rows[0].id;
 }
@@ -109,16 +105,12 @@ export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> 
   // bypass, exactly like the auth bootstrap — otherwise a cross-org actor
   // resolves an empty set and every list filters to nothing.
   const identity = await withBypassContext(async () => {
-    const su = (await db.execute(sql`
-      select is_super_admin from users where id = ${userId}`)) as unknown as {
-      rows: { is_super_admin: boolean }[];
-    };
-    const assignments = (await db.execute(sql`
+    const su = (await db.execute<{ is_super_admin: boolean }>(sql`
+      select is_super_admin from users where id = ${userId}`));
+    const assignments = (await db.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
       select r.subsidiary_restriction as restriction
         from role_assignments a join app_roles r on r.id = a.role_id
-       where a.user_id = ${userId}`)) as unknown as {
-      rows: { restriction: SubsidiaryRestriction | null }[];
-    };
+       where a.user_id = ${userId}`));
     return { superAdmin: su.rows[0]?.is_super_admin === true, rows: assignments.rows as { restriction: SubsidiaryRestriction | null }[] };
   });
   if (identity.superAdmin) return null;

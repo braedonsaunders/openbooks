@@ -777,6 +777,7 @@
     "time_read": "Ver planilhas de horas",
     "time_manage": "Registrar e editar tempo",
     "time_approve": "Aprovar planilhas de horas",
+    "time_reopen": "Reabrir folhas de ponto aprovadas",
     "records_read": "Ver registros personalizados",
     "records_create": "Criar e editar registros personalizados",
     "records_manage_types": "Projetar tipos de registro personalizados",

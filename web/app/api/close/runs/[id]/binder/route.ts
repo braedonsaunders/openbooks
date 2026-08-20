@@ -16,13 +16,11 @@ export async function GET(
     return NextResponse.json({ error: "invalid run id" }, { status: 400 });
   const gate = await guardPermission("close.read");
   if (gate instanceof NextResponse) return gate;
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ binder_snapshot: unknown; binder_hash: string | null }>(sql`
     select binder_snapshot, binder_hash
       from close_runs
      where id = ${id} and org_id = ${gate.user.orgId} and status = 'published'
-  `)) as unknown as {
-    rows: { binder_snapshot: unknown; binder_hash: string | null }[];
-  };
+  `));
   const binder = result.rows[0];
   if (!binder?.binder_snapshot || !binder.binder_hash) {
     return NextResponse.json(

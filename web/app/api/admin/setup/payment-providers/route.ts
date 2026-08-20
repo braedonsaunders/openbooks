@@ -106,7 +106,7 @@ export async function POST(req: Request) {
         values (${orgId}, 'payment_surcharge_rules', ${id}, 'update', ${JSON.stringify({ after: values })}::jsonb, ${gate.user.id})
       `);
     } else {
-      const ins = (await db.execute(sql`
+      const ins = (await db.execute<{ id: string }>(sql`
         insert into payment_surcharge_rules
           (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
            provider, payment_method, effective_from, effective_to, created_by, updated_by)
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
                 ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
                 ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
         returning id
-      `)) as unknown as { rows: { id: string }[] };
+      `));
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'payment_surcharge_rules', ${ins.rows[0].id}, 'insert', ${JSON.stringify({ after: values })}::jsonb, ${gate.user.id})
@@ -141,12 +141,12 @@ export async function POST(req: Request) {
     if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
       return NextResponse.json({ error: "unknown provider" }, { status: 400 });
     }
-    const config = (await db.execute(sql`
+    const config = (await db.execute<Parameters<typeof configSecrets>[0]>(sql`
       select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
              publishable_key, settings, surcharge_rule_id, secrets
         from psp_provider_configs
        where org_id = ${orgId} and provider = ${provider} limit 1
-    `)) as unknown as { rows: Parameters<typeof configSecrets>[0][] };
+    `));
     if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
     const result = await testAcceptanceConnection(provider, configSecrets(config.rows[0]));
     await db.execute(sql`

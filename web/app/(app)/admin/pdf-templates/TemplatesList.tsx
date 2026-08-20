@@ -10,7 +10,7 @@ import { DuplicateTemplateButton, NewTemplateButton } from './TemplateActions'
 
 const PAPER_LABEL: Record<string, string> = { letter: 'Letter', a4: 'A4', legal: 'Legal' }
 
-export interface TemplateRow {
+export type TemplateRow = {
   id: string
   name: string
   description: string | null
@@ -19,7 +19,7 @@ export interface TemplateRow {
   orientation: string
   isActive: boolean
   isDefault: boolean
-}
+};
 
 export interface StarterRow {
   recordType: string

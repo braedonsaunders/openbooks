@@ -16,13 +16,13 @@ export default async function LegacyJournalEntry({ params }: { params: Promise<{
       ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
       : sql`and false`
     : sql``
-  const result = (await db.execute(sql`
+  const result = (await db.execute<{ doc_id: string | null; doc_kind: string | null }>(sql`
     select d.id as doc_id, d.kind as doc_kind
       from journal_entries e
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${authz.user.orgId}
        ${subsidiaryFilter}
-  `)) as unknown as { rows: { doc_id: string | null; doc_kind: string | null }[] }
+  `))
   const row = result.rows[0]
   if (!row) redirect('/journal')
   if (row.doc_id && row.doc_kind) {

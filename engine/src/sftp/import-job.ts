@@ -55,11 +55,10 @@ export interface ScheduleRun {
   duplicates: number;
   errors: string[];
 }
-
-interface ScheduleRow {
+type ScheduleRow = {
   id: string; org_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
   created_by: string | null; backend: string; bucket: string | null; root_prefix: string;
-}
+};
 
 async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
   const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix });
@@ -94,7 +93,7 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
 
 /** Run every active import schedule due for a scan (called from the scheduler tick). */
 export async function runDueSftpImports(orgId?: string, scheduleId?: string): Promise<ScheduleRun[]> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<ScheduleRow>(sql`
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping, sc.created_by,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
@@ -105,7 +104,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
        and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
        ${orgId ? sql`and sc.org_id = ${orgId}` : sql``}
        ${scheduleId ? sql`and sc.id = ${scheduleId}` : sql``}
-  `)) as unknown as { rows: ScheduleRow[] };
+  `));
   const runs: ScheduleRun[] = [];
   for (const s of rows.rows) {
     let run: ScheduleRun;
@@ -121,16 +120,16 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
 
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
 export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
-  const svr = (await db.execute(sql`
+  const svr = (await db.execute<{ backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
     select s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
       from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id
       join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
        and (p.sftp_server_id is null or p.sftp_server_id = s.id)
-  `)) as unknown as { rows: { backend: string; bucket: string | null; root_prefix: string; payment_folder: string }[] };
+  `));
   if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
-  const approval = (await db.execute(sql`select status from payment_files where id = ${file.id}`)) as unknown as { rows: { status: string }[] };
+  const approval = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`));
   if (!approval.rows[0] || !["approved", "delivered"].includes(approval.rows[0].status)) {
     throw new Error("the generated payment file requires approval before SFTP delivery");
   }

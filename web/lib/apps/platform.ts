@@ -206,8 +206,8 @@ async function listRecords(
        where ${where}
        order by ${sortExpression} ${direction}
        limit ${perPage} offset ${(page - 1) * perPage}`),
-    db.execute(sql`select count(*) as n from ${table} where ${where}`),
-  ])) as unknown as [{ rows: unknown[] }, { rows: { n: string | number }[] }]
+    db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`),
+  ]))
 
   return { records: records.rows, total: Number(count.rows[0]?.n ?? 0), page, perPage }
 }
@@ -227,7 +227,7 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
        ${resolved.writer.kind === 'document' ? sql`and kind = ${resolved.writer.docKind}` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryScope ? (subsidiaryScope.length > 0 ? sql`and subsidiary_id in ${subsidiaryScope}` : sql`and false`) : sql``}
-     limit 1`)) as unknown as { rows: unknown[] }
+     limit 1`))
   return result.rows[0] ?? null
 }
 
@@ -307,7 +307,7 @@ async function assertSubsidiaryWriteScope(
     select 1 from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
        ${allowed.length > 0 ? sql`and subsidiary_id in ${allowed}` : sql`and false`}
-     limit 1`)) as unknown as { rows: unknown[] }
+     limit 1`))
   if (!found.rows[0]) throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
 }
 

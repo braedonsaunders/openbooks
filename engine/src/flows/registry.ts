@@ -27,6 +27,11 @@ import {
   payRunSubjectProfile,
   payRunsFlowAdapter,
 } from "./pay-runs-adapter.ts";
+import {
+  TIMESHEET_WEEK_SUBJECT_KIND,
+  timesheetWeekSubjectProfile,
+  timesheetWeeksFlowAdapter,
+} from "./timesheet-weeks-adapter.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
@@ -45,6 +50,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
+  if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
   if (subjectKind === PAY_RUN_SUBJECT_KIND) return payRunsFlowAdapter;
@@ -66,6 +72,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     closeRunSubjectProfile,
     fieldTicketSubjectProfile,
     payRunSubjectProfile,
+    timesheetWeekSubjectProfile,
   ];
 }
 
@@ -89,9 +96,9 @@ export async function flowSubjectProfileForOrg(
   const base = listFlowSubjectProfiles().find((profile) => profile.subjectKind === subjectKind);
   if (!base) return null;
 
-  const roleResult = (await db.execute(sql`
+  const roleResult = (await db.execute<{ key: string }>(sql`
     select key from app_roles where org_id = ${orgId} order by name
-  `)) as unknown as { rows: { key: string }[] };
+  `));
 
   // Pay runs live in the documents table, so their custom header fields come
   // from the same catalog as every other document kind.
@@ -101,13 +108,13 @@ export async function flowSubjectProfileForOrg(
     return { ...base, roles: roleResult.rows.map((role) => role.key) };
   }
 
-  const fieldResult = (await db.execute(sql`
+  const fieldResult = (await db.execute<CustomFlowFieldRow>(sql`
     select key, label, field_type, config
       from custom_field_defs
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${subjectKind}) and is_active
      order by sort_order, label
-  `)) as unknown as { rows: CustomFlowFieldRow[] };
+  `));
   const existing = new Set(base.fields.map((field) => field.key));
   const customFields = fieldResult.rows
     .filter((field) => !existing.has(field.key))

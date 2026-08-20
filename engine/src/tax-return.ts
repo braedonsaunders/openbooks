@@ -250,37 +250,31 @@ export async function computeTaxReturn(
   to: string,
   adjustments: Record<string, string> = {},
 ): Promise<TaxReturnResult> {
-  const formRes = (await db.execute(sql`
+  const formRes = (await db.execute<{ name: string; submission_channel: string; watermark: string | null }>(sql`
     select name, submission_channel, watermark
       from tax_return_forms
-     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`)) as unknown as {
-    rows: { name: string; submission_channel: string; watermark: string | null }[];
-  };
+     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`));
   const form = formRes.rows[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
 
   // Org control tax accounts — the fallback a tax code posts to when it has no
   // collected/paid account of its own.
-  const ctrlRes = (await db.execute(sql`
+  const ctrlRes = (await db.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
     select settings->'controlAccounts'->>'taxCollected' as tax_collected,
            settings->'controlAccounts'->>'taxPaid' as tax_paid
-      from orgs where id = ${orgId}`)) as unknown as {
-    rows: { tax_collected: string | null; tax_paid: string | null }[];
-  };
+      from orgs where id = ${orgId}`));
   const orgTaxCollected = ctrlRes.rows[0]?.tax_collected ?? null;
   const orgTaxPaid = ctrlRes.rows[0]?.tax_paid ?? null;
 
-  const boxRes = (await db.execute(sql`
+  const boxRes = (await db.execute<{
+      line_code: string; label: string; sign: number; sequence: number;
+      tax_code_id: string | null; basis: string | null; formula: string | null; pdf_field: string | null;
+    }>(sql`
     select line_code, label, coalesce(sign, 1) as sign, coalesce(sequence, 0) as sequence,
            tax_code_id, basis, formula, pdf_field
       from tax_report_lines
      where org_id = ${orgId} and report_code = ${formCode}
-     order by sequence, line_code`)) as unknown as {
-    rows: {
-      line_code: string; label: string; sign: number; sequence: number;
-      tax_code_id: string | null; basis: string | null; formula: string | null; pdf_field: string | null;
-    }[];
-  };
+     order by sequence, line_code`));
   if (boxRes.rows.length === 0) {
     throw new TaxReturnError(`tax return form "${formCode}" has no boxes configured`);
   }
@@ -311,37 +305,31 @@ export async function computeTaxReturn(
     if (src.basis === "tax_collected" || src.basis === "tax_paid") {
       const orgFallback = src.basis === "tax_collected" ? orgTaxCollected : orgTaxPaid;
       const acctCol = src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
-      const r = (await db.execute(sql`
+      const r = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id
           join tax_codes tc on tc.id = l.tax_code_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
-           and l.account_id = coalesce(${acctCol}, ${orgFallback})`)) as unknown as {
-        rows: { total: string }[];
-      };
+           and l.account_id = coalesce(${acctCol}, ${orgFallback})`));
       total = r.rows[0]?.total ?? "0";
     } else if (src.basis === "tax_amount") {
-      const r = (await db.execute(sql`
+      const r = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`)) as unknown as {
-        rows: { total: string }[];
-      };
+           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`));
       total = r.rows[0]?.total ?? "0";
     } else {
-      const r = (await db.execute(sql`
+      const r = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(dl.amount), 0)::text as total
           from document_lines dl
           join documents d on d.id = dl.document_id
          where dl.org_id = ${orgId} and dl.tax_code_id = ${src.taxCodeId}
            and d.status = 'posted'
-           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`)) as unknown as {
-        rows: { total: string }[];
-      };
+           and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`));
       total = r.rows[0]?.total ?? "0";
     }
     glRaw.set(src.lineCode, add(glRaw.get(src.lineCode) ?? "0", total));

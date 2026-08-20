@@ -2,6 +2,12 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
+import {
+  lockReasonsFor,
+  weekLockReasons,
+  type EntryProvenance,
+  type LockReason,
+} from '../../../lib/time-lifecycle'
 
 /**
  * Weekly-timesheet server helpers. A "timesheet" is not a table — it's the set
@@ -62,6 +68,14 @@ export function weekWindow(sundayIso: string): string[] {
 export type WeekStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'empty'
 
 /** A single grid line: a distinct time key + its seven day-hour cells. */
+/** Stable key for a line's custom values — key order must not split a row. */
+export function customKey(custom: Record<string, unknown> | null | undefined): string {
+  if (!custom) return ''
+  const keys = Object.keys(custom).filter((k) => custom[k] !== null && custom[k] !== '').sort()
+  if (keys.length === 0) return ''
+  return JSON.stringify(keys.map((k) => [k, custom[k]]))
+}
+
 export interface WeekRow {
   projectId: string | null
   itemId: string | null
@@ -73,6 +87,9 @@ export interface WeekRow {
   hours: string[]
   /** The most locked status among this line's entries (blocks editing). */
   entryStatuses: string[]
+  /** Org-defined line field values (time_entries.custom). Part of the row's
+   * identity: two entries alike but for a custom value are different lines. */
+  custom: Record<string, unknown>
 }
 
 export interface WeekPayload {
@@ -83,6 +100,14 @@ export interface WeekPayload {
   status: WeekStatus
   /** True when any entry in the week is approved (those must not be overwritten). */
   hasApproved: boolean
+  /** Downstream consumers pinning this week (empty when nothing holds it). */
+  lockReasons: LockReason[]
+  /** How many entries are pinned — drives "3 of 12 entries" style messages. */
+  lockedCount: number
+  /** The approver's note when the week was bounced back. */
+  rejectionReason: string | null
+  /** The header row's id — what an approval flow names as its subject. */
+  weekId: string | null
 }
 
 /**
@@ -112,18 +137,12 @@ export async function loadWeek(
 ): Promise<WeekPayload> {
   const days = weekWindow(sundayIso)
   const week = days[0]
+  // The header owns the week's lifecycle. It is created on demand so a week
+  // that has never been touched still reads consistently.
+  const header = await ensureTimesheetWeek(orgId, employeeId, week)
   const dayIndex = new Map(days.map((d, i) => [d, i]))
 
-  const res = (await db.execute(sql`
-    select id, worked_on, hours, time_type_id, item_id, project_id,
-           department_id, memo, is_billable, status
-      from time_entries
-     where org_id = ${orgId}
-       and employee_party_id = ${employeeId}
-       and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-     order by created_at, id
-  `)) as unknown as {
-    rows: {
+  const res = (await db.execute<{
       worked_on: string
       hours: string
       time_type_id: string | null
@@ -133,8 +152,29 @@ export async function loadWeek(
       memo: string | null
       is_billable: boolean
       status: string
-    }[]
-  }
+      custom: Record<string, unknown> | null
+      rejection_reason: string | null
+      invoiced_by_line_id: string | null
+      payroll_batch_ref: string | null
+      cost_journal_entry_id: string | null
+      field_ticket_id: string | null
+    }>(sql`
+    select id, worked_on, hours, time_type_id, item_id, project_id,
+           department_id, memo, is_billable, status, custom, rejection_reason,
+           invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
+           field_ticket_id
+      from time_entries
+     where org_id = ${orgId}
+       and employee_party_id = ${employeeId}
+       and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+     order by created_at, id
+  `))
+  const provenance: EntryProvenance[] = res.rows.map((r) => ({
+    invoicedByLineId: r.invoiced_by_line_id,
+    payrollBatchRef: r.payroll_batch_ref,
+    costJournalEntryId: r.cost_journal_entry_id,
+    fieldTicketId: r.field_ticket_id,
+  }))
 
   const byKey = new Map<string, WeekRow>()
   const allStatuses: string[] = []
@@ -147,6 +187,7 @@ export async function loadWeek(
       r.department_id ?? '',
       r.is_billable ? '1' : '0',
       r.memo ?? '',
+      customKey(r.custom),
     ].join('|')
     let row = byKey.get(key)
     if (!row) {
@@ -159,6 +200,7 @@ export async function loadWeek(
         memo: r.memo,
         hours: ['', '', '', '', '', '', ''],
         entryStatuses: [],
+        custom: r.custom ?? {},
       }
       byKey.set(key, row)
     }
@@ -174,9 +216,102 @@ export async function loadWeek(
     week,
     days,
     rows: Array.from(byKey.values()),
-    status: aggregateStatus(allStatuses),
+    // Status is the header's, not a fold over the entries: a week with no
+    // hours yet is 'draft' (a real, submittable record), and 'empty' is
+    // reserved for describing that it carries nothing.
+    status: allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status,
     hasApproved: allStatuses.some((s) => s === 'approved'),
+    lockReasons: weekLockReasons(provenance),
+    lockedCount: provenance.filter((e) => lockReasonsFor(e).length > 0).length,
+    rejectionReason: header.rejectionReason,
+    weekId: header.id,
   }
+}
+
+/**
+ * The week's header row, created on demand.
+ *
+ * A week becomes a record the first time anyone touches it, so the id an
+ * approval flow needs exists before it is needed. Idempotent: concurrent
+ * saves race to the same unique (org, employee, week) and the loser reads the
+ * winner's row rather than failing.
+ *
+ * A header created now must inherit the state of the hours it covers, not
+ * assume they are new. Time arrives from imports and connectors as well as the
+ * editor, so a week can hold approved hours long before anyone opens it — and
+ * defaulting such a header to 'draft' would report approved time as unsubmitted
+ * and re-offer it for approval.
+ */
+export async function ensureTimesheetWeek(
+  orgId: string,
+  employeePartyId: string,
+  weekStartIso: string,
+  actorId?: string | null,
+): Promise<{ id: string; status: WeekStatus; rejectionReason: string | null }> {
+  const week = weekStart(weekStartIso)
+  const inserted = (await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
+    insert into timesheet_weeks
+      (org_id, employee_party_id, week_start, status,
+       approved_by, approved_at, rejection_reason, created_by, updated_by)
+    select ${orgId}, ${employeePartyId}, ${week}::date,
+           coalesce(seed.status, 'draft'), seed.approved_by, seed.approved_at,
+           seed.rejection_reason, ${actorId ?? null}, ${actorId ?? null}
+      from (
+        select case
+                 when count(*) = 0 then null
+                 when bool_and(te.status = 'approved') then 'approved'
+                 when bool_or(te.status = 'submitted') then 'submitted'
+                 when bool_or(te.status = 'rejected') then 'rejected'
+                 else 'draft'
+               end as status,
+               (array_agg(te.approved_by) filter (where te.approved_by is not null))[1] as approved_by,
+               max(te.approved_at) as approved_at,
+               (array_agg(te.rejection_reason) filter (where te.rejection_reason is not null))[1] as rejection_reason
+          from time_entries te
+         where te.org_id = ${orgId}
+           and te.employee_party_id = ${employeePartyId}
+           and te.worked_on >= ${week}::date
+           and te.worked_on <= ${week}::date + 6
+      ) seed
+    on conflict (org_id, employee_party_id, week_start) do nothing
+    returning id, status, rejection_reason
+  `))
+  const row = inserted.rows[0]
+    ?? ((await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
+      select id, status, rejection_reason from timesheet_weeks
+       where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+         and week_start = ${week}
+    `))).rows[0]
+  return { id: row.id, status: row.status, rejectionReason: row.rejection_reason }
+}
+
+/** Move a week's header to a new status, stamping the matching audit columns. */
+export async function setTimesheetWeekStatus(
+  orgId: string,
+  employeePartyId: string,
+  weekStartIso: string,
+  status: WeekStatus,
+  actorId: string,
+  rejectionReason?: string | null,
+): Promise<void> {
+  const week = weekStart(weekStartIso)
+  // Explicit casts: an untyped `null` in a CASE makes postgres infer text for
+  // the whole expression, which a uuid column rejects.
+  await db.execute(sql`
+    update timesheet_weeks
+       set status = ${status},
+           submitted_by = case when ${status} = 'submitted'
+                               then ${actorId}::uuid else submitted_by end,
+           submitted_at = case when ${status} = 'submitted'
+                               then now() else submitted_at end,
+           approved_by = case when ${status} = 'approved'
+                              then ${actorId}::uuid else null::uuid end,
+           approved_at = case when ${status} = 'approved'
+                              then now() else null::timestamptz end,
+           rejection_reason = ${rejectionReason ?? null}::text,
+           updated_by = ${actorId}::uuid, updated_at = now()
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+       and week_start = ${week}::date`)
 }
 
 export interface PickerOption {
@@ -196,34 +331,50 @@ export interface TimesheetPickers {
   departments: PickerOption[]
 }
 
-/** Load every picker the weekly editor needs, for one org. */
-export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
+/**
+ * Load every picker the weekly editor needs, for one org.
+ *
+ * `includeEmployeeId` keeps a specific employee in the list even when they are
+ * inactive or no longer hold an employee role. Their historical weeks are still
+ * viewable, and without this the picker would have no option matching the
+ * timesheet's own employee and would render blank.
+ */
+export async function loadPickers(
+  orgId: string,
+  includeEmployeeId?: string | null,
+): Promise<TimesheetPickers> {
   const [employees, projects, items, timeTypes, departments] = (await Promise.all([
-    db.execute(sql`
-      select p.id, coalesce(p.display_name, '') as label
+    db.execute<Record<string, unknown>>(sql`
+      select p.id, coalesce(p.display_name, '') as label,
+             (p.is_active and exists (
+               select 1 from employee_roles r
+                where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+             )) as currently_active
         from parties p
        where p.org_id = ${orgId}
-         and p.is_active
-         and exists (
-           select 1 from employee_roles r
-            where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+         and (
+           (p.is_active and exists (
+             select 1 from employee_roles r
+              where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+           ))
+           or p.id = ${includeEmployeeId ?? null}
          )
        order by p.display_name`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, code, name from projects
        where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, code, name from items
        where org_id = ${orgId} and is_active
          and kind in ('service', 'labor', 'other_charge')
        order by name`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, name, cost_multiplier, is_billable_default from time_types
        where org_id = ${orgId} and is_active order by cost_multiplier`),
-    db.execute(sql`
+    db.execute<Record<string, unknown>>(sql`
       select id, code, name from departments
        where org_id = ${orgId} and is_active order by name`),
-  ])) as unknown as { rows: Record<string, unknown>[] }[]
+  ]))
 
   const withCode = (r: Record<string, unknown>): PickerOption => ({
     value: String(r.id),
@@ -231,7 +382,10 @@ export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
   })
 
   return {
-    employees: employees.rows.map((r) => ({ value: String(r.id), label: (r.label as string) || '(unnamed)' })),
+    employees: employees.rows.map((r) => ({
+      value: String(r.id),
+      label: ((r.label as string) || '(unnamed)') + (r.currently_active ? '' : ' (inactive)'),
+    })),
     projects: projects.rows.map(withCode),
     items: items.rows.map(withCode),
     timeTypes: timeTypes.rows.map((r) => ({
@@ -246,8 +400,8 @@ export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
 
 /** Resolve the employee party a user should default to, if any (users.party_id). */
 export async function userEmployeeId(orgId: string, userId: string): Promise<string | null> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ party_id: string | null }>(sql`
     select party_id from users where id = ${userId} and org_id = ${orgId}
-  `)) as unknown as { rows: { party_id: string | null }[] }
+  `))
   return r.rows[0]?.party_id ?? null
 }

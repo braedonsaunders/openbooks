@@ -24,11 +24,7 @@ export default async function BackupsPage() {
   const tHub = await getTranslations("admin.hub");
   const { orgId } = authz.user;
 
-  const policyRes = (await db.execute(sql`
-    select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep,
-           last_run_at, next_run_at
-      from backup_policies where org_id = ${orgId}`)) as unknown as {
-    rows: {
+  const policyRes = (await db.execute<{
       enabled: boolean;
       frequency: string;
       hour_utc: number;
@@ -37,8 +33,10 @@ export default async function BackupsPage() {
       max_keep: number;
       last_run_at: Date | string | null;
       next_run_at: Date | string | null;
-    }[];
-  };
+    }>(sql`
+    select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep,
+           last_run_at, next_run_at
+      from backup_policies where org_id = ${orgId}`));
   const p = policyRes.rows[0];
   const policy: BackupPolicyRow | null = p
     ? {
@@ -53,14 +51,7 @@ export default async function BackupsPage() {
       }
     : null;
 
-  const runsRes = (await db.execute(sql`
-    select id, kind, status, file_name, byte_size, table_count, row_count, sha256,
-           error, purged_at, purge_reason, created_at, completed_at
-      from backup_runs
-     where org_id = ${orgId}
-     order by created_at desc
-     limit 50`)) as unknown as {
-    rows: {
+  const runsRes = (await db.execute<{
       id: string;
       kind: string;
       status: string;
@@ -74,8 +65,13 @@ export default async function BackupsPage() {
       purge_reason: string | null;
       created_at: Date | string;
       completed_at: Date | string | null;
-    }[];
-  };
+    }>(sql`
+    select id, kind, status, file_name, byte_size, table_count, row_count, sha256,
+           error, purged_at, purge_reason, created_at, completed_at
+      from backup_runs
+     where org_id = ${orgId}
+     order by created_at desc
+     limit 50`));
   const runs: BackupRunRow[] = runsRes.rows.map((r) => ({
     id: r.id,
     kind: r.kind as BackupRunRow["kind"],

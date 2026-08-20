@@ -20,13 +20,13 @@ export default async function TaxSetupPage() {
   const orgId = authz.user.orgId
 
   const [installed, installedJurisdictions, jurisdictions, registrations] = await Promise.all([
-    db.execute(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { code: string }[] }>,
-    db.execute(sql`
+    db.execute<{ code: string }>(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`),
+    db.execute<{ code: string }>(sql`
       select code from tax_jurisdictions
        where org_id = ${orgId} and is_active and level = 'state'
-    `) as unknown as Promise<{ rows: { code: string }[] }>,
-    db.execute(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { n: number }[] }>,
-    db.execute(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { n: number }[] }>,
+    `),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`),
   ])
 
   return (

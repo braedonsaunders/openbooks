@@ -27,17 +27,17 @@ export default async function CollectionsPage() {
   const advancedSubscriptionsEnabled = subscriptionsEnabled && await isFeatureEnabled(authz.user.orgId, "advancedSubscriptions");
   const [customers, incomeAccounts] = subscriptionsEnabled
     ? await Promise.all([
-        db.execute(sql`
+        db.execute<any>(sql`
           select p.id, p.display_name as "name" from parties p
            where p.org_id = ${authz.user.orgId} and p.is_active
              and exists (select 1 from customer_roles cr where cr.party_id = p.id)
            order by p.display_name
-        `) as unknown as Promise<{ rows: any[] }>,
-        db.execute(sql`
+        `),
+        db.execute<any>(sql`
           select id, number, name from accounts
            where org_id = ${authz.user.orgId} and type in ('income', 'income_other') and is_active
            order by number nulls last
-        `) as unknown as Promise<{ rows: any[] }>,
+        `),
       ])
     : [{ rows: [] }, { rows: [] }];
 

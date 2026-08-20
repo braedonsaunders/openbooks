@@ -66,9 +66,9 @@ export interface RemittanceGroup {
 /** The raw orgs.settings.payroll blob — indexed by whatever settings keys the
  *  pack declarations name, so this module needs no typed knowledge of them. */
 async function rawPayrollSettings(orgId: string): Promise<Record<string, unknown>> {
-  const r = (await db.execute(
+  const r = (await db.execute<{ p: Record<string, unknown> | null }>(
     sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { p: Record<string, unknown> | null }[] };
+  ));
   return r.rows[0]?.p ?? {};
 }
 
@@ -98,7 +98,12 @@ export async function payrollRemittanceSummary(
   // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
   // destination, and rows that resolve to the same vendor are re-merged per
   // component in groupRemittanceRows.
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{
+      component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
+      system_key: string | null; remittance_party_id: string | null;
+      liability_account_id: string | null; filing_account_id: string | null;
+      province: string; amount: string;
+    }>(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
            c.liability_account_id, ${filingAccount} as filing_account_id, s.province,
            sum(l.amount) as amount
@@ -114,17 +119,10 @@ export async function payrollRemittanceSummary(
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
               c.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
-  `)) as unknown as {
-    rows: {
-      component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
-      system_key: string | null; remittance_party_id: string | null;
-      liability_account_id: string | null; filing_account_id: string | null;
-      province: string; amount: string;
-    }[];
-  };
+  `));
   if (rows.rows.length === 0) return [];
 
-  const context = (await db.execute(sql`
+  const context = (await db.execute<{ filing_account_id: string | null; gross: string; employees: number }>(sql`
     select ${filingAccount} as filing_account_id,
            coalesce(sum(s.gross), 0) as gross,
            count(distinct s.employee_party_id)::int as employees
@@ -134,7 +132,7 @@ export async function payrollRemittanceSummary(
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
      group by ${filingAccount}
-  `)) as unknown as { rows: { filing_account_id: string | null; gross: string; employees: number }[] };
+  `));
   const contextByAccount = new Map(
     context.rows.map((row) => [row.filing_account_id ?? "", row]),
   );
@@ -181,14 +179,17 @@ export async function payrollRemittanceSummary(
   )] as string[];
   const [parties, accounts, bills] = (await Promise.all([
     partyIds.length
-      ? db.execute(sql`select id, display_name from parties
+      ? db.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
                         where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
     accountIds.length
-      ? db.execute(sql`select id, number, name from accounts
+      ? db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
                         where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
-    db.execute(sql`
+    db.execute<{
+        id: string; document_number: string; status: string; total: string;
+        party_id: string | null; filing_account_id: string | null;
+      }>(sql`
       select id, document_number, status, total, party_id,
              custom->'payrollRemittance'->>'filingAccountId' as filing_account_id
         from documents
@@ -196,16 +197,7 @@ export async function payrollRemittanceSummary(
          and custom->'payrollRemittance'->>'from' = ${range.from}
          and custom->'payrollRemittance'->>'to' = ${range.to}
          and status <> 'voided'`),
-  ])) as unknown as [
-    { rows: { id: string; display_name: string }[] },
-    { rows: { id: string; number: string | null; name: string }[] },
-    {
-      rows: {
-        id: string; document_number: string; status: string; total: string;
-        party_id: string | null; filing_account_id: string | null;
-      }[];
-    },
-  ];
+  ]));
   const partyName = new Map(parties.rows.map((p) => [p.id, p.display_name]));
   const accountLabel = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
   for (const group of groups.values()) {
@@ -233,7 +225,7 @@ function groupKey(partyId: string | null, filingAccountId: string | null): strin
 /** A withholding total for one component under one filing account, per stub
  *  province — the province is what a region-scoped remittance declaration
  *  (QPP/QPIP → Revenu Québec) resolves the destination from. */
-export interface RemittanceRow {
+export type RemittanceRow = {
   component_id: string;
   code: string;
   name: string;
@@ -244,7 +236,7 @@ export interface RemittanceRow {
   filing_account_id: string | null;
   province: string;
   amount: string;
-}
+};
 
 /**
  * Fold component totals into one group per (destination vendor, filing
@@ -477,27 +469,27 @@ export async function createRemittanceBill(
   return await db.transaction(async (tx) => {
     const vendor = (await tx.execute(sql`
       select 1 from vendor_roles where org_id = ${orgId} and party_id = ${input.partyId} and is_active
-    `)) as unknown as { rows: unknown[] };
+    `));
     if (!vendor.rows.length) throw new PayrollError("the remittance destination must be an active vendor");
 
-    const sub = (await tx.execute(sql`
+    const sub = (await tx.execute<{ id: string; base_currency: string | null }>(sql`
       select s.id, s.base_currency from subsidiaries s
        where s.org_id = ${orgId} and s.parent_id is null and s.is_active
        order by s.created_at limit 1
-    `)) as unknown as { rows: { id: string; base_currency: string | null }[] };
+    `));
     if (!sub.rows[0]) throw new PayrollError("no active root subsidiary");
 
-    const seq = (await tx.execute(sql`
+    const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${orgId}, 'vendor_bill', null, 'BILL-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       returning prefix, next_number, padding
-    `)) as unknown as { rows: { prefix: string; next_number: number; padding: number }[] };
+    `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
 
     const total = sum(group.components.map((c) => c.amount));
-    const doc = (await tx.execute(sql`
+    const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, memo, subtotal, tax_total, total, custom,
                              created_by, updated_by)
@@ -515,7 +507,7 @@ export async function createRemittanceBill(
               })}::jsonb,
               ${actorId}, ${actorId})
       returning id
-    `)) as unknown as { rows: { id: string }[] };
+    `));
     const documentId = doc.rows[0]!.id;
     let lineNumber = 1;
     for (const component of group.components) {

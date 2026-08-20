@@ -11,7 +11,7 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from './exact-decimal'
  * LineGrid (line columns), record views.
  */
 
-export interface CustomFieldDef {
+export type CustomFieldDef = {
   id: string
   targetTable: string
   targetKind: string | null
@@ -42,10 +42,10 @@ export interface CustomFieldDef {
   }
   isRequired: boolean
   sortOrder: number
-}
+};
 
 export async function loadFieldDefs(targetTable: string, targetKind?: string): Promise<CustomFieldDef[]> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<CustomFieldDef>(sql`
     select id, target_table as "targetTable", target_kind as "targetKind", key, label,
            field_type as "fieldType", config, is_required as "isRequired", sort_order as "sortOrder"
       from custom_field_defs
@@ -53,7 +53,7 @@ export async function loadFieldDefs(targetTable: string, targetKind?: string): P
        and (target_kind is null or target_kind = ${targetKind ?? null})
        and is_active
      order by sort_order, label
-  `)) as unknown as { rows: CustomFieldDef[] }
+  `))
   return r.rows
 }
 

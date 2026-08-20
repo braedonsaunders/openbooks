@@ -73,19 +73,19 @@ export async function PUT(req: Request) {
     group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : [])),
   )
   if (configuredAppKeys.length > 0) {
-    const installed = (await db.execute(sql`
+    const installed = (await db.execute<{ key: string }>(sql`
       select key from apps where org_id = ${user.orgId} and key = any(${configuredAppKeys}::text[])
-    `)) as unknown as { rows: { key: string }[] }
+    `))
     if (installed.rows.length !== configuredAppKeys.length) {
       return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
     }
   }
 
   await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
+    const before = (await tx.execute<{ id: string; config: OrgNavConfig }>(sql`
       select id, config from org_nav_configs where org_id = ${user.orgId} limit 1
-    `)) as unknown as { rows: { id: string; config: OrgNavConfig }[] }
-    const saved = (await tx.execute(sql`
+    `))
+    const saved = (await tx.execute<{ id: string }>(sql`
       insert into org_nav_configs (org_id, config, created_by, updated_by)
       values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})
       on conflict (org_id) do update set
@@ -93,7 +93,7 @@ export async function PUT(req: Request) {
         updated_at = now(),
         updated_by = ${user.id}
       returning id
-    `)) as unknown as { rows: { id: string }[] }
+    `))
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (

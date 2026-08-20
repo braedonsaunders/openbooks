@@ -111,11 +111,9 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         commenced = await commenceLease(ledger.orgId, leaseId, ledger.actorId);
       });
 
-      const schedule = (await db.execute(sql`
+      const schedule = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(payment), 0)::text as total from lease_agreement_schedule_lines
-         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`)) as unknown as {
-        rows: { total: string }[];
-      };
+         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`));
       return {
         entries: [entry],
         values: {

@@ -96,11 +96,18 @@ export async function EntityListView({
 
   const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
   const viewSortKey = view.sort ? listColumnMeta(recordType, view.sort.column)?.sortKey : undefined
+  // A saved view wins; otherwise the record type's declared default; otherwise
+  // the first sortable column ascending.
+  const metaDefault = meta.defaultSort && allowedSorts.includes(meta.defaultSort.sortKey)
+    ? meta.defaultSort
+    : undefined
   const defaultSort =
-    viewSortKey && allowedSorts.includes(viewSortKey) ? viewSortKey : (allowedSorts[0] ?? 'name')
+    viewSortKey && allowedSorts.includes(viewSortKey)
+      ? viewSortKey
+      : (metaDefault?.sortKey ?? allowedSorts[0] ?? 'name')
   const params = parseListParams(sp, {
     sort: defaultSort,
-    dir: view.sort?.dir ?? 'asc',
+    dir: view.sort?.dir ?? metaDefault?.dir ?? 'asc',
     perPage: view.perPage ?? 25,
     allowedSorts,
   })

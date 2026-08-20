@@ -10,8 +10,7 @@ import {
 type TaskStatus = WorkBreakdownTaskInput['status']
 
 type Executor = Pick<typeof db, 'execute'>
-
-interface TaskRow {
+type TaskRow = {
   id: string
   project_id: string
   code: string | null
@@ -20,7 +19,7 @@ interface TaskRow {
   estimated_hours: string | null
   estimated_cost: string | null
   updated_at: string | Date
-}
+};
 
 export interface WorkBreakdownTaskClient {
   id: string
@@ -50,11 +49,11 @@ async function assertProject(
   projectId: string,
   lock: 'none' | 'share' | 'update' = 'none',
 ): Promise<void> {
-  const project = (await exec.execute(sql`
+  const project = (await exec.execute<{ id: string }>(sql`
     select id from projects
      where id = ${projectId} and org_id = ${orgId}
      ${lock === 'update' ? sql`for update` : lock === 'share' ? sql`for share` : sql``}
-  `)) as unknown as { rows: { id: string }[] }
+  `))
   if (!project.rows[0]) throw new ProjectWorkBreakdownError('Project not found', 404)
 }
 
@@ -65,12 +64,12 @@ async function taskSnapshot(
   taskId: string,
   lock = false,
 ): Promise<TaskRow | null> {
-  const result = (await exec.execute(sql`
+  const result = (await exec.execute<TaskRow>(sql`
     select id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
       from project_tasks
      where id = ${taskId} and project_id = ${projectId} and org_id = ${orgId}
      ${lock ? sql`for update` : sql``}
-  `)) as unknown as { rows: TaskRow[] }
+  `))
   return result.rows[0] ?? null
 }
 
@@ -107,12 +106,12 @@ export async function loadWorkBreakdownTasks(
   projectId: string,
 ): Promise<WorkBreakdownTaskClient[]> {
   await assertProject(db, orgId, projectId)
-  const result = (await db.execute(sql`
+  const result = (await db.execute<TaskRow>(sql`
     select id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
       from project_tasks
      where project_id = ${projectId} and org_id = ${orgId}
      order by code nulls last, name, id
-  `)) as unknown as { rows: TaskRow[] }
+  `))
   return result.rows.map(clientTask)
 }
 
@@ -126,7 +125,7 @@ export async function createWorkBreakdownTask(args: {
     // The project row is the transaction-scoped sequencing lock for its WBS.
     // Concurrent creates cannot both observe the same max(schedule_order).
     await assertProject(tx, args.orgId, args.projectId, 'update')
-    const created = (await tx.execute(sql`
+    const created = (await tx.execute<TaskRow>(sql`
       insert into project_tasks (
         org_id, project_id, code, name, status, estimated_hours, estimated_cost,
         schedule_order, created_by, updated_by
@@ -141,7 +140,7 @@ export async function createWorkBreakdownTask(args: {
         ${args.actorId}, ${args.actorId}
       )
       returning id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
-    `)) as unknown as { rows: TaskRow[] }
+    `))
     const after = created.rows[0]
     if (!after) throw new ProjectWorkBreakdownError('Task could not be created', 500)
     await recordTaskAudit({
@@ -181,7 +180,7 @@ export async function updateWorkBreakdownTask(args: {
     // strings carry milliseconds. The locked snapshot comparison above is the
     // optimistic-concurrency decision; repeating it in SQL with the truncated
     // client value would incorrectly reject an otherwise current editor.
-    const updated = (await tx.execute(sql`
+    const updated = (await tx.execute<TaskRow>(sql`
       update project_tasks
          set code = ${args.input.code},
              name = ${args.input.name},
@@ -194,7 +193,7 @@ export async function updateWorkBreakdownTask(args: {
          and project_id = ${args.projectId}
          and org_id = ${args.orgId}
        returning id, project_id, code, name, status, estimated_hours, estimated_cost, updated_at
-    `)) as unknown as { rows: TaskRow[] }
+    `))
     const after = updated.rows[0]
     if (!after) {
       throw new ProjectWorkBreakdownError(

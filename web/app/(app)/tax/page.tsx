@@ -40,12 +40,12 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
   const filingId = pickString(sp.filing)
   const canManageSetup = can(authz, 'admin.setup.manage')
 
-  const formsResult = (await db.execute(sql`
+  const formsResult = (await db.execute<FormRow>(sql`
     select code, name, country, submission_channel, government_format, submission_url,
            official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${orgId} and is_active
-     order by country nulls last, name`)) as unknown as { rows: FormRow[] }
+     order by country nulls last, name`))
   const forms = formsResult.rows
 
   const filters = sql`where org_id = ${orgId}
@@ -67,23 +67,23 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
   // Total filings drives the History tab's count badge (always cheap); the full
   // history rows are only queried when that tab is open.
   const [badgeResult, historyResult, countResult, selectedResult] = await Promise.all([
-    db.execute(sql`select count(*)::int as count from tax_filings where org_id = ${orgId}`) as unknown as Promise<{ rows: { count: number }[] }>,
+    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings where org_id = ${orgId}`),
     tab === 'history'
-      ? db.execute(sql`
+      ? db.execute<FilingRow>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
                  version, status, filing_reference, filed_at::text, snapshot_hash, boxes, created_at::text
             from tax_filings ${filters}
            order by ${order}
-           limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`) as unknown as Promise<{ rows: FilingRow[] }>
+           limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)
       : Promise.resolve({ rows: [] as FilingRow[] }),
     tab === 'history'
-      ? db.execute(sql`select count(*)::int as count from tax_filings ${filters}`) as unknown as Promise<{ rows: { count: number }[] }>
+      ? db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`)
       : Promise.resolve({ rows: [{ count: 0 }] }),
     filingId && isUuid(filingId)
-      ? db.execute(sql`
+      ? db.execute<FilingHistoryRecord>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
                  version, status, filing_reference, filed_at::text, snapshot_hash, boxes
-            from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`) as unknown as Promise<{ rows: FilingHistoryRecord[] }>
+            from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`)
       : Promise.resolve({ rows: [] as FilingHistoryRecord[] }),
   ])
   const badgeCount = Number(badgeResult.rows[0]?.count ?? 0)

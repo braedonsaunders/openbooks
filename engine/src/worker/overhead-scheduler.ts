@@ -42,19 +42,17 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    const orgs = (await db.execute(sql`
+    const orgs = (await db.execute<{ id: string; cadence: string | null }>(sql`
       select id, settings->'overheadRateLifecycle'->>'cadence' as cadence
         from orgs
-       where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'`)) as unknown as {
-      rows: { id: string; cadence: string | null }[];
-    };
+       where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'`));
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
       const effectiveFrom = periodStartFor(cadence);
       const existing = (await db.execute(sql`
         select 1 from overhead_rates
          where org_id = ${org.id} and rate_kind = 'per_hour' and method = 'standard'
-           and effective_from = ${effectiveFrom} limit 1`)) as unknown as { rows: unknown[] };
+           and effective_from = ${effectiveFrom} limit 1`));
       if (existing.rows.length > 0) continue;
       try {
         const res = await fetch(`${appBaseUrl()}/api/internal/overhead/publish`, {

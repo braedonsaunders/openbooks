@@ -51,7 +51,7 @@ export default async function ReconcilePage({
   const sp = await searchParams
   const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`
 
-  const reconRes = (await db.execute(sql`
+  const reconRes = (await db.execute<any>(sql`
     select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name
@@ -60,7 +60,7 @@ export default async function ReconcilePage({
       left join users u on u.id = r.signed_off_by
      where r.id = ${reconciliationId} and r.account_id = ${accountId}
        and r.org_id = ${authz.user.orgId}
-  `)) as unknown as { rows: any[] }
+  `))
   const recon = reconRes.rows[0]
   if (!recon) notFound()
 
@@ -105,7 +105,7 @@ export default async function ReconcilePage({
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
     signedOff
       ? Promise.resolve({ rows: [] })
-      : db.execute(sql`
+      : db.execute<any>(sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
             from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id
@@ -115,13 +115,13 @@ export default async function ReconcilePage({
         `),
     signedOff
       ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute(sql`
+      : db.execute<any>(sql`
           select count(*) as n from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id
            where ${stmtWhere}`),
     signedOff
       ? Promise.resolve({ rows: [] })
-      : db.execute(sql`
+      : db.execute<any>(sql`
           select jl.id, je.posting_date, je.entry_number, jl.amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
@@ -133,11 +133,11 @@ export default async function ReconcilePage({
         `),
     signedOff
       ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute(sql`
+      : db.execute<any>(sql`
           select count(*) as n from journal_lines jl
             join journal_entries je on je.id = jl.entry_id
            where ${glWhere}`),
-    db.execute(sql`
+    db.execute<any>(sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
              sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
              je.entry_number, je.posting_date as gl_date, jl.amount as gl_amount,
@@ -150,13 +150,13 @@ export default async function ReconcilePage({
        order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
        limit ${mParams.perPage} offset ${(mParams.page - 1) * mParams.perPage}
     `),
-    db.execute(sql`
+    db.execute<any>(sql`
       select count(*) as n from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id
         join journal_lines jl on jl.id = m.journal_line_id
         join journal_entries je on je.id = jl.entry_id
        where ${mWhere}`),
-  ])) as unknown as { rows: any[] }[]
+  ]))
 
   const stat = 'rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900'
   const statLabel = 'text-[11px] font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400'

@@ -155,7 +155,7 @@ export async function captureFieldTicketLaborEvidence(
 ): Promise<FieldTicketLaborEvidenceResult> {
   validateInput(args);
   return withOrg(args.orgId, async () => {
-    const ticket = (await db.execute(sql`
+    const ticket = (await db.execute<{ id: string; status: string }>(sql`
       select d.id, d.status
         from documents d
         join field_tickets ft
@@ -165,7 +165,7 @@ export async function captureFieldTicketLaborEvidence(
          and d.org_id = ${args.orgId}
          and d.kind = 'field_ticket'
        for update of d, ft
-    `)) as unknown as { rows: { id: string; status: string }[] };
+    `));
     if (!ticket.rows[0]) {
       throw new FieldTicketLaborEvidenceError("Field Ticket not found");
     }
@@ -186,7 +186,13 @@ export async function captureFieldTicketLaborEvidence(
       );
     }
 
-    const current = (await db.execute(sql`
+    const current = (await db.execute<{
+        id: string;
+        revision: number;
+        source_system: string | null;
+        source_payload_hash: string | null;
+        line_count: number;
+      }>(sql`
       select snapshot.id, snapshot.revision, snapshot.source_system,
              snapshot.source_payload_hash,
              (select count(*)::int
@@ -198,15 +204,7 @@ export async function captureFieldTicketLaborEvidence(
          and snapshot.field_ticket_id = ${args.fieldTicketId}
          and snapshot.superseded_at is null
        for update
-    `)) as unknown as {
-      rows: Array<{
-        id: string;
-        revision: number;
-        source_system: string | null;
-        source_payload_hash: string | null;
-        line_count: number;
-      }>;
-    };
+    `));
     const existing = current.rows[0] ?? null;
     if (
       existing &&
@@ -260,7 +258,7 @@ export async function captureFieldTicketLaborEvidence(
       `);
     }
 
-    const inserted = (await db.execute(sql`
+    const inserted = (await db.execute<{ id: string; revision: number }>(sql`
       insert into field_ticket_labor_snapshots
         (org_id, field_ticket_id, revision, evidence_basis, reason,
          source_system, source_payload_hash, currency, captured_by)
@@ -272,7 +270,7 @@ export async function captureFieldTicketLaborEvidence(
        where org_id = ${args.orgId}
          and field_ticket_id = ${args.fieldTicketId}
       returning id, revision
-    `)) as unknown as { rows: { id: string; revision: number }[] };
+    `));
     const snapshot = inserted.rows[0];
 
     if (args.lines.length > 0) {

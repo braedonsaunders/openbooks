@@ -107,7 +107,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       }
       const nextRunAt = computeNextRunAt(body.cron.trim(), new Date(), body.timezone?.trim() || 'UTC')
       if (!nextRunAt) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
-      const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`)) as unknown as { rows: unknown[] }
+      const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
       if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       const [row] = await db.insert(schema.paymentSchedules).values({
         orgId: gate.user.orgId,
@@ -131,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       select 1 from party_bank_accounts b join parties p on p.id = b.party_id
        where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
          and p.org_id = ${gate.user.orgId} and p.is_active and b.is_active and b.approved_at is not null
-    `)) as unknown as { rows: unknown[] }
+    `))
     if (!mandateBank.rows[0]) return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
     const [row] = await db.insert(schema.paymentMandates).values({
       orgId: gate.user.orgId,

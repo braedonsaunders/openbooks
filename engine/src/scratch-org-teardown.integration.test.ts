@@ -124,11 +124,9 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
 
     // file_versions/file_blobs carry no org_id, so the invariant above cannot
     // see them — assert the payroll blob chain is gone explicitly.
-    const blobLeft = (await db.execute(sql`
+    const blobLeft = (await db.execute<{ versions: number; blobs: number }>(sql`
       select (select count(*)::int from file_versions where id = ${versionId}) as versions,
-             (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`)) as unknown as {
-      rows: { versions: number; blobs: number }[];
-    };
+             (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`));
     assert.deepEqual(blobLeft.rows[0], { versions: 0, blobs: 0 });
 
     // And a second call is an idempotent no-op.
@@ -155,9 +153,7 @@ test("dropScratchOrg commits durably from inside a pinned bypass transaction", {
       }),
       sentinel,
     );
-    const r = (await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`)) as unknown as {
-      rows: unknown[];
-    };
+    const r = (await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`));
     assert.equal(r.rows.length, 0, "the drop must be committed, not staged in the caller's transaction");
     assert.deepEqual(await orgRowCounts(org.orgId), {});
   } finally {
@@ -173,9 +169,7 @@ test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async
   try {
     await assert.rejects(dropScratchOrg(orgId), /refused/);
     // Still there — the refusal happened before any delete.
-    const r = (await db.execute(sql`select env_kind as "envKind" from orgs where id = ${orgId}`)) as unknown as {
-      rows: { envKind: string }[];
-    };
+    const r = (await db.execute<{ envKind: string }>(sql`select env_kind as "envKind" from orgs where id = ${orgId}`));
     assert.equal(r.rows.length, 1);
     assert.equal(r.rows[0]!.envKind, "production", "prep never ran against a refused org");
   } finally {

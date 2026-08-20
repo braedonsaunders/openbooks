@@ -42,7 +42,7 @@ function textOrNull(value: unknown): string | null {
 async function belongsToOrg(table: 'accounts' | 'subsidiaries', id: string, orgId: string) {
   const result = (await db.execute(sql`
     select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${orgId}
-  `)) as unknown as { rows: unknown[] }
+  `))
   return Boolean(result.rows[0])
 }
 
@@ -84,10 +84,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     parentId = textOrNull(body.parentId)
     if (parentId) {
       if (!isUuid(parentId) || parentId === id) return bad('invalid_parent', 'parentId')
-      const parent = (await db.execute(sql`
+      const parent = (await db.execute<{ is_summary: boolean; type: string }>(sql`
         select is_summary, type from accounts
          where id = ${parentId} and org_id = ${gate.user.orgId}
-      `)) as unknown as { rows: { is_summary: boolean; type: string }[] }
+      `))
       if (!parent.rows[0]?.is_summary) return bad('parent_must_be_summary', 'parentId')
       if (parent.rows[0].type !== nextType) return bad('parent_type_mismatch', 'parentId')
       const cycle = (await db.execute(sql`
@@ -99,16 +99,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           where child.org_id = ${gate.user.orgId}
         )
         select 1 from descendants where id = ${parentId} limit 1
-      `)) as unknown as { rows: unknown[] }
+      `))
       if (cycle.rows[0]) return bad('parent_cycle', 'parentId')
     }
   }
   const effectiveParentId = parentId !== undefined ? parentId : (existing.parent_id as string | null)
   if (effectiveParentId && body.type !== undefined && body.parentId === undefined) {
-    const parent = (await db.execute(sql`
+    const parent = (await db.execute<{ type: string }>(sql`
       select type from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
-    `)) as unknown as { rows: { type: string }[] }
+    `))
     if (!parent.rows[0] || parent.rows[0].type !== nextType) {
       return bad('parent_type_mismatch', 'type')
     }
@@ -128,9 +128,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return bad('invalid_currency', 'currencyRestriction')
     }
     if (currencyRestriction) {
-      const currency = (await db.execute(sql`select 1 from currencies where code = ${currencyRestriction}`)) as unknown as {
-        rows: unknown[]
-      }
+      const currency = (await db.execute(sql`select 1 from currencies where code = ${currencyRestriction}`))
       if (!currency.rows[0]) return bad('invalid_currency', 'currencyRestriction')
     }
   }
@@ -145,10 +143,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   let requiredDimensions: string[] | undefined
   if (body.requiredDimensions !== undefined) {
-    const definitions = (await db.execute(sql`
+    const definitions = (await db.execute<{ key: string }>(sql`
       select key from segment_definitions
        where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-    `)) as unknown as { rows: { key: string }[] }
+    `))
     const allowed = new Set(['party', ...definitions.rows.map((row) => row.key)])
     if (!Array.isArray(body.requiredDimensions) || body.requiredDimensions.some((d) => typeof d !== 'string' || !allowed.has(d))) {
       return bad('invalid_dimensions', 'requiredDimensions')
@@ -165,7 +163,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     await db.transaction(async (tx) => {
-      const updated = (await tx.execute(sql`
+      const updated = (await tx.execute<Record<string, unknown>>(sql`
         update accounts set
           number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
           name = ${name !== undefined ? name : sql`name`},
@@ -186,7 +184,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
          where id = ${id} and org_id = ${gate.user.orgId}
            and updated_at = ${existing.updated_at}
          returning *
-      `)) as unknown as { rows: Record<string, unknown>[] }
+      `))
       if (!updated.rows[0]) throw new Error('account_changed')
       await tx.execute(sql`
         insert into audit_log

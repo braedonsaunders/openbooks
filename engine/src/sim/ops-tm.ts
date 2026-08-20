@@ -79,24 +79,23 @@ export async function postLaborCost(world: SimOrg, timeEntryIds: string[]): Prom
 
 /** Post labor cost for all not-yet-costed approved time on a project. */
 export async function postLaborForProject(world: SimOrg, projectId: string): Promise<{ entryIds: string[]; costed: number }> {
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ id: string }>(sql`
     select id from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and cost_journal_entry_id is null`)) as unknown as { rows: { id: string }[] };
+       and status = 'approved' and cost_journal_entry_id is null`));
   const ids = rows.rows.map((r) => r.id);
   if (ids.length === 0) return { entryIds: [], costed: 0 };
   const { entryIds } = await postLaborCost(world, ids);
   return { entryIds, costed: ids.length };
 }
-
-interface UnbilledTime {
+type UnbilledTime = {
   id: string;
   hours: string;
   bill_rate: string;
   cost_rate: string;
   employee_party_id: string;
   time_type_id: string;
-}
+};
 
 /**
  * Build and post a T&M invoice from all unbilled, approved, billable time on a
@@ -118,18 +117,16 @@ export async function billTimeAndMaterials(
   invoiceDate: string,
   opts: { extraLines?: ExtraBillLine[]; memo?: string; costPlusFee?: number } = {},
 ): Promise<{ invoiceId: string; documentNumber: string; billed: string; laborCost: string; lines: number } | null> {
-  const proj = (await db.execute(sql`
-    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`)) as unknown as {
-    rows: { customer_id: string | null; name: string; code: string }[];
-  };
+  const proj = (await db.execute<{ customer_id: string | null; name: string; code: string }>(sql`
+    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`));
   const customerId = proj.rows[0]?.customer_id;
   if (!customerId) throw new Error(`project ${projectId} has no customer to bill`);
 
-  const time = (await db.execute(sql`
+  const time = (await db.execute<UnbilledTime>(sql`
     select id, hours::text, bill_rate::text, cost_rate::text, employee_party_id, time_type_id
       from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`)) as unknown as { rows: UnbilledTime[] };
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`));
   const extraLines = opts.extraLines ?? [];
   if (time.rows.length === 0 && extraLines.length === 0) return null;
 
