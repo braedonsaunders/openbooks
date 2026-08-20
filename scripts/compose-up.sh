@@ -4,7 +4,7 @@ set -eu
 repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 env_file="$repo_dir/.env.compose"
 
-official_openbooks_image=ghcr.io/braedonsaunders/openbooks:0.1.0-alpha.3
+official_openbooks_image=ghcr.io/braedonsaunders/openbooks:0.1.0-alpha.4
 supplied_openbooks_image=${OPENBOOKS_IMAGE:-}
 configured_openbooks_image=$supplied_openbooks_image
 if [ -z "$configured_openbooks_image" ] && [ -f "$env_file" ]; then

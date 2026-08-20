@@ -183,7 +183,7 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. resolves and records the official `0.1.0-alpha.3` image digest in
+2. resolves and records the official `0.1.0-alpha.4` image digest in
    `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker;
@@ -707,10 +707,13 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.3` is the current community preview. It adds the guided company
-setup and go-live experience, industry sample companies, governed query tools,
-16 maintained country tax packs, canonical source identities, and a hardened
-one-command container installation backed by a clean PostgreSQL baseline.
+`v0.1.0-alpha.4` is the current community preview. It adds the timesheet week
+lifecycle with configurable approval routing, and fixes a defect in the NACHA
+and SEPA direct-debit writers that let a half-configured originator reach the
+bank. It builds on alpha.3's guided company setup and go-live experience,
+industry sample companies, governed query tools, 16 maintained country tax
+packs, canonical source identities, and a hardened one-command container
+installation backed by a clean PostgreSQL baseline.
 
 Good uses today:
 
