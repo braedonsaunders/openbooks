@@ -2,22 +2,37 @@
  * Connecticut income-tax withholding — TPG-211 calculation rules.
  *
  * Source (fetched from portal.ct.gov, not memory):
+ *   Informational Publication 2026(1), Connecticut Employer's Tax Guide,
+ *     Circular CT, Issued 12/12/2025, Replaces IP 2025(1), Effective
+ *     January 1, 2026 —
+ *     https://portal.ct.gov/-/media/drs/publications/pubsip/2026/ip-2026-1.pdf
+ *     — no completed CT-W4 → 6.99% with no exemption; Form CT-W4 lines 1–3;
+ *       Code E exemption; supplemental compensation (pp. 11–12); resident
+ *       wages (pp. 7–8); Examples 8–10 (wage-bracket table lookups).
  *   TPG-211, 2026 Withholding Calculation Rules (Rev. 12/25),
  *     https://portal.ct.gov/-/media/drs/forms/2025/wth/tpg-211_1225.pdf
  *     — Steps 1–16; Tables A–E; "The 2026 withholding calculation rules and
  *       2026 withholding tables are unchanged from 2025."
- *   Informational Publication 2026(1), Connecticut Employer's Tax Guide,
- *     Circular CT, https://portal.ct.gov/-/media/drs/publications/pubsip/2026/ip-2026-1.pdf
- *     — no completed CT-W4 → 6.99% with no exemption; Form CT-W4 lines 2 and 3;
- *       supplemental wages paid separately are recomputed on regular + bonus
- *       minus tax already withheld from the regular check (not a flat rate).
  *   Form CT-W4 (Rev. 12/25) — withholding codes A, B, C, D, E, F.
  *
  * TPG-211: "There is no percentage method available to determine Connecticut
- * wage withholding." The engine is these calculation rules, not the wage-bracket
- * tables. Circular CT Example 9 prints a weekly $1,000 / Code A table figure
- * of $39.97; the calculation rules on the same facts are a different cent
- * amount, pinned in the conformance test so the two methods are not collapsed.
+ * wage withholding." Employers may use either these calculation rules or the
+ * wage-bracket tables. The engine is the calculation rules. Circular CT
+ * Examples 8–10 print table cells ($17.65, $39.97, $78.82); the same facts
+ * through Tables A–E are different cents, pinned in the conformance test so
+ * the two official methods are not collapsed.
+ *
+ * Rules in Circular CT that this engine refuses, rather than inventing:
+ *   • Resident out-of-state proration (Examples 1–4) — needs the other
+ *     jurisdiction's withheld tax, which the input does not carry.
+ *   • Form CT-W4NA allocation (Examples 8–9) — a separate certificate; with
+ *     no CT-W4NA, Example 10 withholds on all wages.
+ *   • IP 2026(7) supplemental tables for two-earner Code A couples — employee
+ *     advisory; the employer applies Line 2 / Line 3, not a second table.
+ *   • Daily / miscellaneous amounts — Circular CT sends those to the
+ *     supplemental-compensation section, not a daily table.
+ *   • Code E lapse on February 16 — an employer calendar duty, not a pay-date
+ *     calculation. A current Code E still withholds zero.
  *
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
@@ -58,8 +73,10 @@ export const CT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   label: "TPG-211 2026 Withholding Calculation Rules (Rev. 12/25)",
   effectiveFrom: "2026-01-01",
   citation:
-    "Connecticut DRS, TPG-211, 2026 Withholding Calculation Rules (Rev. 12/25); "
-    + "Informational Publication 2026(1), Circular CT; Form CT-W4 (Rev. 12/25)",
+    "Connecticut Department of Revenue Services, Informational Publication 2026(1), "
+    + "Connecticut Employer's Tax Guide, Circular CT, Issued 12/12/2025, Replaces "
+    + "IP 2025(1); TPG-211, 2026 Withholding Calculation Rules (Rev. 12/25), Steps 1–16 "
+    + "and Tables A–E; Form CT-W4 (Rev. 12/25)",
   status: "published",
   region: "CT",
 }];
