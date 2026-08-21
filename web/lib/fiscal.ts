@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { fiscalContextFor, fiscalYearOf, type FiscalContext } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
@@ -18,10 +19,11 @@ export { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
 
 /** The org's fiscal position (current FY / FYTD / quarter / PYTD) as of `today`. */
 export async function orgFiscalContext(
-  today = new Date().toISOString().slice(0, 10),
+  today?: string,
   orgId?: string,
 ): Promise<FiscalContext> {
-  return fiscalContextFor(today, await fiscalStartMonth(orgId))
+  const asOf = today ?? await orgBusinessDay(orgId)
+  return fiscalContextFor(asOf, await fiscalStartMonth(orgId))
 }
 
 export async function fiscalStartMonth(orgId?: string): Promise<number> {
@@ -35,10 +37,15 @@ export async function fiscalStartMonth(orgId?: string): Promise<number> {
   return m >= 1 && m <= 12 ? m : 1
 }
 
+async function orgBusinessDay(orgId?: string): Promise<string> {
+  return businessToday(await resolveOrgId(orgId))
+}
+
 /** The current fiscal year (end year) for today, per the org's start month. */
 export async function currentFiscalYear(
-  today = new Date().toISOString().slice(0, 10),
+  today?: string,
   orgId?: string,
 ): Promise<number> {
-  return fiscalYearOf(today, await fiscalStartMonth(orgId))
+  const asOf = today ?? await orgBusinessDay(orgId)
+  return fiscalYearOf(asOf, await fiscalStartMonth(orgId))
 }

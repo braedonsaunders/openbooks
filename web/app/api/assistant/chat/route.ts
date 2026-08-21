@@ -8,6 +8,7 @@ import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildToolRegistry } from "../../../../lib/assistant/registry";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { orgFiscalContext } from "../../../../lib/fiscal";
 import {
   appendMessage,
@@ -92,7 +93,7 @@ export async function POST(req: Request): Promise<Response> {
     sql`select base_currency from orgs where id = ${authz.user.orgId}`,
   ));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(authz.user.orgId);
   const tools = buildToolRegistry(authz);
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
