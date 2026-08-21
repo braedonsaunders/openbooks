@@ -20,18 +20,19 @@ export async function orgInfo(orgId?: string) {
   return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
 }
 
-export async function dashboardData() {
+export async function dashboardData(orgId?: string) {
+  const activeOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select
-      (select count(*) from journal_entries) as entries,
-      (select count(*) from journal_lines) as lines,
-      (select count(*) from accounts where is_active) as accounts,
-      (select count(*) from parties) as parties,
-      (select coalesce(sum(amount), 0) from journal_lines) as ledger_sum
+      (select count(*) from journal_entries where org_id = ${activeOrgId}) as entries,
+      (select count(*) from journal_lines where org_id = ${activeOrgId}) as lines,
+      (select count(*) from accounts where org_id = ${activeOrgId} and is_active) as accounts,
+      (select count(*) from parties where org_id = ${activeOrgId}) as parties,
+      (select coalesce(sum(amount), 0) from journal_lines where org_id = ${activeOrgId}) as ledger_sum
   `)) as any;
   const runs = (await db.execute(sql`
     select id, source, status, started_at, finished_at, stats, error_message, triggered_by
-      from sync_runs order by started_at desc limit 8
+      from sync_runs where org_id = ${activeOrgId} order by started_at desc limit 8
   `)) as any;
   return { totals: r.rows[0], runs: runs.rows };
 }
@@ -92,18 +93,19 @@ export async function accountsWithBalances(orgId: string, asOf?: string) {
   }[];
 }
 
-export async function journalPage(offset: number, limit = 50) {
+export async function journalPage(orgId: string, offset: number, limit = 50) {
   const r = (await db.execute(sql`
     select e.id, e.entry_number, e.posting_date, e.memo, e.status, e.origin,
            count(l.id) as line_count,
            sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
       from journal_entries e
-      join journal_lines l on l.entry_id = e.id
+      join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
+     where e.org_id = ${orgId}
      group by e.id
      order by e.posting_date desc, e.entry_number desc
      limit ${limit} offset ${offset}
   `)) as any;
-  const c = (await db.execute(sql`select count(*) as n from journal_entries`)) as any;
+  const c = (await db.execute(sql`select count(*) as n from journal_entries where org_id = ${orgId}`)) as any;
   return { entries: r.rows, total: Number(c.rows[0].n) };
 }
 
