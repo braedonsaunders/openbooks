@@ -636,7 +636,7 @@ export async function generatePaymentFileArtifact(
       select pf.id, pf.filename, pf.content_type, fb.bytes
         from payment_files pf
         join file_blobs fb on fb.version_id = pf.file_version_id
-       where pf.payment_run_id = ${runId} and pf.status not in ('superseded', 'voided', 'rejected')
+       where pf.payment_run_id = ${runId} and pf.org_id = ${orgId} and pf.status not in ('superseded', 'voided', 'rejected')
        order by pf.sequence_number desc limit 1
     `));
     if (existing.rows[0]) return { id: existing.rows[0].id, filename: existing.rows[0].filename, contentType: existing.rows[0].content_type, content: existing.rows[0].bytes };
@@ -646,7 +646,7 @@ export async function generatePaymentFileArtifact(
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
-  const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId}`));
+  const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
   const parentId = opts?.reprocessFileId ?? null;
   const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
     select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id}
@@ -675,7 +675,7 @@ export async function generatePaymentFileArtifact(
     createdBy: userId,
     updatedBy: userId,
   }).returning({ id: schema.paymentFiles.id });
-  if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId}`);
+  if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}`);
   await db.execute(sql`
     update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),
       exported_file_ref = ${rendered.filename}, updated_at = now(), updated_by = ${userId}
@@ -726,8 +726,8 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
     createdBy: userId,
     updatedBy: userId,
   });
-  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${fileId}`);
-  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and status = 'generated'`);
+  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${fileId} and org_id = ${orgId}`);
+  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'`);
   await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
 }
 
@@ -756,8 +756,8 @@ export async function recordPaymentFileSftpDelivery(opts: {
     createdBy: opts.userId,
     updatedBy: opts.userId,
   });
-  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${opts.fileId}`);
-  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and status = 'generated'`);
+  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${opts.fileId} and org_id = ${opts.orgId}`);
+  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'`);
   await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
 }
 
@@ -780,11 +780,11 @@ export async function rollbackPaymentRun(runId: string, orgId: string, userId: s
   const result = (await db.execute<{ status: string }>(sql`
     update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
      where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
-       and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status in ('sent', 'settled', 'returned', 'reversed'))
+       and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('sent', 'settled', 'returned', 'reversed'))
      returning r.status
   `));
   if (!result.rows[0]) throw new PaymentError("a run can only be rolled back before any payment is posted or settled");
-  await db.execute(sql`update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId} where payment_run_id = ${runId} and status not in ('superseded', 'voided')`);
+  await db.execute(sql`update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId} where payment_run_id = ${runId} and org_id = ${orgId} and status not in ('superseded', 'voided')`);
   await event({ orgId, runId, actorId: userId, eventType: "run_rolled_back", toStatus: "rolled_back", details: { reason } });
 }
 
@@ -833,19 +833,19 @@ export async function recordPaymentSettlement(opts: {
         reversal_entry_id = coalesce(excluded.reversal_entry_id, payment_settlements.reversal_entry_id),
         updated_at = now(), updated_by = excluded.updated_by
     `);
-    await tx.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId}`);
+    await tx.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`);
     if (opts.status === "returned") {
-      await tx.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId}`);
+      await tx.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId} and org_id = ${opts.orgId}`);
     }
     await tx.execute(sql`
       update payment_runs r set
         status = case
-          when exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status in ('returned', 'rejected')) then 'returned'
-          when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status not in ('settled', 'cancelled')) then 'settled'
+          when exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('returned', 'rejected')) then 'returned'
+          when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status not in ('settled', 'cancelled')) then 'settled'
           else r.status end,
-        settled_at = case when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.status not in ('settled', 'cancelled')) then now() else settled_at end,
+        settled_at = case when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status not in ('settled', 'cancelled')) then now() else settled_at end,
         updated_at = now(), updated_by = ${opts.userId}
-      where r.id = ${instruction.payment_run_id}
+      where r.id = ${instruction.payment_run_id} and r.org_id = ${opts.orgId}
     `);
   });
   await event({ orgId: opts.orgId, runId: instruction.payment_run_id, instructionId: opts.instructionId, actorId: opts.userId, eventType: `instruction_${opts.status}`, fromStatus: instruction.status, toStatus: opts.status, details: { bankReference: opts.bankReference, returnCode: opts.returnCode, returnReason: opts.returnReason } });
