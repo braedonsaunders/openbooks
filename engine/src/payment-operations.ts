@@ -801,7 +801,7 @@ export async function recordPaymentSettlement(opts: {
 }): Promise<void> {
   const row = (await db.execute<{ payment_run_id: string; payment_document_id: string | null; amount: string; currency: string; status: string }>(sql`
     select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
-      from payment_instructions i join payment_runs r on r.id = i.payment_run_id
+      from payment_instructions i join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
      where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
   `));
   const instruction = row.rows[0];

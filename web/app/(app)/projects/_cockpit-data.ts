@@ -9,6 +9,7 @@ import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 import { isFeatureEnabled } from '../../../lib/features'
 import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /**
  * Loads everything the project flyout's cockpit tabs need. The Financials tab is
@@ -155,7 +156,7 @@ export async function loadProjectCockpit(
     },
     recognition,
     glRange: ((glRangeRes as unknown as { rows: { from: string; to: string }[] }).rows[0]
-      ?? { from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) }),
+      ?? { from: await businessToday(orgId), to: await businessToday(orgId) }),
     transactions: financials.documents as ProjectCockpitData['transactions'],
   }
 }
