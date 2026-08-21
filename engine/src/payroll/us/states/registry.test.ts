@@ -36,7 +36,7 @@ test("the pack now withholds state income tax somewhere", () => {
   // everywhere it is printed.
   assert.deepEqual(
     implementedUsStates(),
-    ["AL", "AZ", "CA", "CO", "CT", "DE", "GA", "IL", "IN", "IA", "KY", "MD", "MA", "MI", "MN", "NJ", "NY", "NC", "OH", "OR", "PA", "SC", "UT", "VA", "WV", "WI"],
+    ["AL", "AZ", "AR", "CA", "CO", "CT", "DE", "GA", "IL", "IN", "IA", "KY", "ME", "MD", "MA", "MI", "MN", "NJ", "NY", "NC", "OH", "OR", "PA", "SC", "UT", "VA", "WV", "WI"],
   );
   for (const state of implementedUsStates()) {
     assert.equal(
@@ -48,9 +48,9 @@ test("the pack now withholds state income tax somewhere", () => {
 
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
-  assert.equal(supported.length, 35); // 26 implemented + 9 no-tax
-  for (const state of ["CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "GA", "NC",
-    "AL", "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT", "OR", "SC",
+  assert.equal(supported.length, 37); // 28 implemented + 9 no-tax
+  for (const state of ["CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "NC",
+    "AL", "AR", "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT", "OR", "SC",
     "TX", "FL", "WA"]) {
     assert.ok(supported.includes(state), state);
   }
@@ -69,18 +69,18 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
 /* --------------------------------------------------------------------- */
 
 test("an untranscribed state is refused BY NAME, with the publication and the file", () => {
-  // Alabama and South Carolina now compute. Arkansas carries the refusal:
-  // the list of states this sentence can be written about is supposed to
-  // keep shrinking.
+  // Arkansas and Maine now compute. The District of Columbia carries the
+  // refusal: the list of states this sentence can be written about is
+  // supposed to keep shrinking.
   assert.throws(
-    () => requireUsStateWithholding("AR"),
+    () => requireUsStateWithholding("DC"),
     (error: unknown) => {
       const message = (error as Error).message;
-      assert.match(message, /AR income tax withholding is not implemented/);
-      assert.match(message, /Arkansas Withholding Tax Formula/);
-      assert.match(message, /engine\/src\/payroll\/us\/states\/ar\.ts/);
+      assert.match(message, /DC income tax withholding is not implemented/);
+      assert.match(message, /District of Columbia FR-230/);
+      assert.match(message, /engine\/src\/payroll\/us\/states\/dc\.ts/);
       assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
-      assert.match(message, /Implemented today: AL, AZ, CA, CO, CT, DE, GA, IL, IN, IA, KY, MD, MA, MI, MN, NJ, NY, NC, OH, OR, PA, SC, UT, VA, WV, WI/);
+      assert.match(message, /Implemented today: AL, AZ, AR, CA, CO, CT, DE, GA, IL, IN, IA, KY, ME, MD, MA, MI, MN, NJ, NY, NC, OH, OR, PA, SC, UT, VA, WV, WI/);
       return true;
     },
   );
@@ -172,7 +172,7 @@ test("state certificates store answers in ROWS, never in a new column", () => {
   for (const key of [
     "us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004", "us_ct_ctw4",
     "us_md_mw507", "us_md_mw507_nr", "us_or_orw4", "us_de_sdw4a",
-    "us_al_a4", "us_sc_scw4",
+    "us_al_a4", "us_sc_scw4", "us_ar_ar4ec", "us_me_w4me",
     "us_az_a4", "us_in_wh4", "us_ky_k4", "us_va_va4", "us_wv_it104",
     "us_ut_w4", "us_mn_w4mn", "us_mn_mwr", "us_wi_wt4", "us_wi_w220",
     "us_ia_iaw4", "us_ia_44016",
@@ -559,8 +559,8 @@ test("an employee with no residence recorded resolves exactly as before", () => 
   // Every profile row written before the residence attribute existed carries
   // null. Those employees must keep calculating identically.
   for (const state of [
-    "CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "GA", "NC",
-    "AL", "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT", "OR", "SC",
+    "CA", "CO", "CT", "DE", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "MD", "ME", "GA", "NC",
+    "AL", "AR", "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT", "OR", "SC",
   ]) {
     const resolved = resolveWithholding({ country: "US", workRegion: state });
     assert.equal(resolved.residenceSource, "assumed");

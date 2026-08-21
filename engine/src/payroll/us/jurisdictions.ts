@@ -23,6 +23,7 @@ import type {
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import { AL_CERTIFICATE, AL_REGION } from "./states/al-declaration.ts";
+import { AR_CERTIFICATE, AR_REGION } from "./states/ar-declaration.ts";
 import { AZ_CERTIFICATE, AZ_REGION } from "./states/az-declaration.ts";
 import { CO_CERTIFICATE, CO_REGION } from "./states/co-declaration.ts";
 import { CT_CERTIFICATE, CT_REGION } from "./states/ct-declaration.ts";
@@ -31,6 +32,7 @@ import { SC_CERTIFICATE, SC_REGION } from "./states/sc-declaration.ts";
 import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia-declaration.ts";
 import { IN_CERTIFICATE, IN_REGION } from "./states/in-declaration.ts";
 import { KY_CERTIFICATE, KY_REGION } from "./states/ky-declaration.ts";
+import { ME_CERTIFICATE, ME_REGION } from "./states/me-declaration.ts";
 import { MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION } from "./states/md-declaration.ts";
 import { OR_CERTIFICATE, OR_REGION } from "./states/or-declaration.ts";
 import { MN_CERTIFICATE, MN_MWR, MN_REGION } from "./states/mn-declaration.ts";
@@ -954,7 +956,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
     MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE, CT_CERTIFICATE,
     MD_CERTIFICATE, MD_MW507_NR, OR_CERTIFICATE, DE_CERTIFICATE,
-    AL_CERTIFICATE, SC_CERTIFICATE,
+    AL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
@@ -1355,6 +1357,7 @@ const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
   AZ: AZ_REGION, IN: IN_REGION, KY: KY_REGION, VA: VA_REGION, WV: WV_REGION,
   IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,
   MD: MD_REGION, OR: OR_REGION, DE: DE_REGION, AL: AL_REGION, SC: SC_REGION,
+  AR: AR_REGION, ME: ME_REGION,
 };
 
 /**

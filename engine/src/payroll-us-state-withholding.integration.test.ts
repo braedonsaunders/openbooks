@@ -417,10 +417,10 @@ test(
   async () => {
     const fx = await usPayrollOrg();
     try {
-      // Arkansas levies a wage income tax that this pack has not transcribed.
-      // Withholding the federal amount, a neighbour's amount, or nothing at all
-      // would each be silently wrong money on every stub.
-      const connecticut = await usEmployee(fx, "Hartford Hank", { state: "AR" });
+      // The District of Columbia levies a wage income tax that this pack has
+      // not transcribed. Withholding the federal amount, a neighbour's amount,
+      // or nothing at all would each be silently wrong money on every stub.
+      const connecticut = await usEmployee(fx, "Hartford Hank", { state: "DC" });
       // An Ohio municipality the employer has entered no rate for. Ohio
       // publishes no municipal withholding rate table, so the rate is
       // employer-entered — and an unentered one must stop the run, not withhold
@@ -442,8 +442,8 @@ test(
       assert.equal(await stubOf(fx, run.documentId, connecticut), null);
       const ctRefusal = result.errors.find((error) => error.employee === "Hartford Hank");
       assert.ok(ctRefusal);
-      assert.match(ctRefusal!.message, /AR income tax withholding is not implemented/);
-      assert.match(ctRefusal!.message, /Implemented: AL, AZ, CA, CO, CT, DE, GA, IL, IN, IA, KY, MD, MA, MI, MN, NJ, NY, NC, OH, OR, PA, SC, UT, VA, WV, WI/);
+      assert.match(ctRefusal!.message, /DC income tax withholding is not implemented/);
+      assert.match(ctRefusal!.message, /Implemented: AL, AZ, AR, CA, CO, CT, DE, GA, IL, IN, IA, KY, ME, MD, MA, MI, MN, NJ, NY, NC, OH, OR, PA, SC, UT, VA, WV, WI/);
 
       assert.equal(await stubOf(fx, run.documentId, ohio), null);
       const ohRefusal = result.errors.find((error) => error.employee === "Westerville Wes");
