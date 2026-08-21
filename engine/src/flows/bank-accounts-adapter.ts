@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
+import { businessToday } from "../business-date.ts";
 import { db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
@@ -153,7 +154,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     if (!legalFrom.includes(row.approvalStatus)) {
       throw new Error(`illegal bank-detail transition ${row.approvalStatus} → ${to}`);
     }
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await businessToday(ctx.orgId);
     await db
       .update(schema.partyBankAccounts)
       .set(
@@ -186,7 +187,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   async releaseApproval(subjectId, outcome, ctx): Promise<void> {
     const row = await loadRow(subjectId);
     if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = await businessToday(ctx.orgId);
     await db
       .update(schema.partyBankAccounts)
       .set(

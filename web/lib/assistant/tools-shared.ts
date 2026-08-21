@@ -50,10 +50,6 @@ export async function orgToday(orgId: string): Promise<string> {
   return businessToday(orgId);
 }
 
-export function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;

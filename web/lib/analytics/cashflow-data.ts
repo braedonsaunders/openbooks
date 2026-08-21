@@ -81,7 +81,7 @@ export interface CashflowData {
 }
 
 export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate?: string): Promise<CashflowData> {
-  const asOfIso = resolveAsOf(asOfDate);
+  const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, accountRows] = await Promise.all([

@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
@@ -238,9 +239,9 @@ export function buildWeekGrid(asOfIso: string, horizonWeeks: number): WeekGrid {
   return { asOfIso, asOf, start, end, weekStarts };
 }
 
-/** Clamp an as-of date to today (never forecast from the future). */
-export function resolveAsOf(asOfDate?: string): string {
-  const today = new Date().toISOString().slice(0, 10);
+/** Clamp an as-of date to the organization's business day (never forecast from the future). */
+export async function resolveAsOf(orgId: string, asOfDate?: string): Promise<string> {
+  const today = await businessToday(orgId);
   return asOfDate && asOfDate < today ? asOfDate : today;
 }
 

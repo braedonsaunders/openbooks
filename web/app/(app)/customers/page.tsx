@@ -46,7 +46,7 @@ export default async function CustomersHomePage({
   const tNav = await getTranslations('nav')
   const sp = await searchParams
 
-  const subView = await reportSubsidiaryView(sp.sub, resolveAsOf())
+  const subView = await reportSubsidiaryView(sp.sub, await resolveAsOf(authz.user.orgId))
   const [data, navGroups] = await Promise.all([
     customersHome(authz.user.orgId, subView.subsidiary?.ids),
     resolveNav(

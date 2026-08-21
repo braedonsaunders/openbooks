@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import type {
   ContinuousCloseEnrichmentInput,
@@ -232,7 +233,7 @@ async function financeEvidence(
     : null;
   const fromDate = typeof latest?.fromDate === "string" ? latest.fromDate : null;
   const toDate = typeof latest?.toDate === "string" ? latest.toDate : null;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(input.orgId);
   const tasks: [string, unknown][] = [
     ["financial_trends", { limit: 15 }],
     ["aging_ar_current", { side: "ar", asOf: today, limit: 50 }],
@@ -266,8 +267,11 @@ async function financeEvidence(
   };
 }
 
-function agentPrompt(input: ContinuousCloseEnrichmentInput, evidence: EvidencePacket | null): string {
-  const today = new Date().toISOString().slice(0, 10);
+function agentPrompt(
+  input: ContinuousCloseEnrichmentInput,
+  evidence: EvidencePacket | null,
+  today: string,
+): string {
   return [
     `Run id: ${input.runId}`,
     `Finding ids to investigate: ${input.findingIds.length ? input.findingIds.join(", ") : "none"}.`,
@@ -309,6 +313,7 @@ export async function enrichContinuousCloseRun(
   }
   const authz = systemAuthz(input.orgId, input.agentKey);
   const tools = buildToolRegistry(authz);
+  const today = await businessToday(input.orgId);
   const evidence = input.agentKey === "finance" ? await financeEvidence(input, authz) : null;
   const org = (await db.execute<{ locale: string }>(sql`
     select coalesce(settings->>'defaultLocale', 'en') as locale
@@ -324,7 +329,7 @@ export async function enrichContinuousCloseRun(
   try {
     result = await runBackgroundAgent(config, {
       system: agentSystemPrompt(input, config?.org?.name ?? null, org.rows[0]?.locale ?? "en", fiscal),
-      prompt: agentPrompt(input, evidence),
+      prompt: agentPrompt(input, evidence, today),
       tools,
       tier: input.analysis.modelTier,
       maxSteps: input.analysis.maxToolSteps,

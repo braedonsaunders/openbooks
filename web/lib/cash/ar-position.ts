@@ -95,7 +95,7 @@ export async function arPosition(
   apSettings: ApSettings,
   asOfDate?: string,
 ): Promise<ArPosition> {
-  const asOfIso = resolveAsOf(asOfDate);
+  const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs] = await Promise.all([

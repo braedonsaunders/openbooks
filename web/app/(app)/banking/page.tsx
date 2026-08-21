@@ -49,7 +49,7 @@ export default async function BankingHomePage({
 
   // Subsidiary context — multi-subsidiary orgs get a switcher; the whole page
   // (roster, balances, trend, badges) scopes to the selected view.
-  const subView = await reportSubsidiaryView(sp.sub, resolveAsOf())
+  const subView = await reportSubsidiaryView(sp.sub, await resolveAsOf(authz.user.orgId))
 
   const [data, rosterPrefs, navGroups] = await Promise.all([
     bankingHome(authz.user.orgId, subView.subsidiary?.ids),

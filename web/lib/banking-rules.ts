@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
@@ -57,7 +58,7 @@ export async function ensureOpenReconciliation(orgId: string, userId: string, ac
              order by statement_date desc, imported_at desc limit 1) as closing
       from bank_statements where account_id = ${accountId} and org_id = ${orgId}
   `))
-  const throughDate = latest.rows[0]?.through_date ?? new Date().toISOString().slice(0, 10)
+  const throughDate = latest.rows[0]?.through_date ?? await businessToday(orgId)
   const statementBalance = latest.rows[0]?.closing ?? '0'
   const rec = await startReconciliation({ accountId, throughDate, statementBalance }, { orgId, userId })
   return rec.id

@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type InvoicingProfile, type BackupProfile } from '@openbooks/schema'
 
@@ -37,9 +38,10 @@ function timeAndMaterials(): ResolvedProjectType {
 export async function loadProjectType(
   orgId: string,
   projectId: string,
-  asOf = new Date().toISOString().slice(0, 10),
+  asOf?: string,
 ): Promise<ResolvedProjectType> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+  const effectiveAsOf = asOf ?? await businessToday(orgId)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveAsOf)) {
     throw new Error('project type asOf must be YYYY-MM-DD')
   }
   const r = (await db.execute<{ id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; fp_effective_from: string | null; ip: InvoicingProfile | null; bp: BackupProfile | null }>(sql`
@@ -54,8 +56,8 @@ export async function loadProjectType(
           from project_financial_profile_versions v
          where v.org_id = p.org_id
            and v.project_type_id = pt.id
-           and v.effective_from <= ${asOf}
-           and (v.effective_to is null or v.effective_to >= ${asOf})
+           and v.effective_from <= ${effectiveAsOf}
+           and (v.effective_to is null or v.effective_to >= ${effectiveAsOf})
          order by v.effective_from desc
          limit 1
       ) version on true
