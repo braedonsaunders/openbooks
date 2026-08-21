@@ -11,6 +11,7 @@ import {
 } from '../../../../../lib/report-pdf'
 import { reportCsvOptions } from '../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
 
@@ -45,7 +46,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const data = runResultToExportData(result, { title: view.name, dateRangeLabel: '' })
-  const filename = `${safeName(view.slug)}-${new Date().toISOString().slice(0, 10)}`
+  const filename = `${safeName(view.slug)}-${await businessToday(user.orgId)}`
 
   if (format === 'csv') {
     const { sectionHeader } = await reportCsvOptions()

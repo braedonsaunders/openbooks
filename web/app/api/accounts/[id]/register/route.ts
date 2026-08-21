@@ -20,6 +20,7 @@ import {
 import { reportCsvOptions } from '../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
 import { decimalCmp, decimalSum } from '../../../../../lib/statement-format'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
 
@@ -103,7 +104,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
     })
     const filename = safeName(
-      `${result.account.number ?? result.account.name}-register-${new Date().toISOString().slice(0, 10)}`,
+      `${result.account.number ?? result.account.name}-register-${await businessToday(gate.user.orgId)}`,
     )
     const format = requestedFormat as AccountRegisterExportFormat
     if (format === 'csv') {

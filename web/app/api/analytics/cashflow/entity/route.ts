@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentUser } from "../../../../../lib/auth";
 
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
   const side = url.searchParams.get("side") === "ap" ? "ap" : "ar";
   if (!party) return NextResponse.json({ error: "party required" }, { status: 400 });
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(user.orgId);
 
   const [pay, open, recent] = await Promise.all([
     // Avg days-to-pay + total paid over the trailing 12 months.
@@ -29,12 +30,13 @@ export async function GET(req: Request) {
       select avg(pe.posting_date - be.posting_date) as avg_days,
         coalesce(sum(ap.amount), 0) as total_paid, count(*) as payment_count
       from applications ap
-      join journal_lines bl on bl.id = ap.to_line_id
-      join journal_entries be on be.id = bl.entry_id
-      join journal_lines pl on pl.id = ap.from_line_id
-      join journal_entries pe on pe.id = pl.entry_id
-      join accounts ba on ba.id = bl.account_id
-      where ba.type = ${acctType} and ap.unapplied_at is null and bl.party_id = ${party}
+      join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
+      join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
+      join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
+      join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
+      join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
+      where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
+        and bl.party_id = ${party}
         and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
     `) as Promise<any>,
     // Open items with days-overdue. Applications drain from EITHER side of the
@@ -48,17 +50,19 @@ export async function GET(req: Request) {
           je.posting_date::text as tran_date, jl.due_date::text as due_date,
           abs(jl.amount) - coalesce((
             select sum(x.amount) from applications x
-             where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
+             where x.org_id = jl.org_id
+               and (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
           ), 0) as remaining
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-        join accounts a on a.id = jl.account_id
-        left join documents d on d.id = je.source_document_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+          and je.status in ('posted', 'reversed')
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+        left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
         where jl.org_id = ${user.orgId} and jl.is_open_item and a.type = ${acctType}
           and jl.party_id = ${party}
           and ${side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`}
       )
-      select * from oi where remaining > 0.005
+      select * from oi where remaining > 0
       order by due_date nulls last
     `) as Promise<any>,
     // Recent payments (drawer paginates client-side).

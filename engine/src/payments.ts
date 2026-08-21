@@ -1589,8 +1589,8 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
     select i.id, p.display_name as payee, i.payee_bank_account_id,
            b.approved_at, b.is_active, b.routing, b.account_number_encrypted, i.currency
       from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      left join party_bank_accounts b on b.id = i.payee_bank_account_id
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+      left join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
   `));
 
@@ -1694,9 +1694,9 @@ export async function postPaymentRun(
     select i.id, i.payment_document_id, i.status, p.display_name as payee,
            d.status as document_status
       from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      left join documents d on d.id = i.payment_document_id
-     where i.payment_run_id = ${runId} and i.status = 'pending'
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status = 'pending'
      order by p.display_name
   `));
 
@@ -1800,11 +1800,11 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
            p.display_name as payee, vr.eft_notification_email as email,
            bp.auto_remittance, r.direction, o.name as org_name
       from payment_instructions i
-      join payment_runs r on r.id = i.payment_run_id
-      join payment_bank_profiles bp on bp.id = r.payment_bank_profile_id
-      join parties p on p.id = i.payee_party_id
+      join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
+      join payment_bank_profiles bp on bp.id = r.payment_bank_profile_id and bp.org_id = i.org_id
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
       left join vendor_roles vr on vr.party_id = p.id
-      left join documents d on d.id = i.payment_document_id
+      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
       join orgs o on o.id = i.org_id
      where i.id = ${instructionId} and i.org_id = ${orgId}
   `));
