@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { now } from "./clock.ts";
+import { businessToday } from "./business-date.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import {
   PAYROLL_PAYMENT_METHODS,
@@ -1102,7 +1103,8 @@ function businessDaysBetween(fromIso: string, toIso: string): number {
 /** What this payday costs, and whether the chosen bank can carry it. */
 export async function payRunFunding(orgId: string, documentId: string): Promise<PayRunFunding> {
   const run = await runContext(orgId, documentId);
-  const payDate = run?.pay_date ?? new Date().toISOString().slice(0, 10);
+  const today = await businessToday(orgId);
+  const payDate = run?.pay_date ?? today;
 
   const totals = (await db.execute<{ net: string; gross: string; employer: string }>(sql`
     select coalesce(sum(net_pay), 0)::text as net,
@@ -1142,7 +1144,7 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
     liabilities,
     totalCost: add(t.net, liabilities),
     payDate,
-    businessDaysToPayDate: businessDaysBetween(new Date().toISOString().slice(0, 10), payDate),
+    businessDaysToPayDate: businessDaysBetween(today, payDate),
     accounts: accounts.rows.map((a) => ({ ...a, sufficient: cmp(a.balance, t.net) >= 0 })),
   };
 }

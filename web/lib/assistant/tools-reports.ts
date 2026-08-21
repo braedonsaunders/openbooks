@@ -22,7 +22,7 @@ import {
   dateInput,
   uuidInput,
   capList,
-  today,
+  orgToday,
   periodPresetInput,
   rangeInputFields,
   resolveToolRange,
@@ -230,7 +230,7 @@ const agingDetailTool: AssistantToolDef = {
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
-    const asOf = a.asOf ?? today();
+    const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const r = await agingDetail(a.side, asOf, undefined, authz.user.orgId);
     const limit = Math.min(a.limit ?? 100, 200);
     return {

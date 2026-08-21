@@ -104,6 +104,9 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   bankFeeds: ['app/api/banking/bank-feeds'],
   crm: ['app/api/crm'],
   subcontractorCompliance: ['app/api/compliance'],
+  scripts: ['app/api/scripts'],
+  onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers'],
+  queryConsole: ['app/api/query'],
 }
 
 function routeFilesUnder(dir: string): string[] {

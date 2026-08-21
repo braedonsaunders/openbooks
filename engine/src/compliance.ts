@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, cmp, neg } from "./money.ts";
 
 /**
@@ -623,7 +624,7 @@ export async function vendorComplianceStatus(args: {
   runner?: Pick<typeof db, "execute">;
 }): Promise<VendorComplianceStatus> {
   const runner = args.runner ?? db;
-  const asOf = args.asOf ?? new Date().toISOString().slice(0, 10);
+  const asOf = args.asOf ?? (await businessToday(args.orgId));
   const [policies, inputs] = await Promise.all([
     loadRequirementPolicies(args.orgId, runner),
     loadVendorComplianceInputs(args.orgId, args.partyId, runner),
@@ -758,6 +759,7 @@ export async function evaluateBillsForRelease(args: {
   if (!(await complianceFeatureEnabled(args.orgId, runner))) {
     // Feature off: every bill clears, and we say so explicitly rather than
     // returning an empty list a caller could mistake for "nothing checked".
+    const asOfOff = args.asOf ?? (await businessToday(args.orgId));
     return args.bills.map((bill) => ({
       documentId: bill.documentId,
       documentNumber: bill.documentNumber,
@@ -769,7 +771,7 @@ export async function evaluateBillsForRelease(args: {
         partyId: bill.partyId,
         classId: null,
         tracked: false,
-        asOf: args.asOf ?? new Date().toISOString().slice(0, 10),
+        asOf: asOfOff,
         projectId: bill.projectId,
         findings: [],
         overall: "compliant" as const,
@@ -790,7 +792,7 @@ export async function evaluateBillsForRelease(args: {
       },
     }));
   }
-  const asOf = args.asOf ?? new Date().toISOString().slice(0, 10);
+  const asOf = args.asOf ?? (await businessToday(args.orgId));
   const policies = await loadRequirementPolicies(args.orgId, runner);
   const partyIds = [...new Set(args.bills.map((b) => b.partyId))];
   const inputs = new Map<string, VendorComplianceInputs>();
