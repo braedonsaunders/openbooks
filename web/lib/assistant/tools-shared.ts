@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { PERIOD_PRESET_IDS, type DateRange } from "@openbooks/reports";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { fiscalStartMonth } from "../fiscal";
 import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
@@ -42,7 +43,11 @@ export async function resolveToolRange(
   orgId: string,
   a: RangeArgs,
 ): Promise<DateRange | { error: string }> {
-  return resolveRangeArgs(a, await fiscalStartMonth(orgId), today());
+  return resolveRangeArgs(a, await fiscalStartMonth(orgId), await businessToday(orgId));
+}
+
+export async function orgToday(orgId: string): Promise<string> {
+  return businessToday(orgId);
 }
 
 export function today(): string {

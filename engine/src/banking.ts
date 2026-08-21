@@ -447,8 +447,11 @@ export function parseBai2(text: string): ParsedStatement {
       const bankRef = f[4] || null;
       const custRef = f[5] || null;
       const textDesc = f.slice(6).join(",").trim() || null;
+      if (!statementDate) {
+        throw new BankingError("BAI2: type-16 transaction before a type-02 header date");
+      }
       lines.push({
-        postedOn: statementDate ?? new Date().toISOString().slice(0, 10),
+        postedOn: statementDate,
         amount: signed,
         description: textDesc,
         counterpartyRef: custRef ?? bankRef,

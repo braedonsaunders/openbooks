@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import {
   add, cmp, div, isZero, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum,
 } from "./money.ts";
@@ -666,7 +667,7 @@ export async function entitlementBalances(
   const excludeRunDocumentId = opts.excludeRunDocumentId ?? null;
   const plans = opts.plans ?? await entitlementPlans(orgId, executor);
   if (plans.length === 0) return [];
-  const onDate = asOf ?? new Date().toISOString().slice(0, 10);
+  const onDate = asOf ?? (await businessToday(orgId));
   const sums = (await executor.execute<{ plan_id: string; balance: string; last_movement: string | null }>(sql`
     select plan_id, sum(amount) as balance, max(movement_date) as last_movement
       from entitlement_ledger
@@ -1046,7 +1047,7 @@ export async function entitlementOpenings(
   orgId: string,
   opts: { asOf?: string } = {},
 ): Promise<EntitlementOpeningsResult> {
-  const asOf = opts.asOf ? assertMovementDate(opts.asOf) : new Date().toISOString().slice(0, 10);
+  const asOf = opts.asOf ? assertMovementDate(opts.asOf) : await businessToday(orgId);
   const plans = await entitlementPlans(orgId);
 
   const people = (await db.execute<Record<string, unknown>>(sql`
@@ -1409,7 +1410,7 @@ export async function employeesNearLimit(
   orgId: string,
   opts: { asOf?: string; planId?: string } = {},
 ): Promise<NearLimitEmployee[]> {
-  const onDate = opts.asOf ?? new Date().toISOString().slice(0, 10);
+  const onDate = opts.asOf ?? (await businessToday(orgId));
   const rows = (await db.execute<{
       plan_id: string; plan_code: string; plan_name: string; unit: string;
       employee_party_id: string; employee_name: string; balance: string;

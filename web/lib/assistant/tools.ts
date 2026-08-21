@@ -15,7 +15,7 @@ import {
 } from "../reports";
 import { openItems } from "../cash/open-items";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
-import { rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import { orgToday, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
@@ -33,10 +33,6 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD");
 const uuidInput = z.string().regex(UUID_RE, "uuid");
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function num(v: unknown): number {
   const n = Number(v);
@@ -113,7 +109,7 @@ const findAccounts: AssistantToolDef = {
         total: matches.length,
         returned: Math.min(matches.length, limit),
         truncated: matches.length > limit,
-        asOf: a.asOf ?? today(),
+        asOf: a.asOf ?? (await orgToday(authz.user.orgId)),
         items: matches.slice(0, limit).map((r) => ({
           id: r.id,
           number: r.number,
@@ -651,7 +647,8 @@ const agingTool: AssistantToolDef = {
       return { ok: false, error: "forbidden" };
     }
     const limit = Math.min(a.limit ?? 30, 100);
-    const r = await agingByParty(a.side, a.asOf ?? today(), undefined, authz.user.orgId);
+    const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
+    const r = await agingByParty(a.side, asOf, undefined, authz.user.orgId);
     return {
       ok: true,
       data: {
@@ -670,7 +667,7 @@ const agingTool: AssistantToolDef = {
           over90: row.b4,
           total: row.total,
         })),
-        href: `/reports/aging?side=${a.side}&asOf=${a.asOf ?? today()}`,
+        href: `/reports/aging?side=${a.side}&asOf=${asOf}`,
       },
     };
   },
@@ -1030,7 +1027,7 @@ const listOpenItems: AssistantToolDef = {
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
-    const asOf = a.asOf ?? today();
+    const asOf = a.asOf ?? (await orgToday(authz.user.orgId));
     const all = await openItems(authz.user.orgId, a.side, asOf);
     const scoped = a.partyId ? all.filter((item) => item.partyId === a.partyId) : all;
     scoped.sort((x, y) =>
