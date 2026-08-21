@@ -12,15 +12,18 @@ import { FilingWorkspace } from '../_ui/filing-workspace'
  */
 export function SeparationsView({
   year,
+  currentYear,
   sections,
 }: {
   year: number
+  currentYear: number
   sections: YearEndFilingSection[]
 }) {
   const t = useTranslations('payroll.separations')
   return (
     <FilingWorkspace
       year={year}
+      currentYear={currentYear}
       path="/payroll/separations"
       emptyTitle={t('noFilings')}
       groups={[{ key: 'separation', sections }]}

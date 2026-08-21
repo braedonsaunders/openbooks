@@ -68,6 +68,7 @@ export default async function PayrollOpeningBalancesPage({
       <div className="space-y-8">
         <OpeningBalancesView
           year={year}
+          currentYear={currentYear}
           initial={data}
           fields={OPENING_BALANCE_FIELDS.map((field) => ({
             key: field.key, label: field.label, help: field.help, packs: [...field.packs],

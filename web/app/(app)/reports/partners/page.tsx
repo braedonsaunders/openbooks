@@ -16,6 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { decimalCmp, decimalNeg, decimalSum } from '../../../../lib/statement-format'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { resolveOrgId } from '../../../../lib/org-scope'
 
 export const dynamic = 'force-dynamic'
 const PER_PAGE = 50
@@ -40,7 +42,7 @@ export default async function Partners({
   const presented = (value: string) => k === 'payable' ? decimalNeg(value) : value
   const total = presented(decimalSum(filtered.map((row) => row.balance)))
   const rows = filtered.slice((params.page - 1) * PER_PAGE, params.page * PER_PAGE)
-  const asOf = new Date().toISOString().slice(0, 10)
+  const asOf = await businessToday(await resolveOrgId())
   const accountTypes = [k === 'payable' ? 'liability_payable' : 'asset_receivable']
 
   return (
