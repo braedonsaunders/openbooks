@@ -59,7 +59,7 @@ export default async function PayrollYearEndPage({
         />
       }
     >
-      <YearEndView year={year} sections={sections} />
+      <YearEndView year={year} currentYear={currentYear} sections={sections} />
     </ListPageLayout>
   )
 }

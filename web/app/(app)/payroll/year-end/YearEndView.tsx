@@ -14,15 +14,18 @@ import { FilingWorkspace } from '../_ui/filing-workspace'
  */
 export function YearEndView({
   year,
+  currentYear,
   sections,
 }: {
   year: number
+  currentYear: number
   sections: YearEndFilingSection[]
 }) {
   const t = useTranslations('payroll.yearEnd')
   return (
     <FilingWorkspace
       year={year}
+      currentYear={currentYear}
       path="/payroll/year-end"
       emptyTitle={t('noFilings')}
       // The original → amended → cancelled lifecycle belongs to year-end

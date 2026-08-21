@@ -144,12 +144,15 @@ export interface FilingGroup {
  */
 export function FilingWorkspace({
   year,
+  currentYear,
   path,
   groups,
   emptyTitle,
   amendments = false,
 }: {
   year: number
+  /** Organization business year — not the UTC calendar year. */
+  currentYear: number
   /** The surface's own route, for the year picker ("/payroll/year-end"). */
   path: string
   groups: FilingGroup[]
@@ -168,7 +171,7 @@ export function FilingWorkspace({
   const t = useTranslations('payroll.filings')
   const router = useRouter()
   const { money } = useMoney()
-  const years = Array.from({ length: 6 }, (_, i) => new Date().getUTCFullYear() - i)
+  const years = Array.from({ length: 6 }, (_, i) => currentYear - i)
   const sections = groups.flatMap((group) => group.sections)
 
   const defaultSection = sections.find((s) => s.data.rows.length > 0) ?? sections[0] ?? null

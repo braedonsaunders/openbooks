@@ -55,7 +55,7 @@ export default async function PayrollSeparationsPage({
         />
       }
     >
-      <SeparationsView year={year} sections={sections} />
+      <SeparationsView year={year} currentYear={currentYear} sections={sections} />
     </ListPageLayout>
   )
 }

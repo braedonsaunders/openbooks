@@ -54,12 +54,15 @@ interface SaveError {
  */
 export function OpeningBalancesView({
   year,
+  currentYear,
   initial,
   fields,
   components,
   canManage,
 }: {
   year: number
+  /** Organization business year — not the UTC calendar year. */
+  currentYear: number
   initial: OpeningBalanceYear
   fields: FieldDescriptor[]
   components: ComponentDescriptor[]
@@ -81,11 +84,10 @@ export function OpeningBalancesView({
 
   const years = useMemo(() => {
     const span = new Set<number>(initial.years)
-    const now = new Date().getUTCFullYear()
-    for (let y = now + 1; y >= now - 4; y--) span.add(y)
+    for (let y = currentYear + 1; y >= currentYear - 4; y--) span.add(y)
     span.add(year)
     return [...span].sort((a, b) => b - a)
-  }, [initial.years, year])
+  }, [initial.years, year, currentYear])
 
   // Only show a column some employee's country pack actually reads. A US-only
   // payroll has no CPP2, and a column of permanently blank boxes is noise that
