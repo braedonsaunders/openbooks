@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 
 /**
@@ -102,11 +103,14 @@ function gradeOf(score: number): Grade {
   return "F";
 }
 
-export async function vendorData(period: { from: string; to: string; label: string }): Promise<VendorData> {
+export async function vendorData(
+  period: { from: string; to: string; label: string },
+  orgId: string,
+): Promise<VendorData> {
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(orgId);
   const ref = to < today ? to : today;
   const end = new Date(to + "T00:00:00Z");
   const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1));
@@ -118,7 +122,7 @@ export async function vendorData(period: { from: string; to: string; label: stri
     db.execute(sql`
       with ew as materialized (
         select id, posting_date from journal_entries
-         where posting_date >= ${pFrom} and posting_date <= ${to}
+         where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
       )
       select p.id, coalesce(p.display_name, 'Unknown') as name,
         sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
@@ -127,25 +131,27 @@ export async function vendorData(period: { from: string; to: string; label: stri
       join journal_lines l on l.entry_id = e.id
       join accounts a on a.id = l.account_id
       join parties p on p.id = l.party_id
-      where a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
+      where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
+        and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by p.id, p.display_name
     `) as Promise<any>,
     db.execute(sql`
       select party_id as id, count(*)::int as bills, max(posting_date) as last_bill
       from documents
-      where kind = 'vendor_bill' and party_id is not null and status = 'posted' and posting_date <= ${ref}
+      where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted' and posting_date <= ${ref}
       group by party_id
     `) as Promise<any>,
     db.execute(sql`
       with ew as materialized (
         select id, posting_date from journal_entries
-         where posting_date >= ${startIso} and posting_date <= ${to}
+         where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
       )
       select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as spend
       from ew e
       join journal_lines l on l.entry_id = e.id
       join accounts a on a.id = l.account_id
-      where a.type in ('cogs','expense','expense_deferred')
+      where l.org_id = ${orgId} and a.org_id = ${orgId}
+        and a.type in ('cogs','expense','expense_deferred')
       group by 1
     `) as Promise<any>,
     // Payment behaviour: each AP open-item line paid via an application; compare
@@ -162,7 +168,9 @@ export async function vendorData(period: { from: string; to: string; label: stri
       join journal_lines pl on pl.id = a.from_line_id
       join journal_entries pe on pe.id = pl.entry_id
       join accounts ba on ba.id = bl.account_id
-      where ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null
+      where a.org_id = ${orgId} and bl.org_id = ${orgId} and be.org_id = ${orgId}
+        and pl.org_id = ${orgId} and pe.org_id = ${orgId} and ba.org_id = ${orgId}
+        and ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null
         and be.posting_date >= ${from} and be.posting_date <= ${to}
       group by bl.party_id
     `) as Promise<any>,
