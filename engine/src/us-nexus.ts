@@ -9,12 +9,17 @@
  * register (a tax_registration) before it is late.
  *
  * The evaluator is pure (no I/O) and fully unit-tested; the ledger aggregation
- * lives in the DB wrapper (us-nexus-ledger.ts).
+ * lives in the DB wrapper (us-nexus-ledger.ts). Sales figures are money strings
+ * and the met/not-met decision uses exact comparison — a JS number would be
+ * exact at these dollar scales, but the ledger already holds numeric(19,4) and
+ * converting it just to compare would be a second, lossy representation.
  *
  * Thresholds are maintained REFERENCE DATA (as of 2026-01-01). States revise them
  * — several have dropped the 200-transaction test entirely — so the set below is
  * a documented starting point to verify per state, not legal advice.
  */
+
+import { cmp, toUnits } from './money.ts'
 
 export type NexusMeasure = 'sales_only' | 'sales_or_txn' | 'sales_and_txn'
 
@@ -55,7 +60,8 @@ export function thresholdForState(state: string): StateNexusThreshold {
 
 export interface StateSales {
   state: string
-  salesUsd: number
+  /** Posted sales converted to USD, numeric(19,4) string. */
+  salesUsd: string
   txnCount: number
 }
 
@@ -63,7 +69,7 @@ export type NexusStatus = 'none' | 'approaching' | 'met'
 
 export interface NexusEvaluation {
   state: string
-  salesUsd: number
+  salesUsd: string
   txnCount: number
   threshold: StateNexusThreshold
   status: NexusStatus
@@ -72,8 +78,8 @@ export interface NexusEvaluation {
 }
 
 /** Whether the state's threshold is met by these figures. */
-function isMet(t: StateNexusThreshold, salesUsd: number, txnCount: number): boolean {
-  const salesMet = salesUsd >= t.salesUsd
+function isMet(t: StateNexusThreshold, salesUsd: string, txnCount: number): boolean {
+  const salesMet = cmp(salesUsd, String(t.salesUsd)) >= 0
   const txnMet = t.txnCount != null && txnCount >= t.txnCount
   if (t.measure === 'sales_only') return salesMet
   if (t.measure === 'sales_and_txn') return salesMet && (t.txnCount == null ? true : txnMet)
@@ -81,8 +87,9 @@ function isMet(t: StateNexusThreshold, salesUsd: number, txnCount: number): bool
 }
 
 /** Progress toward the binding trigger (max for OR, min for AND, sales for ONLY). */
-function progressOf(t: StateNexusThreshold, salesUsd: number, txnCount: number): number {
-  const salesPct = t.salesUsd > 0 ? salesUsd / t.salesUsd : 0
+function progressOf(t: StateNexusThreshold, salesUsd: string, txnCount: number): number {
+  // The meter is UI. The status decision above is exact.
+  const salesPct = t.salesUsd > 0 ? Number(toUnits(salesUsd)) / Number(toUnits(String(t.salesUsd))) : 0
   const txnPct = t.txnCount && t.txnCount > 0 ? txnCount / t.txnCount : 0
   if (t.measure === 'sales_only' || t.txnCount == null) return salesPct
   if (t.measure === 'sales_and_txn') return Math.min(salesPct, txnPct)

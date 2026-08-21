@@ -18,13 +18,7 @@ export interface UsNexusResult {
   to: string
   states: NexusEvaluation[]
   /** Posted US sales that could not be attributed to a state (no ship-to on file). */
-  unattributed: { salesUsd: number; txnCount: number }
-}
-
-function moneyToNumber(value: string): number {
-  // Threshold comparison is dollar-scale (100_000). Four-decimal money as a
-  // JS number is exact below 2^53 / 1e4 ≈ 900 billion.
-  return Number(value)
+  unattributed: { salesUsd: string; txnCount: number }
 }
 
 export async function computeUsNexusStatus(orgId: string, from: string, to: string): Promise<UsNexusResult> {
@@ -97,11 +91,10 @@ export async function computeUsNexusStatus(orgId: string, from: string, to: stri
   }
 
   const attributed: StateSales[] = []
-  let unattributed = { salesUsd: 0, txnCount: 0 }
+  let unattributed = { salesUsd: '0', txnCount: 0 }
   for (const [state, agg] of usdByState) {
-    const salesUsd = moneyToNumber(agg.sales)
-    if (state) attributed.push({ state: state.toUpperCase(), salesUsd, txnCount: agg.txnCount })
-    else unattributed = { salesUsd, txnCount: agg.txnCount }
+    if (state) attributed.push({ state: state.toUpperCase(), salesUsd: agg.sales, txnCount: agg.txnCount })
+    else unattributed = { salesUsd: agg.sales, txnCount: agg.txnCount }
   }
 
   return { from, to, states: evaluateUsNexus(attributed), unattributed }

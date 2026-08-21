@@ -27,6 +27,7 @@ test("a balanced two-line journal validates and normalizes", () => {
 
 test("account codes are accepted in place of ids", () => {
   const v = validateJournalInput({
+    documentDate: "2026-07-16",
     lines: [
       { accountCode: "5100", amount: 10 },
       { accountCode: "2100", amount: -10 },
@@ -37,52 +38,55 @@ test("account codes are accepted in place of ids", () => {
 
 test("an unbalanced journal is refused", () => {
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: A, amount: 100 }, { accountId: B, amount: -99.99 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 100 }, { accountId: B, amount: -99.99 }] }),
     (e: Error) => e instanceof JournalWriteError && /not balanced/.test(e.message),
   );
 });
 
 test("fewer than 2 lines is refused", () => {
-  assert.throws(() => validateJournalInput({ lines: [{ accountId: A, amount: 0 }] }), /at least 2 lines/);
+  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 0 }] }), /at least 2 lines/);
 });
 
 test("zero and non-numeric amounts are refused", () => {
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: A, amount: 0 }, { accountId: B, amount: 0 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 0 }, { accountId: B, amount: 0 }] }),
     /nonzero number/,
   );
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: -1 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: -1 }] }),
     /nonzero number/,
   );
 });
 
 test("a line without any account reference is refused", () => {
   assert.throws(
-    () => validateJournalInput({ lines: [{ amount: 5 }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ amount: 5 }, { accountId: B, amount: -5 }] }),
     /accountId or accountCode required/,
   );
 });
 
 test("a malformed accountId is refused", () => {
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: "nope", amount: 5 }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: "nope", amount: 5 }, { accountId: B, amount: -5 }] }),
     /invalid accountId/,
   );
 });
 
-test("bad dates are refused; missing date defaults to today", () => {
+test("bad dates are refused; a missing date is refused rather than defaulted to UTC today", () => {
   assert.throws(
     () => validateJournalInput({ documentDate: "07/16/2026", lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
     /invalid documentDate/,
   );
-  const v = validateJournalInput({ lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] });
-  assert.match(v.documentDate, /^\d{4}-\d{2}-\d{2}$/);
+  assert.throws(
+    () => validateJournalInput({ lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
+    /documentDate is required/,
+  );
 });
 
 test("4dp rounding keeps a float-noise journal balanced", () => {
   // 0.1 + 0.2 - 0.3 = 5.55e-17 in floats; must still count as balanced.
   const v = validateJournalInput({
+    documentDate: "2026-07-16",
     lines: [
       { accountId: A, amount: 0.1 },
       { accountId: A, amount: 0.2 },
@@ -94,5 +98,5 @@ test("4dp rounding keeps a float-noise journal balanced", () => {
 
 test("line cap is enforced", () => {
   const lines = Array.from({ length: 201 }, (_, i) => ({ accountId: A, amount: i % 2 === 0 ? 1 : -1 }));
-  assert.throws(() => validateJournalInput({ lines }), /too many lines/);
+  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines }), /too many lines/);
 });

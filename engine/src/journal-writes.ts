@@ -71,7 +71,15 @@ export function validateJournalInput(input: ScriptJournalInput): {
     throw new JournalWriteError("journal needs at least 2 lines");
   }
   if (input.lines.length > MAX_LINES) throw new JournalWriteError(`too many lines (max ${MAX_LINES})`);
-  const documentDate = input.documentDate ?? new Date().toISOString().slice(0, 10);
+  // The validator is pure and cannot know the tenant. Inventing UTC today
+  // here would stamp journals onto the wrong day for every org that is not
+  // on UTC. createScriptJournal applies businessToday before calling this.
+  if (input.documentDate == null || input.documentDate === "") {
+    throw new JournalWriteError(
+      "documentDate is required (YYYY-MM-DD); apply the organization's business day before calling the validator",
+    );
+  }
+  const documentDate = input.documentDate;
   if (!DATE_RE.test(documentDate)) throw new JournalWriteError(`invalid documentDate "${input.documentDate}" (use YYYY-MM-DD)`);
 
   const amounts: string[] = [];
@@ -132,8 +140,8 @@ export async function createScriptJournal(
   opts: { post?: boolean } = {},
 ): Promise<ScriptJournalResult> {
   // The pure validator cannot know the tenant, so the org's business-day
-  // default is applied here; validateJournalInput keeps a UTC fallback for
-  // direct callers.
+  // default is applied here. The validator refuses a missing date rather
+  // than inventing UTC today.
   const effective: ScriptJournalInput = input.documentDate
     ? input
     : { ...input, documentDate: await businessToday(orgId) };
