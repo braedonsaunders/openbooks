@@ -1862,6 +1862,6 @@ export async function fiscalYearRange(fyEndYear: number) {
 }
 
 /** The current fiscal year (end year) for today, per the org's start month. */
-export async function currentFiscalYearEnd(today = new Date().toISOString().slice(0, 10)): Promise<number> {
+export async function currentFiscalYearEnd(today?: string): Promise<number> {
   return currentFiscalYear(today);
 }
