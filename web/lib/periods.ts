@@ -7,6 +7,7 @@ import {
   resolvePreset,
   type DateRange,
 } from '@openbooks/reports'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { fiscalStartMonth } from './fiscal'
 import { resolveOrgId } from './org-scope'
 
@@ -67,15 +68,15 @@ async function accountingPeriodWindow(
 
 /**
  * Resolve a period selection into concrete dates. `today` defaults to the
- * server clock; callers can pin it for deterministic exports.
+ * organization's business day; callers can pin it for deterministic exports.
  */
 export async function resolvePeriod(
   presetId: string | null | undefined,
   opts: { customFrom?: string | null; customTo?: string | null; today?: string; orgId?: string } = {},
 ): Promise<ResolvedPeriod> {
-  const today = opts.today ?? new Date().toISOString().slice(0, 10)
-  const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
   const orgId = await resolveOrgId(opts.orgId)
+  const today = opts.today ?? await businessToday(orgId)
+  const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
   const startMonth = await fiscalStartMonth(orgId)
 
   // Accounting-period-aware presets: prefer real period rows.

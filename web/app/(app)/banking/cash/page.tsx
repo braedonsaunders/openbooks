@@ -41,7 +41,7 @@ export default async function BankingCashPage({
 
   // Subsidiary context (multi-subsidiary orgs): the whole cockpit — cash,
   // open items, SQL-backed forecast categories — scopes to the selected view.
-  const asOfIso = resolveAsOf()
+  const asOfIso = await resolveAsOf(authz.user.orgId)
   const subView = await reportSubsidiaryView(sp.sub, asOfIso)
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')

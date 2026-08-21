@@ -1,4 +1,5 @@
 import "server-only";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { can } from "../authz";
 import { analyticsConfig } from "../analytics/config";
 import { cashPosition } from "../cash/cash-position";
@@ -91,7 +92,7 @@ async function closeSection(context: ApplicationContext) {
 }
 
 export async function orgVitals(context: ApplicationContext) {
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = await businessToday(context.authz.user.orgId);
   const [cash, arAging, apAging, approvals, close] = await Promise.all([
     cashSection(context),
     agingSection(context, "ar", asOf),

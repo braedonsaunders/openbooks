@@ -8,7 +8,7 @@ import { entitlementBalances } from "@openbooks/engine/src/payroll-entitlements.
 import { payrollRemittanceSummary } from "@openbooks/engine/src/payroll-remittance.ts";
 import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput, num, capList } from "./tools-shared";
+import { dateInput, uuidInput, num, capList, orgToday } from "./tools-shared";
 
 /**
  * Payroll read/search tools for the agentic assistant. Every tool is
@@ -300,7 +300,7 @@ const payrollEntitlements: AssistantToolDef = {
       data: {
         employeePartyId: a.employeePartyId,
         employeeName: exists.rows[0].display_name,
-        asOf: a.asOfDate ?? new Date().toISOString().slice(0, 10),
+        asOf: a.asOfDate ?? (await orgToday(authz.user.orgId)),
         balances: capped.items,
         truncated: capped.truncated,
         href: "/payroll",

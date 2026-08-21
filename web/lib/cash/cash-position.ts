@@ -177,7 +177,7 @@ export async function cashPosition(
    * SQL-backed forecast categories. Omitted = whole company, unchanged SQL. */
   subIds?: string[],
 ): Promise<CashPosition> {
-  const asOfIso = resolveAsOf(asOfDate);
+  const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
