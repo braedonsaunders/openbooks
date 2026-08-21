@@ -28,6 +28,7 @@ test('each downstream consumer pins the entry', () => {
   assert.deepEqual(lockReasonsFor({ ...free, billingStatus: 'billed' }), ['invoiced'])
   assert.deepEqual(lockReasonsFor({ ...free, payrollBatchRef: 'run-1' }), ['paid'])
   assert.deepEqual(lockReasonsFor({ ...free, costJournalEntryId: 'je1' }), ['costed'])
+  assert.deepEqual(lockReasonsFor({ ...free, overheadJournalEntryId: 'oh1' }), ['costed'])
   assert.deepEqual(lockReasonsFor({ ...free, fieldTicketId: 'ft1' }), ['ticketed'])
 })
 

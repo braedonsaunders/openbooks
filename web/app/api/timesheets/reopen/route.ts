@@ -52,10 +52,12 @@ export async function POST(req: Request) {
         invoiced_by_line_id: string | null
         payroll_batch_ref: string | null
         cost_journal_entry_id: string | null
+        overhead_journal_entry_id: string | null
         field_ticket_id: string | null
         billing_status: 'unbilled' | 'billed'
       }>(sql`
-      select invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id, field_ticket_id, billing_status
+      select invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
+             overhead_journal_entry_id, field_ticket_id, billing_status
         from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${employee}
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
       invoicedByLineId: r.invoiced_by_line_id,
       payrollBatchRef: r.payroll_batch_ref,
       costJournalEntryId: r.cost_journal_entry_id,
+      overheadJournalEntryId: r.overhead_journal_entry_id,
       fieldTicketId: r.field_ticket_id,
       billingStatus: r.billing_status,
     }))
