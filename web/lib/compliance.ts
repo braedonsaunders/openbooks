@@ -16,6 +16,7 @@ import {
   type RequirementPolicy,
   type WaiverRecord,
 } from '@openbooks/engine/src/compliance.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { isFeatureEnabled } from './features'
 
 /**
@@ -119,7 +120,7 @@ export async function loadComplianceMatrix(args: {
   /** Only vendors whose worst state is in this set. */
   states?: readonly ComplianceState[]
 }): Promise<ComplianceMatrix> {
-  const asOf = args.asOf ?? new Date().toISOString().slice(0, 10)
+  const asOf = args.asOf ?? (await businessToday(args.orgId))
   const [policies, classes, vendors, records, waivers] = await Promise.all([
     loadRequirementPolicies(args.orgId),
     loadComplianceClasses(args.orgId),
@@ -635,7 +636,7 @@ const EMPTY_STATES: Record<ComplianceState, number> = {
 
 /** Everything the /compliance cockpit renders, in one pass. */
 export async function loadComplianceOverview(orgId: string, taxYear: number): Promise<ComplianceOverview> {
-  const asOf = new Date().toISOString().slice(0, 10)
+  const asOf = await businessToday(orgId)
   const [matrix, blocked, waivers, readiness, filings] = await Promise.all([
     loadComplianceMatrix({ orgId, asOf }),
     loadBlockedBills(orgId),

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { runRevenueRecognition } from '@openbooks/engine/src/revenue-recognition.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -24,9 +25,12 @@ export async function POST(req: Request) {
   const gate = await guardPermission('ar.post')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
+  if (!(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
+    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
+  }
 
   const body = (await req.json().catch(() => ({}))) as Body
-  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : new Date().toISOString().slice(0, 10)
+  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : await businessToday(user.orgId)
   if (body.obligationId !== undefined && !isUuid(body.obligationId)) {
     return NextResponse.json({ error: 'invalid obligation' }, { status: 422 })
   }

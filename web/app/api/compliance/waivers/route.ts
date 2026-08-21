@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
   if (reason.length < 10) {
     return NextResponse.json({ error: 'an exception needs a reason of at least 10 characters' }, { status: 400 })
   }
-  const effectiveFrom = body.effectiveFrom ?? new Date().toISOString().slice(0, 10)
+  const effectiveFrom = body.effectiveFrom ?? (await businessToday(orgId))
   if (!body.expiresOn) return NextResponse.json({ error: 'an exception must have an end date' }, { status: 400 })
   const span = Math.round(
     (Date.parse(`${body.expiresOn}T00:00:00Z`) - Date.parse(`${effectiveFrom}T00:00:00Z`)) / 86_400_000,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
@@ -81,7 +82,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!name) {
         return NextResponse.json({ error: 'the name of the person who signed is required' }, { status: 400 })
       }
-      const signedAt = body.signedAt ?? new Date().toISOString().slice(0, 10)
+      const signedAt = body.signedAt ?? (await businessToday(orgId))
       // Evidence of the attestation, not a digital signature: who in this
       // organisation recorded the executed document, and when.
       const evidence = {

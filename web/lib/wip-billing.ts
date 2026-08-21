@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
 import {
@@ -1141,16 +1142,17 @@ function eligibleWipSources(orgId: string, asOf: string) {
   `
 }
 
-export async function wipAnalytics(orgId: string, asOf = new Date().toISOString().slice(0, 10)): Promise<WipAnalytics> {
-  requireDate(asOf, 'As-of date')
+export async function wipAnalytics(orgId: string, asOf?: string): Promise<WipAnalytics> {
+  const asOfDate = asOf ?? (await businessToday(orgId))
+  requireDate(asOfDate, 'As-of date')
   const [agingResult, realizationResult, leakageResult] = await Promise.all([
     db.execute<WipAnalytics['aging']>(sql`
-      ${eligibleWipSources(orgId, asOf)}
-      select coalesce(sum(capped_available_value) filter (where ${asOf}::date-source_date <= 0),0)::text as current,
-             coalesce(sum(capped_available_value) filter (where ${asOf}::date-source_date between 1 and 30),0)::text as "days1to30",
-             coalesce(sum(capped_available_value) filter (where ${asOf}::date-source_date between 31 and 60),0)::text as "days31to60",
-             coalesce(sum(capped_available_value) filter (where ${asOf}::date-source_date between 61 and 90),0)::text as "days61to90",
-             coalesce(sum(capped_available_value) filter (where ${asOf}::date-source_date > 90),0)::text as "over90",
+      ${eligibleWipSources(orgId, asOfDate)}
+      select coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date <= 0),0)::text as current,
+             coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 1 and 30),0)::text as "days1to30",
+             coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 31 and 60),0)::text as "days31to60",
+             coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date between 61 and 90),0)::text as "days61to90",
+             coalesce(sum(capped_available_value) filter (where ${asOfDate}::date-source_date > 90),0)::text as "over90",
              coalesce(sum(source_value) filter (where held),0)::text as held
         from eligible_sources
     `),
@@ -1172,8 +1174,8 @@ export async function wipAnalytics(orgId: string, asOf = new Date().toISOString(
   const original = Number(realization.original)
   const percent = original === 0 ? null : Number(realization.billed) / original
   const heldOver90Result = (await db.execute<{ amount: string }>(sql`
-    ${eligibleWipSources(orgId, asOf)}
-    select coalesce(sum(source_value) filter (where held and ${asOf}::date-source_date > 90),0)::text as amount
+    ${eligibleWipSources(orgId, asOfDate)}
+    select coalesce(sum(source_value) filter (where held and ${asOfDate}::date-source_date > 90),0)::text as amount
       from eligible_sources
   `))
   const writeDowns = leakageResult.rows[0]?.write_downs ?? '0'

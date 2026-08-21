@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";
@@ -92,7 +93,7 @@ const draftJournalEntry: AssistantToolDef = {
     }
 
     const preview: JournalPreview = {
-      documentDate: a.documentDate ?? new Date().toISOString().slice(0, 10),
+      documentDate: a.documentDate ?? (await businessToday(authz.user.orgId)),
       memo: a.memo?.trim() || null,
       lines,
     };

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
       await publishProjectFinancialProfileInTransaction(tx, {
         orgId,
         projectTypeId: createdId,
-        effectiveFrom: new Date().toISOString().slice(0, 10),
+        effectiveFrom: await businessToday(orgId),
         financialProfile: b.financialProfile,
         reason: 'Initial project type financial policy',
         actorId: gate.user.id,
