@@ -17,6 +17,7 @@ import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
+import { formatJournalAmount, journalAmountUnits, journalLineUnits } from '../../../lib/journal-amounts'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
@@ -89,15 +90,10 @@ const emptyLine = (): LineRow => ({
   credit: '',
 })
 
-/** Amount string → integer cents ('' / garbage → 0). */
-const cents = (v: unknown): number => {
-  if (v === '' || v == null) return 0
-  const n = Number(v)
-  return Number.isNaN(n) ? 0 : Math.round(n * 100)
-}
-
 function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
-  const amt = Number(l.amount ?? 0)
+  // Exact parse at the ledger's numeric(19,4) scale — a float round-trip here
+  // would snap 4-decimal lines to cents and silently drop sub-cent legs.
+  const units = journalAmountUnits(l.amount) ?? 0n
   const row: LineRow = {
     accountId: l.account_id ?? '',
     description: l.description ?? '',
@@ -105,8 +101,8 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
     subsidiaryId: l.subsidiary_id ?? '',
-    debit: amt > 0 ? amt.toFixed(2) : '',
-    credit: amt < 0 ? (-amt).toFixed(2) : '',
+    debit: units > 0n ? formatJournalAmount(units) : '',
+    credit: units < 0n ? formatJournalAmount(-units) : '',
   }
   for (const def of lineDefs) row[`cf_${def.key}`] = (l.custom ?? {})[def.key] ?? ''
   for (const segment of segments) row[`seg_${segment.key}`] = (l.extra_dims ?? {})[segment.key] ?? ''
@@ -196,16 +192,25 @@ export function JournalDrawer({
     )
   }
 
-  const { debits, credits, diff } = useMemo(() => {
-    let d = 0
-    let c = 0
+  // Exact bigint totals at 4dp scale. Unparseable input fails closed: it never
+  // counts as zero, and both saving and posting are blocked while it stands.
+  const { debits, credits, diff, hasInvalidAmounts } = useMemo(() => {
+    let d = 0n
+    let c = 0n
+    let invalid = false
     for (const r of rows) {
-      d += cents(r.debit)
-      c += cents(r.credit)
+      const du = journalAmountUnits(r.debit)
+      const cu = journalAmountUnits(r.credit)
+      if (du === null || cu === null) {
+        invalid = true
+        continue
+      }
+      d += du
+      c += cu
     }
-    return { debits: d, credits: c, diff: d - c }
+    return { debits: d, credits: c, diff: d - c, hasInvalidAmounts: invalid }
   }, [rows])
-  const balanced = diff === 0 && debits > 0
+  const balanced = !hasInvalidAmounts && diff === 0n && debits > 0n
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
@@ -219,21 +224,24 @@ export function JournalDrawer({
       extraDims,
       custom: customValues,
       lines: rows
-        .filter((r) => r.accountId && cents(r.debit) - cents(r.credit) !== 0)
-        .map((r) => ({
-          accountId: r.accountId,
-          description: r.description,
-          amount: ((cents(r.debit) - cents(r.credit)) / 100).toFixed(2), // signed: + debit / − credit
-          partyId: r.partyId || null,
-          departmentId: r.departmentId || null,
-          projectId: r.projectId || null,
-          // Intercompany line override (multi-subsidiary orgs only).
-          subsidiaryId: multiSub ? r.subsidiaryId || null : undefined,
-          extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
-          custom: Object.fromEntries(
-            lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
-          ),
-        })),
+        .flatMap((r) => {
+          const signed = journalLineUnits(r.debit, r.credit)
+          if (!r.accountId || signed === null || signed === 0n) return []
+          return [{
+            accountId: r.accountId,
+            description: r.description,
+            amount: formatJournalAmount(signed), // signed: + debit / − credit
+            partyId: r.partyId || null,
+            departmentId: r.departmentId || null,
+            projectId: r.projectId || null,
+            // Intercompany line override (multi-subsidiary orgs only).
+            subsidiaryId: multiSub ? r.subsidiaryId || null : undefined,
+            extraDims: Object.fromEntries(segments.map((segment) => [segment.key, r[`seg_${segment.key}`]]).filter(([, value]) => value !== '' && value != null)),
+            custom: Object.fromEntries(
+              lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
+            ),
+          }]
+        }),
     }),
     [partyId, documentDate, referenceNumber, memo, subsidiaryId, multiSub, customValues, extraDims, rows, lineDefs, segments],
   )
@@ -480,7 +488,7 @@ export function JournalDrawer({
         <>
           {mode === 'edit' ? (
             <>
-              <Button disabled={busy} onClick={save}>
+              <Button disabled={busy || hasInvalidAmounts} onClick={save}>
                 {busy ? tc('actions.saving') : tc('actions.save')}
               </Button>
             </>
@@ -534,17 +542,17 @@ export function JournalDrawer({
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
             {t.rich('totals', {
-              debits: money(debits / 100),
-              credits: money(credits / 100),
+              debits: money(formatJournalAmount(debits)),
+              credits: money(formatJournalAmount(credits)),
               strong: (chunks) => (
                 <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
               ),
             })}
           </span>
           {isDraft ? (
-            diff !== 0 ? (
-              <Badge variant="destructive">{t('outOfBalance', { amount: money(Math.abs(diff) / 100) })}</Badge>
-            ) : debits > 0 ? (
+            diff !== 0n ? (
+              <Badge variant="destructive">{t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })}</Badge>
+            ) : debits > 0n ? (
               <Badge variant="success">{t('balanced')}</Badge>
             ) : null
           ) : null}

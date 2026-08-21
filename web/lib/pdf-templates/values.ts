@@ -87,6 +87,11 @@ async function loadDocumentValues(
   orgId: string,
   id: string,
 ): Promise<PdfRecordValues | null> {
+  // `target_transaction_amount`, NOT `amount`: `documents.total` is in the
+  // document's TRANSACTION currency while `applications.amount` is the
+  // base-currency carrying amount. The old subtraction printed a balance in
+  // neither currency on every FX invoice/credit — on paper and in emailed
+  // records (same fix as engine/src/dunning.ts).
   const r = (await db.execute<Record<string, any>>(sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
@@ -98,10 +103,10 @@ async function loadDocumentValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
       left join lateral (
-        select coalesce(sum(x.amount), 0) as applied
+        select coalesce(sum(x.target_transaction_amount), 0) as applied
           from journal_lines jl
-          join applications x on x.to_line_id = jl.id and x.unapplied_at is null
-         where jl.entry_id = d.posted_entry_id and jl.is_open_item
+          join applications x on x.org_id = jl.org_id and x.to_line_id = jl.id and x.unapplied_at is null
+         where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
       ) ap on true
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}
   `))

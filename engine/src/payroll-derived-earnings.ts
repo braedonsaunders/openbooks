@@ -1249,7 +1249,7 @@ export async function previewDerivedRule(
   if (rule.rateMode === "percent_of_gross") {
     const grossRes = (await db.execute<{ employee_party_id: string; gross: string }>(sql`
       select te.employee_party_id,
-             coalesce(sum(te.hours * coalesce(tt.cost_multiplier, 1) * lcr.rate), 0)::text as gross
+             coalesce(sum(round(te.hours * coalesce(tt.cost_multiplier, 1) * lcr.rate, 4)), 0)::text as gross
         from time_entries te
         left join time_types tt on tt.id = te.time_type_id
         join lateral (

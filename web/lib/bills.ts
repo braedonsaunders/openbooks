@@ -8,6 +8,7 @@ import {
   type TaxComponentConfig,
 } from '@openbooks/engine/src/tax.ts'
 import { resolveOrgId } from './org-scope'
+import { requireEffectiveRateRow } from '@openbooks/engine/src/tax-persist.ts'
 
 export interface TaxProfiles {
   codes: Map<string, TaxComponentConfig[]>
@@ -19,7 +20,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
   const resolvedOrgId = await resolveOrgId(orgId)
   const date = asOfDate ?? new Date().toISOString().slice(0, 10)
   const codeRows = (await db.execute<Record<string, any>>(sql`
-    select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
+    select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
            tc.rounding_scale, tc.collected_account_id, tc.paid_account_id,
@@ -36,7 +37,10 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
     taxCodeId: String(row.id),
     code: String(row.code),
     sequence,
-    ratePercent: String(row.rate),
+    // A NULL join result means "no rate row effective on the document date",
+    // distinct from a matched statutory zero rate; the former is refused
+    // instead of silently posting 0% tax with full calculation evidence.
+    ratePercent: requireEffectiveRateRow(String(row.code), date, row.effective_rate),
     recoverablePercent: String(row.recoverable_percent),
     calculationType: row.calculation_type,
     priceIncludesTax: inclusive ?? Boolean(row.price_includes_tax),
@@ -50,7 +54,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
 
   const groupRows = (await db.execute<Record<string, any>>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
-           tgm.sequence, tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
+           tgm.sequence, tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.compound_on_previous, tc.rounding_scale,
            tc.collected_account_id, tc.paid_account_id, tc.withholding_account_id

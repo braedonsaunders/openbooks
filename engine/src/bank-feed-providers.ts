@@ -81,7 +81,9 @@ const gocardless: BankFeedAdapter = {
       { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } },
     );
     const body = await asJson(res);
-    const txns: any[] = [...(body?.transactions?.booked ?? []), ...(body?.transactions?.pending ?? [])];
+    // Booked only: pendings change or vanish, so importing them would leave
+    // statement evidence that can never reconcile at sign-off.
+    const txns: any[] = body?.transactions?.booked ?? [];
     let currency: string | null = null;
     const lines: ParsedStatementLine[] = txns.map((t) => {
       currency ??= t?.transactionAmount?.currency ?? null;
@@ -108,6 +110,32 @@ const gocardless: BankFeedAdapter = {
 // Plaid Transactions. Plaid's `amount` is POSITIVE for money leaving the
 // account, so we negate to the bank-statement convention.
 // --------------------------------------------------------------------------
+const PLAID_PAGE_SIZE = 500;
+// 20 pages × 500 = 10,000 transactions per sync; past that we abort loudly
+// rather than silently truncating a 90-day cold start on a busy account.
+const PLAID_MAX_PAGES = 20;
+
+/**
+ * Accumulate every transactions/get page until Plaid reports has_more=false.
+ * The page fetcher is injected so pagination is testable in isolation; the
+ * hard page cap throws instead of letting history fall off the end silently.
+ */
+export async function plaidFetchAllTransactions(
+  fetchPage: (offset: number) => Promise<{ transactions?: any[]; has_more?: boolean }>,
+): Promise<any[]> {
+  const all: any[] = [];
+  for (let offset = 0, page = 1; ; offset += PLAID_PAGE_SIZE, page += 1) {
+    if (page > PLAID_MAX_PAGES) {
+      throw new FeedError(
+        `Plaid feed exceeded ${PLAID_MAX_PAGES} pages (${PLAID_MAX_PAGES * PLAID_PAGE_SIZE} transactions) — narrow the sync window instead of truncating history`,
+      );
+    }
+    const body = await fetchPage(offset);
+    all.push(...(body.transactions ?? []));
+    if (!body.has_more) return all;
+  }
+}
+
 const plaid: BankFeedAdapter = {
   key: "plaid",
   async test(creds) {
@@ -130,21 +158,24 @@ const plaid: BankFeedAdapter = {
   async fetch(creds, externalAccountId, sinceIso) {
     const env = creds.env || "production";
     const today = new Date().toISOString().slice(0, 10);
-    const res = await fetch(`https://${env}.plaid.com/transactions/get`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        client_id: creds.clientId,
-        secret: creds.secret,
-        access_token: creds.accessToken,
-        start_date: sinceIso,
-        end_date: today,
-        options: externalAccountId ? { account_ids: [externalAccountId], count: 500 } : { count: 500 },
-      }),
+    const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
+    const transactions = await plaidFetchAllTransactions(async (offset) => {
+      const res = await fetch(`https://${env}.plaid.com/transactions/get`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_id: creds.clientId,
+          secret: creds.secret,
+          access_token: creds.accessToken,
+          start_date: sinceIso,
+          end_date: today,
+          options: { ...accountOptions, count: PLAID_PAGE_SIZE, offset },
+        }),
+      });
+      return await asJson(res);
     });
-    const body = await asJson(res);
     let currency: string | null = null;
-    const lines: ParsedStatementLine[] = (body.transactions ?? []).map((t: any) => {
+    const lines: ParsedStatementLine[] = transactions.map((t: any) => {
       currency ??= t.iso_currency_code ?? null;
       // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
       const signed = t.amount != null ? neg(normalizeMoney(String(t.amount))) : "0.0000";

@@ -1,16 +1,15 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, pool } from '@openbooks/engine/src/db.ts'
+import { db } from '@openbooks/engine/src/db.ts'
 import {
   REPORT_ENTITY_MAP,
   defaultRowsQuery,
-  runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
   type ReportRunLabels,
   type ReportRunResult,
 } from '@openbooks/reports'
-import { reportRunLabels } from './report-labels'
+import { executeReport } from './custom-reports'
 
 /**
  * Views (the source platform Saved Search analogue, Knowledge menu). A view stores a
@@ -242,19 +241,18 @@ export function viewEntityPermission(query: Pick<ReportCustomQuery, 'entity'>): 
   return REPORT_ENTITY_MAP[query.entity]?.requiredPermission ?? null
 }
 
-/** Execute a view's plan (fresh, current data) — reused report engine. */
+/** Execute a view's plan (fresh, current data) — the one shared executor. */
 export async function runView(
   orgId: string,
   query: ReportCustomQuery,
   maxRows = 10000,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  return runCustomQuery(pool, query, {
-    orgId,
-    entityMap: REPORT_ENTITY_MAP,
-    maxRows,
-    labels: labels ?? (await reportRunLabels()),
-  })
+  // Views store the same plan shape as report definitions, so they must go
+  // through executeReport too: a `period_preset` window that reached the
+  // compiler unresolved would silently drop its date bounds and return every
+  // row. This also supplies fiscalStartMonth for fiscal_* breakouts.
+  return executeReport(orgId, query, maxRows, labels)
 }
 
 export function slugifyViewName(name: string): string {

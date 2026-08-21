@@ -1006,6 +1006,14 @@ async function applySubsidiaries(
   })[];
   docSubId: string;
   multi: boolean;
+  /** The origin subsidiary's functional currency. */
+  originBaseCurrency: string;
+  /**
+   * The txn→origin-functional rate this run resolved and applied to every
+   * origin-subsidiary leg (the document's stored rate when it carries one,
+   * "1" when the document is already in the origin's base currency).
+   */
+  originFxRate: string;
 }> {
   try {
     const ctx = await loadSubsidiaryContext(runner, doc.orgId);
@@ -1068,11 +1076,12 @@ async function applySubsidiaries(
         fxRate,
       });
     }
+    const originFxRate = await functionalRate(origin.baseCurrency);
     const legs = await intercompanyBalancingLegs(runner, {
       orgId: doc.orgId,
       ctx,
       originSubId: docSubId,
-      originFxRate: await functionalRate(origin.baseCurrency),
+      originFxRate,
       lines: stamped,
     });
     const all = [
@@ -1098,6 +1107,8 @@ async function applySubsidiaries(
       lines: all,
       docSubId,
       multi: new Set(all.map((l) => l.subsidiaryId)).size > 1,
+      originBaseCurrency: origin.baseCurrency,
+      originFxRate,
     };
   } catch (err) {
     if (err instanceof SubsidiaryError) throw new PostingError(err.message);
@@ -1480,6 +1491,19 @@ export async function postDocument(
     // re-evaluates the predicate against the now-'posted' row and matches 0
     // rows. Zero rows → throw → THIS transaction rolls back, discarding the
     // entry + lines just inserted. A document can never produce two entries.
+    //
+    // The flip also stamps documents.fx_rate with the SAME rate the kernel
+    // applied to the origin-subsidiary legs, in the same transaction as the
+    // entry, so the header and the posted lines agree by construction:
+    // documents.fx_rate is the txn→functional rate as of posting, maintained
+    // by the posting kernel. Native creation paths never set it (the column
+    // defaults to '1'; only source sync wrote real values before), so every
+    // downstream reader — dunning's base-currency threshold, payment-run
+    // conversions — now reads the rate the ledger actually posted at. A
+    // document already in its origin's base currency keeps the stored value
+    // (1 by definition). The posted-document financial guard is not in play
+    // here: this UPDATE matches only 'approved' rows and that guard fires
+    // solely for posted/reversed ones.
     const flipped = await tx
       .update(schema.documents)
       .set({
@@ -1487,6 +1511,9 @@ export async function postDocument(
         postedEntryId: entry.id,
         postingDate,
         postingPeriodId: period.id,
+        ...(subApplied.originBaseCurrency !== effectiveDoc.currency
+          ? { fxRate: subApplied.originFxRate }
+          : {}),
       })
       .where(
         and(

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
@@ -16,7 +17,9 @@ import { computeNextRunAt } from "./scripting.ts";
  *
  * Claiming is done by the same advance-and-guard trick the script scheduler
  * uses: the UPDATE … WHERE next_run_on = $old means only one tick can win an
- * occurrence, so horizontal scaling can never double-bill.
+ * occurrence, so horizontal scaling can never double-bill. A failed attempt
+ * rolls its claim back — guarded on the claimed value — so the occurrence is
+ * retried on the next tick, never silently lost.
  */
 
 export type Cadence =
@@ -71,6 +74,47 @@ export function advanceCadence(
   const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
   const day = Math.min(d!, lastDay);
   return `${targetYear}-${pad(targetMonth + 1)}-${pad(day)}`;
+}
+
+export interface ScheduleClaimRollback {
+  /** Apply the restore only while the row still holds this (claimed) value. */
+  expectedNextRunOn: string;
+  nextRunOn: string;
+  /** The due scan only claims active schedules, so a rollback reactivates. */
+  isActive: boolean;
+  lastRunAt: Date | null;
+}
+
+/**
+ * Rollback payload for a generation attempt that failed AFTER its occurrence
+ * was claimed: the pre-claim schedule fields, so the next tick retries instead
+ * of the occurrence being silently lost. The caller must apply it with
+ * `where next_run_on = expectedNextRunOn` — if a concurrent writer has already
+ * moved the schedule on, the guarded update matches nothing and that writer
+ * wins. When the live value is known, pass it to skip building a rollback that
+ * could no longer apply. Pure — unit-tested.
+ */
+export function scheduleClaimRollback(
+  prior: { nextRunOn: string; lastRunAt: Date | null },
+  claimedNextRunOn: string,
+): ScheduleClaimRollback;
+export function scheduleClaimRollback(
+  prior: { nextRunOn: string; lastRunAt: Date | null },
+  claimedNextRunOn: string,
+  currentNextRunOn: string,
+): ScheduleClaimRollback | null;
+export function scheduleClaimRollback(
+  prior: { nextRunOn: string; lastRunAt: Date | null },
+  claimedNextRunOn: string,
+  currentNextRunOn?: string,
+): ScheduleClaimRollback | null {
+  if (currentNextRunOn !== undefined && currentNextRunOn !== claimedNextRunOn) return null;
+  return {
+    expectedNextRunOn: claimedNextRunOn,
+    nextRunOn: prior.nextRunOn,
+    isActive: true,
+    lastRunAt: prior.lastRunAt,
+  };
 }
 
 /** Whole-day difference b − a (both ISO), used to carry the payment term. */
@@ -156,7 +200,9 @@ export interface RecurringRunResult {
  * next_run_on.
  */
 export async function runDueRecurringSchedules(asOf?: string): Promise<RecurringRunResult> {
-  const today = asOf ?? toIso(new Date());
+  // Org-spanning scan keeps a UTC-day cutoff — no tenant is in scope yet; each
+  // generated document below dates itself by the owning org's business day.
+  const scanCutoff = asOf ?? toIso(new Date());
   const result: RecurringRunResult = { generated: 0, posted: 0, failed: 0, documents: [] };
 
   const due = await withBypass(async () => {
@@ -169,13 +215,14 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         nextRunOn: string;
         endsOn: string | null;
         autoPost: boolean;
+        lastRunAt: Date | null;
       }>(sql`
       select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
              rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
-             rs.auto_post as "autoPost"
+             rs.auto_post as "autoPost", rs.last_run_at as "lastRunAt"
         from recurring_schedules rs
         join orgs o on o.id = rs.org_id and o.env_kind = 'production'
-       where rs.is_active and rs.next_run_on <= ${today}
+       where rs.is_active and rs.next_run_on <= ${scanCutoff}
        order by rs.next_run_on
     `));
   });
@@ -188,6 +235,11 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
 
     // Claim the occurrence: only the tick that flips next_run_on off its current
     // value proceeds. Deactivate in the same statement if this was the last one.
+    // If generation then fails, the catch rolls this claim back: a persistently
+    // failing schedule stays due and retries every tick, surfacing through
+    // last_error (the operator's signal — there is no failure counter in the
+    // schema). That is preferable to silently losing the occurrence, which is
+    // what leaving the claim advanced would do.
     const claimed = await withBypass(async () => {
       return (await db.execute<{ id: string }>(sql`
         update recurring_schedules
@@ -201,8 +253,8 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     if (!claimed.rows.length) continue; // another tick won it
 
     try {
-      const gen = await withOrg(s.orgId, () =>
-        generateFromTemplate(s.orgId, s.templateId, today, s.autoPost),
+      const gen = await withOrg(s.orgId, async () =>
+        generateFromTemplate(s.orgId, s.templateId, asOf ?? (await businessToday(s.orgId)), s.autoPost),
       );
       result.generated += 1;
       if (gen.posted) result.posted += 1;
@@ -218,6 +270,16 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
       await withBypass(async () => {
+        // Roll the claim back so the next tick retries the occurrence. The
+        // restore is guarded on the advanced value: a concurrent writer that
+        // has legitimately moved the schedule wins over our rollback.
+        const rollback = scheduleClaimRollback(s, advanced);
+        await db.execute(sql`
+          update recurring_schedules
+             set next_run_on = ${rollback.nextRunOn}, is_active = ${rollback.isActive},
+                 last_run_at = ${rollback.lastRunAt}
+           where id = ${s.id} and next_run_on = ${rollback.expectedNextRunOn}
+        `);
         await db.execute(sql`
           update recurring_schedules set last_error = ${message} where id = ${s.id}
         `);
@@ -236,7 +298,6 @@ export async function runScheduleNow(
   scheduleId: string,
   asOf?: string,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
-  const today = asOf ?? toIso(new Date());
   const s = await withBypass(async () => {
     return (await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
       select org_id as "orgId", template_document_id as "templateId", auto_post as "autoPost"
@@ -245,6 +306,7 @@ export async function runScheduleNow(
   });
   const row = s.rows[0];
   if (!row) throw new Error("recurring schedule not found");
+  const today = asOf ?? (await businessToday(row.orgId));
   const gen = await withOrg(row.orgId, () =>
     generateFromTemplate(row.orgId, row.templateId, today, row.autoPost),
   );

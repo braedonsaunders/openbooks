@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withOrg } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
@@ -156,7 +157,7 @@ export async function createPaymentDocument(opts: {
       documentNumber,
       partyId: opts.partyId ?? null,
       subsidiaryId,
-      documentDate: opts.documentDate ?? new Date().toISOString().slice(0, 10),
+      documentDate: opts.documentDate ?? await businessToday(opts.orgId),
       currency: opts.currency ?? org.baseCurrency,
       fxRate: opts.fxRate ?? "1",
       memo: opts.memo ?? null,
@@ -993,7 +994,7 @@ export async function reversePaymentForReturn(
          set void_reason = ${voidReason},
              void_requested_at = now(),
              void_requested_by = ${actorId},
-             void_reversal_date = ${reversalDate ?? new Date().toISOString().slice(0, 10)},
+             void_reversal_date = ${reversalDate ?? await businessToday(orgId)},
              updated_at = now(),
              updated_by = ${actorId}
        where id = ${payment.id} and org_id = ${orgId}
@@ -1263,7 +1264,7 @@ export async function createPaymentRun(opts: {
   const discountAccountId = typeof profile.settings?.discountAccountId === "string"
     ? profile.settings.discountAccountId
     : null;
-  const paymentDate = opts.scheduledFor ?? new Date().toISOString().slice(0, 10);
+  const paymentDate = opts.scheduledFor ?? await businessToday(opts.orgId);
 
   for (const vendorBills of byVendor.values()) {
     const first = vendorBills[0]!;

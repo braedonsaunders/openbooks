@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, fromUnits, mul, mulRatio, toUnits } from "./money.ts";
+import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 
@@ -28,6 +28,8 @@ export interface TaxComponentQuote {
   ratePercent: string;
   taxAmount: string;
   taxName?: string;
+  /** True when no jurisdiction-specific rate came back and the blended rate was stamped instead. */
+  rateIsBlendedFallback?: boolean;
 }
 
 export interface TaxQuoteRequest {
@@ -157,13 +159,85 @@ export function sumComponentTax(components: TaxComponentQuote[]): string {
   return fromUnits(t);
 }
 
-/** Pure: build a single-component quote from a known rate percent. */
-export function quoteFromRate(taxableAmount: string, ratePercent: number, jurisdiction: string, name?: string): TaxQuoteResult {
-  const taxAmount = mulRatio(taxableAmount, BigInt(Math.round(ratePercent * 10_000)), 1_000_000n);
+/**
+ * Provider wire formats are JSON numbers, so an outbound ledger amount must
+ * survive the Number() round trip unchanged: String(n) is JS's shortest
+ * round-trip representation, so equality here proves the float carries the
+ * exact four-decimal value. Anything else is refused rather than misstated.
+ */
+function wireAmountOrThrow(amount: string): number {
+  const canonical = normalizeMoney(amount);
+  const wire = Number(canonical);
+  if (!Number.isFinite(wire) || fromUnits(toUnits(String(wire))) !== canonical) {
+    throw new TaxRateProviderError(`provider wire format cannot represent ${canonical} exactly`);
+  }
+  return wire;
+}
+
+/**
+ * Inbound provider amounts may be JSON numbers or decimal strings; either way
+ * they parse through String() → toUnits so no arithmetic crosses a float.
+ * Responses finer than the ledger's 4dp scale fail closed instead of being
+ * silently rounded into posted calculation evidence.
+ */
+function providerMoney(value: unknown, field: string): string {
+  if (value == null) return "0.0000";
+  try {
+    return fromUnits(toUnits(String(value)));
+  } catch (e) {
+    throw new TaxRateProviderError(
+      `provider ${field} ${String(value)} is not a ledger-scale amount (${(e as Error).message})`,
+    );
+  }
+}
+
+/**
+ * Providers report rates as decimal FRACTIONS of one (0.0825 = 8.25%). Shift
+ * the decimal point two places on the exact string form — never rate*100 float
+ * math — and fail closed beyond the 4dp percent scale.
+ */
+function percentFromRateFraction(value: unknown): string {
+  if (value == null) return "0.0000";
+  const raw = String(value).trim();
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
+    throw new TaxRateProviderError(`provider returned a non-decimal rate: "${raw}"`);
+  }
+  const negative = raw.startsWith("-");
+  const [whole = "0", fraction = ""] = raw.replace(/^[-+]/, "").split(".");
+  const fracPadded = fraction.padEnd(2, "0");
+  const shiftedWhole = `${whole || "0"}${fracPadded.slice(0, 2)}`;
+  const shiftedFrac = fracPadded.slice(2);
+  if (shiftedFrac.length > 4 && /[1-9]/.test(shiftedFrac.slice(4))) {
+    throw new TaxRateProviderError(`provider rate ${raw} exceeds the 4-decimal percent scale`);
+  }
+  const percent = `${shiftedWhole.replace(/^0+(?=\d)/, "")}.${shiftedFrac.padEnd(4, "0")}`;
+  return negative ? `-${percent}` : percent;
+}
+
+/**
+ * Pure: build a single-component quote from a known rate percent.
+ *
+ * The percent crosses as its exact decimal STRING: the ratio numerator is
+ * derived by digit surgery on that string (strip '.', pad to 4dp) instead of
+ * `Math.round(rate * 10_000)`, which crosses JavaScript floats. JSON-number
+ * inputs arrive via String(n) — JS's shortest round-trip representation — so
+ * the boundary neither invents nor loses digits.
+ */
+export function quoteFromRate(
+  taxableAmount: string,
+  ratePercent: string | number,
+  jurisdiction: string,
+  name?: string,
+): TaxQuoteResult {
+  const percentText = normalizeDecimal(ratePercent, 4);
+  const [whole = "0", fraction = ""] = percentText.split(".");
+  const numerator = BigInt(`${whole}${fraction}`);
+  if (numerator < 0n) throw new TaxRateProviderError("tax rate cannot be negative");
+  const taxAmount = mulRatio(taxableAmount, numerator, 1_000_000n);
   const components: TaxComponentQuote[] = [
     {
       jurisdiction,
-      ratePercent: ratePercent.toFixed(4),
+      ratePercent: percentText,
       taxAmount,
       taxName: name ?? jurisdiction,
     },
@@ -200,7 +274,7 @@ async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest)
       {
         number: "1",
         quantity: 1,
-        amount: Number(req.taxableAmount),
+        amount: wireAmountOrThrow(req.taxableAmount),
         taxCode: req.itemCode ?? undefined,
       },
     ],
@@ -214,25 +288,27 @@ async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest)
   });
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
-  const totalTax = String((raw as { totalTax?: number }).totalTax ?? 0);
+  const totalTax = providerMoney((raw as { totalTax?: number }).totalTax, "totalTax");
   const details = ((raw as { summary?: { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[] }).summary ??
     []) as { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[];
   const components: TaxComponentQuote[] = details.length
     ? details.map((d) => ({
         jurisdiction: d.jurisdictionType ?? "unknown",
-        ratePercent: String(((d.rate ?? 0) * 100).toFixed(4)),
-        taxAmount: fromUnits(toUnits(String(d.tax ?? 0))),
+        // Avalara reports the rate as a decimal fraction (0.065 = 6.5%); parse
+        // it and the amounts on their exact string forms, never via float math.
+        ratePercent: percentFromRateFraction(d.rate),
+        taxAmount: providerMoney(d.tax, "summary.tax"),
         taxName: d.taxName,
       }))
     : [
         {
           jurisdiction: req.shipTo.region ?? "US",
-          ratePercent: "0",
-          taxAmount: fromUnits(toUnits(totalTax)),
+          ratePercent: "0.0000",
+          taxAmount: totalTax,
         },
       ];
   return {
-    taxAmount: fromUnits(toUnits(totalTax)),
+    taxAmount: totalTax,
     components,
     externalRef: String((raw as { code?: string }).code ?? (raw as { id?: string }).id ?? ""),
     raw,
@@ -252,7 +328,7 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
     to_zip: req.shipTo.postalCode,
     to_state: req.shipTo.region,
     to_city: req.shipTo.city,
-    amount: Number(req.taxableAmount),
+    amount: wireAmountOrThrow(req.taxableAmount),
     shipping: 0,
   };
   const base = String(row.settings.baseUrl ?? "https://api.taxjar.com");
@@ -264,28 +340,34 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`TaxJar ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const tax = (raw as { tax?: Record<string, unknown> }).tax ?? {};
-  const amountToCollect = String(tax.amount_to_collect ?? 0);
-  const rate = Number(tax.rate ?? 0) * 100;
-  const breakdown = (tax.breakdown as Record<string, number> | undefined) ?? {};
+  const amountToCollect = providerMoney(tax.amount_to_collect, "amount_to_collect");
+  // Blended combined rate; each jurisdiction's own rate takes precedence below.
+  const blendedRate = percentFromRateFraction(tax.rate);
+  const breakdown = (tax.breakdown as Record<string, unknown> | undefined) ?? {};
   const components: TaxComponentQuote[] = [];
-  for (const [k, v] of Object.entries(breakdown)) {
-    if (typeof v === "number" && k.endsWith("_tax_collectable")) {
-      components.push({
-        jurisdiction: k.replace(/_tax_collectable$/, ""),
-        ratePercent: rate.toFixed(4),
-        taxAmount: fromUnits(toUnits(String(v))),
-      });
-    }
+  for (const [key, value] of Object.entries(breakdown)) {
+    if (value == null || !key.endsWith("_tax_collectable")) continue;
+    const jurisdiction = key.replace(/_tax_collectable$/, "");
+    // TaxJar keys each jurisdiction's own rate `<j>_tax_rate` (special
+    // districts use its `remitance` spelling). Fall back to the blended rate
+    // only when the payload omits it, and flag that fact on the component.
+    const ownRate = breakdown[`${jurisdiction}_tax_rate`] ?? breakdown[`${jurisdiction}_tax_remitance_rate`];
+    components.push({
+      jurisdiction,
+      ratePercent: ownRate == null ? blendedRate : percentFromRateFraction(ownRate),
+      taxAmount: providerMoney(value, `breakdown.${key}`),
+      ...(ownRate == null ? { rateIsBlendedFallback: true } : {}),
+    });
   }
   if (!components.length) {
     components.push({
       jurisdiction: req.shipTo.region ?? "US",
-      ratePercent: rate.toFixed(4),
-      taxAmount: fromUnits(toUnits(amountToCollect)),
+      ratePercent: blendedRate,
+      taxAmount: amountToCollect,
     });
   }
   return {
-    taxAmount: fromUnits(toUnits(amountToCollect)),
+    taxAmount: amountToCollect,
     components,
     externalRef: null,
     raw,
@@ -341,8 +423,15 @@ export async function quoteExternalTax(
     else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req);
     else if (cfg.provider === "custom_http") result = await quoteCustomHttp(cfg, req);
     else {
-      const rate = Number(cfg.settings.defaultRatePercent ?? 0);
-      result = quoteFromRate(req.taxableAmount, rate, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
+      // A missing default is NOT zero-rated: quoting would post statutory-looking
+      // evidence at 0%. Only a profile that explicitly declares 0 stays legal.
+      const configured = cfg.settings.defaultRatePercent;
+      if (typeof configured !== "number" && typeof configured !== "string") {
+        throw new TaxRateProviderError(
+          "manual provider requires settings.defaultRatePercent; refusing to quote at an implied 0%",
+        );
+      }
+      result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
     }
 
     const quotedOn = req.quotedOn ?? new Date().toISOString().slice(0, 10);

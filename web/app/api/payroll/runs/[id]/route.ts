@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
 import {
@@ -115,7 +115,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     // Apply one component amount across many employees in one pass — the
     // review step's bulk edit. Each employee still gets its own audited
-    // adjustment row through the same helper as a single edit.
+    // adjustment row through the same helper as a single edit, and the whole
+    // batch shares one transaction: a mid-loop failure rolls back every
+    // adjustment instead of committing a partial set.
     if (body.action === 'bulk-adjustment') {
       const { componentId, amount, note, replaceComponent } = body
       const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
@@ -128,14 +130,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       ) {
         return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       }
-      for (const employeePartyId of employees as string[]) {
-        await mutatePayRunAdjustment({
-          orgId: gate.user.orgId,
-          documentId: id,
-          actorId: gate.user.id,
-          mutation: { action: 'add', employeePartyId, componentId, amount, replaceComponent, note },
-        })
-      }
+      await withOrgTransaction(gate.user.orgId, async () => {
+        for (const employeePartyId of employees as string[]) {
+          await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            mutation: { action: 'add', employeePartyId, componentId, amount, replaceComponent, note },
+          })
+        }
+      })
       return NextResponse.json({ ok: true, applied: employees.length })
     }
     if (body.action === 'preview-gl') {
@@ -177,7 +181,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Bulk scope: set the run's included employees in one call. Everyone on
     // the roster who is NOT in `employeePartyIds` gets an exclusion row; those
     // in it have theirs removed. One mutation per employee through the same
-    // audited helper — no second write path.
+    // audited helper — no second write path — and the whole roster pass is one
+    // transaction, so a partial scope can never be committed.
     if (body.action === 'set-scope') {
       const included = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : null
       const roster = Array.isArray(body.rosterPartyIds) ? body.rosterPartyIds : null
@@ -187,17 +192,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: 'invalid scope' }, { status: 422 })
       }
       const keep = new Set(included as string[])
-      for (const employeePartyId of roster as string[]) {
-        await mutatePayRunAdjustment({
-          orgId: gate.user.orgId,
-          documentId: id,
-          actorId: gate.user.id,
-          mutation: {
-            action: keep.has(employeePartyId) ? 'include' : 'exclude',
-            employeePartyId,
-          },
-        })
-      }
+      await withOrgTransaction(gate.user.orgId, async () => {
+        for (const employeePartyId of roster as string[]) {
+          await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            mutation: {
+              action: keep.has(employeePartyId) ? 'include' : 'exclude',
+              employeePartyId,
+            },
+          })
+        }
+      })
       return NextResponse.json({ ok: true, included: keep.size, excluded: roster.length - keep.size })
     }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {

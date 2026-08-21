@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, neg } from "./money.ts";
+import { add, cmp, neg, normalizeMoney } from "./money.ts";
 import {
   effectiveFilingAccountSql,
   filingAccountRef,
@@ -123,6 +123,80 @@ export interface T4Slip {
   stubCount: number;
 }
 
+/** A pre-adoption carry-in that lands on a slip's income-tax boxes. */
+export interface OpeningTaxYtd {
+  /** taxable_ytd — T4 box 14 / W-2 box 1 earnings paid before adoption. */
+  taxableYtd: string;
+  /** tax_ytd — income tax withheld before adoption (box 22 / W-2 box 2). */
+  taxYtd: string;
+}
+
+/**
+ * Fold each employee's pre-adoption year-to-date into exactly ONE of their
+ * slips — the first the list carries.
+ *
+ * An opening balance is a PER-EMPLOYEE fact (one row per org, employee and
+ * tax year) while a slip is per province and filing account, so folding it
+ * into every slip would multiply it by the employee's slip count and
+ * overstate box 14 twice over for a mid-year mover. It is also ADDITIVE with
+ * the committed stubs, never either/or — `coalesce(opening, 0) + sum(stubs)`
+ * is the established pattern (`employeeYtd` in payroll-run.ts). Which single
+ * slip carries it is a declaration, not a discovery: the prior provider's
+ * records do not say which province or program account the money was earned
+ * under, so this follows the only attribution convention the module already
+ * has — `capAnnualEarnings` consumes per-employee annual amounts across slips
+ * in chronological order, and the first slip fills first. Callers must pass
+ * slips in that order (both builders order by employee, then earliest pay
+ * date).
+ *
+ * Pure, so the once-per-employee rule is verifiable without a database.
+ */
+export function carryOpeningTaxYtd<S extends { employeePartyId: string }>(
+  slips: readonly S[],
+  openings: ReadonlyMap<string, OpeningTaxYtd>,
+  into: (slip: S, opening: OpeningTaxYtd) => S,
+): S[] {
+  const carried = new Set<string>();
+  return slips.map((slip) => {
+    const opening = openings.get(slip.employeePartyId);
+    if (!opening || carried.has(slip.employeePartyId)) return slip;
+    carried.add(slip.employeePartyId);
+    return into(slip, opening);
+  });
+}
+
+/** The T4 boxes a carry-in lands in: 14 (employment income) and 22 (income tax). */
+export function openingYtdIntoT4Slip(slip: T4Slip, opening: OpeningTaxYtd): T4Slip {
+  return {
+    ...slip,
+    box14EmploymentIncome: add(slip.box14EmploymentIncome, opening.taxableYtd),
+    box22IncomeTax: add(slip.box22IncomeTax, opening.taxYtd),
+  };
+}
+
+/**
+ * The taxable-earnings and tax-withheld carry-ins for one org-year, keyed by
+ * employee. Employees whose row carries neither are left out entirely, so a
+ * population with no opening balances produces byte-identical slips.
+ */
+async function openingTaxYtdByEmployee(
+  orgId: string,
+  taxYear: number,
+): Promise<Map<string, OpeningTaxYtd>> {
+  const rows = (await db.execute<{
+    employee_party_id: string; taxable_ytd: unknown; tax_ytd: unknown;
+  }>(sql`
+    select employee_party_id, taxable_ytd, tax_ytd
+      from payroll_opening_balances
+     where org_id = ${orgId} and tax_year = ${taxYear}
+       and (coalesce(taxable_ytd, 0) <> 0 or coalesce(tax_ytd, 0) <> 0)
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
+    taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+  }]));
+}
+
 export interface T4SummaryTotals {
   slips: number;
   employmentIncome: string;
@@ -200,30 +274,38 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
   );
 
   const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
-  return rows.rows.map((row, index) => {
-    const province = String(row.province ?? "");
-    const isQuebec = province === "QC";
-    return {
-      employeePartyId: String(row.employee_party_id),
-      employeeName: String(row.display_name),
-      province,
-      isQuebec,
-      filingAccountId: (row.filing_account_id as string | null) ?? null,
-      box14EmploymentIncome: num(row.taxable_income),
-      box16Cpp: num(row.cpp),
-      box16aCpp2: num(row.cpp2),
-      box18Ei: num(row.ei),
-      box22IncomeTax: num(row.income_tax),
-      box24EiInsurable: capped[index]!.box24EiInsurable,
-      box26CppPensionable: capped[index]!.box26CppPensionable,
-      box44UnionDues: num(row.union_dues),
-      box55Qpip: num(row.qpip),
-      // Box 56 is only reported for Quebec employment, and only up to the
-      // QPIP maximum insurable earnings — a different ceiling from EI's MIE.
-      box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
-      stubCount: Number(row.stub_count ?? 0),
-    };
-  });
+  // The carry-in lands on box 14 / box 22 only — the capped boxes (24/26/56)
+  // measure the CPP/EI bases these stubs were assessed against, which an
+  // opening balance is not part of here.
+  const openings = await openingTaxYtdByEmployee(orgId, taxYear);
+  return carryOpeningTaxYtd(
+    rows.rows.map((row, index) => {
+      const province = String(row.province ?? "");
+      const isQuebec = province === "QC";
+      return {
+        employeePartyId: String(row.employee_party_id),
+        employeeName: String(row.display_name),
+        province,
+        isQuebec,
+        filingAccountId: (row.filing_account_id as string | null) ?? null,
+        box14EmploymentIncome: num(row.taxable_income),
+        box16Cpp: num(row.cpp),
+        box16aCpp2: num(row.cpp2),
+        box18Ei: num(row.ei),
+        box22IncomeTax: num(row.income_tax),
+        box24EiInsurable: capped[index]!.box24EiInsurable,
+        box26CppPensionable: capped[index]!.box26CppPensionable,
+        box44UnionDues: num(row.union_dues),
+        box55Qpip: num(row.qpip),
+        // Box 56 is only reported for Quebec employment, and only up to the
+        // QPIP maximum insurable earnings — a different ceiling from EI's MIE.
+        box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
+        stubCount: Number(row.stub_count ?? 0),
+      };
+    }),
+    openings,
+    openingYtdIntoT4Slip,
+  );
 }
 
 /**
@@ -690,6 +772,15 @@ export interface W2Slip {
   box6MedicareTax: string;
 }
 
+/** The W-2 boxes a carry-in lands in: 1 (wages) and 2 (federal income tax). */
+export function openingYtdIntoW2Slip(slip: W2Slip, opening: OpeningTaxYtd): W2Slip {
+  return {
+    ...slip,
+    box1Wages: add(slip.box1Wages, opening.taxableYtd),
+    box2FederalIncomeTax: add(slip.box2FederalIncomeTax, opening.taxYtd),
+  };
+}
+
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
@@ -716,10 +807,16 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
-     group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
-     order by p.display_name
-  `));
-  return rows.rows.map((row) => {
+      group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
+      -- The carry-in lands on the employee's FIRST slip, so an employee filed
+      -- under more than one EIN needs a deterministic order, not just name.
+     order by p.display_name, min(s.pay_date)
+   `));
+  // The carry-in lands on box 1 / box 2 only — the SS and Medicare wage bases
+  // (boxes 3–6) are the FICA bases these stubs were assessed against, which an
+  // opening balance is not part of here.
+  const openings = await openingTaxYtdByEmployee(orgId, taxYear);
+  return carryOpeningTaxYtd(rows.rows.map((row) => {
     const states = ((row.states as string[] | null) ?? []).filter(Boolean);
     return {
     employeePartyId: String(row.employee_party_id),
@@ -734,7 +831,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     box5MedicareWages: num(row.medicare_wages),
     box6MedicareTax: num(row.medicare_tax),
     };
-  });
+  }), openings, openingYtdIntoW2Slip);
 }
 
 // ---------------------------------------------------------------------------

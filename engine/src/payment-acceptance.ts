@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import {
@@ -65,9 +66,19 @@ export interface CheckoutSession {
 export interface WebhookEvent {
   /** Provider object id (session / pspReference / payment id). */
   externalRef: string;
+  /** A second provider id the attempt may be keyed under — GoCardless stores
+   *  the billing request id at checkout while payment events reference the
+   *  payment id, so resolution must try both. */
+  alternateExternalRef?: string | null;
+  /** Provider intent id (Stripe payment_intent). Persisted onto the attempt
+   *  when the session completes so later refund/dispute events — keyed by the
+   *  intent, not the session — resolve to the same attempt. */
+  intentRef?: string | null;
   /** Some providers key events by our reference instead of their object id. */
   linkToken?: string | null;
-  status: "succeeded" | "failed" | "cancelled" | "refunded";
+  /** In-flight states never settle: "processing" means the provider reports
+   *  the collection still pending (async ACH/SEPA). */
+  status: "succeeded" | "processing" | "failed" | "cancelled" | "refunded";
   paidAmount?: string | null;
   raw: Record<string, unknown>;
 }
@@ -144,8 +155,13 @@ const stripeAdapter: PaymentProviderAdapter = {
     if (!parts.t || !parts.v1) return null;
     const expected = hmacSha256Hex(secrets.webhookSecret, `${parts.t}.${rawBody}`);
     if (!safeEqual(expected, parts.v1)) return null;
-    // Replay window: reject events older than 5 minutes (Stripe guidance).
-    if (Math.abs(Date.now() / 1000 - Number(parts.t)) > 300) return null;
+    // Replay window: far-future timestamps are rejected outright, but retries
+    // up to 24h old are accepted — during a provider outage every older
+    // delivery would otherwise 401 forever and the settlement would be
+    // silently lost. Old-event acceptance is safe because the attempt claim
+    // (below) makes processing idempotent.
+    const skew = Date.now() / 1000 - Number(parts.t);
+    if (skew < -300 || skew > 86_400) return null;
     let event: any;
     try {
       event = JSON.parse(rawBody);
@@ -153,19 +169,42 @@ const stripeAdapter: PaymentProviderAdapter = {
       return null;
     }
     const obj = event?.data?.object ?? {};
-    if (event?.type === "checkout.session.completed") {
+    if (
+      event?.type === "checkout.session.completed" ||
+      event?.type === "checkout.session.async_payment_succeeded"
+    ) {
+      // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
+      // settling on that would post a receipt for money not yet collected.
+      const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
+      const settled =
+        event.type === "checkout.session.async_payment_succeeded" ||
+        paymentStatus === "paid" ||
+        paymentStatus === "no_payment_required";
       return {
         externalRef: String(obj.id ?? ""),
+        intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
         linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
-        status: "succeeded",
-        paidAmount: obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
+        status: settled ? "succeeded" : "processing",
+        paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
+        raw: event,
+      };
+    }
+    if (event?.type === "checkout.session.async_payment_failed") {
+      return {
+        externalRef: String(obj.id ?? ""),
+        intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
+        linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+        status: "failed",
         raw: event,
       };
     }
     if (event?.type === "checkout.session.expired") {
       return { externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event };
     }
-    if (event?.type === "charge.refunded") {
+    if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
+      // Keyed by payment_intent — the completed session persisted it onto the
+      // attempt, so refunds/disputes resolve against the same attempt even
+      // though checkout stored the session id.
       return { externalRef: String(obj.payment_intent ?? obj.id ?? ""), status: "refunded", raw: event };
     }
     return null;
@@ -301,11 +340,21 @@ const gocardlessAdapter: PaymentProviderAdapter = {
     if (!event) return null;
     const brId = event.links?.billing_request ?? null;
     const paymentId = event.links?.payment ?? event.links?.billing_request ?? "";
+    // Checkout stores the billing request id as the attempt's external_ref,
+    // while payment events reference the payment id — every payment event
+    // carries the billing request so resolution can match either side.
+    const alternateRef = brId && brId !== paymentId ? brId : null;
     if (event.resource_type === "payments" && (event.action === "confirmed" || event.action === "paid_out")) {
-      return { externalRef: String(paymentId), linkToken: null, status: "succeeded", raw: payload };
+      return { externalRef: String(paymentId), alternateExternalRef: alternateRef, linkToken: null, status: "succeeded", raw: payload };
     }
     if (event.resource_type === "payments" && (event.action === "failed" || event.action === "charged_back")) {
-      return { externalRef: String(paymentId), linkToken: null, status: event.action === "failed" ? "failed" : "refunded", raw: payload };
+      return {
+        externalRef: String(paymentId),
+        alternateExternalRef: alternateRef,
+        linkToken: null,
+        status: event.action === "failed" ? "failed" : "refunded",
+        raw: payload,
+      };
     }
     if (event.resource_type === "billing_requests" && event.action === "cancelled") {
       return { externalRef: String(brId ?? paymentId), linkToken: null, status: "cancelled", raw: payload };
@@ -461,7 +510,7 @@ export async function createPaymentLink(
     const surcharge = await resolveSurcharge(orgId, {
       provider: input.provider,
       amount: doc.open_balance,
-      onDate: new Date().toISOString().slice(0, 10),
+      onDate: await businessToday(orgId),
       configuredRuleId: config.surcharge_rule_id,
     });
 
@@ -551,7 +600,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
   if (!link) return null;
   if (link.status !== "active") return null;
   return await withOrg(link.orgId, async () => {
-    if (link.expiresOn && link.expiresOn < new Date().toISOString().slice(0, 10)) {
+    if (link.expiresOn && link.expiresOn < await businessToday(link.orgId)) {
       await db.execute(sql`update payment_links set status = 'expired', updated_at = now() where id = ${link.id} and status = 'active'`);
       return null;
     }
@@ -568,7 +617,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
     const surcharge = await resolveSurcharge(link.orgId, {
       provider: link.provider,
       amount: row.openBalance,
-      onDate: new Date().toISOString().slice(0, 10),
+      onDate: await businessToday(link.orgId),
       configuredRuleId: config?.surcharge_rule_id ?? null,
     });
     return {
@@ -608,7 +657,7 @@ export async function createCheckoutSession(
     const surcharge = await resolveSurcharge(link.orgId, {
       provider: link.provider,
       amount: openBalance,
-      onDate: new Date().toISOString().slice(0, 10),
+      onDate: await businessToday(link.orgId),
       configuredRuleId: config.surcharge_rule_id,
     });
 
@@ -655,10 +704,12 @@ export async function createCheckoutSession(
 
 /**
  * Verify and route a provider webhook. The provider signature is checked
- * against every org configured for acceptance with this provider — the first
- * secret that verifies owns the event (per-org webhook secrets without
- * org-scoped URLs). Returns the org that accepted it, or null when no
- * signature verifies.
+ * against EVERY org configured for acceptance with this provider — per-org
+ * webhook secrets share one provider endpoint, so sibling orgs can verify the
+ * same delivery and each verifying org must get a chance to claim its attempt.
+ * Returns null when no signature verifies anywhere; otherwise the org that
+ * resolved the event, or the first verifying org with "unknown_attempt" when
+ * none of them owned it.
  */
 export async function handleProviderWebhook(
   provider: AcceptanceProvider,
@@ -673,25 +724,60 @@ export async function handleProviderWebhook(
        where provider = ${provider} and is_enabled and acceptance_enabled
     `)) as unknown as { rows: (ProviderConfigRow & { org_id: string })[] };
   const adapter = ACCEPTANCE_ADAPTERS[provider];
+  const verified: { orgId: string; event: WebhookEvent }[] = [];
   for (const config of configs.rows) {
     const event = adapter.verifyWebhook(headers, rawBody, configSecrets(config));
-    if (!event) continue;
-    const orgId = config.org_id;
-    const status = await withOrg(orgId, () => processWebhookEvent(orgId, provider, event));
-    return { orgId, status };
+    if (event) verified.push({ orgId: config.org_id, event });
   }
-  return null;
+  if (verified.length === 0) return null;
+  let unresolved: { orgId: string; status: string } | null = null;
+  for (const v of verified) {
+    const status = await withOrg(v.orgId, () => processWebhookEvent(v.orgId, provider, v.event));
+    if (status !== "unknown_attempt") return { orgId: v.orgId, status };
+    unresolved ??= { orgId: v.orgId, status };
+  }
+  return unresolved;
 }
+
+/**
+ * Which attempt states each event kind may claim. Terminal states are never
+ * claimable, so redelivered or concurrent deliveries dedupe instead of
+ * re-running settlement; refunds may land on a settled attempt (post-receipt
+ * clawback note) or an initiated one (refund beat the settlement event).
+ *
+ * The status column is constrained to initiated/succeeded/failed/cancelled/
+ * refunded, so a succeeded claim moves straight to 'succeeded' before
+ * settlement runs — exactly one delivery wins the update, and a failed
+ * settlement rolls back to 'initiated' below.
+ */
+export const CLAIMABLE_FROM: Record<WebhookEvent["status"], string[]> = {
+  succeeded: ["initiated"],
+  processing: ["initiated"],
+  failed: ["initiated"],
+  cancelled: ["initiated"],
+  refunded: ["succeeded", "initiated"],
+};
 
 async function processWebhookEvent(
   orgId: string,
   provider: AcceptanceProvider,
   event: WebhookEvent,
 ): Promise<string> {
-  // Resolve the attempt: by provider object id first, then by link token.
+  // Resolve the attempt: by provider object id, by its alternate id (e.g.
+  // GoCardless billing request vs payment id), by an intent id persisted from
+  // the completed session, then by link token. Absent refs are bound as real
+  // NULL params — an undefined in a drizzle template renders as nothing, which
+  // would tear the SQL apart.
+  const alternateRef = event.alternateExternalRef ?? null;
+  const intentRef = event.intentRef ?? null;
   let attempt = (await db.execute<{ id: string; link_id: string; status: string }>(sql`
     select id, link_id, status from payment_attempts
-     where org_id = ${orgId} and provider = ${provider} and external_ref = ${event.externalRef}
+     where org_id = ${orgId} and provider = ${provider}
+       and (external_ref = ${event.externalRef}
+            or (${alternateRef}::text is not null
+                and external_ref = ${alternateRef})
+            or (${intentRef}::text is not null
+                and event_payload->>'paymentIntent' = ${intentRef}))
      order by created_at desc limit 1
   `));
   if (!attempt.rows[0] && event.linkToken) {
@@ -706,16 +792,27 @@ async function processWebhookEvent(
   const found = attempt.rows[0];
   if (!found) return "unknown_attempt";
 
-  // Atomic claim: exactly one concurrent delivery transitions the attempt.
+  // Evidence merged into every claim: the intent id lets later refund/dispute
+  // events match this attempt even though checkout stored the session id.
+  const merge: Record<string, unknown> = { webhook: true, status: event.status };
+  if (event.intentRef) merge.paymentIntent = event.intentRef;
+  // 'processing' has no column value (see CLAIMABLE_FROM): the row stays
+  // initiated and the payload marker records the in-flight provider state.
+  const rowStatus = event.status === "processing" ? "initiated" : event.status;
+
+  // Atomic claim: exactly one concurrent delivery transitions the attempt out
+  // of its current state; every later delivery sees a non-claimable row and
+  // dedupes instead of settling again.
   let claim: { rows: { id: string }[] };
   try {
     claim = (await db.execute<{ id: string }>(sql`
       update payment_attempts
-         set status = ${event.status === "succeeded" ? "initiated" : event.status},
+         set status = ${rowStatus},
              external_ref = ${event.externalRef},
-             event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify({ webhook: true, status: event.status })}::jsonb,
+             event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify(merge)}::jsonb,
              updated_at = now()
-       where id = ${found.id} and status = 'initiated'
+       where id = ${found.id}
+         and status in (${sql.join(CLAIMABLE_FROM[event.status].map((s) => sql`${s}`), sql`, `)})
        returning id
     `));
   } catch (err) {
@@ -726,8 +823,19 @@ async function processWebhookEvent(
   if (!claim.rows[0]) return "duplicate";
 
   if (event.status === "succeeded") {
-    await settleAttempt(orgId, found.id);
-    return "settled";
+    try {
+      const outcome = await settleAttempt(orgId, found.id);
+      return outcome === "gated" ? "awaiting_approval" : "settled";
+    } catch (err) {
+      // Roll the claim back so the next delivery retries settlement. The
+      // reserved receipt document is kept on the attempt: resume reuses that
+      // exact draft rather than minting another one per retry.
+      await db.execute(sql`
+        update payment_attempts set status = 'initiated', updated_at = now()
+         where id = ${found.id} and status = 'succeeded' and journal_entry_id is null
+      `);
+      throw err;
+    }
   }
   if (event.status === "refunded") {
     await db.execute(sql`
@@ -744,16 +852,23 @@ async function processWebhookEvent(
  * Convert a paid attempt into a posted customer receipt: create the payment
  * document, auto-apply it to the link's invoice (capped at the current open
  * balance; any remainder stays on-account), attach the surcharge fee leg,
- * and post through the kernel. Idempotent via the attempt claim above.
+ * and post through the kernel. Idempotent via the attempt claim above plus
+ * document-level resume: an interrupted settle reuses the reserved receipt
+ * draft instead of minting another one.
+ *
+ * Returns "gated" when a tenant approval flow owns the receipt — the attempt
+ * stays in its claimed non-initiated state and finalize completes the
+ * bookkeeping when the approval flow eventually posts it.
  */
-async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
+async function settleAttempt(orgId: string, attemptId: string): Promise<"posted" | "gated"> {
   const rows = (await db.execute<{
       id: string; amount: string | null; surcharge_amount: string | null;
+      payment_document_id: string | null;
       event_payload: { feeIncomeAccountId?: string } | null;
       link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
       link_created_by: string | null;
     }>(sql`
-    select a.id, a.amount, a.surcharge_amount, a.event_payload,
+    select a.id, a.amount, a.surcharge_amount, a.payment_document_id, a.event_payload,
            l.id as link_id, l.document_id, l.party_id, l.subsidiary_id, l.bank_account_id, l.currency, l.created_by as link_created_by
       from payment_attempts a
       join payment_links l on l.id = a.link_id and l.org_id = a.org_id
@@ -776,7 +891,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
       update payment_links set status = 'paid', paid_at = now(), updated_at = now()
        where id = ${a.link_id} and status = 'active'
     `);
-    return;
+    return "posted";
   }
 
   // Auto-apply to the invoice's open-item line, capped at its open balance.
@@ -787,54 +902,86 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
   const allocations: AllocationInput[] = [sameCurrencyAllocation(item.lineId, invoicePortion)];
 
   const actorId = a.link_created_by as string; // receipts attribute to the link creator
-  const payment = await createPaymentDocument({
-    orgId,
-    kind: "customer_payment",
-    createdBy: actorId,
-    partyId: a.party_id,
-    bankAccountId: a.bank_account_id,
-    documentDate: new Date().toISOString().slice(0, 10),
-    memo: `Online payment — ${invoice.document_number}`,
-    subsidiaryId: a.subsidiary_id,
-    currency: a.currency,
-  });
-  const feeAmount = a.surcharge_amount ?? "0";
-  const feeIncomeAccountId = a.event_payload?.feeIncomeAccountId ?? null;
-  await updateDraftPayment(
-    payment.id,
-    {
-      allocations,
-      referenceNumber: `link:${a.link_id.slice(0, 8)}`,
-      feeAmount,
-      feeIncomeAccountId,
-    },
-    actorId,
-  );
-  await db.execute(sql`
-    update payment_attempts
-       set payment_document_id = ${payment.id}, updated_at = now()
-     where id = ${attemptId}
-  `);
-  const submission = await submitAndReleaseIfUngated(
-    "customer_payment",
-    payment.id,
-    actorId,
-  );
-  if (submission.flowError) {
-    throw new PaymentAcceptanceError(
-      `receipt approval could not be routed: ${submission.flowError}`,
+
+  let paymentId = a.payment_document_id;
+  let resumedApproved = false;
+  if (paymentId) {
+    const existing = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${paymentId} and org_id = ${orgId}
+    `));
+    const reservedStatus = existing.rows[0]?.status;
+    if (reservedStatus === "posted") {
+      // Posted earlier but the closing bookkeeping never ran (interrupted
+      // settle) — finish it; finalize is journal-keyed and once-only.
+      await finalizePaymentAcceptanceForDocument(paymentId);
+      return "posted";
+    }
+    if (reservedStatus === "pending_approval") return "gated";
+    if (reservedStatus !== "draft" && reservedStatus !== "approved") {
+      throw new PaymentAcceptanceError(`reserved receipt is ${reservedStatus}; refusing to settle over it`);
+    }
+    resumedApproved = reservedStatus === "approved";
+  } else {
+    const payment = await createPaymentDocument({
+      orgId,
+      kind: "customer_payment",
+      createdBy: actorId,
+      partyId: a.party_id,
+      bankAccountId: a.bank_account_id,
+      documentDate: await businessToday(orgId),
+      memo: `Online payment — ${invoice.document_number}`,
+      subsidiaryId: a.subsidiary_id,
+      currency: a.currency,
+    });
+    paymentId = payment.id;
+    // Reserve the document on the attempt BEFORE building it out: any retry
+    // or redelivery resumes onto this exact draft rather than minting a
+    // duplicate receipt per delivery.
+    await db.execute(sql`
+      update payment_attempts set payment_document_id = ${paymentId}, updated_at = now() where id = ${attemptId}
+    `);
+  }
+
+  if (!resumedApproved) {
+    const feeAmount = a.surcharge_amount ?? "0";
+    const feeIncomeAccountId = a.event_payload?.feeIncomeAccountId ?? null;
+    // Applying replaces the stored allocations and fee leg (update semantics,
+    // not append), so resuming a half-built draft cannot double either.
+    await updateDraftPayment(
+      paymentId,
+      {
+        allocations,
+        referenceNumber: `link:${a.link_id.slice(0, 8)}`,
+        feeAmount,
+        feeIncomeAccountId,
+      },
+      actorId,
     );
+    const submission = await submitAndReleaseIfUngated(
+      "customer_payment",
+      paymentId,
+      actorId,
+    );
+    if (submission.flowError) {
+      throw new PaymentAcceptanceError(
+        `receipt approval could not be routed: ${submission.flowError}`,
+      );
+    }
+    if (submission.gated) {
+      return "gated";
+    }
   }
-  if (submission.gated) {
-    return;
-  }
-  await postPaymentWithApplications(payment.id, allocations, actorId);
-  await finalizePaymentAcceptanceForDocument(payment.id);
+
+  await postPaymentWithApplications(paymentId, allocations, actorId);
+  await finalizePaymentAcceptanceForDocument(paymentId);
+  return "posted";
 }
 
 /**
  * Close the provider attempt after its receipt posts. This is also invoked by
  * post-payment effects when a configured approval flow posts the receipt later.
+ * Keyed on journal_entry_id being unset, so it closes whichever attempt
+ * reserved this receipt exactly once regardless of the claim that started it.
  */
 export async function finalizePaymentAcceptanceForDocument(
   paymentDocumentId: string,
@@ -867,7 +1014,7 @@ export async function finalizePaymentAcceptanceForDocument(
       join documents payment
         on payment.id = attempt.payment_document_id and payment.org_id = attempt.org_id
      where attempt.payment_document_id = ${paymentDocumentId}
-       and attempt.status = 'initiated'
+       and attempt.journal_entry_id is null
        and payment.status = 'posted'
      for update of attempt
   `));
@@ -878,7 +1025,7 @@ export async function finalizePaymentAcceptanceForDocument(
        set status = 'succeeded',
            journal_entry_id = ${row.posted_entry_id},
            updated_at = now()
-     where id = ${row.attempt_id} and status = 'initiated'
+     where id = ${row.attempt_id} and journal_entry_id is null
      returning id
   `));
   if (!closed.rows[0]) return;

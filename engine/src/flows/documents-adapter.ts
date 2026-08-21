@@ -72,7 +72,12 @@ async function loadDoc(subjectId: string): Promise<DocRow | null> {
   return doc ?? null;
 }
 
-function headerValues(doc: DocRow, partyName: string | null): Record<string, unknown> {
+/**
+ * The real document header fields, one key per built-in column. Kept as its
+ * own unconditional literal so RESERVED_DOCUMENT_FIELD_KEYS can enumerate it —
+ * add a column here and the reserved set follows automatically.
+ */
+function builtinHeaderValues(doc: DocRow, partyName: string | null): Record<string, unknown> {
   return {
     id: doc.id,
     kind: doc.kind,
@@ -101,13 +106,39 @@ function headerValues(doc: DocRow, partyName: string | null): Record<string, unk
     locationId: doc.locationId,
     classId: doc.classId,
     createdBy: doc.createdBy,
+  };
+}
+
+export function headerValues(doc: DocRow, partyName: string | null): Record<string, unknown> {
+  return {
     // Registered custom jsonb keys ride along for interpolation and conditions;
     // the tenant-aware authoring profile exposes only active definitions.
+    // Precedence invariant: customs spread FIRST and the built-ins are
+    // re-asserted after, so a custom field can never shadow a real header
+    // value (`total`, `status`, …) in a flow condition or {{token}} — that
+    // would let record data override approval logic. Authoring rejects such
+    // keys outright (RESERVED_DOCUMENT_FIELD_KEYS); this ordering is the
+    // runtime backstop for definitions that predate the rule.
     ...(typeof doc.custom === "object" && doc.custom !== null
       ? (doc.custom as Record<string, unknown>)
       : {}),
+    ...builtinHeaderValues(doc, partyName),
   };
 }
+
+/**
+ * Custom-field keys that must never be registered against `documents`: they
+ * name a real header field (or a flow-writable column) and would either shadow
+ * it in condition evaluation or be silently unreachable. Derived 1:1 from
+ * builtinHeaderValues + WRITABLE_DOCUMENT_FIELDS so it cannot drift from what
+ * headerValues actually exposes; enforced at custom-field registration.
+ */
+export const RESERVED_DOCUMENT_FIELD_KEYS: ReadonlySet<string> = new Set([
+  // Keyless probe: enumerates the built-in header keys without a row (every
+  // key above is read unconditionally).
+  ...Object.keys(builtinHeaderValues({} as DocRow, null)),
+  ...WRITABLE_DOCUMENT_FIELDS,
+]);
 
 export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
   return {

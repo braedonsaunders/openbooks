@@ -4,12 +4,27 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { attachExisting, getFile, listAttachments, uploadAndAttach } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
 import { can, getAuthz } from '../../../../lib/authz'
-import { canMutateFiles, fileViewer, isAllowedContentType, MAX_BYTES, requireSession } from '../lib'
+import {
+  attachmentTargetExists,
+  canMutateFiles,
+  fileViewer,
+  isAllowedContentType,
+  isAttachableTargetTable,
+  MAX_BYTES,
+  requireSession,
+} from '../lib'
 
 export const runtime = 'nodejs'
 
-async function fixedAssetVisible(authz: Awaited<ReturnType<typeof getAuthz>>, targetTable: string, targetId: string): Promise<boolean> {
-  if (!authz || targetTable !== 'fixed_assets') return targetTable !== 'fixed_assets'
+/**
+ * The attach target must exist and be visible to the caller. fixed_assets adds
+ * subsidiary scoping; every other allowlisted table is org-scoped with a
+ * trivial existence probe.
+ */
+async function attachTargetVisible(authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>, targetTable: string, targetId: string): Promise<boolean> {
+  if (targetTable !== 'fixed_assets') {
+    return attachmentTargetExists(authz.user.orgId, targetTable, targetId)
+  }
   const visible = (await db.execute(sql`
     select 1 from fixed_assets where id=${targetId} and org_id=${authz.user.orgId}
     ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id=any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}`))
@@ -23,6 +38,9 @@ export async function GET(req: Request) {
   const targetId = url.searchParams.get('targetId') ?? ''
   if (!targetTable || !isUuid(targetId)) {
     return NextResponse.json({ error: 'targetTable and targetId are required' }, { status: 400 })
+  }
+  if (!isAttachableTargetTable(targetTable)) {
+    return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
   }
   const gate = await getAuthz()
   if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -60,10 +78,13 @@ export async function POST(req: Request) {
     if (!targetTable || !isUuid(targetId)) {
       return NextResponse.json({ error: 'targetTable and targetId are required' }, { status: 400 })
     }
+    if (!isAttachableTargetTable(targetTable)) {
+      return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
+    }
     if (!canMutateFiles(gate, targetTable)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
-    if (!(await fixedAssetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!(await attachTargetVisible(gate, targetTable, targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!isAllowedContentType(file.type)) {
       return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
     }
@@ -90,10 +111,13 @@ export async function POST(req: Request) {
   if (!body || !isUuid(body.fileId) || !body.targetTable || !isUuid(body.targetId)) {
     return NextResponse.json({ error: 'fileId, targetTable, and targetId are required' }, { status: 400 })
   }
+  if (!isAttachableTargetTable(String(body.targetTable))) {
+    return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
+  }
   if (!canMutateFiles(gate, body.targetTable)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
-  if (!(await fixedAssetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await attachTargetVisible(gate, body.targetTable, body.targetId))) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.
   if (!(await getFile(gate.user.orgId, body.fileId, fileViewer(gate)))) {

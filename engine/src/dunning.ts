@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { cmp } from "./money.ts";
 
 /**
@@ -49,10 +50,6 @@ export function renderTemplate(template: string, vars: Record<string, string | n
   );
 }
 
-function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 function daysBetween(fromIso: string, toIsoDate: string): number {
   const [ay, am, ad] = fromIso.split("-").map(Number);
   const [by, bm, bd] = toIsoDate.split("-").map(Number);
@@ -69,7 +66,6 @@ export interface DunningRunResult {
 }
 
 export async function runDunning(asOf?: string): Promise<DunningRunResult> {
-  const today = asOf ?? toIso(new Date());
   const result: DunningRunResult = { scanned: 0, sent: 0, failed: 0, notices: [] };
 
   const orgs = await withBypass(async () => {
@@ -83,6 +79,9 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
 
   for (const { orgId } of orgs.rows) {
     await withOrg(orgId, async () => {
+      // Overdue math compares calendar days, so "today" is the org's business
+      // day — the scheduler itself runs on the server's UTC day.
+      const today = asOf ?? (await businessToday(orgId));
       const org = (await db.execute<{ name: string; baseCurrency: string }>(
         sql`select name, base_currency as "baseCurrency" from orgs where id = ${orgId}`,
       ));

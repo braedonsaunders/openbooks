@@ -2,10 +2,12 @@
 // entity catalog, seeded per-org by engine/src/seed-reports.ts (kind =
 // 'built_in'). Users can run/schedule them as-is or clone them in the studio.
 //
-// "This FY" note: plans use the relative `this_year` operator, which compiles
-// to the CURRENT CALENDAR YEAR anchored to the DB clock. Org-specific fiscal
-// calendars are a deliberate seam — when fiscal-period-aware operators land,
-// swap `this_year` for them here.
+// Year-wide windows use the `period_preset` operator with value
+// 'this_fiscal_year': the web executor (web/lib/custom-reports.ts) resolves it
+// to concrete gte/lte bounds against the org's fiscal calendar before the
+// DB-free compiler runs, so the window honours fiscalYearStartMonth instead of
+// silently reading as the calendar year. Every definition run path (interactive,
+// export, drill, scheduled) funnels through that executor.
 
 import type { ReportCustomQuery } from './types'
 
@@ -74,7 +76,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     slug: 'gl-activity-by-account-fy',
     name: 'GL activity by account (this FY)',
     description:
-      'Posted journal activity this year, one row per account: net movement and line count. Uses the calendar year until fiscal-period operators land.',
+      'Posted journal activity this fiscal year, one row per account: net movement and line count.',
     query: {
       entity: 'ledger_lines',
       mode: 'summarize',
@@ -88,7 +90,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         combinator: 'and',
         rules: [
           { field: 'entry_status', op: 'eq', value: 'posted' },
-          { field: 'posting_date', op: 'this_year' },
+          { field: 'posting_date', op: 'period_preset', value: 'this_fiscal_year' },
         ],
       },
       groupBy: null,
@@ -99,7 +101,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     slug: 'expense-detail-by-department-fy',
     name: 'Expense detail by department (this FY)',
     description:
-      'Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount.',
+      'Posted expense and COGS lines this fiscal year, sectioned by department — date, entry, account, party, memo and amount.',
     query: {
       entity: 'ledger_lines',
       mode: 'rows',
@@ -119,7 +121,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         combinator: 'and',
         rules: [
           { field: 'entry_status', op: 'eq', value: 'posted' },
-          { field: 'posting_date', op: 'this_year' },
+          { field: 'posting_date', op: 'period_preset', value: 'this_fiscal_year' },
           {
             field: 'account_type',
             op: 'in',
@@ -136,7 +138,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     slug: 'payroll-register',
     name: 'Payroll register',
     description:
-      'Every pay stub this year, one row per employee per run: gross, statutory withholdings, net, and employer cost, sectioned by pay run. Requires the payroll permission.',
+      'Every pay stub this fiscal year, one row per employee per run: gross, statutory withholdings, net, and employer cost, sectioned by pay run. Requires the payroll permission.',
     query: {
       entity: 'pay_stubs',
       mode: 'rows',
@@ -147,7 +149,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       groupBy: 'run_number',
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       sorts: [{ column: 'pay_date', direction: 'desc' }],
       limit: 5000,
@@ -183,7 +185,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       },
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       limit: 10000,
     },
@@ -206,7 +208,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       filters: {
         combinator: 'and',
         rules: [
-          { field: 'pay_date', op: 'this_year' },
+          { field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' },
           { field: 'line_kind', op: 'in', value: ['deduction', 'employer_contribution'] },
         ],
       },
@@ -229,7 +231,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       ],
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       groupBy: null,
       limit: 1000,
@@ -254,7 +256,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       ],
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       groupBy: null,
       limit: 1000,
@@ -264,7 +266,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     slug: 'payroll-cost-by-month',
     name: 'Payroll cost by month',
     description:
-      'Monthly payroll totals this year: gross, net, income tax withheld, and employer cost, with stub counts. Requires the payroll permission.',
+      'Monthly payroll totals this fiscal year: gross, net, income tax withheld, and employer cost, with stub counts. Requires the payroll permission.',
     query: {
       entity: 'pay_stubs',
       mode: 'summarize',
@@ -279,7 +281,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       ],
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       groupBy: null,
       limit: 1000,
@@ -303,7 +305,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       groupBy: 'classification',
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       sorts: [
         { column: 'employee', direction: 'asc' },
@@ -334,7 +336,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       totals: { sections: true, grand: true },
       filters: {
         combinator: 'and',
-        rules: [{ field: 'pay_date', op: 'this_year' }],
+        rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       sorts: [{ column: 'component', direction: 'asc' }],
       limit: 10000,
@@ -363,7 +365,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     slug: 'entitlement-service-milestones',
     name: 'Service milestones reached',
     description:
-      'Service anniversaries an entitlement tier acts on this year — benefits eligibility, RRSP eligibility, and each rung of the vacation ladder — with the date every employee reaches it. The list the milestone letters go out from. Requires the payroll permission.',
+      'Service anniversaries an entitlement tier acts on this fiscal year — benefits eligibility, RRSP eligibility, and each rung of the vacation ladder — with the date every employee reaches it. The list the milestone letters go out from. Requires the payroll permission.',
     query: {
       entity: 'entitlement_service_milestones',
       mode: 'rows',
@@ -376,7 +378,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       groupBy: 'milestone_kind',
       filters: {
         combinator: 'and',
-        rules: [{ field: 'milestone_date', op: 'this_year' }],
+        rules: [{ field: 'milestone_date', op: 'period_preset', value: 'this_fiscal_year' }],
       },
       sorts: [{ column: 'milestone_date', direction: 'asc' }],
       limit: 5000,

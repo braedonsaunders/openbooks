@@ -24,8 +24,30 @@ test("opportunity totals and weighting are exact at four decimals", () => {
   assert.equal(totals.lines[1]?.amount, "33.3300");
   assert.equal(totals.lines[1]?.expectedAmount, "8.3325");
   assert.equal(totals.projectedAmount, "93.3297");
-  assert.equal(totals.weightedAmount, "69.9973");
+  // Weighted sums each line's own rounding (44.9998 @ 75% + 8.3325 @ 25%),
+  // not the header rate applied to the projected total.
+  assert.equal(totals.weightedAmount, "53.3323");
   assert.equal(weightAmount("0.0001", 50), "0.0001");
+});
+
+test("weighted totals honor per-line probability overrides with header fallback", () => {
+  const totals = computeOpportunityTotals([
+    { quantity: "100.0000", unitPrice: "1.0000", probability: 100 },
+    { quantity: "40.0000", unitPrice: "1.0000" },
+  ], 20);
+  assert.equal(totals.lines[0]?.probability, 100);
+  assert.equal(totals.lines[0]?.expectedAmount, "100.0000");
+  assert.equal(totals.lines[1]?.probability, 20);
+  assert.equal(totals.lines[1]?.expectedAmount, "8.0000");
+  assert.equal(totals.weightedAmount, "108.0000");
+});
+
+test("probability bounds stay guarded at zero and reject invalid rates", () => {
+  assert.equal(weightAmount("123.4567", 0), "0.0000");
+  assert.equal(weightAmount("123.4567", 100), "123.4567");
+  assert.throws(() => weightAmount("10.0000", -1), /integer from 0 to 100/);
+  assert.throws(() => weightAmount("10.0000", 101), /integer from 0 to 100/);
+  assert.throws(() => weightAmount("10.0000", 12.5), /integer from 0 to 100/);
 });
 
 test("sales-team contributions must total exactly one hundred percent", () => {

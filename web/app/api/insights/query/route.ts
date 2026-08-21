@@ -72,6 +72,9 @@ export async function POST(req: Request) {
       const t = await getTranslations('insights')
       return NextResponse.json({ error: t('compileErrors.timeout') }, { status: 400 })
     }
-    return NextResponse.json({ error: msg }, { status: 400 })
+    // Full error stays in the server log only; the client gets a generic
+    // message so database internals never reach the browser.
+    console.error('[insights-query] execution failed', e)
+    return NextResponse.json({ error: 'query failed' }, { status: 400 })
   }
 }

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, mul, mulRatio, neg, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
@@ -16,7 +17,9 @@ import {
  * next_bill_on comes due: the runner generates a customer_invoice for the plan
  * price × quantity, optionally posts it, and advances next_bill_on by the plan
  * interval. Billing is claimed with the scheduler's advance-and-guard trick so
- * it can never double-bill. Gated by the org's `subscriptionBilling` feature —
+ * it can never double-bill, and a failed attempt rolls its claim back —
+ * guarded on the claimed value — so the occurrence is retried, never silently
+ * lost. Gated by the org's `subscriptionBilling` feature —
  * disabling the feature stops automated billing without touching any data.
  */
 
@@ -132,6 +135,46 @@ export function prorate(fullAmount: string, periodStart: string, periodEnd: stri
   if (total <= 0) return "0.0000";
   const remaining = Math.max(0, Math.min(total, dayDiff(asOf, periodEnd)));
   return mulRatio(fullAmount, BigInt(remaining), BigInt(total));
+}
+
+export interface SubscriptionClaimRollback {
+  /** Apply the restore only while the row still holds this (claimed) value. */
+  expectedNextBillOn: string;
+  nextBillOn: string;
+  currentPeriodStart: string | null;
+  lastBilledAt: Date | null;
+}
+
+/**
+ * Rollback payload for a billing attempt that failed AFTER its occurrence was
+ * claimed: the pre-claim schedule fields, so the next tick retries instead of
+ * the occurrence being silently lost. The caller must apply it with
+ * `where next_bill_on = expectedNextBillOn` — if a concurrent writer has
+ * already moved the schedule on (e.g. a manual bill), the guarded update
+ * matches nothing and that writer wins. When the live value is known, pass it
+ * to skip building a rollback that could no longer apply. Pure — unit-tested.
+ */
+export function subscriptionClaimRollback(
+  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
+  claimedNextBillOn: string,
+): SubscriptionClaimRollback;
+export function subscriptionClaimRollback(
+  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
+  claimedNextBillOn: string,
+  currentNextBillOn: string,
+): SubscriptionClaimRollback | null;
+export function subscriptionClaimRollback(
+  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
+  claimedNextBillOn: string,
+  currentNextBillOn?: string,
+): SubscriptionClaimRollback | null {
+  if (currentNextBillOn !== undefined && currentNextBillOn !== claimedNextBillOn) return null;
+  return {
+    expectedNextBillOn: claimedNextBillOn,
+    nextBillOn: prior.nextBillOn,
+    currentPeriodStart: prior.currentPeriodStart,
+    lastBilledAt: prior.lastBilledAt,
+  };
 }
 
 async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
@@ -343,9 +386,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const result: SubscriptionRunResult = { billed: 0, posted: 0, failed: 0 };
 
   const due = await withBypass(async () =>
-    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }>(sql`
+    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null; interval: Interval; intervalCount: number }>(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
-             s.current_period_start as "currentPeriodStart",
+             s.current_period_start as "currentPeriodStart", s.last_billed_at as "lastBilledAt",
              coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -375,6 +418,12 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       continue;
     }
     const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
+    // Claim the occurrence with a compare-and-swap so concurrent ticks can
+    // never double-bill. If billing then fails, the catch rolls this claim
+    // back: a persistently failing subscription stays due and retries every
+    // tick, surfacing through last_error (the operator's signal — there is no
+    // failure counter in the schema). That is preferable to silently losing
+    // the occurrence, which is what leaving the claim advanced would do.
     const claimed = await withBypass(async () =>
       (await db.execute<{ id: string }>(sql`
         update subscriptions
@@ -404,6 +453,17 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
       await withBypass(async () => {
+        // Roll the claim back so the next tick retries the occurrence. The
+        // restore is guarded on the advanced value: a concurrent manual bill
+        // that has legitimately moved the schedule wins over our rollback.
+        const rollback = subscriptionClaimRollback(row, advanced);
+        await db.execute(sql`
+          update subscriptions
+             set next_bill_on = ${rollback.nextBillOn},
+                 current_period_start = ${rollback.currentPeriodStart},
+                 last_billed_at = ${rollback.lastBilledAt}
+           where id = ${row.id} and next_bill_on = ${rollback.expectedNextBillOn}
+        `);
         await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id}`);
       });
     }
@@ -413,7 +473,6 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
 
 /** Bill one subscription immediately (the "bill now" button), no date advance. */
 export async function billSubscriptionNow(subscriptionId: string, asOf?: string): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
-  const today = asOf ?? toIso(new Date());
   const meta = await withBypass(async () =>
     (await db.execute<{ orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
       select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
@@ -426,6 +485,7 @@ export async function billSubscriptionNow(subscriptionId: string, asOf?: string)
   const orgId = meta.rows[0]?.orgId;
   if (!orgId) throw new SubscriptionError("subscription not found");
   if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
+  const today = asOf ?? (await businessToday(orgId));
   const gen = await withOrg(orgId, async () => {
     const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} limit 1`));
     const s = r.rows[0];
@@ -449,33 +509,40 @@ type SubDetail = SubRow & {
   advancedLifecycle: boolean;
 };
 
-async function loadSubDetail(subscriptionId: string): Promise<{ orgId: string; row: SubDetail }> {
+/** Resolve the owning org — the tenant must be known before any scoped read. */
+async function loadSubOrgId(subscriptionId: string): Promise<string> {
   const meta = await withBypass(async () =>
     (await db.execute<{ orgId: string }>(sql`select org_id as "orgId" from subscriptions where id = ${subscriptionId}`)),
   );
   const orgId = meta.rows[0]?.orgId;
   if (!orgId) throw new SubscriptionError("subscription not found");
-  const row = await withOrg(orgId, async () => {
-    const r = (await db.execute<SubDetail>(sql`
-      select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
-             s.price_override as "priceOverride", s.auto_post as "autoPost",
-             p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
-             p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
-             p.interval, p.interval_count as "intervalCount",
-             (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
-             o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
-             s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status, s.created_by as "createdBy",
-             exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
-        from subscriptions s
-        join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-        join orgs o on o.id = s.org_id
-       where s.id = ${subscriptionId} limit 1
-    `));
-    const d = r.rows[0];
-    if (!d) throw new SubscriptionError("subscription not found");
-    return d;
-  });
-  return { orgId, row };
+  return orgId;
+}
+
+/**
+ * Read the full subscription detail. Must run inside the caller's org
+ * transaction (see withOrg) — mutation paths call this after taking the
+ * subscription row lock so they price from locked, current state.
+ */
+async function loadSubRow(subscriptionId: string): Promise<SubDetail> {
+  const r = (await db.execute<SubDetail>(sql`
+    select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
+           s.price_override as "priceOverride", s.auto_post as "autoPost",
+           p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
+           p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
+           p.interval, p.interval_count as "intervalCount",
+           (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
+           o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
+           s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status, s.created_by as "createdBy",
+           exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
+      from subscriptions s
+      join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+      join orgs o on o.id = s.org_id
+     where s.id = ${subscriptionId} limit 1
+  `));
+  const d = r.rows[0];
+  if (!d) throw new SubscriptionError("subscription not found");
+  return d;
 }
 
 /**
@@ -489,30 +556,38 @@ export async function changeSubscription(
   changes: { quantity?: string; priceOverride?: string | null },
   asOf?: string,
 ): Promise<{ invoiceId: string | null; documentNumber: string | null; adjustment: string }> {
-  const today = asOf ?? toIso(new Date());
-  const { orgId, row } = await loadSubDetail(subscriptionId);
-  if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");
-  if (row.advancedLifecycle) throw new SubscriptionError("use an advanced contract amendment to change subscription components");
+  const orgId = await loadSubOrgId(subscriptionId);
+  const today = asOf ?? (await businessToday(orgId));
+  // Serialize the whole change (read → proration → invoice → subscription
+  // update) on the subscription row lock, the same way billOne serializes
+  // invoice attempts: two concurrent changes must not both price from the
+  // same pre-change state and each cut a proration invoice (double billing).
+  // One transaction also commits the invoice and the configuration change
+  // together or not at all.
+  return withOrg(orgId, async () => {
+    await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
+    const row = await loadSubRow(subscriptionId);
+    if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");
+    if (row.advancedLifecycle) throw new SubscriptionError("use an advanced contract amendment to change subscription components");
 
-  const oldQty = row.quantity;
-  const oldPrice = row.priceOverride ?? row.planAmount;
-  const newQty = changes.quantity ?? oldQty;
-  const newPrice = changes.priceOverride !== undefined ? (changes.priceOverride ?? row.planAmount) : oldPrice;
-  const oldFull = mul(oldQty, oldPrice);
-  const newFull = mul(newQty, newPrice);
+    const oldQty = row.quantity;
+    const oldPrice = row.priceOverride ?? row.planAmount;
+    const newQty = changes.quantity ?? oldQty;
+    const newPrice = changes.priceOverride !== undefined ? (changes.priceOverride ?? row.planAmount) : oldPrice;
+    const oldFull = mul(oldQty, oldPrice);
+    const newFull = mul(newQty, newPrice);
 
-  const periodStart = row.currentPeriodStart ?? row.startOn;
-  const periodEnd = row.nextBillOn;
-  // Prorated value of each configuration for the remaining slice of the period.
-  const oldRemaining = prorate(oldFull, periodStart, periodEnd, today);
-  const newRemaining = prorate(newFull, periodStart, periodEnd, today);
-  const adjustment = add(newRemaining, neg(oldRemaining)); // >0 upgrade charge, <0 credit
+    const periodStart = row.currentPeriodStart ?? row.startOn;
+    const periodEnd = row.nextBillOn;
+    // Prorated value of each configuration for the remaining slice of the period.
+    const oldRemaining = prorate(oldFull, periodStart, periodEnd, today);
+    const newRemaining = prorate(newFull, periodStart, periodEnd, today);
+    const adjustment = add(newRemaining, neg(oldRemaining)); // >0 upgrade charge, <0 credit
 
-  let invoiceId: string | null = null;
-  let documentNumber: string | null = null;
-  if (toUnits(adjustment) !== 0n) {
-    const gen = await withOrg(orgId, () =>
-      createSubscriptionInvoice({
+    let invoiceId: string | null = null;
+    let documentNumber: string | null = null;
+    if (toUnits(adjustment) !== 0n) {
+      const gen = await createSubscriptionInvoice({
         orgId,
         actorId: subscriptionId,
         customerId: row.customerId,
@@ -528,21 +603,19 @@ export async function changeSubscription(
         invoiceDate: today,
         autoPost: false,
         applyTax: false,
-      }),
-    );
-    invoiceId = gen.invoiceId;
-    documentNumber = gen.documentNumber;
-  }
+      });
+      invoiceId = gen.invoiceId;
+      documentNumber = gen.documentNumber;
+    }
 
-  await withBypass(async () => {
     await db.execute(sql`
       update subscriptions set quantity = ${newQty},
              price_override = ${changes.priceOverride !== undefined ? (changes.priceOverride ?? null) : row.priceOverride},
              last_invoice_id = coalesce(${invoiceId}, last_invoice_id), updated_at = now()
        where id = ${subscriptionId}
     `);
+    return { invoiceId, documentNumber, adjustment };
   });
-  return { invoiceId, documentNumber, adjustment };
 }
 
 /**
@@ -556,16 +629,26 @@ export async function prorateFirstInvoice(
   firstBillOn: string,
   asOf?: string,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; amount: string }> {
-  const today = asOf ?? toIso(new Date());
-  const { orgId, row } = await loadSubDetail(subscriptionId);
-  const price = row.priceOverride ?? row.planAmount;
-  const full = mul(row.quantity, price);
-  // Prorate the partial period [startOn, firstBillOn] for the days from start.
-  const amount = prorate(full, row.startOn, firstBillOn, row.startOn > today ? row.startOn : today);
-  if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
+  const orgId = await loadSubOrgId(subscriptionId);
+  const today = asOf ?? (await businessToday(orgId));
+  // Same single-transaction row lock as changeSubscription: a double-click
+  // must not cut two prorated first invoices from the same pre-bill state.
+  return withOrg(orgId, async () => {
+    await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
+    const row = await loadSubRow(subscriptionId);
+    // Single-fire: this exact state is what a successful proration writes, so
+    // a concurrent twin that waited on the lock must not bill the partial
+    // period a second time.
+    if (row.nextBillOn === firstBillOn && row.currentPeriodStart === row.startOn) {
+      throw new SubscriptionError("the first invoice has already been prorated");
+    }
+    const price = row.priceOverride ?? row.planAmount;
+    const full = mul(row.quantity, price);
+    // Prorate the partial period [startOn, firstBillOn] for the days from start.
+    const amount = prorate(full, row.startOn, firstBillOn, row.startOn > today ? row.startOn : today);
+    if (toUnits(amount) <= 0n) throw new SubscriptionError("nothing to prorate for the first period");
 
-  const gen = await withOrg(orgId, () =>
-    createSubscriptionInvoice({
+    const gen = await createSubscriptionInvoice({
       orgId,
       actorId: subscriptionId,
       customerId: row.customerId,
@@ -580,14 +663,12 @@ export async function prorateFirstInvoice(
       memo: row.planName,
       invoiceDate: today,
       autoPost: row.autoPost,
-    }),
-  );
-  await withBypass(async () => {
+    });
     await db.execute(sql`
       update subscriptions set next_bill_on = ${firstBillOn}, current_period_start = ${row.startOn},
              run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_billed_at = now()
        where id = ${subscriptionId}
     `);
+    return { ...gen, amount };
   });
-  return { ...gen, amount };
 }

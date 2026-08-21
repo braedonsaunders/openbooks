@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { filingAccountRef, type PayrollFilingAccount } from "./payroll-filing.ts";
-import { groupRemittanceRows, type RemittanceRow } from "./payroll-remittance.ts";
+import {
+  duplicateRemittanceMessage,
+  groupRemittanceRows,
+  pickRemittanceSequence,
+  remittanceBillLockKey,
+  type RemittanceRow,
+} from "./payroll-remittance.ts";
 import { renderT4Xml, type T4ReturnWithSins } from "./payroll-t4xml.ts";
 import type { T4Slip, T4SummaryTotals } from "./payroll-yearend.ts";
 
@@ -162,6 +169,41 @@ test("T4 XML falls back to the transmitter BN for unassigned employees", () => {
   assert.match(xml, /<summ_cnt>1<\/summ_cnt>/);
 });
 
+test("T4 XML formats amounts by exact decimal arithmetic, never a float round-trip", () => {
+  // The ROE builder's documented case: 86.615 has no exact binary double, so
+  // Number(v).toFixed(2) printed "86.61" where the statutory figure — half-up
+  // from the 4-decimal money string — is "86.62".
+  const xml = renderT4Xml({
+    orgId: "org", taxYear: 2026, transmitter: TRANSMITTER,
+    returns: [{
+      filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
+      slips: [{ ...slip("Ada Byron", "046454286", RP1.id), box14EmploymentIncome: "86.6150" }],
+      summary: summary("86.6150"),
+    }],
+  });
+  assert.match(xml, /<EMPT_INC_AMT>86\.62<\/EMPT_INC_AMT>/);
+  assert.match(xml, /<TOT_EMPT_INC_AMT>86\.62<\/TOT_EMPT_INC_AMT>/);
+});
+
+test("T4 XML keeps large magnitudes exact beyond double precision", () => {
+  // At ~2^46 the double spacing (2^-7) is coarser than the cent being
+  // rounded: Number("70368744177663.985") lands on …984.375 and toFixed(2)
+  // prints ".98". The bigint path rounds the exact decimal half-up to ".99".
+  const xml = renderT4Xml({
+    orgId: "org", taxYear: 2026, transmitter: TRANSMITTER,
+    returns: [{
+      filingAccount: filingAccountRef(RP1.id, ACCOUNTS),
+      slips: [{
+        ...slip("Ada Byron", "046454286", RP1.id),
+        box14EmploymentIncome: "70368744177663.9850",
+      }],
+      summary: summary("70368744177663.9850"),
+    }],
+  });
+  assert.match(xml, /<EMPT_INC_AMT>70368744177663\.99<\/EMPT_INC_AMT>/);
+  assert.match(xml, /<TOT_EMPT_INC_AMT>70368744177663\.99<\/TOT_EMPT_INC_AMT>/);
+});
+
 test("a region-scoped remittance vendor splits the group; same-vendor provinces fold into one line", () => {
   // The CA pack declares QPP/QPIP remitted to Revenu Québec for QC stubs
   // (regionalRemittanceVendorSettingsKeys) while every other province's CPP
@@ -191,4 +233,65 @@ test("a region-scoped remittance vendor splits the group; same-vendor provinces 
   assert.equal(rq.components.length, 1);
   assert.equal(rq.components[0]!.amount, "25.00");
   assert.equal(rq.total, "25.0000");
+});
+
+// -- Remittance bill idempotency ---------------------------------------------
+
+test("a second remittance bill for the same key is refused, naming the first", () => {
+  const refusal = duplicateRemittanceMessage({ documentNumber: "BILL-00004" });
+  assert.match(refusal!, /already exists \(BILL-00004\)/);
+  assert.match(refusal!, /one bill per remittance/);
+  // No prior bill (or only a voided one, which never reaches this check) is
+  // a clear coast.
+  assert.equal(duplicateRemittanceMessage(undefined), null);
+});
+
+test("the bill lock key scopes one destination, window and filing account", () => {
+  assert.equal(
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+    }),
+    "payroll-remittance-bill:org-1:cra:2026-07-01:2026-07-31:",
+  );
+  assert.notEqual(
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: "acct-2",
+    }),
+    remittanceBillLockKey("org-1", {
+      partyId: "cra", from: "2026-07-01", to: "2026-07-31", filingAccountId: null,
+    }),
+    "two program accounts remit independently",
+  );
+});
+
+test("bill creation takes the advisory lock before any bill write", () => {
+  // The duplicate check is only a control if two transactions cannot pass it
+  // simultaneously — pinned structurally, like bootstrap-safety does.
+  const source = readFileSync(new URL("./payroll-remittance.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("export async function createRemittanceBill");
+  const tx = source.indexOf("db.transaction", fn);
+  const lock = source.indexOf("pg_advisory_xact_lock", tx);
+  const insert = source.indexOf("insert into documents", tx);
+  assert.ok(tx > fn && lock > tx && insert > lock, "lock precedes the bill insert inside the transaction");
+});
+
+test("remittance bills number off the org's existing vendor_bill series", () => {
+  const root = "sub-root";
+  // The org's current usage wins: a subsidiary-scoped series outranks the
+  // org-wide row, exactly like the AP path's own numbering.
+  assert.deepEqual(
+    pickRemittanceSequence([
+      { prefix: "AP-", subsidiaryId: null },
+      { prefix: "PB-", subsidiaryId: root },
+    ], root),
+    { prefix: "PB-", subsidiaryId: root },
+  );
+  assert.deepEqual(
+    pickRemittanceSequence([{ prefix: "AP-", subsidiaryId: null }], root),
+    { prefix: "AP-", subsidiaryId: null },
+  );
+  // Another subsidiary's series never leaks, and no series at all leaves the
+  // caller seeding 'BILL-' as before.
+  assert.equal(pickRemittanceSequence([{ prefix: "XX-", subsidiaryId: "other" }], root), null);
+  assert.equal(pickRemittanceSequence([], root), null);
 });

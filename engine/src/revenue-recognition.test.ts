@@ -1,15 +1,23 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "./db.ts";
 import { toUnits } from "./money.ts";
 import {
   allocateByRelativeSSP,
   apportion,
+  buildRecognitionSchedule,
   computeRecognitionSchedule,
   estimateVariableConsideration,
   fairValueRangeFlag,
+  runRevenueRecognition,
   separateFinancingComponent,
   type RecognitionInput,
 } from "./revenue-recognition.ts";
+import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Sum of the planned amounts on a plan, in integer money units. */
 function plannedUnits(plan: { planned: string }[]): bigint {
@@ -244,6 +252,37 @@ test("cumulative column tracks recognized-to-date and ends at the total", () => 
   assert.equal(toUnits(plan[11].cumulative), toUnits("1200"));
 });
 
+test("an end date before the start date is refused, not planned as silent zeros", () => {
+  for (const method of [
+    "straight_line_even",
+    "straight_line_prorate_first_last",
+    "straight_line_daily",
+  ] as const) {
+    assert.throws(
+      () =>
+        computeRecognitionSchedule({
+          total: "1200",
+          method,
+          startOn: "2026-03-01",
+          endOn: "2026-02-28",
+        }),
+      /precedes the recognition start/,
+    );
+  }
+});
+
+test("a single-period term ending on the start day still plans the full amount", () => {
+  // Guard against over-eager validation: end == start is a legal one-day term.
+  const plan = computeRecognitionSchedule({
+    total: "500",
+    method: "straight_line_daily",
+    startOn: "2026-03-01",
+    endOn: "2026-03-01",
+  });
+  assert.equal(plan.length, 1);
+  assert.equal(toUnits(plan[0].planned), toUnits("500"));
+});
+
 // ---------------------------------------------------------------------------
 // Step 3 — transaction price: variable consideration + financing component
 // ---------------------------------------------------------------------------
@@ -333,4 +372,57 @@ test("financing accretion absorbs rounding in the final year and still lands on 
   assert.equal(last.closing, "50000.0000");
   const interestSum = f.accretion.reduce((a, p) => a + toUnits(p.interest), 0n);
   assert.equal(interestSum, toUnits(f.financingComponent));
+});
+
+// ---------------------------------------------------------------------------
+// runRevenueRecognition — fail-closed empty milestone/usage schedules
+// ---------------------------------------------------------------------------
+
+test("an empty milestone schedule reports a problem and never satisfies the obligation", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'MILESTONE', 'Milestone events', 'milestone', false, 1,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-MILESTONE-001', 'active', ${org.date},
+              'CAD', '5000', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Milestone deliverable', ${ruleId},
+              '5000', '5000', ${org.date}, 'open', ${actorId}, ${actorId})`);
+
+    // The real build path: with no event source, the defect leaves a zero-line schedule.
+    const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(build.lineCount, 0);
+
+    const run = await runRevenueRecognition(org.orgId, "2026-12-31", actorId);
+    assert.equal(run.posted, 0);
+    assert.ok(
+      run.problems.some((p) =>
+        p.includes("REV-MILESTONE-001") &&
+        p.includes("milestone/usage obligation has no recognition events recorded"),
+      ),
+      `expected an empty-milestone problem, got ${JSON.stringify(run.problems)}`,
+    );
+
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from performance_obligations where id = ${obligationId}`));
+    assert.equal(status.rows[0]!.status, "open");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });

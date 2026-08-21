@@ -14,6 +14,13 @@ import { resolveOrgId } from './org-scope'
  * Full invoice payload for the drawer: header + lines. For posted invoices
  * the applied amount is summed from `applications` rows targeting the posted
  * entry's AR open-item line, and `balance_due` = total − applied.
+ *
+ * The applied sum reads `target_transaction_amount`, NOT `amount`:
+ * `documents.total` is in the document's TRANSACTION currency while
+ * `applications.amount` is the base-currency carrying amount, so subtracting
+ * it from the total produced a meaningless figure for every FX invoice — a
+ * balance in neither currency (same fix as engine/src/dunning.ts). Both
+ * figures are now denominated in the document's own currency.
  */
 export async function loadInvoice(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
@@ -25,7 +32,7 @@ export async function loadInvoice(id: string, orgId?: string) {
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
       left join lateral (
-        select coalesce(sum(a.amount), 0) as applied
+        select coalesce(sum(a.target_transaction_amount), 0) as applied
           from journal_lines jl
           join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
          where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item

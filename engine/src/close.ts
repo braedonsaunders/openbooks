@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
+import { businessToday } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
 
 export class CloseError extends Error {}
@@ -2766,7 +2767,6 @@ export async function runCloseAutomations(
 
 /** Scheduler entrypoint. Each run/rule/day is idempotent across processes. */
 export async function runDueCloseAutomations(): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10);
   // Org-spanning discovery crosses an explicit trusted boundary; each rule then
   // executes inside its own tenant. Without this the contextless scheduler tick
   // is denied by default and no deadline automation ever runs.
@@ -2779,12 +2779,13 @@ export async function runDueCloseAutomations(): Promise<number> {
      where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 90
   `));
   for (const run of due.rows) {
-    await withOrgContext(run.org_id, () =>
+    await withOrgContext(run.org_id, async () =>
       runCloseAutomations({
       orgId: run.org_id,
       runId: run.id,
       trigger: "deadline_approaching",
-      eventKey: `deadline:${today}`,
+      // The idempotency day is the org's business day, not the scheduler's UTC day.
+      eventKey: `deadline:${run.id}:${await businessToday(run.org_id)}`,
     }));
   }
   return due.rows.length;

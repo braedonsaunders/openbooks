@@ -101,20 +101,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (action === 'copy_prior_actuals') {
         if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
         const selected = dims(body)
+        // A selected dimension filters the source activity and stamps its value
+        // onto every copied line. An unselected dimension is copied through:
+        // each source line keeps its own value instead of being silently
+        // collapsed into the NULL-dimension bucket.
+        const sourceDimFilters = [
+          selected.departmentId === null ? null : sql`l.department_id is not distinct from ${selected.departmentId}`,
+          selected.projectId === null ? null : sql`l.project_id is not distinct from ${selected.projectId}`,
+          selected.locationId === null ? null : sql`l.location_id is not distinct from ${selected.locationId}`,
+          selected.classId === null ? null : sql`l.class_id is not distinct from ${selected.classId}`,
+        ].filter((predicate) => predicate !== null)
+        // Clear exactly what this copy replaces: the selected dimensions'
+        // existing lines, or the whole scenario when nothing narrows the scope.
+        const clearDimFilters = [
+          selected.departmentId === null ? null : sql`department_id is not distinct from ${selected.departmentId}`,
+          selected.projectId === null ? null : sql`project_id is not distinct from ${selected.projectId}`,
+          selected.locationId === null ? null : sql`location_id is not distinct from ${selected.locationId}`,
+          selected.classId === null ? null : sql`class_id is not distinct from ${selected.classId}`,
+        ].filter((predicate) => predicate !== null)
         await tx.execute(sql`
           delete from budget_lines
            where org_id = ${user.orgId} and scenario_id = ${id}
-             and department_id is not distinct from ${selected.departmentId}
-             and project_id is not distinct from ${selected.projectId}
-             and location_id is not distinct from ${selected.locationId}
-             and class_id is not distinct from ${selected.classId}
+             ${clearDimFilters.length > 0 ? sql`and ${sql.join(clearDimFilters, sql` and `)}` : sql``}
         `)
         await tx.execute(sql`
           insert into budget_lines
             (org_id, scenario_id, account_id, period_id, department_id, project_id, location_id, class_id,
              amount, created_by, updated_by)
           select ${user.orgId}, ${id}, l.account_id, destination.id,
-                 ${selected.departmentId}, ${selected.projectId}, ${selected.locationId}, ${selected.classId},
+                 l.department_id, l.project_id, l.location_id, l.class_id,
                  sum(l.amount), ${user.id}, ${user.id}
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
@@ -127,11 +142,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
              and destination.period_number = source_period.period_number
            where e.book_id = ${scenario.book_id}
              and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-             and l.department_id is not distinct from ${selected.departmentId}
-             and l.project_id is not distinct from ${selected.projectId}
-             and l.location_id is not distinct from ${selected.locationId}
-             and l.class_id is not distinct from ${selected.classId}
-           group by l.account_id, destination.id
+             ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
+           group by l.account_id, destination.id, l.department_id, l.project_id, l.location_id, l.class_id
           having sum(l.amount) <> 0
         `)
         const nextRevision = expectedRevision + 1

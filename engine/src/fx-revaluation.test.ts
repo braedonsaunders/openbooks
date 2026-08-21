@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { computeRevaluation, type RevaluationPosition } from "./fx-revaluation.ts";
+import {
+  computeRevaluation,
+  missingReversalPeriodReason,
+  revaluationLockKey,
+  type RevaluationPosition,
+} from "./fx-revaluation.ts";
 import { add, isZero, toUnits } from "./money.ts";
 
 const GL = "gainloss-acct";
@@ -125,4 +131,66 @@ test("positions with zero delta are dropped even when others revalue", () => {
   );
   assert.equal(r.lines.length, 2);
   assert.equal(r.lines[0]!.accountId, "moved");
+});
+
+test("the revaluation lock key scopes one org, book, period and subsidiary", () => {
+  assert.equal(
+    revaluationLockKey("org-1", "book-1", "period-1", "sub-1"),
+    "fxreval:org-1:book-1:period-1:sub-1",
+  );
+  // Two subsidiaries (or books, or periods) in the same org revalue
+  // independently; only the exact same scope contends.
+  const key = revaluationLockKey("org-1", "book-1", "period-1", "sub-1");
+  assert.notEqual(key, revaluationLockKey("org-2", "book-1", "period-1", "sub-1"));
+  assert.notEqual(key, revaluationLockKey("org-1", "book-2", "period-1", "sub-1"));
+  assert.notEqual(key, revaluationLockKey("org-1", "book-1", "period-2", "sub-1"));
+  assert.notEqual(key, revaluationLockKey("org-1", "book-1", "period-1", "sub-2"));
+});
+
+test("a refused revaluation names the missing reversal period and the remedy", () => {
+  const reason = missingReversalPeriodReason();
+  assert.match(reason, /no following accounting period/);
+  assert.match(reason, /generate periods and re-run/);
+});
+
+test("the advisory lock precedes the duplicate check precedes the insert", () => {
+  // The check-then-insert is only a control if two transactions cannot pass it
+  // simultaneously — pinned structurally, like payroll-filing does.
+  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("async function postRevaluationEntry");
+  const tx = source.indexOf("db.transaction", fn);
+  const lock = source.indexOf("pg_advisory_xact_lock", tx);
+  const check = source.indexOf("select 1 from journal_entries", tx);
+  const insert = source.indexOf("insert into journal_entries", tx);
+  assert.ok(tx > fn, "posting happens inside one transaction");
+  assert.ok(lock > tx, "the advisory lock is taken inside that transaction");
+  assert.ok(check > lock, "the duplicate check runs under the lock");
+  assert.ok(insert > check, "the entry insert follows the duplicate check");
+});
+
+test("direct quotes outrank inverted ones when both quote the same date", () => {
+  // The rate union must be deterministic: with USD→EUR and EUR→USD rows on the
+  // same as_of, the winner can never be planner-arbitrary.
+  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
+  const lookup = source.slice(source.indexOf("async function periodEndRate"));
+  assert.match(lookup, /select rate, as_of, 0 as priority from fx_rates/, "direct pair is priority 0");
+  assert.match(lookup, /1 as priority from fx_rates/, "inverted pair is priority 1");
+  assert.match(lookup, /order by as_of desc, priority asc limit 1/);
+  // One conversion rule across the engine: labor costing resolves the same
+  // pair/date with the same ordering.
+  const labor = readFileSync(new URL("./labor-costing.ts", import.meta.url), "utf8");
+  assert.match(labor, /order by as_of desc, priority asc limit 1/);
+});
+
+test("a missing reversal period is reported before any posting is attempted", () => {
+  const source = readFileSync(new URL("./fx-revaluation.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runRevaluation");
+  const guard = source.indexOf("missingReversalPeriodReason()", run);
+  const postCall = source.indexOf("await postRevaluationEntry(", run);
+  assert.ok(guard > run && postCall > guard, "the problem is pushed before the posting attempt");
+  // The old silent skip is gone: the posting boundary itself refuses rather
+  // than post an unreversed revaluation.
+  assert.ok(!source.includes("if (nextPeriodId && nextStartsOn) {"), "the reversal is never silently skipped");
+  const throwGuard = source.indexOf("throw new RevaluationError(missingReversalPeriodReason())");
+  assert.ok(throwGuard > source.indexOf("async function postRevaluationEntry"), "posting throws without a reversal period");
 });

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { can, getAuthz, type Authz } from '../../../lib/authz'
 import {
   accessAtLeast,
@@ -58,6 +60,27 @@ export function canMutateFiles(authz: Authz, targetTable?: string): boolean {
   if (targetTable === 'fixed_assets') return can(authz, 'assets.manage')
   if (targetTable !== 'documents') return false
   return DOCUMENT_WRITE_PERMS.some((p) => can(authz, p))
+}
+
+export { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from './target-tables'
+
+/**
+ * Verify the attach target row exists in the caller's org. Every allowlisted
+ * table is org-scoped with a uuid id, so the existence probe is trivial.
+ * fixed_assets is allowlist-only here — the route checks it separately with
+ * subsidiary scoping (attachTargetVisible).
+ */
+export async function attachmentTargetExists(orgId: string, targetTable: string, targetId: string): Promise<boolean> {
+  const probe =
+    targetTable === 'documents' ? sql`select 1 from documents where id = ${targetId} and org_id = ${orgId}`
+    : targetTable === 'parties' ? sql`select 1 from parties where id = ${targetId} and org_id = ${orgId}`
+    : targetTable === 'item_rate_versions' ? sql`select 1 from item_rate_versions where id = ${targetId} and org_id = ${orgId}`
+    : targetTable === 'compliance_records' ? sql`select 1 from compliance_records where id = ${targetId} and org_id = ${orgId}`
+    : targetTable === 'lien_waivers' ? sql`select 1 from lien_waivers where id = ${targetId} and org_id = ${orgId}`
+    : null
+  if (!probe) return true
+  const r = await db.execute(probe)
+  return Boolean(r.rows[0])
 }
 
 /** Resolve authz or the 401 response. */
