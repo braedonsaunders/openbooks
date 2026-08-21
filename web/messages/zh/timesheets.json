@@ -63,6 +63,11 @@
     "reopenTitle": "重新打开此工时表？",
     "reopenMessage": "该周将回到草稿状态并清除批准，需要重新批准。",
     "reopenedToast": "已重新打开工时表",
+    "amend": "更正",
+    "amendTitle": "更正本周已锁定的工时？",
+    "amendMessage": "已被下游使用的工时保持原样。系统会为每条锁定记录创建一笔冲销草稿，以便您在新行上录入更正。该周将回到草稿状态。",
+    "amendedToast": "已创建更正草稿",
+    "amendmentLine": "更正",
     "lockedBecause": "该周无法再重新打开 — {count} 条记录已{reasons}。",
     "lockReason": {
       "invoiced": "向客户开票",

@@ -18,7 +18,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
-import { ChevronLeft, ChevronRight, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { CustomFieldInput } from '../../../components/custom-field-input'
@@ -53,6 +53,8 @@ interface GridRow {
   memo: string
   hours: string[]
   custom: Record<string, unknown>
+  immutable: boolean
+  amendsEntryId: string | null
 }
 
 function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
@@ -66,6 +68,8 @@ function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
     memo: '',
     hours: ['', '', '', '', '', '', ''],
     custom: {},
+    immutable: false,
+    amendsEntryId: null,
   }
 }
 
@@ -80,6 +84,8 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
     memo: r.memo ?? '',
     hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
     custom: r.custom ?? {},
+    immutable: r.immutable,
+    amendsEntryId: r.amendsEntryId,
   }))
 }
 
@@ -195,10 +201,12 @@ export function WeeklyGrid({
   )
 
   const setRow = (i: number, patch: Partial<GridRow>) => {
+    if (rows[i]?.immutable) return
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
     setDirty(true)
   }
   const setCell = (i: number, day: number, value: string) => {
+    if (rows[i]?.immutable) return
     setRows((rs) =>
       rs.map((r, j) => (j === i ? { ...r, hours: r.hours.map((h, k) => (k === day ? value : h)) } : r)),
     )
@@ -209,6 +217,7 @@ export function WeeklyGrid({
     setDirty(true)
   }
   const removeRow = (i: number) => {
+    if (rows[i]?.immutable) return
     setRows((rs) => (rs.length <= 1 ? [emptyRow(pickers.timeTypes)] : rs.filter((_, j) => j !== i)))
     setDirty(true)
   }
@@ -285,7 +294,7 @@ export function WeeklyGrid({
     const data = await post('/api/timesheets', {
       employee: employeeId,
       week,
-      rows: rows.map((r) => ({
+      rows: rows.filter((r) => !r.immutable).map((r) => ({
         projectId: r.projectId || null,
         itemId: r.itemId || null,
         timeTypeId: r.timeTypeId || null,
@@ -355,6 +364,21 @@ export function WeeklyGrid({
     }
   }
 
+  const onAmend = async () => {
+    if (!employeeId) return
+    const ok = await confirmDialog({
+      title: t('grid.amendTitle'),
+      message: t('grid.amendMessage'),
+      confirmLabel: t('grid.amend'),
+    })
+    if (!ok) return
+    const data = await post('/api/timesheets/amend', { employee: employeeId, week })
+    if (data) {
+      applyPayload(data)
+      toast.success(t('grid.amendedToast'))
+    }
+  }
+
   const canSave = canManage && !readOnly && employeeId != null
   const canSubmit = requireApproval && canManage && employeeId != null && (status === 'draft' || status === 'rejected')
   const canDoApprove = requireApproval && canApprove && employeeId != null && status === 'submitted'
@@ -363,6 +387,7 @@ export function WeeklyGrid({
   // nothing downstream, and the user carries the separate reopen right.
   const weekLocked = (payload.lockReasons?.length ?? 0) > 0
   const canDoReopen = canReopen && employeeId != null && status === 'approved' && !weekLocked
+  const canDoAmend = canReopen && employeeId != null && status === 'approved' && weekLocked
 
   // Column widths mirror LineGrid's data-driven track model.
   // Org-defined line fields become real grid columns, between the built-in
@@ -416,6 +441,11 @@ export function WeeklyGrid({
           {canDoReopen ? (
             <Button size="sm" variant="outline" onClick={onReopen} disabled={busy}>
               <RotateCcw size={14} /> {t('grid.reopen')}
+            </Button>
+          ) : null}
+          {canDoAmend ? (
+            <Button size="sm" variant="outline" onClick={onAmend} disabled={busy}>
+              <FilePenLine size={14} /> {t('grid.amend')}
             </Button>
           ) : null}
         </>
@@ -520,7 +550,7 @@ export function WeeklyGrid({
                   r={r}
                   i={i}
                   total={total}
-                  readOnly={readOnly}
+                  readOnly={readOnly || r.immutable}
                   pickers={pickers}
                   cellInput={cellInput}
                   onProject={(v) => setRow(i, { projectId: v })}
@@ -701,6 +731,9 @@ function RowFragment({
         />
       </div>
       <div className={cell}>
+        {r.amendsEntryId ? (
+          <Badge variant="outline" className="mr-1 shrink-0">{t('grid.amendmentLine')}</Badge>
+        ) : null}
         {readOnly ? (
           <span className="truncate px-1.5 text-sm text-slate-500 dark:text-slate-400">{r.memo || '—'}</span>
         ) : (
