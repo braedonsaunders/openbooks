@@ -36,7 +36,7 @@ test("the pack now withholds state income tax somewhere", () => {
   // everywhere it is printed.
   assert.deepEqual(
     implementedUsStates(),
-    ["CA", "GA", "IL", "MA", "MI", "NJ", "NY", "NC", "OH", "PA"],
+    ["CA", "CO", "GA", "IL", "MA", "MI", "NJ", "NY", "NC", "OH", "PA"],
   );
   for (const state of implementedUsStates()) {
     assert.equal(
@@ -48,8 +48,8 @@ test("the pack now withholds state income tax somewhere", () => {
 
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
-  assert.equal(supported.length, 19); // 10 implemented + 9 no-tax
-  for (const state of ["CA", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC",
+  assert.equal(supported.length, 20); // 11 implemented + 9 no-tax
+  for (const state of ["CA", "CO", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC",
     "TX", "FL", "WA"]) {
     assert.ok(supported.includes(state), state);
   }
@@ -68,19 +68,18 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
 /* --------------------------------------------------------------------- */
 
 test("an untranscribed state is refused BY NAME, with the publication and the file", () => {
-  // Massachusetts was this test's example until the second tranche implemented
-  // it. Colorado now carries it, which is the point: the list of states this
-  // sentence can be written about is supposed to keep shrinking.
+  // Colorado was this test's example until DR 1098 was transcribed. Connecticut
+  // now carries it: the list of states this sentence can be written about is
+  // supposed to keep shrinking.
   assert.throws(
-    () => requireUsStateWithholding("CO"),
+    () => requireUsStateWithholding("CT"),
     (error: unknown) => {
       const message = (error as Error).message;
-      assert.match(message, /CO income tax withholding is not implemented/);
-      assert.match(message, /DR 1098/);
-      assert.match(message, /engine\/src\/payroll\/us\/states\/co\.ts/);
-      // And the doctrine, stated where the operator reads it.
+      assert.match(message, /CT income tax withholding is not implemented/);
+      assert.match(message, /Circular CT/);
+      assert.match(message, /engine\/src\/payroll\/us\/states\/ct\.ts/);
       assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
-      assert.match(message, /Implemented today: CA, GA, IL, MA, MI, NJ, NY, NC, OH, PA/);
+      assert.match(message, /Implemented today: CA, CO, GA, IL, MA, MI, NJ, NY, NC, OH, PA/);
       return true;
     },
   );
@@ -169,7 +168,7 @@ test("the W-4 reads through profile COLUMNS — one interface, two storages", ()
 });
 
 test("state certificates store answers in ROWS, never in a new column", () => {
-  for (const key of ["us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419"]) {
+  for (const key of ["us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004"]) {
     const certificate = payrollCertificate("US", key);
     assert.equal(certificate.storage, "certificate_rows", key);
     for (const field of certificate.fields) {
@@ -520,7 +519,7 @@ test("Illinois declares no sub-region levies, because it constitutionally has no
 test("an employee with no residence recorded resolves exactly as before", () => {
   // Every profile row written before the residence attribute existed carries
   // null. Those employees must keep calculating identically.
-  for (const state of ["CA", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC"]) {
+  for (const state of ["CA", "CO", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC"]) {
     const resolved = resolveWithholding({ country: "US", workRegion: state });
     assert.equal(resolved.residenceSource, "assumed");
     assert.deepEqual(resolved.levies.map((levy) => levy.region), [state]);

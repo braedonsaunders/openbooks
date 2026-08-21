@@ -26,6 +26,7 @@
 import { PayrollError } from "../../../payroll-error.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
 import { CA_WITHHOLDING } from "./ca.ts";
+import { CO_WITHHOLDING } from "./co.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
 import { IL_WITHHOLDING } from "./il.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
@@ -55,6 +56,7 @@ export class UsStateWithholdingError extends PayrollError {}
  */
 const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   CA_WITHHOLDING,
+  CO_WITHHOLDING,
   NY_WITHHOLDING,
   PA_WITHHOLDING,
   IL_WITHHOLDING,
@@ -93,7 +95,6 @@ const PUBLICATIONS: Readonly<Record<string, string>> = {
   AL: "Alabama Withholding Tax Tables and Instructions for Employers",
   AZ: "Arizona Form A1-T / Publication 011 (a percentage-of-federal election)",
   AR: "Arkansas Withholding Tax Formula (AR4ECX)",
-  CO: "Colorado DR 1098, Colorado Income Tax Withholding Worksheet for Employers",
   CT: "Connecticut Circular CT, Employer's Tax Guide",
   DE: "Delaware Employer's Guide, Withholding Tax Computation",
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
@@ -203,6 +204,7 @@ export function usStatePublication(code: string): string | null {
 export * from "./types.ts";
 export { pctToRate } from "./transcription.ts";
 export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
+export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
 export { GA_WITHHOLDING, GA_EDITIONS, gaEditionForPayDate, gaStandardDeduction } from "./ga.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,

@@ -22,6 +22,7 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
+import { CO_CERTIFICATE, CO_REGION } from "./states/co-declaration.ts";
 import { implementedUsStates, usStatePublication } from "./states/index.ts";
 import { MI_TAXING_CITIES } from "./states/mi.ts";
 import { OH_SCHOOL_DISTRICTS_2026 } from "./states/oh.ts";
@@ -936,7 +937,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
   certificates: [
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
-    MA_M4, GA_G4, NC_NC4,
+    MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE,
   ],
 };
 
@@ -1330,7 +1331,7 @@ const NC_REGION: PayrollRegionWithholding = {
 };
 
 const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
-  CA: CA_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
+  CA: CA_REGION, CO: CO_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
   NJ: NJ_REGION, OH: OH_REGION, MI: MI_REGION, MA: MA_REGION, GA: GA_REGION, NC: NC_REGION,
 };
 
