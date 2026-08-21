@@ -35,6 +35,8 @@ import { KY_CERTIFICATE, KY_REGION } from "./states/ky-declaration.ts";
 import { ME_CERTIFICATE, ME_REGION } from "./states/me-declaration.ts";
 import { MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION } from "./states/md-declaration.ts";
 import { OR_CERTIFICATE, OR_REGION } from "./states/or-declaration.ts";
+import { RI_CERTIFICATE, RI_REGION } from "./states/ri-declaration.ts";
+import { VT_CERTIFICATE, VT_REGION } from "./states/vt-declaration.ts";
 import { MN_CERTIFICATE, MN_MWR, MN_REGION } from "./states/mn-declaration.ts";
 import { implementedUsStates, usStatePublication } from "./states/index.ts";
 import { MI_TAXING_CITIES } from "./states/mi.ts";
@@ -957,6 +959,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE, CT_CERTIFICATE,
     MD_CERTIFICATE, MD_MW507_NR, OR_CERTIFICATE, DE_CERTIFICATE,
     AL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
+    RI_CERTIFICATE, VT_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
@@ -1357,7 +1360,7 @@ const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
   AZ: AZ_REGION, IN: IN_REGION, KY: KY_REGION, VA: VA_REGION, WV: WV_REGION,
   IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,
   MD: MD_REGION, OR: OR_REGION, DE: DE_REGION, AL: AL_REGION, SC: SC_REGION,
-  AR: AR_REGION, ME: ME_REGION,
+  AR: AR_REGION, ME: ME_REGION, RI: RI_REGION, VT: VT_REGION,
 };
 
 /**

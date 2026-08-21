@@ -45,6 +45,8 @@ import { NY_TAX_YEAR_EDITIONS } from "./ny.ts";
 import { OH_TAX_YEAR_EDITIONS } from "./oh.ts";
 import { OR_TAX_YEAR_EDITIONS } from "./or.ts";
 import { PA_TAX_YEAR_EDITIONS } from "./pa.ts";
+import { RI_TAX_YEAR_EDITIONS } from "./ri.ts";
+import { VT_TAX_YEAR_EDITIONS } from "./vt.ts";
 import { UT_TAX_YEAR_EDITIONS } from "./ut.ts";
 import { VA_TAX_YEAR_EDITIONS } from "./va.ts";
 import { WI_TAX_YEAR_EDITIONS } from "./wi.ts";
@@ -80,6 +82,8 @@ export const US_STATE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
   ...SC_TAX_YEAR_EDITIONS,
   ...AR_TAX_YEAR_EDITIONS,
   ...ME_TAX_YEAR_EDITIONS,
+  ...RI_TAX_YEAR_EDITIONS,
+  ...VT_TAX_YEAR_EDITIONS,
 ];
 
 /**

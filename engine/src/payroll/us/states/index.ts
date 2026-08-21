@@ -48,7 +48,9 @@ import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
 import { OR_WITHHOLDING } from "./or.ts";
 import { PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING } from "./pa.ts";
+import { RI_WITHHOLDING } from "./ri.ts";
 import { SC_WITHHOLDING } from "./sc.ts";
+import { VT_WITHHOLDING } from "./vt.ts";
 import { UT_WITHHOLDING } from "./ut.ts";
 import { VA_WITHHOLDING } from "./va.ts";
 import { WI_WITHHOLDING } from "./wi.ts";
@@ -105,6 +107,8 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   SC_WITHHOLDING,
   AR_WITHHOLDING,
   ME_WITHHOLDING,
+  RI_WITHHOLDING,
+  VT_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -140,8 +144,6 @@ const PUBLICATIONS: Readonly<Record<string, string>> = {
   NM: "New Mexico FYI-104, Wage Withholding Tax",
   ND: "North Dakota Income Tax Withholding Rates and Instructions",
   OK: "Oklahoma Income Tax Withholding Tables (Packet OW-2)",
-  RI: "Rhode Island Employer's Income Tax Withholding Tables",
-  VT: "Vermont Income Tax Withholding Instructions, Tables and Charts",
 };
 
 /** The engines the pack carries, for the setup surface and readiness. */
@@ -230,7 +232,9 @@ export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
 export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";
 export { DE_WITHHOLDING, DE_RATES_2026 } from "./de.ts";
 export { ME_WITHHOLDING, ME_RATES_2026 } from "./me.ts";
+export { RI_WITHHOLDING, RI_RATES_2026 } from "./ri.ts";
 export { SC_WITHHOLDING, SC_RATES_2026 } from "./sc.ts";
+export { VT_WITHHOLDING, VT_RATES_2026 } from "./vt.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
 export { KY_WITHHOLDING, KY_RATES_2026 } from "./ky.ts";
