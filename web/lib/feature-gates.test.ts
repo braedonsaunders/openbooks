@@ -91,6 +91,8 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   budgets: ['app/api/budgets'],
   projects: ['app/api/projects'],
   timeTracking: ['app/api/timesheets'],
+  payroll: ['app/api/payroll'],
+  fixedAssets: ['app/api/assets'],
 }
 
 function routeFilesUnder(dir: string): string[] {

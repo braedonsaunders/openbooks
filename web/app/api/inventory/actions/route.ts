@@ -15,6 +15,7 @@ import {
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
 
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
   if (quantity === null || toUnits(quantity) === 0n) {
     return NextResponse.json({ error: 'quantity required' }, { status: 422 })
   }
-  const date = body.date && DATE_RE.test(body.date) ? body.date : new Date().toISOString().slice(0, 10)
+  const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(user.orgId)
 
   // Default to the org's primary/first subsidiary when the caller didn't scope one.
   let subsidiaryId = body.subsidiaryId

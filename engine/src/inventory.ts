@@ -23,6 +23,7 @@ import {
   loadSubsidiaryContext,
   validateSubsidiaryRestrictions,
 } from "./subsidiaries.ts";
+import { businessToday } from "./business-date.ts";
 
 /**
  * Inventory subledger. Quantity and value move ONLY through this engine:
@@ -57,7 +58,7 @@ import {
  * than handed to it. A zero quantity has no unit cost to state; callers choose
  * the fallback that fits their context.
  */
-function unitCostPerQuantity(value: string, quantity: string): string | null {
+export function unitCostPerQuantity(value: string, quantity: string): string | null {
   const q = toUnits(quantity);
   if (q === 0n) return null;
   const v = toUnits(value) * 10_000n;
@@ -3036,7 +3037,7 @@ export async function shipTransferOrder(
   orderId: string,
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
-  const shipDate = date ?? new Date().toISOString().slice(0, 10);
+  const shipDate = date ?? await businessToday(orgId);
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "draft")
@@ -3100,7 +3101,7 @@ export async function receiveTransferOrder(
   orderId: string,
   date?: string,
 ): Promise<{ id: string; status: string; entryId: string | null }> {
-  const receiveDate = date ?? new Date().toISOString().slice(0, 10);
+  const receiveDate = date ?? await businessToday(orgId);
   return await db.transaction(async (tx) => {
     const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
     if (order.status !== "in_transit")

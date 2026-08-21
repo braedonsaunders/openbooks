@@ -151,6 +151,26 @@ export interface OpeningTaxYtd {
  *
  * Pure, so the once-per-employee rule is verifiable without a database.
  */
+/**
+ * Mid-year adopters can have opening YTD and no committed stub in this
+ * system. `carryOpeningTaxYtd` only folds onto existing slips, so those
+ * employees would otherwise disappear from T4/W-2. Seed a zero slip for
+ * each opening employee the stub query did not produce; the carry-in then
+ * lands on it.
+ */
+export function seedOpeningOnlySlips<S extends { employeePartyId: string }>(
+  slips: readonly S[],
+  openingEmployeeIds: Iterable<string>,
+  seed: (employeePartyId: string) => S,
+): S[] {
+  const have = new Set(slips.map((s) => s.employeePartyId));
+  const extra: S[] = [];
+  for (const id of openingEmployeeIds) {
+    if (!have.has(id)) extra.push(seed(id));
+  }
+  return extra.length ? [...extra, ...slips] : [...slips];
+}
+
 export function carryOpeningTaxYtd<S extends { employeePartyId: string }>(
   slips: readonly S[],
   openings: ReadonlyMap<string, OpeningTaxYtd>,
@@ -194,6 +214,31 @@ async function openingTaxYtdByEmployee(
   return new Map(rows.rows.map((row) => [row.employee_party_id, {
     taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
     taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+  }]));
+}
+
+async function openingEmployeeProfiles(
+  orgId: string,
+  employeeIds: readonly string[],
+  country: "CA" | "US",
+): Promise<Map<string, { name: string; province: string; filingAccountId: string | null }>> {
+  if (employeeIds.length === 0) return new Map();
+  const rows = (await db.execute<{
+    employee_party_id: string; display_name: string; province: string | null; filing_account_id: string | null;
+  }>(sql`
+    select p.id as employee_party_id, p.display_name,
+           coalesce(prof.province, '') as province,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id
+      from parties p
+      left join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+       and coalesce(prof.country, ${country}) = ${country}
+     where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
+  `));
+  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+    name: row.display_name,
+    province: row.province ?? "",
+    filingAccountId: row.filing_account_id,
   }]));
 }
 
@@ -278,8 +323,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
   // measure the CPP/EI bases these stubs were assessed against, which an
   // opening balance is not part of here.
   const openings = await openingTaxYtdByEmployee(orgId, taxYear);
-  return carryOpeningTaxYtd(
-    rows.rows.map((row, index) => {
+  const stubSlips = rows.rows.map((row, index) => {
       const province = String(row.province ?? "");
       const isQuebec = province === "QC";
       return {
@@ -302,10 +346,31 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
         box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
         stubCount: Number(row.stub_count ?? 0),
       };
-    }),
-    openings,
-    openingYtdIntoT4Slip,
-  );
+    });
+  const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "CA");
+  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
+    const profile = profiles.get(employeePartyId);
+    const province = profile?.province ?? "";
+    return {
+      employeePartyId,
+      employeeName: profile?.name ?? employeePartyId,
+      province,
+      isQuebec: province === "QC",
+      filingAccountId: profile?.filingAccountId ?? null,
+      box14EmploymentIncome: "0",
+      box16Cpp: "0",
+      box16aCpp2: "0",
+      box18Ei: "0",
+      box22IncomeTax: "0",
+      box24EiInsurable: "0",
+      box26CppPensionable: "0",
+      box44UnionDues: "0",
+      box55Qpip: "0",
+      box56QpipInsurable: "0",
+      stubCount: 0,
+    };
+  });
+  return carryOpeningTaxYtd(seeded, openings, openingYtdIntoT4Slip);
 }
 
 /**
@@ -816,22 +881,41 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // (boxes 3–6) are the FICA bases these stubs were assessed against, which an
   // opening balance is not part of here.
   const openings = await openingTaxYtdByEmployee(orgId, taxYear);
-  return carryOpeningTaxYtd(rows.rows.map((row) => {
+  const stubSlips = rows.rows.map((row) => {
     const states = ((row.states as string[] | null) ?? []).filter(Boolean);
     return {
-    employeePartyId: String(row.employee_party_id),
-    employeeName: String(row.display_name),
-    states,
-    state: states.join(" / "),
-    filingAccountId: (row.filing_account_id as string | null) ?? null,
-    box1Wages: num(row.wages),
-    box2FederalIncomeTax: num(row.fit),
-    box3SsWages: num(row.ss_wages),
-    box4SsTax: num(row.ss_tax),
-    box5MedicareWages: num(row.medicare_wages),
-    box6MedicareTax: num(row.medicare_tax),
+      employeePartyId: String(row.employee_party_id),
+      employeeName: String(row.display_name),
+      states,
+      state: states.join(" / "),
+      filingAccountId: (row.filing_account_id as string | null) ?? null,
+      box1Wages: num(row.wages),
+      box2FederalIncomeTax: num(row.fit),
+      box3SsWages: num(row.ss_wages),
+      box4SsTax: num(row.ss_tax),
+      box5MedicareWages: num(row.medicare_wages),
+      box6MedicareTax: num(row.medicare_tax),
     };
-  }), openings, openingYtdIntoW2Slip);
+  });
+  const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
+  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
+    const profile = profiles.get(employeePartyId);
+    const states = profile?.province ? [profile.province] : [];
+    return {
+      employeePartyId,
+      employeeName: profile?.name ?? employeePartyId,
+      states,
+      state: states.join(" / "),
+      filingAccountId: profile?.filingAccountId ?? null,
+      box1Wages: "0",
+      box2FederalIncomeTax: "0",
+      box3SsWages: "0",
+      box4SsTax: "0",
+      box5MedicareWages: "0",
+      box6MedicareTax: "0",
+    };
+  });
+  return carryOpeningTaxYtd(seeded, openings, openingYtdIntoW2Slip);
 }
 
 // ---------------------------------------------------------------------------

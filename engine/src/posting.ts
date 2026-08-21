@@ -1026,7 +1026,12 @@ async function applySubsidiaries(
 
     const functionalRate = async (targetCurrency: string): Promise<string> => {
       if (doc.currency === targetCurrency) return "1";
-      if (targetCurrency === origin.baseCurrency) return doc.fxRate;
+      // Honour a user-supplied header rate. The schema default is '1', which
+      // on a foreign-currency document is "unset", not a 1:1 peg — look the
+      // spot up so dunning, payment runs and the stamp are not all 1.
+      if (targetCurrency === origin.baseCurrency && doc.fxRate && doc.fxRate !== "1") {
+        return doc.fxRate;
+      }
       const cached = rateCache.get(targetCurrency);
       if (cached) return cached;
       const r = (await runner.execute<{ rate: string }>(sql`

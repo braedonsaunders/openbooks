@@ -105,10 +105,19 @@ test("changeSubscription and prorateFirstInvoice serialize on the subscription r
     assert.ok(read > lock, `${name}: state is read under the lock`);
     assert.ok(invoice > read, `${name}: the proration invoice is cut under the same lock`);
   }
-  // Single-fire first proration: a twin that waited on the lock must not bill
-  // the partial period again once the winner committed its exact end state.
+  // Single-fire first proration: create inserts next_bill_on = firstBillOn and
+  // current_period_start = startOn — the same columns a successful proration
+  // writes. The guard must key off last_invoice_id / run_count, not that
+  // insert state, or addSubscription + prorateFirstPeriod is dead on arrival.
   const prorateFn = source.indexOf("export async function prorateFirstInvoice");
   const guard = source.indexOf('throw new SubscriptionError("the first invoice has already been prorated")', prorateFn);
   const invoice = source.indexOf("createSubscriptionInvoice({", prorateFn);
+  const guardBlock = source.slice(prorateFn, invoice);
   assert.ok(guard > prorateFn && invoice > guard, "the already-prorated guard precedes the second invoice attempt");
+  assert.match(guardBlock, /lastInvoiceId/, "single-fire keys off the invoice, not the create-state schedule columns");
+  assert.match(guardBlock, /runCount/, "single-fire also keys off run_count");
+  assert.ok(
+    !/nextBillOn === firstBillOn && row\.currentPeriodStart === row\.startOn/.test(guardBlock),
+    "must not treat the create-state schedule as already-prorated",
+  );
 });

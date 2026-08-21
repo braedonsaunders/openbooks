@@ -1,12 +1,13 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { nextDocumentNumber } from './bills'
+import { nextDocumentNumber, persistLineTaxComponents } from './bills'
 import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { add, sum } from '@openbooks/engine/src/money.ts'
+import { add, mulRatio, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { remainingOrderLine } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -42,9 +43,10 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
     sql`select base_currency from orgs where id = ${orgId}`,
   ))
   const documentNumber = await nextDocumentNumber(orgId, cfg.kind, cfg.prefix)
+  const today = await businessToday(orgId)
   const row = (await db.execute<{ id: string; document_number: string }>(sql`
     insert into documents (org_id, kind, document_number, document_date, currency, subtotal, tax_total, total, created_by)
-    values (${orgId}, ${kind}, ${documentNumber}, ${new Date().toISOString().slice(0, 10)},
+    values (${orgId}, ${kind}, ${documentNumber}, ${today},
             ${org.rows[0]?.base_currency ?? 'CAD'}, '0', '0', '0', ${userId})
     returning id, document_number
   `))
@@ -74,7 +76,7 @@ export async function convertOrder(
   return db.transaction(async (tx) => {
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
-             department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
+             subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
         from documents where id = ${sourceId} and org_id = ${orgId} for update
     `))
     const doc = src.rows[0]
@@ -88,7 +90,7 @@ export async function convertOrder(
 
     const lines = (await tx.execute<any>(sql`
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
-             amount, tax_code_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
+             amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
              is_billable, quantity_billed
         from document_lines where document_id = ${sourceId} and org_id = ${orgId} order by line_number
     `))
@@ -107,20 +109,23 @@ export async function convertOrder(
       .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
 
-    const documentNumber = await nextDocumentNumber(orgId, target.kind, target.prefix)
+    const documentNumber = await nextDocumentNumber(orgId, target.kind, target.prefix, doc.subsidiary_id)
     const isOrder = ORDER_KINDS.includes(target.kind as OrderKind)
     // Downstream orders (quote→SO) start issued; posting docs start as drafts.
     const targetStatus = isOrder ? 'approved' : 'draft'
+    // Keep the source commercial date. A UTC "today" here both shifted the
+    // cutoff for orgs behind UTC and dropped the order's own date.
+    const documentDate = String(doc.document_date)
 
     const convertedAmounts: string[] = []
     const convertedTaxes: string[] = []
     const [created] = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, party_id, document_date, due_date,
-                             currency, fx_rate, status, department_id, project_id, location_id,
+                             currency, fx_rate, status, subsidiary_id, department_id, project_id, location_id,
                              class_id, extra_dims, billing_method, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, ${target.kind}, ${documentNumber}, ${doc.party_id},
-              ${new Date().toISOString().slice(0, 10)}, ${doc.due_date}, ${doc.currency},
-              ${doc.fx_rate}, ${targetStatus}, ${doc.department_id}, ${doc.project_id},
+              ${documentDate}, ${doc.due_date}, ${doc.currency},
+              ${doc.fx_rate}, ${targetStatus}, ${doc.subsidiary_id}, ${doc.department_id}, ${doc.project_id},
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
               '0', '0', '0', ${userId})
       returning id
@@ -134,15 +139,79 @@ export async function convertOrder(
       const taxAmount = r.remainder.taxAmount
       convertedAmounts.push(amount)
       convertedTaxes.push(taxAmount)
-      await tx.execute(sql`
+      const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-              quantity, unit, unit_price, amount, tax_code_id, tax_amount, department_id, project_id,
+              quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
               ${r.remainder.quantity}, ${l.unit}, ${l.unit_price}, ${amount},
-              ${l.tax_code_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
+              ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.is_billable}, ${userId})
-      `)
+        returning id
+      `))
+      const newLineId = inserted.rows[0]!.id
+      const originalQty = toUnits(String(l.quantity))
+      const remainingQty = toUnits(r.remainder.quantity)
+      if (originalQty !== 0n && (l.tax_code_id || l.tax_group_id)) {
+        const components = (await tx.execute<{
+          tax_code_id: string
+          sequence: number
+          rate_percent: string
+          taxable_amount: string
+          tax_amount: string
+          recoverable_amount: string
+          nonrecoverable_amount: string
+          calculation_type: 'standard' | 'withholding' | 'reverse_charge'
+          price_includes_tax: boolean
+          compound_on_previous: boolean
+          rounding_scale: number
+          collected_account_id: string | null
+          paid_account_id: string | null
+          withholding_account_id: string | null
+          overridden: boolean
+        }>(sql`
+          select tax_code_id, sequence, rate_percent, taxable_amount, tax_amount,
+                 recoverable_amount, nonrecoverable_amount, calculation_type,
+                 price_includes_tax, compound_on_previous, rounding_scale,
+                 collected_account_id, paid_account_id, withholding_account_id, overridden
+            from document_line_tax_components
+           where document_line_id = ${l.id} and org_id = ${orgId}
+           order by sequence
+        `))
+        if (components.rows.length === 0) {
+          throw new ConversionError(
+            `line ${l.line_number} has a tax profile but no calculation evidence — reopen the order and save it so tax can be recalculated`,
+          )
+        }
+        await persistLineTaxComponents(tx, {
+          orgId,
+          documentLineId: newLineId,
+          actorId: userId,
+          components: components.rows.map((c) => {
+            const tax = mulRatio(String(c.tax_amount), remainingQty, originalQty)
+            const recoverable = mulRatio(String(c.recoverable_amount), remainingQty, originalQty)
+            return {
+              taxCodeId: c.tax_code_id,
+              sequence: c.sequence,
+              ratePercent: String(c.rate_percent),
+              taxableAmount: mulRatio(String(c.taxable_amount), remainingQty, originalQty),
+              taxAmount: tax,
+              recoverableAmount: recoverable,
+              // Keep the recovery crossfoot: scale tax and recoverable, then
+              // residual is nonrecoverable so rounding cannot break the check.
+              nonrecoverableAmount: add(tax, neg(recoverable)),
+              calculationType: c.calculation_type,
+              priceIncludesTax: c.price_includes_tax,
+              compoundOnPrevious: c.compound_on_previous,
+              roundingScale: c.rounding_scale,
+              collectedAccountId: c.collected_account_id,
+              paidAccountId: c.paid_account_id,
+              withholdingAccountId: c.withholding_account_id,
+              overridden: c.overridden,
+            }
+          }),
+        })
+      }
       // advance billed qty on the source line
       await tx.execute(sql`
         update document_lines set quantity_billed = quantity_billed + ${r.remainder.quantity}, updated_by = ${userId}

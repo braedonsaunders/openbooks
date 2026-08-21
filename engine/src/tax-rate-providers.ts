@@ -3,6 +3,7 @@ import { db } from "./db.ts";
 import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
+import { businessToday } from "./business-date.ts";
 
 /**
  * External sales-tax rate providers. Quotes are persisted as immutable evidence;
@@ -258,7 +259,7 @@ async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest)
   const body = {
     type: "SalesOrder",
     companyCode,
-    date: req.quotedOn ?? new Date().toISOString().slice(0, 10),
+    date: req.quotedOn ?? await businessToday(row.orgId),
     customerCode: "OPENBOOKS",
     currencyCode: req.currency ?? "USD",
     addresses: {
@@ -434,7 +435,7 @@ export async function quoteExternalTax(
       result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
     }
 
-    const quotedOn = req.quotedOn ?? new Date().toISOString().slice(0, 10);
+    const quotedOn = req.quotedOn ?? await businessToday(orgId);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into tax_rate_quotes
         (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,

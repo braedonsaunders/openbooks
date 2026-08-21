@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { carryOpeningTaxYtd, openingYtdIntoT4Slip, openingYtdIntoW2Slip } from "./payroll-yearend.ts";
+import { carryOpeningTaxYtd, openingYtdIntoT4Slip, openingYtdIntoW2Slip, seedOpeningOnlySlips } from "./payroll-yearend.ts";
 import type { T4Slip, W2Slip } from "./payroll-yearend.ts";
 
 /**
@@ -87,6 +87,17 @@ test("the T4 carry-in reaches only boxes 14 and 22 — capped boxes stay put", (
   assert.equal(after.box26CppPensionable, before.box26CppPensionable);
   assert.equal(after.box55Qpip, before.box55Qpip);
   assert.equal(after.box56QpipInsurable, before.box56QpipInsurable);
+});
+
+test("an opening with no committed stub still produces a slip", () => {
+  const openings = new Map([["e-midyear", { taxableYtd: "21000.50", taxYtd: "3150.75" }]]);
+  const seeded = seedOpeningOnlySlips([], openings.keys(), (id) => t4(id, {
+    box14EmploymentIncome: "0", box22IncomeTax: "0", stubCount: 0,
+  }));
+  assert.equal(seeded.length, 1);
+  const [slip] = carryOpeningTaxYtd(seeded, openings, openingYtdIntoT4Slip);
+  assert.equal(slip!.box14EmploymentIncome, "21000.5000");
+  assert.equal(slip!.box22IncomeTax, "3150.7500");
 });
 
 test("the W-2 carry-in reaches only boxes 1 and 2 — FICA wage bases stay put", () => {

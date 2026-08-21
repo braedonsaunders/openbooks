@@ -1,6 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
+import { fiscalStartMonth } from "./fiscal";
 import { resolveOrgId } from "./org-scope";
 
 export const runtime = "nodejs";
@@ -38,13 +41,12 @@ export async function dashboardData() {
  * positive; a payable owed reads positive), through `asOf`. Balance-sheet
  * accounts carry their cumulative balance; income-statement accounts show the
  * current-fiscal-year-to-date activity (a lifetime P&L balance is meaningless
- * on a COA). Fiscal years run Apr–Mar.
+ * on a COA). Fiscal-year start is the org's configured month, default January.
  */
 export async function accountsWithBalances(orgId: string, asOf?: string) {
-  const asOfDate = asOf ?? new Date().toISOString().slice(0, 10);
-  const y = Number(asOfDate.slice(0, 4));
-  const m = Number(asOfDate.slice(5, 7));
-  const fyStart = `${m >= 4 ? y : y - 1}-04-01`;
+  const asOfDate = asOf ?? await businessToday(orgId);
+  const startMonth = await fiscalStartMonth(orgId);
+  const fyStart = fiscalYearRangeFor(fiscalYearOf(asOfDate, startMonth), startMonth).from;
 
   const CREDIT_NORMAL = [
     'income', 'income_other',

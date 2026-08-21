@@ -61,6 +61,16 @@ const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
     symbol: 'canRunReportEntity',
     why: 'listing hands out the ids and stored plans every other path keys on',
   },
+  {
+    file: '../app/api/reports/runs/[id]/csv/route.ts',
+    symbol: 'guardReportEntity',
+    why: 'downloading a recorded run CSV returns the same rows',
+  },
+  {
+    file: '../app/api/reports/runs/[id]/artifact/route.ts',
+    symbol: 'guardReportEntity',
+    why: 'scheduled-run artifacts are the same report, rendered',
+  },
 ]
 
 for (const { file, symbol, why } of EXECUTION_PATHS) {

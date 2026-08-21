@@ -732,6 +732,11 @@ export async function createPayRun(input: {
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
+    const feature = (await tx.execute<{ enabled: boolean }>(sql`
+      select coalesce((settings->'features'->>'payroll')::boolean, false) as enabled
+        from orgs where id = ${orgId}
+    `));
+    if (!feature.rows[0]?.enabled) throw new PayrollError("Payroll feature is disabled");
     const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active

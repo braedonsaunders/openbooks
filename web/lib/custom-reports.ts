@@ -17,6 +17,7 @@ import { reportResultToCsv } from '@openbooks/office'
 import { reportCsvOptions, reportRunLabels } from './report-labels'
 import { resolvePeriod } from './periods'
 import { fiscalStartMonth } from './fiscal'
+import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -144,6 +145,7 @@ export async function loadReportDefinition(
   orgId: string,
   id: string,
 ): Promise<ReportDefinitionRow | null> {
+  await ensureReportDefinitions(orgId)
   const r = (await db.execute<ReportDefinitionRow>(sql`
     select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions

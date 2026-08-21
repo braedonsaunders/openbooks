@@ -9,6 +9,7 @@ import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
 import type { RatePrice } from '@openbooks/engine/src/item-rate-pricing.ts'
 import { isFeatureEnabled } from './features'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /**
  * Project charges / resource usage — the native replacement for source platform's
@@ -101,7 +102,7 @@ export async function createProjectCharge(
     const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
     const currency = org.rows[0]?.base_currency ?? 'CAD'
     const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
-    const docDate = input.documentDate ?? new Date().toISOString().slice(0, 10)
+    const docDate = input.documentDate ?? await businessToday(orgId)
 
     const [doc] = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, project_id,

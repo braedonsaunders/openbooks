@@ -5,6 +5,7 @@ import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { canRunReportEntity } from '../../../../lib/report-authz'
 import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
+import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
 
 export const runtime = 'nodejs'
 
@@ -19,6 +20,7 @@ export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  await ensureReportDefinitions(user.orgId)
   const rows = (await db.execute<{ query: unknown }>(sql`
     select id, kind, slug, name, description, query, updated_at
       from report_definitions

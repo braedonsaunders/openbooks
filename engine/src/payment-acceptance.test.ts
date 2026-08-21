@@ -145,11 +145,13 @@ test("stripe webhook: refunds and disputes key off the persisted payment intent"
   assert.ok(refund);
   assert.equal(refund.status, "refunded");
   assert.equal(refund.externalRef, "pi_async_1");
+  assert.equal(refund.intentRef, "pi_async_1", "refunds must set intentRef so resolution matches the session-keyed attempt");
 
   const dispute = stripeEvent(secret, "charge.dispute.created", { id: "dp_1", payment_intent: "pi_async_1" });
   assert.ok(dispute);
   assert.equal(dispute.status, "refunded");
   assert.equal(dispute.externalRef, "pi_async_1");
+  assert.equal(dispute.intentRef, "pi_async_1");
 });
 
 test("webhook claims: only pre-terminal states are claimable so redeliveries dedupe", () => {

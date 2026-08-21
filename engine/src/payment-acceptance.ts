@@ -202,10 +202,17 @@ const stripeAdapter: PaymentProviderAdapter = {
       return { externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event };
     }
     if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
-      // Keyed by payment_intent — the completed session persisted it onto the
-      // attempt, so refunds/disputes resolve against the same attempt even
-      // though checkout stored the session id.
-      return { externalRef: String(obj.payment_intent ?? obj.id ?? ""), status: "refunded", raw: event };
+      // Checkout stores the session id as external_ref and persists
+      // payment_intent onto event_payload. Refund/dispute objects are keyed
+      // by the intent, so both refs must be set: externalRef for a later
+      // re-key, intentRef so resolution matches event_payload.paymentIntent.
+      const intent = obj.payment_intent ? String(obj.payment_intent) : null;
+      return {
+        externalRef: String(obj.payment_intent ?? obj.id ?? ""),
+        intentRef: intent,
+        status: "refunded",
+        raw: event,
+      };
     }
     return null;
   },

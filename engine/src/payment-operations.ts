@@ -8,6 +8,7 @@ import {
   decryptAccountNumber,
   loadRunFile,
   reversePaymentForReturn,
+  validateNachaSettings,
   type NachaSettings,
   type SepaSettings,
 } from "./payments.ts";
@@ -431,10 +432,6 @@ function positivePayRegister(ctx: FormatContext): { filename: string; content: s
   };
 }
 
-const NACHA_DEBIT_REQUIRED = [
-  "odfiRouting", "immediateDestination", "immediateOrigin", "destinationName", "originName", "companyName", "companyId",
-] as const;
-
 /**
  * Parse a debit profile's unsealed `secrets` blob into NACHA originator
  * settings.
@@ -451,30 +448,23 @@ const NACHA_DEBIT_REQUIRED = [
  * 94-character file addressed to the WRONG originating institution.
  */
 export function nachaOriginator(secrets: Record<string, unknown>): NachaSettings {
-  const values: Record<string, string> = {};
-  const missing: string[] = [];
-  for (const key of NACHA_DEBIT_REQUIRED) {
-    const value = secrets[key];
-    const text = typeof value === "string" ? value.trim() : "";
-    if (text === "" || text.includes("FILL-ME")) missing.push(key);
-    else values[key] = text;
+  const trimmed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(secrets)) {
+    trimmed[key] = typeof value === "string" ? value.trim() : value;
   }
-  if (missing.length) throw new PaymentError(`NACHA debit profile is missing: ${missing.join(", ")}`);
-  if (!/^\d{9}$/.test(values.odfiRouting)) {
-    throw new PaymentError("NACHA debit profile needs a 9-digit odfiRouting");
+  const result = validateNachaSettings(trimmed as Partial<NachaSettings>);
+  if (!result.ok) {
+    if (result.missing.some((item) => item.includes("9 digits"))) {
+      throw new PaymentError("NACHA debit profile needs a 9-digit odfiRouting");
+    }
+    throw new PaymentError(`NACHA debit profile is missing: ${result.missing.join(", ")}`);
   }
   // An unrecognised SEC code would be truncated into the 3-character field as
   // whatever the tenant typed; fall back to the corporate default instead.
-  const entryClassCode = secrets.entryClassCode;
-  const entryDescription = secrets.entryDescription;
+  const entryClassCode = trimmed.entryClassCode;
+  const entryDescription = trimmed.entryDescription;
   return {
-    odfiRouting: values.odfiRouting,
-    immediateDestination: values.immediateDestination,
-    immediateOrigin: values.immediateOrigin,
-    destinationName: values.destinationName,
-    originName: values.originName,
-    companyName: values.companyName,
-    companyId: values.companyId,
+    ...result.settings,
     entryClassCode: entryClassCode === "PPD" || entryClassCode === "CCD" ? entryClassCode : undefined,
     entryDescription: typeof entryDescription === "string" ? entryDescription : undefined,
   };

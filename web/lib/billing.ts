@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /** Round money to the currency's minor unit, half away from zero. */
 function toCents(amount: string): string {
@@ -15,8 +16,8 @@ function toCents(amount: string): string {
 }
 
 /** The day the invoice is cut, or the period it closes. */
-function invoiceDateOf(req: { cutoff_date?: string | null }): string {
-  return req.cutoff_date ?? new Date().toISOString().slice(0, 10)
+async function invoiceDateOf(orgId: string, req: { cutoff_date?: string | null }): Promise<string> {
+  return req.cutoff_date ?? businessToday(orgId)
 }
 
 /** Prices are negotiated as of the date work was PERFORMED, not the day billed. */
@@ -497,7 +498,7 @@ export async function generateInvoiceFromBillingRequest(
       built.push(...kept)
     }
 
-    const invoiceDate = invoiceDateOf(req)
+    const invoiceDate = await invoiceDateOf(orgId, req)
     // Prices are negotiated as of the date work is PERFORMED, not the day the
     // invoice happens to be cut: re-billing or catching up on old work must not
     // silently apply today's card. Latest work date on the invoice wins, so a
