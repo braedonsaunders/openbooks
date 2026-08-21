@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { FORM_TYPES } from '@openbooks/engine/src/information-returns.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
@@ -51,7 +52,7 @@ export default async function InformationReturnsPage() {
   await requireComplianceFeature(orgId)
   const t = await getTranslations('compliance')
   const { money } = await getMoneyFormatter()
-  const lastYear = new Date().getUTCFullYear() - 1
+  const lastYear = Number((await businessToday(orgId)).slice(0, 4)) - 1
 
   const [filings, readiness, projectsEnabled] = await Promise.all([
     loadFilings(orgId),

@@ -4,6 +4,7 @@ import { Alert, AlertDescription, Badge, Button, EmptyState, PageHeader } from '
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomePanel, HomeStatTile } from '../../../components/module-home/client'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { loadComplianceOverview, requireComplianceFeature, stateTone } from '../../../lib/compliance'
@@ -42,7 +43,7 @@ export default async function ComplianceHomePage({
   const sp = await searchParams
   const yearParam = Number(Array.isArray(sp.year) ? sp.year[0] : sp.year)
   // 1099s are prepared for the year that just ended, so that is the default.
-  const taxYear = Number.isInteger(yearParam) ? yearParam : new Date().getUTCFullYear() - 1
+  const taxYear = Number.isInteger(yearParam) ? yearParam : Number((await businessToday(orgId)).slice(0, 4)) - 1
 
   const [overview, projectsEnabled] = await Promise.all([
     loadComplianceOverview(orgId, taxYear),
