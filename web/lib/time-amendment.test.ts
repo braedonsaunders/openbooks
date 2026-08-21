@@ -10,6 +10,7 @@ const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
 test('a weekly save never deletes amendment offsets', () => {
   const route = source('app/api/timesheets/route.ts')
   assert.match(route, /and amends_entry_id is null/)
+  assert.match(route, /overhead_journal_entry_id is null/)
 })
 
 test('the week grid keeps amendments on their own immutable line', () => {

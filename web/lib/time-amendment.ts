@@ -35,6 +35,7 @@ export async function amendTimeEntry(
       invoiced_by_line_id: string | null
       payroll_batch_ref: string | null
       cost_journal_entry_id: string | null
+      overhead_journal_entry_id: string | null
       field_ticket_id: string | null
       billing_status: 'unbilled' | 'billed'
       amends_entry_id: string | null
@@ -42,7 +43,7 @@ export async function amendTimeEntry(
       select id, employee_party_id, worked_on, hours, time_type_id, item_id,
              project_id, department_id, memo, is_billable, custom,
              invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             field_ticket_id, billing_status, amends_entry_id
+             overhead_journal_entry_id, field_ticket_id, billing_status, amends_entry_id
         from time_entries
        where id = ${entryId} and org_id = ${orgId}
        for update
@@ -81,6 +82,7 @@ type AmendableRow = {
   invoiced_by_line_id: string | null
   payroll_batch_ref: string | null
   cost_journal_entry_id: string | null
+  overhead_journal_entry_id: string | null
   field_ticket_id: string | null
   billing_status: 'unbilled' | 'billed'
   amends_entry_id: string | null
@@ -126,7 +128,8 @@ export async function amendLockedWeek(
       select id, employee_party_id, worked_on, hours, time_type_id, item_id,
              project_id, department_id, memo, is_billable, custom,
              invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             field_ticket_id, billing_status, amends_entry_id, status
+             overhead_journal_entry_id, field_ticket_id, billing_status,
+             amends_entry_id, status
         from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${employeeId}
@@ -142,6 +145,7 @@ export async function amendLockedWeek(
         invoicedByLineId: row.invoiced_by_line_id,
         payrollBatchRef: row.payroll_batch_ref,
         costJournalEntryId: row.cost_journal_entry_id,
+        overheadJournalEntryId: row.overhead_journal_entry_id,
         fieldTicketId: row.field_ticket_id,
         billingStatus: row.billing_status,
       })
