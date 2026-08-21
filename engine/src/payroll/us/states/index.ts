@@ -25,17 +25,26 @@
  */
 import { PayrollError } from "../../../payroll-error.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
+import { AZ_WITHHOLDING } from "./az.ts";
 import { CA_WITHHOLDING } from "./ca.ts";
 import { CO_WITHHOLDING } from "./co.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
+import { IA_WITHHOLDING } from "./ia.ts";
 import { IL_WITHHOLDING } from "./il.ts";
+import { IN_WITHHOLDING } from "./in.ts";
+import { KY_WITHHOLDING } from "./ky.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
 import { DETROIT_WITHHOLDING, MI_WITHHOLDING } from "./mi.ts";
+import { MN_WITHHOLDING } from "./mn.ts";
 import { NC_WITHHOLDING } from "./nc.ts";
 import { NJ_WITHHOLDING } from "./nj.ts";
 import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
 import { PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING } from "./pa.ts";
+import { UT_WITHHOLDING } from "./ut.ts";
+import { VA_WITHHOLDING } from "./va.ts";
+import { WI_WITHHOLDING } from "./wi.ts";
+import { WV_WITHHOLDING } from "./wv.ts";
 import type { UsStateWithholdingEngine } from "./types.ts";
 
 export class UsStateWithholdingError extends PayrollError {}
@@ -69,6 +78,17 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   MA_WITHHOLDING,
   GA_WITHHOLDING,
   NC_WITHHOLDING,
+  // Third wave: Arizona's percentage-of-wages election, then the Midwest /
+  // Appalachian reciprocity cluster (IN, KY, VA, WV, IA, MN, WI) and Utah.
+  AZ_WITHHOLDING,
+  IN_WITHHOLDING,
+  KY_WITHHOLDING,
+  VA_WITHHOLDING,
+  WV_WITHHOLDING,
+  IA_WITHHOLDING,
+  MN_WITHHOLDING,
+  WI_WITHHOLDING,
+  UT_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -93,21 +113,16 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   AL: "Alabama Withholding Tax Tables and Instructions for Employers",
-  AZ: "Arizona Form A1-T / Publication 011 (a percentage-of-federal election)",
   AR: "Arkansas Withholding Tax Formula (AR4ECX)",
   CT: "Connecticut Circular CT, Employer's Tax Guide",
   DE: "Delaware Employer's Guide, Withholding Tax Computation",
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
   HI: "Hawaii Booklet A, Employer's Tax Guide",
   ID: "Idaho Guide to Income Tax Withholding, Computer Formula",
-  IN: "Indiana Departmental Notice #1 (state and COUNTY rates)",
-  IA: "Iowa Withholding Formula and Instructions",
   KS: "Kansas KW-100, Withholding Tax Guide",
-  KY: "Kentucky Withholding Tax Formula (and local occupational taxes)",
   LA: "Louisiana Employer's Withholding Tax Formula (R-1306)",
   ME: "Maine Withholding Tables for Individual Income Tax",
   MD: "Maryland Employer Withholding Guide (state PLUS county rates)",
-  MN: "Minnesota Income Tax Withholding Instruction Booklet, Computer Formula",
   MS: "Mississippi Computer Payroll Accounting Withholding Formula",
   MO: "Missouri Employer's Tax Guide, Withholding Formula",
   MT: "Montana Withholding Tax Guide",
@@ -118,11 +133,7 @@ const PUBLICATIONS: Readonly<Record<string, string>> = {
   OR: "Oregon Withholding Tax Formulas (150-206-436), plus transit district taxes",
   RI: "Rhode Island Employer's Income Tax Withholding Tables",
   SC: "South Carolina SC W-166, Withholding Tax Tables",
-  UT: "Utah Publication 14, Withholding Tax Guide",
   VT: "Vermont Income Tax Withholding Instructions, Tables and Charts",
-  VA: "Virginia Employer Withholding Instructions, Formula Method",
-  WV: "West Virginia Employer's Withholding Tax Tables",
-  WI: "Wisconsin Publication W-166, Withholding Tax Guide",
 };
 
 /** The engines the pack carries, for the setup surface and readiness. */
@@ -203,8 +214,13 @@ export function usStatePublication(code: string): string | null {
 
 export * from "./types.ts";
 export { pctToRate } from "./transcription.ts";
+export { AZ_WITHHOLDING, AZ_RATES_2026, AZ_PRINTED_PERCENTS } from "./az.ts";
 export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
 export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
+export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
+export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
+export { KY_WITHHOLDING, KY_RATES_2026 } from "./ky.ts";
+export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
 export { GA_WITHHOLDING, GA_EDITIONS, gaEditionForPayDate, gaStandardDeduction } from "./ga.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,
@@ -224,6 +240,10 @@ export {
 } from "./oh.ts";
 export { US_LOCAL_RATE_SLOTS } from "./local-rates.ts";
 export { IL_WITHHOLDING, IL_RATES_2026 } from "./il.ts";
+export { UT_WITHHOLDING, UT_EDITION_2026, UT_EDITIONS } from "./ut.ts";
+export { VA_WITHHOLDING, VA_RATES_2026, vaSupplementalFlat } from "./va.ts";
+export { WI_WITHHOLDING, WI_RATES_2026 } from "./wi.ts";
+export { WV_WITHHOLDING, WV_RATES_2026 } from "./wv.ts";
 export {
   NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING,
   NY_RATES_2026, nysWithholding, yonkersNonresidentAnnualized,

@@ -21,17 +21,26 @@
  * import no rate module at runtime.
  */
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { AZ_TAX_YEAR_EDITIONS } from "./az.ts";
 import { CA_TAX_YEAR_EDITIONS } from "./ca.ts";
 import { CO_TAX_YEAR_EDITIONS } from "./co.ts";
 import { GA_TAX_YEAR_EDITIONS } from "./ga.ts";
+import { IA_TAX_YEAR_EDITIONS } from "./ia.ts";
 import { IL_TAX_YEAR_EDITIONS } from "./il.ts";
+import { IN_TAX_YEAR_EDITIONS } from "./in.ts";
+import { KY_TAX_YEAR_EDITIONS } from "./ky.ts";
 import { MA_TAX_YEAR_EDITIONS } from "./ma.ts";
 import { MI_TAX_YEAR_EDITIONS } from "./mi.ts";
+import { MN_TAX_YEAR_EDITIONS } from "./mn.ts";
 import { NC_TAX_YEAR_EDITIONS } from "./nc.ts";
 import { NJ_TAX_YEAR_EDITIONS } from "./nj.ts";
 import { NY_TAX_YEAR_EDITIONS } from "./ny.ts";
 import { OH_TAX_YEAR_EDITIONS } from "./oh.ts";
 import { PA_TAX_YEAR_EDITIONS } from "./pa.ts";
+import { UT_TAX_YEAR_EDITIONS } from "./ut.ts";
+import { VA_TAX_YEAR_EDITIONS } from "./va.ts";
+import { WI_TAX_YEAR_EDITIONS } from "./wi.ts";
+import { WV_TAX_YEAR_EDITIONS } from "./wv.ts";
 
 /** Region-scoped editions, one group per state with an engine. */
 export const US_STATE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
@@ -46,6 +55,15 @@ export const US_STATE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
   ...MA_TAX_YEAR_EDITIONS,
   ...GA_TAX_YEAR_EDITIONS,
   ...NC_TAX_YEAR_EDITIONS,
+  ...AZ_TAX_YEAR_EDITIONS,
+  ...IN_TAX_YEAR_EDITIONS,
+  ...KY_TAX_YEAR_EDITIONS,
+  ...VA_TAX_YEAR_EDITIONS,
+  ...WV_TAX_YEAR_EDITIONS,
+  ...IA_TAX_YEAR_EDITIONS,
+  ...MN_TAX_YEAR_EDITIONS,
+  ...WI_TAX_YEAR_EDITIONS,
+  ...UT_TAX_YEAR_EDITIONS,
 ];
 
 /**

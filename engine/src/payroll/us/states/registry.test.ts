@@ -36,7 +36,7 @@ test("the pack now withholds state income tax somewhere", () => {
   // everywhere it is printed.
   assert.deepEqual(
     implementedUsStates(),
-    ["CA", "CO", "GA", "IL", "MA", "MI", "NJ", "NY", "NC", "OH", "PA"],
+    ["AZ", "CA", "CO", "GA", "IL", "IN", "IA", "KY", "MA", "MI", "MN", "NJ", "NY", "NC", "OH", "PA", "UT", "VA", "WV", "WI"],
   );
   for (const state of implementedUsStates()) {
     assert.equal(
@@ -48,8 +48,9 @@ test("the pack now withholds state income tax somewhere", () => {
 
 test("supported states are the implemented ones PLUS the genuinely no-tax ones", () => {
   const supported = supportedUsStates();
-  assert.equal(supported.length, 20); // 11 implemented + 9 no-tax
+  assert.equal(supported.length, 29); // 20 implemented + 9 no-tax
   for (const state of ["CA", "CO", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC",
+    "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT",
     "TX", "FL", "WA"]) {
     assert.ok(supported.includes(state), state);
   }
@@ -79,7 +80,7 @@ test("an untranscribed state is refused BY NAME, with the publication and the fi
       assert.match(message, /Circular CT/);
       assert.match(message, /engine\/src\/payroll\/us\/states\/ct\.ts/);
       assert.match(message, /withholding the federal amount.*would each be silently\s+wrong/s);
-      assert.match(message, /Implemented today: CA, CO, GA, IL, MA, MI, NJ, NY, NC, OH, PA/);
+      assert.match(message, /Implemented today: AZ, CA, CO, GA, IL, IN, IA, KY, MA, MI, MN, NJ, NY, NC, OH, PA, UT, VA, WV, WI/);
       return true;
     },
   );
@@ -168,7 +169,12 @@ test("the W-4 reads through profile COLUMNS — one interface, two storages", ()
 });
 
 test("state certificates store answers in ROWS, never in a new column", () => {
-  for (const key of ["us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004"]) {
+  for (const key of [
+    "us_ca_de4", "us_ny_it2104", "us_il_ilw4", "us_pa_rev419", "us_co_dr0004",
+    "us_az_a4", "us_in_wh4", "us_ky_k4", "us_va_va4", "us_wv_it104",
+    "us_ut_w4", "us_mn_w4mn", "us_mn_mwr", "us_wi_wt4", "us_wi_w220",
+    "us_ia_iaw4", "us_ia_44016",
+  ]) {
     const certificate = payrollCertificate("US", key);
     assert.equal(certificate.storage, "certificate_rows", key);
     for (const field of certificate.fields) {
@@ -319,31 +325,57 @@ test("Michigan's SIX reciprocal partners, on a certificate the state does not pr
 });
 
 test("an agreement with an UNIMPLEMENTED partner refuses — it never withholds zero", () => {
-  // The trap this whole tranche was warned about: Ohio's agreement with Indiana
-  // is real, so it is declared, and Indiana has no engine. With the waiver on
-  // file Ohio withholds nothing and Indiana's tax is owed instead — so the run
-  // must STOP and name Indiana, not quietly pay the employee with no state tax
-  // withheld at all.
+  // The trap this whole tranche was warned about: Minnesota's agreement with
+  // North Dakota is real, so it is declared, and North Dakota has no engine.
+  // With Form MWR on file Minnesota withholds nothing and North Dakota's tax
+  // is owed instead — so the run must STOP and name North Dakota, not quietly
+  // pay the employee with no state tax withheld at all.
   const resolved = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "IN",
-    certificatesOnFile: ["us_oh_it4"],
+    country: "US", workRegion: "MN", residenceRegion: "ND",
+    certificatesOnFile: ["us_mn_mwr"],
   });
   assert.deepEqual(resolved.levies.filter((levy) => levy.level === "region"), []);
   const blocking = resolved.gaps.filter((gap) => gap.severity === "blocking");
   assert.equal(blocking.length, 1);
-  assert.equal(blocking[0]!.region, "IN");
-  assert.match(blocking[0]!.message, /IN income tax withholding is not implemented/);
-  assert.match(blocking[0]!.message, /Departmental Notice #1/);
+  assert.equal(blocking[0]!.region, "ND");
+  assert.match(blocking[0]!.message, /ND income tax withholding is not implemented/);
+  assert.match(blocking[0]!.message, /North Dakota Income Tax Withholding/);
 
-  // Without the waiver, Ohio withholds — correctly — and says why.
+  // Without the affidavit, Minnesota withholds — correctly — and says why.
   const withoutWaiver = resolveWithholding({
-    country: "US", workRegion: "OH", residenceRegion: "IN",
+    country: "US", workRegion: "MN", residenceRegion: "ND",
   });
   assert.deepEqual(
     withoutWaiver.levies.filter((levy) => levy.level === "region").map((levy) => levy.region),
-    ["OH"],
+    ["MN"],
   );
   assert.equal(withoutWaiver.reciprocityUnclaimed, true);
+});
+
+test("an Indiana resident working in Ohio is withheld INDIANA, both engines present", () => {
+  const resolved = resolveWithholding({
+    country: "US", workRegion: "OH", residenceRegion: "IN",
+    certificatesOnFile: ["us_oh_it4"],
+  });
+  const regions = resolved.levies.filter((levy) => levy.level === "region");
+  assert.deepEqual(regions.map((levy) => levy.region), ["IN"]);
+  assert.equal(regions[0]!.basis, "reciprocity");
+  assert.deepEqual(resolved.gaps, []);
+});
+
+test("Iowa, Wisconsin, Minnesota, Kentucky, Virginia and West Virginia name their work-side partners", () => {
+  assert.deepEqual(reciprocityPartners("US", "IA"), ["IL"]);
+  assert.equal(reciprocityAgreement("US", "IA", "IL")!.certificateKey, "us_ia_44016");
+  assert.deepEqual(reciprocityPartners("US", "WI").sort(), ["IL", "IN", "KY", "MI"]);
+  assert.equal(reciprocityAgreement("US", "WI", "IL")!.certificateKey, "us_wi_w220");
+  assert.deepEqual(reciprocityPartners("US", "MN").sort(), ["MI", "ND"]);
+  assert.equal(reciprocityAgreement("US", "MN", "MI")!.certificateKey, "us_mn_mwr");
+  assert.deepEqual(reciprocityPartners("US", "KY").sort(), ["IL", "IN", "MI", "WI", "WV"]);
+  assert.equal(reciprocityAgreement("US", "KY", "VA"), null);
+  assert.equal(reciprocityAgreement("US", "KY", "OH"), null);
+  assert.deepEqual(reciprocityPartners("US", "VA").sort(), ["MD", "PA", "WV"]);
+  assert.equal(reciprocityAgreement("US", "VA", "KY"), null);
+  assert.deepEqual(reciprocityPartners("US", "WV").sort(), ["KY", "MD", "OH", "PA", "VA"]);
 });
 
 test("a Michigan resident working in Ohio is withheld MICHIGAN, both engines present", () => {
@@ -488,8 +520,10 @@ test("Ohio reciprocity relieves the STATE, and leaves the city standing", () => 
     certificatesOnFile: ["us_oh_it4"],
     workSubRegions: ["CINCINNATI"],
   });
+  const regions = resolved.levies.filter((levy) => levy.level === "region");
+  assert.deepEqual(regions.map((levy) => levy.region), ["KY"]);
+  assert.equal(regions[0]!.basis, "reciprocity");
   assert.ok(resolved.levies.some((levy) => levy.subRegion === "CINCINNATI"));
-  assert.equal(resolved.levies.some((levy) => levy.level === "region"), false);
 });
 
 test("Michigan's city list is CLOSED — an unlisted city is not a jurisdiction", () => {
@@ -519,7 +553,10 @@ test("Illinois declares no sub-region levies, because it constitutionally has no
 test("an employee with no residence recorded resolves exactly as before", () => {
   // Every profile row written before the residence attribute existed carries
   // null. Those employees must keep calculating identically.
-  for (const state of ["CA", "CO", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC"]) {
+  for (const state of [
+    "CA", "CO", "NY", "PA", "IL", "NJ", "OH", "MI", "MA", "GA", "NC",
+    "AZ", "IN", "KY", "VA", "WV", "IA", "MN", "WI", "UT",
+  ]) {
     const resolved = resolveWithholding({ country: "US", workRegion: state });
     assert.equal(resolved.residenceSource, "assumed");
     assert.deepEqual(resolved.levies.map((levy) => levy.region), [state]);
