@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { remeasureAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!AMOUNT_RE.test(newCarryingValue)) {
     return NextResponse.json({ error: 'enter the new carrying value' }, { status: 422 })
   }
-  const date = body.date && DATE_RE.test(body.date) ? body.date : new Date().toISOString().slice(0, 10)
+  const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(gate.user.orgId)
 
   try {
     const result = await remeasureAsset(gate.user.orgId, id, { newCarryingValue, date, actorId: gate.user.id })

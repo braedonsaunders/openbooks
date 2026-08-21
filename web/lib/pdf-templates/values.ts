@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
@@ -137,9 +138,9 @@ async function loadDocumentValues(
     .filter(Boolean)
     .join(', ')
 
-  const subtotal = Number(doc.subtotal ?? 0)
-  const taxTotal = Number(doc.tax_total ?? 0)
-  const total = Number(doc.total ?? 0)
+  const subtotal = String(doc.subtotal ?? '0')
+  const taxTotal = String(doc.tax_total ?? '0')
+  const total = String(doc.total ?? '0')
 
   const values: Record<string, unknown> = {
     document_number: doc.document_number ?? '',
@@ -156,7 +157,7 @@ async function loadDocumentValues(
     subtotal: money(subtotal),
     tax_total: money(taxTotal),
     total: money(total),
-    balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(Number(doc.balance_due)),
+    balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(String(doc.balance_due)),
     org_name: org.name,
     printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     lines: lines.rows.map((l) => ({
@@ -166,9 +167,9 @@ async function loadDocumentValues(
       description: l.description ?? '',
       quantity: fmtQty(l.quantity, locale),
       unit: l.unit ?? '',
-      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(Number(l.unit_price)),
-      tax_amount: l.tax_amount === null || l.tax_amount === undefined || Number(l.tax_amount) === 0 ? '' : money(Number(l.tax_amount)),
-      amount: money(Number(l.amount ?? 0)),
+      unit_price: l.unit_price === null || l.unit_price === undefined ? '' : money(String(l.unit_price)),
+      tax_amount: l.tax_amount === null || l.tax_amount === undefined || isZero(String(l.tax_amount)) ? '' : money(String(l.tax_amount)),
+      amount: money(String(l.amount ?? '0')),
     })),
     ...(await customFieldValues(orgId, 'documents', meta.docKind, (doc.custom ?? {}) as Record<string, unknown>, format)),
   }
@@ -195,19 +196,19 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
      order by l.line_number
   `))
 
-  let debits = 0
-  let credits = 0
+  const debitAmounts: string[] = []
+  const creditAmounts: string[] = []
   const lineRows = lines.rows.map((l) => {
-    const amount = Number(l.amount ?? 0)
-    if (amount >= 0) debits += amount
-    else credits += -amount
+    const amount = String(l.amount ?? '0')
+    if (cmp(amount, '0') >= 0) debitAmounts.push(amount)
+    else creditAmounts.push(neg(amount))
     return {
       line_number: String(l.line_number ?? ''),
       account_number: l.account_number ?? '',
       account_name: l.account_name ?? '',
       memo: l.memo ?? '',
-      debit: amount >= 0 ? money(amount) : '',
-      credit: amount < 0 ? money(-amount) : '',
+      debit: cmp(amount, '0') >= 0 ? money(amount) : '',
+      credit: cmp(amount, '0') < 0 ? money(neg(amount)) : '',
     }
   })
 
@@ -217,8 +218,8 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
     status: fmtStatus(entry.status),
     origin: fmtStatus(entry.origin),
     memo: entry.memo ?? '',
-    total_debits: money(debits),
-    total_credits: money(credits),
+    total_debits: money(sum(debitAmounts)),
+    total_credits: money(sum(creditAmounts)),
     org_name: org.name,
     printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     lines: lineRows,
@@ -266,12 +267,12 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
     .map((l) => ({
       description: l.description ?? '',
       hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
-      rate: l.rate != null ? money(Number(l.rate)) : '',
-      amount: money(Number(l.amount ?? 0)),
+      rate: l.rate != null ? money(String(l.rate)) : '',
+      amount: money(String(l.amount ?? '0')),
     }))
-  const deductionsTotal = lines.rows
-    .filter((l) => l.kind === 'deduction')
-    .reduce((total, l) => total + Number(l.amount ?? 0), 0)
+  const deductionsTotal = sum(
+    lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
+  )
 
   const values: Record<string, unknown> = {
     employee_name: stub.employee_name ?? '',
@@ -284,13 +285,13 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
     pay_date: fmtDate(stub.pay_date, locale),
     province: stub.province ?? '',
     currency: stub.currency_code ?? '',
-    gross: money(Number(stub.gross ?? 0)),
+    gross: money(String(stub.gross ?? '0')),
     total_deductions: money(deductionsTotal),
-    net_pay: money(Number(stub.net_pay ?? 0)),
-    vacation_accrued: money(Number(stub.vacation_accrued ?? 0)),
-    ytd_gross: money(Number(ytd.rows[0]?.gross ?? 0)),
-    ytd_tax: money(Number(ytd.rows[0]?.tax ?? 0)),
-    ytd_net: money(Number(ytd.rows[0]?.net ?? 0)),
+    net_pay: money(String(stub.net_pay ?? '0')),
+    vacation_accrued: money(String(stub.vacation_accrued ?? '0')),
+    ytd_gross: money(String(ytd.rows[0]?.gross ?? '0')),
+    ytd_tax: money(String(ytd.rows[0]?.tax ?? '0')),
+    ytd_net: money(String(ytd.rows[0]?.net ?? '0')),
     org_name: org.name,
     printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     earnings: byKind('earning'),
@@ -341,12 +342,12 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
     .map((l) => ({
       description: l.description ?? '',
       hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
-      rate: l.rate != null ? money(Number(l.rate)) : '',
-      amount: money(Number(l.amount ?? 0)),
+      rate: l.rate != null ? money(String(l.rate)) : '',
+      amount: money(String(l.amount ?? '0')),
     }))
-  const deductionsTotal = lines.rows
-    .filter((l) => l.kind === 'deduction')
-    .reduce((total, l) => total + Number(l.amount ?? 0), 0)
+  const deductionsTotal = sum(
+    lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
+  )
 
   const address = [
     stub.line1,
@@ -363,7 +364,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
     employee_address: address,
     party_address: address,
     pay_date: fmtDate(stub.pay_date, locale),
-    amount: money(Number(net)),
+    amount: money(net),
     // The legal amount comes from the engine, off the exact decimal — never
     // from the formatted courtesy amount above.
     amount_in_words: amountInWords(net),
@@ -372,9 +373,9 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
     document_number: stub.document_number ?? '',
     period_start: fmtDate(stub.period_start, locale),
     period_end: fmtDate(stub.period_end, locale),
-    gross: money(Number(stub.gross ?? 0)),
+    gross: money(String(stub.gross ?? '0')),
     total_deductions: money(deductionsTotal),
-    net_pay: money(Number(net)),
+    net_pay: money(net),
     org_name: org.name,
     printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
     earnings: byKind('earning'),
@@ -416,7 +417,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   }
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, org.base_currency)
-  const m = (v: unknown) => (v === null || v === undefined || v === '' ? '' : money(Number(v)))
+  const m = (v: unknown) => (v === null || v === undefined || v === '' ? '' : money(String(v)))
 
   const ft = ticket.fieldTicket
   // Day axis: up to 7 days from periodStart.
@@ -445,7 +446,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     hours: Record<'reg' | 'ot' | 'dt' | 'other', number>
     rates: Record<'reg' | 'ot' | 'dt' | 'other', string | null>
     perDay: Record<string, number>
-    amount: number
+    amount: string
   }
   const crewMap = new Map<string, CrewAgg>()
   for (const e of ticket.entries) {
@@ -458,7 +459,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
         hours: { reg: 0, ot: 0, dt: 0, other: 0 },
         rates: { reg: null, ot: null, dt: null, other: null },
         perDay: {},
-        amount: 0,
+        amount: '0',
       }
       crewMap.set(k, row)
     }
@@ -467,7 +468,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     row.hours[t] += h
     if (e.bill_rate != null) {
       row.rates[t] = row.rates[t] ?? String(e.bill_rate)
-      row.amount += h * Number(e.bill_rate)
+      row.amount = add(row.amount, mul(String(e.hours ?? '0'), String(e.bill_rate)))
     }
     const di = days.indexOf(e.worked_on)
     if (di >= 0) row.perDay[`day${di + 1}_${t}`] = (row.perDay[`day${di + 1}_${t}`] ?? 0) + h
@@ -487,7 +488,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
       ot_rate: r.rates.ot != null ? m(r.rates.ot) : '',
       dt_rate: r.rates.dt != null ? m(r.rates.dt) : '',
       other_rate: r.rates.other != null ? m(r.rates.other) : '',
-      amount: r.amount ? m(r.amount.toFixed(2)) : '',
+      amount: isZero(r.amount) ? '' : m(r.amount),
     }
     for (let i = 1; i <= 7; i++) {
       for (const t of ['reg', 'ot', 'dt', 'other'] as const) {

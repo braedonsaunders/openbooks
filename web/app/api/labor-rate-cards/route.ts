@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ errorCode: "save" }, { status: 422 });
   const name = body.name.trim();
   const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(gate.user.orgId);
   try {
     const id = await db.transaction(async (tx) => {
       const book = (await tx.execute<{ id: string }>(sql`

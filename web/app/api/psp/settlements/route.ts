@@ -13,6 +13,7 @@ import {
   summarizeSettlement,
   type PspProvider,
 } from "@openbooks/engine/src/psp-settlement.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -76,9 +77,7 @@ export async function POST(req: Request) {
           parsed = parseStripeBalanceTransactions(
             body.transactions ?? [],
             String(body.externalRef ?? body.payoutId ?? ""),
-            String(
-              body.settlementDate ?? new Date().toISOString().slice(0, 10),
-            ),
+            String(body.settlementDate ?? (await businessToday(orgId))),
           );
         } else if (provider === "recurly") {
           parsed = parseRecurlySettlement(body.payload ?? body);

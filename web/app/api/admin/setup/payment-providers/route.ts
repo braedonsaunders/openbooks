@@ -7,6 +7,7 @@ import {
   saveAcceptanceConfig,
   testAcceptanceConnection,
 } from "@openbooks/engine/src/payment-acceptance.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 
@@ -76,7 +77,7 @@ export async function POST(req: Request) {
     }
     const provider = body.provider === "stripe" || body.provider === "adyen" || body.provider === "gocardless" ? body.provider : null;
     const paymentMethod = body.paymentMethod === "card" || body.paymentMethod === "bank_debit" ? body.paymentMethod : "all";
-    const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : new Date().toISOString().slice(0, 10);
+    const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
     const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
     const id = typeof body.id === "string" ? body.id : null;
     const values = {

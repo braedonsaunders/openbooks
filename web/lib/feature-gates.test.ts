@@ -24,7 +24,7 @@ import test from 'node:test'
 const WEB = new URL('../', import.meta.url)
 const APP_SEGMENT = 'app/(app)'
 
-const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(/
+const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(/
 
 const read = (path: string) => readFileSync(new URL(path, WEB), 'utf8')
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -93,6 +93,17 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   timeTracking: ['app/api/timesheets'],
   payroll: ['app/api/payroll'],
   fixedAssets: ['app/api/assets'],
+  inventory: ['app/api/inventory'],
+  fieldTickets: ['app/api/field-tickets'],
+  subscriptionBilling: ['app/api/subscriptions'],
+  revenueRecognition: ['app/api/revenue'],
+  wipBilling: ['app/api/wip-billing'],
+  propertyManagement: ['app/api/property-management'],
+  projectScheduling: ['app/api/project-schedule'],
+  subcontracts: ['app/api/subcontracts'],
+  bankFeeds: ['app/api/banking/bank-feeds'],
+  crm: ['app/api/crm'],
+  subcontractorCompliance: ['app/api/compliance'],
 }
 
 function routeFilesUnder(dir: string): string[] {
@@ -164,6 +175,11 @@ test('the surfaces this test was written for are covered', () => {
   for (const file of routeFilesUnder('app/api/apps')) {
     assert.match(read(file), GATE, `${file} lost its feature gate`)
   }
+  assert.match(
+    read('app/api/revenue/run-recognition/route.ts'),
+    /isFeatureEnabled\(user\.orgId, 'revenueRecognition'\)/,
+    'recognition posting must refuse when the revenue recognition gate is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

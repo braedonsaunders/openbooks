@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import {
   InventoryError,
   createTransferOrder,
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
           fromStockLocationId: body.fromStockLocationId,
           toStockLocationId: body.toStockLocationId,
           subsidiaryId,
-          orderedOn: body.orderedOn || new Date().toISOString().slice(0, 10),
+          orderedOn: body.orderedOn || (await businessToday(orgId)),
           inTransitAccountId: body.inTransitAccountId ?? null,
           memo: body.memo ?? null,
           lines: body.lines ?? [],
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
           basis: body.basis ?? "value",
           freightAccountId: body.freightAccountId,
           subsidiaryId,
-          voucherDate: body.voucherDate || new Date().toISOString().slice(0, 10),
+          voucherDate: body.voucherDate || (await businessToday(orgId)),
           sourceDocumentLineId: body.sourceDocumentLineId ?? null,
           memo: body.memo ?? null,
           targets: body.targets ?? [],

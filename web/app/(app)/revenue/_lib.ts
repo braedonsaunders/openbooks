@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add } from '@openbooks/engine/src/money.ts'
 
 export type ScheduleLineRow = {
   period_name: string
@@ -76,15 +77,15 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
         join accounting_periods p on p.id = l.period_id
        where s.obligation_id = ${o.id} and s.org_id = ${orgId}
        order by l.sequence`))
-    const planned = lRes.rows.reduce((a, r) => a + Number(r.planned_amount ?? 0), 0)
+    const planned = lRes.rows.reduce((a, r) => add(a, String(r.planned_amount ?? '0')), '0')
     const recognized = lRes.rows.reduce(
-      (a, r) => a + (r.journal_entry_id ? Number(r.recognized_amount ?? 0) : 0),
-      0,
+      (a, r) => (r.journal_entry_id ? add(a, String(r.recognized_amount ?? '0')) : a),
+      '0',
     )
     obligations.push({
       ...o,
-      planned: planned.toFixed(4),
-      recognized: recognized.toFixed(4),
+      planned,
+      recognized,
       lines: lRes.rows,
     })
   }

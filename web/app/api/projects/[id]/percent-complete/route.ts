@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -38,7 +39,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
      returning id`))
   if (!updated.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = await businessToday(orgId)
   const sync = await syncProjectRevenueContracts(orgId, gate.user.id, today, id)
   return NextResponse.json({
     ok: true,

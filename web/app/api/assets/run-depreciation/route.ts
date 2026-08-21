@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runDepreciation } from '@openbooks/engine/src/depreciation.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
   const user = gate.user
 
   const body = (await req.json().catch(() => ({}))) as Body
-  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : new Date().toISOString().slice(0, 10)
+  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : await businessToday(user.orgId)
   if (body.assetId !== undefined && !isUuid(body.assetId)) {
     return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
   }

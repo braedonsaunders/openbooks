@@ -15,6 +15,7 @@ import {
   payrollTaxYearCoverage,
   payrollTaxYearForDate,
 } from '@openbooks/engine/src/payroll/tax-years.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -79,8 +80,8 @@ function parseBody(body: unknown): RatePayload | string {
 }
 
 /** The year the surface opens on: the pack's own current tax year. */
-function defaultYear(countries: string[]): number {
-  const today = new Date().toISOString().slice(0, 10)
+async function defaultYear(orgId: string, countries: string[]): Promise<number> {
+  const today = await businessToday(orgId)
   for (const country of countries) {
     try {
       return payrollTaxYearForDate(country, today).taxYear
@@ -104,7 +105,7 @@ export async function GET(req: Request) {
   const requestedYear = Number(url.searchParams.get('year'))
   const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
     ? requestedYear
-    : defaultYear(installed)
+    : await defaultYear(orgId, installed)
 
   const [rows, accounts] = await Promise.all([
     listStatutoryRates(orgId, { taxYear: year }),
