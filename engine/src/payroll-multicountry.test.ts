@@ -219,14 +219,15 @@ test("the US pack still refuses a withholding state, and an unknown one differen
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
-  // Twenty: the eleven states whose income tax the pack computes end to end,
-  // plus the nine that levy none. The old assertion pinned NINE — and every
-  // one of those nine was a no-tax state, which is to say the pack supported
-  // only the places with nothing to withhold and nothing in the codebase could
-  // tell. Derived from the engine registry now, so the two cannot disagree.
+  // Twenty-nine: the twenty states whose income tax the pack computes end to
+  // end, plus the nine that levy none. The old assertion pinned NINE — and
+  // every one of those nine was a no-tax state, which is to say the pack
+  // supported only the places with nothing to withhold and nothing in the
+  // codebase could tell. Derived from the engine registry now, so the two
+  // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 20,
-    "eleven states with an engine, nine with no wage income tax",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 29,
+    "twenty states with an engine, nine with no wage income tax",
   );
 });
 

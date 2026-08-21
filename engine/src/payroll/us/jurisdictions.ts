@@ -22,10 +22,19 @@ import type {
   PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
+import { AZ_CERTIFICATE, AZ_REGION } from "./states/az-declaration.ts";
 import { CO_CERTIFICATE, CO_REGION } from "./states/co-declaration.ts";
+import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia-declaration.ts";
+import { IN_CERTIFICATE, IN_REGION } from "./states/in-declaration.ts";
+import { KY_CERTIFICATE, KY_REGION } from "./states/ky-declaration.ts";
+import { MN_CERTIFICATE, MN_MWR, MN_REGION } from "./states/mn-declaration.ts";
 import { implementedUsStates, usStatePublication } from "./states/index.ts";
 import { MI_TAXING_CITIES } from "./states/mi.ts";
 import { OH_SCHOOL_DISTRICTS_2026 } from "./states/oh.ts";
+import { UT_CERTIFICATE, UT_REGION } from "./states/ut-declaration.ts";
+import { VA_CERTIFICATE, VA_REGION } from "./states/va-declaration.ts";
+import { WI_CERTIFICATE, WI_REGION, WI_W220 } from "./states/wi-declaration.ts";
+import { WV_CERTIFICATE, WV_REGION } from "./states/wv-declaration.ts";
 
 // ===========================================================================
 // Certificates
@@ -938,6 +947,8 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
     MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE,
+    AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
+    UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
 };
 
@@ -1333,6 +1344,8 @@ const NC_REGION: PayrollRegionWithholding = {
 const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
   CA: CA_REGION, CO: CO_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
   NJ: NJ_REGION, OH: OH_REGION, MI: MI_REGION, MA: MA_REGION, GA: GA_REGION, NC: NC_REGION,
+  AZ: AZ_REGION, IN: IN_REGION, KY: KY_REGION, VA: VA_REGION, WV: WV_REGION,
+  IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,
 };
 
 /**
@@ -1529,6 +1542,81 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
       citation:
         "Michigan Form 446 (Rev. 02-26) p. 4, \"Reciprocal Agreements\" and \"Certificate of "
         + "Nonresidency\"; Form MI-W4 (Rev. 12-20) line 8b",
+    })),
+    // --- Iowa: ONE state, on Form 44-016 --------------------------------
+    {
+      workRegion: "IA",
+      residenceRegion: "IL",
+      taxedBy: "residence" as const,
+      certificateKey: "us_ia_44016",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "Iowa Form 44-016 (10/3/2024); Iowa Department of Revenue, Iowa–Illinois Reciprocal "
+        + "Agreement",
+    },
+    // --- Wisconsin: four states, on Form W-220 --------------------------
+    ...(["IL", "IN", "KY", "MI"] as const).map((residence) => ({
+      workRegion: "WI",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_wi_w220",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "Wisconsin Form W-220 (R. 7-20); Publication W-166 (January 2026) p. 8; "
+        + "Publication 121 Reciprocity (January 2026)",
+    })),
+    // --- Minnesota: Michigan and North Dakota, on Form MWR --------------
+    ...(["MI", "ND"] as const).map((residence) => ({
+      workRegion: "MN",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_mn_mwr",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "Minnesota Form MWR for Tax Year 2026; 2026 Minnesota Withholding Tax Instructions "
+        + "and Tables p. 4",
+    })),
+    // --- Kentucky: unambiguous partners on the K-4 exemption ------------
+    // The K-4 also names Virginia (daily commute) and Ohio (unless a
+    // 20%-or-greater S-corporation shareholder-employee). Those extra
+    // predicates are not declared: the resolver cannot test a commute
+    // frequency or an ownership percentage.
+    ...(["IL", "IN", "MI", "WV", "WI"] as const).map((residence) => ({
+      workRegion: "KY",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_ky_k4",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "Kentucky Form 42A804 (K-4) (2026), boxes 1–4; 42A003 (TCF)(10-2025)",
+    })),
+    // --- Virginia: MD / PA / WV domiciliaries on VA-4 line 3 ------------
+    // Daily commuters from Kentucky or the District of Columbia are a
+    // commute-frequency predicate, not declared.
+    ...(["MD", "PA", "WV"] as const).map((residence) => ({
+      workRegion: "VA",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_va_va4",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "Virginia Form VA-4 line 3; Income Tax Withholding Guide for Employers, Rev. 05/25",
+    })),
+    // --- West Virginia: five states on IT-104NR -------------------------
+    ...(["KY", "MD", "OH", "PA", "VA"] as const).map((residence) => ({
+      workRegion: "WV",
+      residenceRegion: residence,
+      taxedBy: "residence" as const,
+      certificateKey: "us_wv_it104",
+      withoutCertificate: "work_region" as const,
+      relievesSubRegionLevies: false,
+      citation:
+        "West Virginia Form WV IT-104 / IT-104NR (Rev. 03/2023); TSD 381 (Rev. September 2025)",
     })),
   ],
 };
