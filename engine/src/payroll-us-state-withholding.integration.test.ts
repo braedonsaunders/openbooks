@@ -443,7 +443,7 @@ test(
       const ctRefusal = result.errors.find((error) => error.employee === "Hartford Hank");
       assert.ok(ctRefusal);
       assert.match(ctRefusal!.message, /DE income tax withholding is not implemented/);
-      assert.match(ctRefusal!.message, /Implemented: AZ, CA, CO, CT, GA, IL, IN, IA, KY, MA, MI, MN, NJ, NY, NC, OH, PA, UT, VA, WV, WI/);
+      assert.match(ctRefusal!.message, /Implemented: AZ, CA, CO, CT, GA, IL, IN, IA, KY, MD, MA, MI, MN, NJ, NY, NC, OH, OR, PA, UT, VA, WV, WI/);
 
       assert.equal(await stubOf(fx, run.documentId, ohio), null);
       const ohRefusal = result.errors.find((error) => error.employee === "Westerville Wes");

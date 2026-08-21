@@ -35,12 +35,14 @@ import { IL_WITHHOLDING } from "./il.ts";
 import { IN_WITHHOLDING } from "./in.ts";
 import { KY_WITHHOLDING } from "./ky.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
+import { MD_WITHHOLDING } from "./md.ts";
 import { DETROIT_WITHHOLDING, MI_WITHHOLDING } from "./mi.ts";
 import { MN_WITHHOLDING } from "./mn.ts";
 import { NC_WITHHOLDING } from "./nc.ts";
 import { NJ_WITHHOLDING } from "./nj.ts";
 import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
+import { OR_WITHHOLDING } from "./or.ts";
 import { PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING } from "./pa.ts";
 import { UT_WITHHOLDING } from "./ut.ts";
 import { VA_WITHHOLDING } from "./va.ts";
@@ -91,6 +93,8 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   MN_WITHHOLDING,
   WI_WITHHOLDING,
   UT_WITHHOLDING,
+  MD_WITHHOLDING,
+  OR_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -123,7 +127,6 @@ const PUBLICATIONS: Readonly<Record<string, string>> = {
   KS: "Kansas KW-100, Withholding Tax Guide",
   LA: "Louisiana Employer's Withholding Tax Formula (R-1306)",
   ME: "Maine Withholding Tables for Individual Income Tax",
-  MD: "Maryland Employer Withholding Guide (state PLUS county rates)",
   MS: "Mississippi Computer Payroll Accounting Withholding Formula",
   MO: "Missouri Employer's Tax Guide, Withholding Formula",
   MT: "Montana Withholding Tax Guide",
@@ -131,7 +134,6 @@ const PUBLICATIONS: Readonly<Record<string, string>> = {
   NM: "New Mexico FYI-104, Wage Withholding Tax",
   ND: "North Dakota Income Tax Withholding Rates and Instructions",
   OK: "Oklahoma Income Tax Withholding Tables (Packet OW-2)",
-  OR: "Oregon Withholding Tax Formulas (150-206-436), plus transit district taxes",
   RI: "Rhode Island Employer's Income Tax Withholding Tables",
   SC: "South Carolina SC W-166, Withholding Tax Tables",
   VT: "Vermont Income Tax Withholding Instructions, Tables and Charts",
@@ -222,6 +224,8 @@ export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
 export { KY_WITHHOLDING, KY_RATES_2026 } from "./ky.ts";
+export { MD_WITHHOLDING, MD_RATES_2026, MD_COUNTIES_2026 } from "./md.ts";
+export { OR_WITHHOLDING, OR_RATES_2026 } from "./or.ts";
 export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
 export { GA_WITHHOLDING, GA_EDITIONS, gaEditionForPayDate, gaStandardDeduction } from "./ga.ts";
 export {
