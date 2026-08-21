@@ -63,6 +63,11 @@
     "reopenTitle": "このタイムシートを再開しますか？",
     "reopenMessage": "週は下書きに戻り承認が取り消されるため、再度承認が必要になります。",
     "reopenedToast": "タイムシートを再開しました",
+    "amend": "訂正",
+    "amendTitle": "この週のロックされた時間を訂正しますか？",
+    "amendMessage": "消費済みの時間はそのまま残ります。ロックされた各記録に対して相殺の下書きを作成するので、新しい行に訂正を入力できます。週は下書きに戻ります。",
+    "amendedToast": "訂正の下書きを作成しました",
+    "amendmentLine": "訂正",
     "lockedBecause": "この週は再開できません — {count} 件の記録がすでに{reasons}です。",
     "lockReason": {
       "invoiced": "顧客へ請求済み",

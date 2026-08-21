@@ -63,6 +63,11 @@
     "reopenTitle": "Diesen Stundenzettel wieder öffnen?",
     "reopenMessage": "Die Woche wird wieder zum Entwurf und die Genehmigung entfällt; sie muss erneut genehmigt werden.",
     "reopenedToast": "Stundenzettel wieder geöffnet",
+    "amend": "Korrigieren",
+    "amendTitle": "Gesperrte Stunden dieser Woche korrigieren?",
+    "amendMessage": "Die bereits verwendeten Stunden bleiben gebucht. Für jeden gesperrten Eintrag wird ein ausgleichender Entwurf angelegt, damit Sie die Korrektur in einer neuen Zeile erfassen können. Die Woche wird wieder zum Entwurf.",
+    "amendedToast": "Korrektur-Entwürfe erstellt",
+    "amendmentLine": "Korrektur",
     "lockedBecause": "Diese Woche kann nicht mehr geöffnet werden — {count} Einträge sind bereits {reasons}.",
     "lockReason": {
       "invoiced": "dem Kunden berechnet",

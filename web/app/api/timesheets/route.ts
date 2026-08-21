@@ -158,6 +158,7 @@ async function save(req: Request) {
        where org_id = ${orgId}
          and employee_party_id = ${employee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and amends_entry_id is null
          and (
            status in ('draft', 'rejected')
            or (${!policy.requireApproval} and status = 'approved'

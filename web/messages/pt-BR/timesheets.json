@@ -63,6 +63,11 @@
     "reopenTitle": "Reabrir esta folha de horas?",
     "reopenMessage": "A semana volta a rascunho e a aprovação é limpa, portanto precisará ser aprovada novamente.",
     "reopenedToast": "Folha de horas reaberta",
+    "amend": "Corrigir",
+    "amendTitle": "Corrigir as horas bloqueadas desta semana?",
+    "amendMessage": "As horas já consumidas permanecem lançadas. Um rascunho de compensação é criado para cada lançamento bloqueado para que você possa informar a correção em uma nova linha. A semana volta a rascunho.",
+    "amendedToast": "Rascunhos de correção criados",
+    "amendmentLine": "Correção",
     "lockedBecause": "Esta semana não pode mais ser reaberta — {count} lançamentos já estão {reasons}.",
     "lockReason": {
       "invoiced": "faturados ao cliente",

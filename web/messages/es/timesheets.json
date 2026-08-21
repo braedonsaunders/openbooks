@@ -63,6 +63,11 @@
     "reopenTitle": "¿Reabrir esta hoja de horas?",
     "reopenMessage": "La semana vuelve a borrador y se borra la aprobación, por lo que deberá aprobarse de nuevo.",
     "reopenedToast": "Hoja de horas reabierta",
+    "amend": "Corregir",
+    "amendTitle": "¿Corregir las horas bloqueadas de esta semana?",
+    "amendMessage": "Las horas ya consumidas permanecen tal como se registraron. Se crea un borrador de compensación por cada entrada bloqueada para que pueda introducir la corrección en una línea nueva. La semana vuelve a borrador.",
+    "amendedToast": "Borradores de corrección creados",
+    "amendmentLine": "Corrección",
     "lockedBecause": "Esta semana ya no puede reabrirse: {count} entradas ya están {reasons}.",
     "lockReason": {
       "invoiced": "facturadas al cliente",

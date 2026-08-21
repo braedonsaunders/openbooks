@@ -63,6 +63,11 @@
     "reopenTitle": "Reopen this timesheet?",
     "reopenMessage": "The week returns to draft and the approval is cleared, so it will need approving again.",
     "reopenedToast": "Timesheet reopened",
+    "amend": "Amend",
+    "amendTitle": "Amend this week's locked hours?",
+    "amendMessage": "The consumed hours stay as posted. An offsetting draft is created for each locked entry so you can enter the correction on a new line. The week returns to draft.",
+    "amendedToast": "Amendment drafts created",
+    "amendmentLine": "Amendment",
     "lockedBecause": "This week can no longer be reopened — {count} entries are already {reasons}.",
     "lockReason": {
       "invoiced": "invoiced to the customer",

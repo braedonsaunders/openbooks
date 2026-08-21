@@ -90,6 +90,10 @@ export interface WeekRow {
   /** Org-defined line field values (time_entries.custom). Part of the row's
    * identity: two entries alike but for a custom value are different lines. */
   custom: Record<string, unknown>
+  /** Set when this line is an offset of a consumed original. */
+  amendsEntryId: string | null
+  /** Approved, submitted, or amendment lines must not be rewritten by save. */
+  immutable: boolean
 }
 
 export interface WeekPayload {
@@ -159,11 +163,12 @@ export async function loadWeek(
       cost_journal_entry_id: string | null
       field_ticket_id: string | null
       billing_status: 'unbilled' | 'billed'
+      amends_entry_id: string | null
     }>(sql`
     select id, worked_on, hours, time_type_id, item_id, project_id,
            department_id, memo, is_billable, status, custom, rejection_reason,
            invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-           field_ticket_id, billing_status
+           field_ticket_id, billing_status, amends_entry_id
       from time_entries
      where org_id = ${orgId}
        and employee_party_id = ${employeeId}
@@ -190,6 +195,7 @@ export async function loadWeek(
       r.is_billable ? '1' : '0',
       r.memo ?? '',
       customKey(r.custom),
+      r.amends_entry_id ?? '',
     ].join('|')
     let row = byKey.get(key)
     if (!row) {
@@ -203,6 +209,8 @@ export async function loadWeek(
         hours: ['', '', '', '', '', '', ''],
         entryStatuses: [],
         custom: r.custom ?? {},
+        amendsEntryId: r.amends_entry_id,
+        immutable: r.status === 'approved' || r.status === 'submitted' || r.amends_entry_id != null,
       }
       byKey.set(key, row)
     }
@@ -211,6 +219,9 @@ export async function loadWeek(
       row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx], String(r.hours))
     }
     row.entryStatuses.push(r.status)
+    if (r.status === 'approved' || r.status === 'submitted' || r.amends_entry_id != null) {
+      row.immutable = true
+    }
   }
 
   return {
