@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { payrollRemittanceSummary } from '@openbooks/engine/src/payroll-remittance.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
@@ -14,11 +15,13 @@ export const dynamic = 'force-dynamic'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
-/** Default period: the previous calendar month (the PD7A rhythm). */
-function previousMonth(): { from: string; to: string } {
-  const now = new Date()
-  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-  const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0))
+/** Default period: the previous calendar month on the org's business day (the PD7A rhythm). */
+function previousMonth(today: string): { from: string; to: string } {
+  const [year, month] = today.split("-").map(Number)
+  const prevMonth = month === 1 ? 12 : month! - 1
+  const prevYear = month === 1 ? year! - 1 : year!
+  const first = new Date(Date.UTC(prevYear, prevMonth - 1, 1))
+  const last = new Date(Date.UTC(prevYear, prevMonth, 0))
   return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10) }
 }
 
@@ -31,7 +34,7 @@ export default async function PayrollRemittancesPage({
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('payroll.remittances')
   const sp = await searchParams
-  const defaults = previousMonth()
+  const defaults = previousMonth(await businessToday(authz.user.orgId))
   const from = DATE.test(pickString(sp.from) ?? '') ? (pickString(sp.from) as string) : defaults.from
   const to = DATE.test(pickString(sp.to) ?? '') ? (pickString(sp.to) as string) : defaults.to
 

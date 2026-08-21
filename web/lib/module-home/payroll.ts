@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { nextPeriodAfter, payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
 
@@ -85,7 +86,7 @@ export interface PayrollHome {
 const EXCEPTION_LIMIT = 6
 
 export async function payrollHome(orgId: string): Promise<PayrollHome> {
-  const taxYear = new Date().getUTCFullYear()
+  const taxYear = Number((await businessToday(orgId)).slice(0, 4))
 
   const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.

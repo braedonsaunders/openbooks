@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import {
   assertTaxYear,
@@ -29,14 +30,14 @@ export const runtime = 'nodejs'
  * route only translates HTTP.
  */
 
-function currentTaxYear(): number {
-  return new Date().getUTCFullYear()
+async function currentTaxYear(orgId: string): Promise<number> {
+  return Number((await businessToday(orgId)).slice(0, 4))
 }
 
-function parseYear(raw: string | null): number {
-  if (!raw) return currentTaxYear()
+async function parseYear(orgId: string, raw: string | null): Promise<number> {
+  if (!raw) return currentTaxYear(orgId)
   const year = Number(raw)
-  return Number.isInteger(year) ? year : currentTaxYear()
+  return Number.isInteger(year) ? year : currentTaxYear(orgId)
 }
 
 export async function GET(req: Request) {
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
   if (gate instanceof NextResponse) return gate
   let year: number
   try {
-    year = assertTaxYear(parseYear(new URL(req.url).searchParams.get('year')))
+    year = assertTaxYear(await parseYear(gate.user.orgId, new URL(req.url).searchParams.get('year')))
   } catch (error) {
     return NextResponse.json({ error: message(error) }, { status: 422 })
   }

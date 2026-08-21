@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { now } from "./clock.ts";
 import { businessToday } from "./business-date.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import {
@@ -313,8 +312,9 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   // answer is right for a jurisdiction whose year does not open in January. A
   // blocker: no run in the current year can calculate until the edition lands,
   // and January is exactly when nobody wants to discover that mid-payroll.
+  const today = await businessToday(orgId);
   for (const country of installed) {
-    const { taxYear, problem } = payrollTaxYearForDate(country, today());
+    const { taxYear, problem } = payrollTaxYearForDate(country, today);
     checks.push({
       severity: "blocker", code: "setup.taxYear", ok: problem === null,
       detail: problem ? problem.message : `${country} · ${taxYear}`,
@@ -329,7 +329,9 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
   // the same reason as in the run pre-flight.
   const population = await activePayrollPopulation(orgId);
   for (const country of installed) {
-    const missing = await unconfiguredRatesForRun(orgId, country, currentTaxYear(country), population);
+    const missing = await unconfiguredRatesForRun(
+      orgId, country, await currentTaxYear(orgId, country), population,
+    );
     if (missing.length === 0) {
       checks.push({
         severity: "warning", code: "setup.statutoryRate", ok: true, detail: country,
@@ -611,12 +613,9 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   return tally(people.length);
 }
 
-/** Today, on the injectable clock the rest of the engine uses (clock.ts). */
-const today = (): string => now().toISOString().slice(0, 10);
-
-/** The tax year today falls in FOR THE PACK — never `getFullYear()`. */
-const currentTaxYear = (country: string): number =>
-  payrollTaxYearForDate(country, today()).taxYear;
+/** The tax year the org's business day falls in FOR THE PACK — never UTC `getFullYear()`. */
+const currentTaxYear = async (orgId: string, country: string): Promise<number> =>
+  payrollTaxYearForDate(country, await businessToday(orgId)).taxYear;
 
 /**
  * The org's active payroll population, reduced to the facts a scope point is
