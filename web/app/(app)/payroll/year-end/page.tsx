@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
@@ -34,7 +35,7 @@ export default async function PayrollYearEndPage({
   await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('payroll.yearEnd')
   const sp = await searchParams
-  const currentYear = new Date().getUTCFullYear()
+  const currentYear = Number((await businessToday(authz.user.orgId)).slice(0, 4))
   const requested = Number(pickString(sp.year))
   const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
 

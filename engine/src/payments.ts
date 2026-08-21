@@ -2098,15 +2098,15 @@ export async function loadCpa005RunFile(
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted,
            d.document_number
       from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id
-      left join documents d on d.id = i.payment_document_id
-     where i.payment_run_id = ${runId} and i.status <> 'cancelled'
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
+      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
      order by p.display_name
   `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
-  const fundsDate = run.scheduledFor ? new Date(`${run.scheduledFor}T00:00:00`) : new Date();
+  const fundsDate = new Date(`${run.scheduledFor ?? await businessToday(orgId)}T00:00:00`);
   const payments: Cpa005Payment[] = rows.rows.map((r) => {
     const units = toUnits(r.amount);
     if (units % 100n !== 0n) {
@@ -2285,10 +2285,11 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
       from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id
-      left join documents d on d.id = i.payment_document_id
-     where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
+      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+     order by p.display_name
   `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
@@ -2306,7 +2307,7 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
       individualName: r.payee,
     };
   });
-  const effectiveDate = run.scheduledFor ? new Date(`${run.scheduledFor}T00:00:00`) : new Date();
+  const effectiveDate = new Date(`${run.scheduledFor ?? await businessToday(orgId)}T00:00:00`);
   const content = buildNachaFile({ settings: settings.settings, effectiveDate, creationDate: new Date(), entries });
   return { filename: `NACHA-${run.runNumber}.ach`, content, runNumber: run.runNumber };
 }
@@ -2407,10 +2408,11 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
   const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
     select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
       from payment_instructions i
-      join parties p on p.id = i.payee_party_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id
-      left join documents d on d.id = i.payment_document_id
-     where i.payment_run_id = ${runId} and i.status <> 'cancelled' order by p.display_name
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
+      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
+     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+     order by p.display_name
   `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
@@ -2430,7 +2432,7 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
     settings: settings.settings,
     messageId: `MSG-${run.runNumber}`,
     creationDateTime: now.toISOString().replace(/\.\d{3}Z$/, ""),
-    executionDate: run.scheduledFor ?? now.toISOString().slice(0, 10),
+    executionDate: run.scheduledFor ?? await businessToday(orgId),
     payments,
   });
   return { filename: `SEPA-${run.runNumber}.xml`, content, runNumber: run.runNumber };

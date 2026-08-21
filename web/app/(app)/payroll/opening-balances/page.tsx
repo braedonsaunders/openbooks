@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { openingBalancesForYear, OPENING_BALANCE_FIELDS } from '@openbooks/engine/src/payroll-opening-balances.ts'
 import { entitlementOpenings } from '@openbooks/engine/src/payroll-entitlements.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -37,7 +38,7 @@ export default async function PayrollOpeningBalancesPage({
 
   const t = await getTranslations('payroll')
   const sp = await searchParams
-  const currentYear = new Date().getUTCFullYear()
+  const currentYear = Number((await businessToday(orgId)).slice(0, 4))
   const requested = Number(pickString(sp.year))
   const year = Number.isInteger(requested) && requested >= 2000 && requested <= 2100
     ? requested
