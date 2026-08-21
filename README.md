@@ -484,8 +484,8 @@ OpenBooks does not currently include a complete:
 - complete 50-state US income-tax withholding (federal withholding, FICA, FUTA
   and SUTA ship in the payroll feature alongside the CRA T4127 engine; state
   withholding currently covers the nine no-tax states plus AZ, CA, CO, CT, GA,
-  IL, IN, IA, KY, MA, MI, MN, NJ, NY, NC, OH, PA, UT, VA, WV and WI — every
-  other state is refused rather than estimated);
+  IL, IN, IA, KY, MA, MD, MI, MN, NJ, NY, NC, OH, OR, PA, UT, VA, WV and WI —
+  every other state is refused rather than estimated);
 - human-capital-management suite — payroll pays people, but there is no
   applicant tracking, onboarding, performance, benefits-administration or
   employee self-service;
