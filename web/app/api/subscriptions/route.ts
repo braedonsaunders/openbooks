@@ -12,6 +12,7 @@ import {
 import { add } from "@openbooks/engine/src/money.ts";
 import { requirePermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
 
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
       }
       case "addSubscription": {
         if (!body.customerId || !body.planId) return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
-        const startOn = body.startOn || new Date().toISOString().slice(0, 10);
+        const startOn = body.startOn || await businessToday(orgId);
         // firstBillOn is when the first FULL cycle bills; if it's after the start
         // and proration is requested, we bill the partial [start, firstBillOn] now.
         const firstBillOn = body.firstBillOn || startOn;
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
       case "updateSubscription": {
         const sets = [];
         if ("status" in body) sets.push(sql`status = ${body.status}`);
-        if (body.status === "canceled") sets.push(sql`canceled_on = ${new Date().toISOString().slice(0, 10)}`);
+        if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
         if ("quantity" in body) sets.push(sql`quantity = ${String(body.quantity)}`);
         if ("priceOverride" in body) sets.push(sql`price_override = ${body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null}`);
         if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);

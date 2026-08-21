@@ -507,6 +507,8 @@ type SubDetail = SubRow & {
   startOn: string;
   status: string;
   advancedLifecycle: boolean;
+  lastInvoiceId: string | null;
+  runCount: number;
 };
 
 /** Resolve the owning org — the tenant must be known before any scoped read. */
@@ -534,6 +536,7 @@ async function loadSubRow(subscriptionId: string): Promise<SubDetail> {
            (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
            o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
            s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status, s.created_by as "createdBy",
+           s.last_invoice_id as "lastInvoiceId", s.run_count as "runCount",
            exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
       from subscriptions s
       join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -636,10 +639,12 @@ export async function prorateFirstInvoice(
   return withOrg(orgId, async () => {
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
     const row = await loadSubRow(subscriptionId);
-    // Single-fire: this exact state is what a successful proration writes, so
-    // a concurrent twin that waited on the lock must not bill the partial
-    // period a second time.
-    if (row.nextBillOn === firstBillOn && row.currentPeriodStart === row.startOn) {
+    // Single-fire: create inserts next_bill_on = firstBillOn and
+    // current_period_start = startOn — the same two columns a successful
+    // proration writes. The real post-proration evidence is the invoice
+    // itself (run_count / last_invoice_id). A concurrent twin that waited
+    // on the lock sees those after the winner commits and must not bill again.
+    if (row.lastInvoiceId != null || Number(row.runCount) > 0) {
       throw new SubscriptionError("the first invoice has already been prorated");
     }
     const price = row.priceOverride ?? row.planAmount;

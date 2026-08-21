@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
+import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax-nexus-ledger.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -13,6 +15,19 @@ function isIsoDate(value: string): boolean {
   if (!DATE_RE.test(value)) return false
   const date = new Date(`${value}T00:00:00Z`)
   return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
+}
+
+/** Filing obligations for the org's registrations in a date range. */
+export async function GET(req: Request) {
+  const gate = await guardPermission('reports.read')
+  if (gate instanceof NextResponse) return gate
+  const p = new URL(req.url).searchParams
+  const today = await businessToday(gate.user.orgId)
+  const from = p.get('from') && DATE_RE.test(p.get('from')!) ? p.get('from')! : `${today.slice(0, 4)}-01-01`
+  const to = p.get('to') && DATE_RE.test(p.get('to')!) ? p.get('to')! : today
+  if (from > to) return NextResponse.json({ error: 'invalid period' }, { status: 422 })
+  const obligations = await loadOrgFilingCalendar(gate.user.orgId, from, to)
+  return NextResponse.json({ from, to, obligations })
 }
 
 /** Recompute server-side and freeze a versioned return snapshot in history. */

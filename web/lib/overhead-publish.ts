@@ -1,6 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { trueCostData } from './analytics/true-cost-data'
 
 /**
@@ -13,18 +15,17 @@ import { trueCostData } from './analytics/true-cost-data'
  */
 export interface PublishedRate {
   departmentId: string
-  ratePerHour: number
+  ratePerHour: string
 }
 
 export async function computeLiveOverheadRates(orgId: string): Promise<PublishedRate[]> {
-  const to = new Date()
-  const from = new Date(to)
-  from.setFullYear(from.getFullYear() - 1)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  const tc = await trueCostData(orgId, { from: iso(from), to: iso(to), label: 'TTM' })
+  const to = await businessToday(orgId)
+  const [y, m, d] = to.split('-').map(Number)
+  const from = `${(y ?? 0) - 1}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const tc = await trueCostData(orgId, { from, to, label: 'TTM' })
   return tc.departments
     .filter((d) => d.composite > 0)
-    .map((d) => ({ departmentId: d.id, ratePerHour: Math.round(d.composite * 100) / 100 }))
+    .map((d) => ({ departmentId: d.id, ratePerHour: formatMoney(String(d.composite), 2) }))
 }
 
 export async function publishOverheadRates(

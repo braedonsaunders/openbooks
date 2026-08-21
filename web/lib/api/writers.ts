@@ -8,6 +8,7 @@ import { deleteDocument, DeleteError } from "@openbooks/engine/src/document-dele
 import { resolveDefaultValue, type FieldValueMap } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
 import { nextDocumentNumber } from "../bills";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { loadFieldDefs, validateCustomValues } from "../custom-fields";
 import {
   buildSearchText,
@@ -402,7 +403,7 @@ async function createDocument(
     total: "0",
     taxTotal: "0",
     partyId: null,
-    documentDate: body.documentDate ?? new Date().toISOString().slice(0, 10),
+    documentDate: body.documentDate ?? await businessToday(user.orgId),
     updatedAt: undefined,
   };
   try {

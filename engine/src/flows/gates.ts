@@ -696,7 +696,16 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
     `));
     if (!claimed.rowCount) continue;
     const gate = await withBypassContext(() => loadGate(id));
-    if (!gate) continue;
+    if (!gate) {
+      // Claim set, row gone (or unreadable) — release so a later tick can
+      // retry instead of silently retiring the reminder forever.
+      await withBypassContext(() =>
+        db.execute(sql`
+        update flow_gates set reminded_at = null
+         where id = ${id} and status = 'pending' and reminded_at = ${now}
+      `));
+      continue;
+    }
     try {
       await withOrgContext(gate.orgId, () => notifyGateAssignee(gate, "reminder"));
       reminded++;

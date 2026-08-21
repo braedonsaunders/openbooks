@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { abs, add, fromUnits, neg, toUnits } from "./money.ts";
+import { clampTaxReturnWindow } from "./tax-nexus-ledger.ts";
 
 /**
  * Configurable government tax return computation.
@@ -256,6 +257,10 @@ export async function computeTaxReturn(
      where org_id = ${orgId} and code = ${formCode} and is_active limit 1`));
   const form = formRes.rows[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
+
+  const window = await clampTaxReturnWindow(orgId, formCode, from, to);
+  from = window.from;
+  to = window.to;
 
   // Org control tax accounts — the fallback a tax code posts to when it has no
   // collected/paid account of its own.

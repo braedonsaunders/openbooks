@@ -158,11 +158,12 @@ export async function loadWeek(
       payroll_batch_ref: string | null
       cost_journal_entry_id: string | null
       field_ticket_id: string | null
+      billing_status: 'unbilled' | 'billed'
     }>(sql`
     select id, worked_on, hours, time_type_id, item_id, project_id,
            department_id, memo, is_billable, status, custom, rejection_reason,
            invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-           field_ticket_id
+           field_ticket_id, billing_status
       from time_entries
      where org_id = ${orgId}
        and employee_party_id = ${employeeId}
@@ -174,6 +175,7 @@ export async function loadWeek(
     payrollBatchRef: r.payroll_batch_ref,
     costJournalEntryId: r.cost_journal_entry_id,
     fieldTicketId: r.field_ticket_id,
+    billingStatus: r.billing_status,
   }))
 
   const byKey = new Map<string, WeekRow>()

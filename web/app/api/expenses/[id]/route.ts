@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cmp } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
+import { DocumentEditError, validateEditableDocumentLines } from '../../../../lib/documents'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
@@ -75,7 +75,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let totals: { subtotal: string; taxTotal: string; total: string } | null = null
   let preparedLines: { accountId: string; description: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; departmentId: string | null; projectId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
-    const valid = body.lines.filter((l) => l.accountId && cmp(l.amount, '0') > 0)
+    let valid
+    try {
+      valid = validateEditableDocumentLines(body.lines)
+    } catch (e) {
+      if (e instanceof DocumentEditError) return NextResponse.json({ error: e.message }, { status: e.status })
+      throw e
+    }
     const computed = computeBillTotals(
       valid,
       await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),

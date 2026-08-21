@@ -16,6 +16,7 @@ import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
 
@@ -260,7 +261,7 @@ export async function POST(req: Request) {
           `));
           if (activeApplication.rows.length) throw new ConstructionBillingError("Complete or void the current application before approving a change order");
           await tx.execute(sql`
-            update change_orders set status = 'approved', approved_on = ${body.approvedOn ?? new Date().toISOString().slice(0, 10)},
+            update change_orders set status = 'approved', approved_on = ${body.approvedOn ?? await businessToday(orgId)},
                    approved_by = ${userId},
                    updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
@@ -313,7 +314,7 @@ export async function POST(req: Request) {
                         'after', jsonb_build_object('projectId', ${row.project_id}, 'scheduledValue', ${String(row.amount)})),
                       ${userId})`);
           }
-          const approvedOn = body.approvedOn ?? new Date().toISOString().slice(0, 10);
+          const approvedOn = body.approvedOn ?? await businessToday(orgId);
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'change_orders', ${body.id}, 'approve',
                     jsonb_build_object('before', jsonb_build_object('status', 'draft'), 'after',

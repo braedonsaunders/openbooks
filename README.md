@@ -413,14 +413,16 @@ levies exist and what they are assessed on — is a country-pack declaration.
 Canada and the United States are two packs, not a default and an exception.
 
 Specific limits worth knowing before you rely on it. US state income-tax
-withholding covers only the nine states that levy none, and any other state is
-refused loudly rather than approximated. Statutory holiday pay is calculated
-only for jurisdictions whose formula is transcribed; the rest are refused by
-name when a holiday falls in the period. Remittance due dates are computed only
-for regular remitters and left unset for accelerated and quarterly schedules
-rather than guessed. Quebec's RL-1 electronic filing is out of scope pending
-the gated specification, so Quebec year-end refuses rather than filing
-something wrong.
+withholding is computed for the nine states that levy none plus California,
+New York (including NYC and Yonkers), Pennsylvania (including Philadelphia),
+Illinois, New Jersey, Ohio, Michigan (including Detroit), Massachusetts,
+Georgia, and North Carolina. Any other state is refused loudly rather than
+approximated. Statutory holiday pay is calculated only for jurisdictions whose
+formula is transcribed; the rest are refused by name when a holiday falls in
+the period. Remittance due dates are computed only for regular remitters and
+left unset for accelerated and quarterly schedules rather than guessed.
+Quebec's RL-1 electronic filing is out of scope pending the gated
+specification, so Quebec year-end refuses rather than filing something wrong.
 
 ### Reporting, automation, and extension
 
@@ -479,10 +481,10 @@ The interface includes locale catalogs for:
 
 OpenBooks does not currently include a complete:
 
-- US state income-tax withholding (federal withholding, FICA, FUTA and SUTA
-  ship in the payroll feature alongside the CRA T4127 engine, but state
-  withholding covers only the nine states that levy none — every other state is
-  refused rather than estimated);
+- complete 50-state US income-tax withholding (federal withholding, FICA, FUTA
+  and SUTA ship in the payroll feature alongside the CRA T4127 engine; state
+  withholding currently covers the nine no-tax states plus CA, NY, PA, IL, NJ,
+  OH, MI, MA, GA and NC — every other state is refused rather than estimated);
 - human-capital-management suite — payroll pays people, but there is no
   applicant tracking, onboarding, performance, benefits-administration or
   employee self-service;

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber } from './bills'
 import { resolveOrgId } from './org-scope'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -20,7 +21,7 @@ export async function createDraftJournal(orgId: string, userId: string) {
       kind: 'journal',
       subsidiaryId: subsidiary.id,
       documentNumber,
-      documentDate: new Date().toISOString().slice(0, 10),
+      documentDate: await businessToday(orgId),
       currency: subsidiary.base_currency,
       subtotal: '0',
       taxTotal: '0',

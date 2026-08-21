@@ -9,6 +9,7 @@ import {
 } from '@openbooks/engine/src/tax.ts'
 import { resolveOrgId } from './org-scope'
 import { requireEffectiveRateRow } from '@openbooks/engine/src/tax-persist.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export interface TaxProfiles {
   codes: Map<string, TaxComponentConfig[]>
@@ -18,7 +19,7 @@ export interface TaxProfiles {
 /** Effective, ordered tax profiles for a transaction date. */
 export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<TaxProfiles> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const date = asOfDate ?? new Date().toISOString().slice(0, 10)
+  const date = asOfDate ?? await businessToday(resolvedOrgId)
   const codeRows = (await db.execute<Record<string, any>>(sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,

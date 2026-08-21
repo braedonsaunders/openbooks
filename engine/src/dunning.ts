@@ -161,7 +161,8 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           if (daysOverdue < policy.gracePeriodDays) continue;
 
           const fired = (await db.execute<{ stageId: string }>(sql`
-            select stage_id as "stageId" from dunning_log where document_id = ${doc.id} and org_id = ${orgId}
+            select stage_id as "stageId" from dunning_log
+             where document_id = ${doc.id} and org_id = ${orgId} and status = 'sent'
           `));
           const firedIds = new Set(fired.rows.map((r) => r.stageId));
 
@@ -202,6 +203,7 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           const alreadyLogged = (await db.execute(sql`
             select 1 from dunning_log
              where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
+               and status = 'sent'
              limit 1
           `));
           if (alreadyLogged.rows.length > 0) continue;

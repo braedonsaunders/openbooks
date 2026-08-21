@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { nextDocumentNumber } from '../../../../lib/bills'
 
@@ -11,15 +13,19 @@ export async function POST() {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const documentNumber = await nextDocumentNumber(user.orgId, 'expense_report', 'EXP-')
+  const [org, today, documentNumber] = await Promise.all([
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${user.orgId}`),
+    businessToday(user.orgId),
+    nextDocumentNumber(user.orgId, 'expense_report', 'EXP-'),
+  ])
   const [doc] = await db
     .insert(schema.documents)
     .values({
       orgId: user.orgId,
       kind: 'expense_report',
       documentNumber,
-      documentDate: new Date().toISOString().slice(0, 10),
-      currency: 'CAD',
+      documentDate: today,
+      currency: org.rows[0]?.base_currency ?? 'CAD',
       subtotal: '0',
       taxTotal: '0',
       total: '0',

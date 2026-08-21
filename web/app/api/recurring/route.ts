@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { requirePermission } from "../../../lib/authz";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
 
@@ -64,7 +65,7 @@ export async function POST(req: Request) {
   }
   const templateDocumentId = tpl.rows[0]!.id;
 
-  const nextRunOn = body.nextRunOn ?? new Date().toISOString().slice(0, 10);
+  const nextRunOn = body.nextRunOn ?? await businessToday(authz.user.orgId);
   const created = (await db.execute<{ id: string }>(sql`
     insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
                                      auto_post, name, created_by, updated_by)

@@ -11,6 +11,7 @@ import {
   toBaseQuantity,
   type CostLayer,
 } from "./inventory-costing.ts";
+import { unitCostPerQuantity } from "./inventory.ts";
 
 // ---------------------------------------------------------------------------
 // extendCost / unit conversion
@@ -119,4 +120,10 @@ test("standard-cost receipt yields a favorable (negative) variance when actual i
 
 test("standard-cost issue is always at standard", () => {
   assert.equal(issueStandard("7", "2.00"), "14.0000");
+});
+
+test("unitCostPerQuantity is half-up so 6 @ 10.0000 is 1.6667, not truncated 1.6666", () => {
+  assert.equal(unitCostPerQuantity("10.0000", "6"), "1.6667");
+  assert.equal(unitCostPerQuantity("10.0000", "-6"), "-1.6667");
+  assert.equal(unitCostPerQuantity("10.0000", "0"), null);
 });

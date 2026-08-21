@@ -30,12 +30,14 @@ export interface EntryProvenance {
   payrollBatchRef: string | null
   costJournalEntryId: string | null
   fieldTicketId: string | null
+  /** Independent of invoice-line provenance — imported billed rows may have no line id. */
+  billingStatus?: 'unbilled' | 'billed' | null
 }
 
 /** Every downstream consumer holding this entry, in reporting order. */
 export function lockReasonsFor(entry: EntryProvenance): LockReason[] {
   const reasons: LockReason[] = []
-  if (entry.invoicedByLineId) reasons.push('invoiced')
+  if (entry.invoicedByLineId || entry.billingStatus === 'billed') reasons.push('invoiced')
   if (entry.payrollBatchRef) reasons.push('paid')
   if (entry.costJournalEntryId) reasons.push('costed')
   if (entry.fieldTicketId) reasons.push('ticketed')

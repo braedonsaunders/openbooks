@@ -10,6 +10,7 @@ import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /**
  * Unified line-based posting-document machinery.
@@ -92,7 +93,7 @@ export async function createDocumentDraft(
       kind,
       subsidiaryId,
       documentNumber,
-      documentDate: new Date().toISOString().slice(0, 10),
+      documentDate: await businessToday(orgId),
       currency,
       subtotal: '0',
       taxTotal: '0',

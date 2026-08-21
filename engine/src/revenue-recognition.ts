@@ -1103,11 +1103,16 @@ export async function runRevenueRecognition(
      where o.org_id = ${orgId} and o.status = 'open'
        and r.method in ('milestone', 'usage')
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
-       and exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
-       and not exists (
-         select 1 from recognition_schedule_lines l
-           join recognition_schedules s on s.id = l.schedule_id
-          where s.obligation_id = o.id)`));
+       and (
+         not exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+         or (
+           exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+           and not exists (
+             select 1 from recognition_schedule_lines l
+               join recognition_schedules s on s.id = l.schedule_id
+              where s.obligation_id = o.id)
+         )
+       )`));
   for (const row of emptyPlans.rows) {
     result.problems.push(
       `${row.contract_number} ${row.description}: milestone/usage obligation has no recognition events recorded`,

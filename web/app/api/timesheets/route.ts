@@ -162,7 +162,8 @@ async function save(req: Request) {
            status in ('draft', 'rejected')
            or (${!policy.requireApproval} and status = 'approved'
                and invoiced_by_line_id is null and payroll_batch_ref is null
-               and cost_journal_entry_id is null and field_ticket_id is null)
+               and cost_journal_entry_id is null and field_ticket_id is null
+               and billing_status = 'unbilled')
          )
     `)
     for (const p of toPersist) {

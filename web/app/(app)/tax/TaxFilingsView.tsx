@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -39,12 +39,18 @@ type Result = {
   boxes: Box[]
 }
 
+function localIso(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 function monthBounds(): { from: string; to: string } {
   const now = new Date()
   const from = new Date(now.getFullYear(), now.getMonth(), 1)
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  const iso = (date: Date) => date.toISOString().slice(0, 10)
-  return { from: iso(from), to: iso(to) }
+  return { from: localIso(from), to: localIso(to) }
 }
 
 function safeGovernmentUrl(value: string | null | undefined): string | null {
@@ -81,6 +87,23 @@ export function TaxFilingsView({
   const [exportOpen, setExportOpen] = useState(false)
   const selectedForm = forms.find((form) => form.code === code)
   const governmentUrl = safeGovernmentUrl(selectedForm?.submission_url)
+
+  useEffect(() => {
+    if (!code) return
+    let cancelled = false
+    void fetch(`/api/tax/filings?from=${bounds.from.slice(0, 4)}-01-01&to=${bounds.to}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { obligations?: { returnFormCode: string | null; reportableFrom: string; reportableTo: string }[] } | null) => {
+        if (cancelled || !data?.obligations?.length) return
+        const match = data.obligations.find((o) => o.returnFormCode === code)
+          ?? data.obligations[data.obligations.length - 1]
+        if (match) {
+          setFrom(match.reportableFrom)
+          setTo(match.reportableTo)
+        }
+      })
+    return () => { cancelled = true }
+  }, [code, bounds.from, bounds.to])
 
   const fmt = (value: string) =>
     Number(value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
