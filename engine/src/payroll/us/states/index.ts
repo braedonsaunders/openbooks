@@ -33,6 +33,7 @@ import { CO_WITHHOLDING } from "./co.ts";
 import { CT_WITHHOLDING } from "./ct.ts";
 import { DE_WITHHOLDING } from "./de.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
+import { HI_WITHHOLDING } from "./hi.ts";
 import { IA_WITHHOLDING } from "./ia.ts";
 import { IL_WITHHOLDING } from "./il.ts";
 import { IN_WITHHOLDING } from "./in.ts";
@@ -109,6 +110,7 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   ME_WITHHOLDING,
   RI_WITHHOLDING,
   VT_WITHHOLDING,
+  HI_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -133,7 +135,6 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
-  HI: "Hawaii Booklet A, Employer's Tax Guide",
   ID: "Idaho Guide to Income Tax Withholding, Computer Formula",
   KS: "Kansas KW-100, Withholding Tax Guide",
   LA: "Louisiana Employer's Withholding Tax Formula (R-1306)",
@@ -242,6 +243,7 @@ export { MD_WITHHOLDING, MD_RATES_2026, MD_COUNTIES_2026 } from "./md.ts";
 export { OR_WITHHOLDING, OR_RATES_2026 } from "./or.ts";
 export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
 export { GA_WITHHOLDING, GA_EDITIONS, gaEditionForPayDate, gaStandardDeduction } from "./ga.ts";
+export { HI_WITHHOLDING, HI_RATES_2026 } from "./hi.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,
 } from "./ma.ts";
