@@ -15,41 +15,48 @@ test('overrides win (CA sales-only $500k, NY sales AND 100 txns)', () => {
 })
 
 test('OR states are met by hitting either the dollar or the transaction trigger', () => {
-  const [byTxn] = evaluateUsNexus([{ state: 'FL', salesUsd: 40_000, txnCount: 250 }])
+  const [byTxn] = evaluateUsNexus([{ state: 'FL', salesUsd: '40000', txnCount: 250 }])
   assert.equal(byTxn.status, 'met') // 250 > 200 transactions
-  const [bySales] = evaluateUsNexus([{ state: 'FL', salesUsd: 120_000, txnCount: 5 }])
+  const [bySales] = evaluateUsNexus([{ state: 'FL', salesUsd: '120000', txnCount: 5 }])
   assert.equal(bySales.status, 'met') // $120k > $100k
 })
 
 test('sales-only states ignore transaction count', () => {
-  const [ca] = evaluateUsNexus([{ state: 'CA', salesUsd: 200_000, txnCount: 100_000 }])
+  const [ca] = evaluateUsNexus([{ state: 'CA', salesUsd: '200000', txnCount: 100_000 }])
   assert.equal(ca.status, 'none') // huge txn count irrelevant; $200k < $500k
 })
 
 test('AND states require both triggers', () => {
   // Sales blown past but only 40% of the transaction count → not close on the
   // binding (min) leg, so not yet approaching.
-  const [far] = evaluateUsNexus([{ state: 'NY', salesUsd: 600_000, txnCount: 40 }])
+  const [far] = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 40 }])
   assert.equal(far.status, 'none')
   // Both legs near (sales met, 85 of 100 txns) → approaching.
-  const [near] = evaluateUsNexus([{ state: 'NY', salesUsd: 600_000, txnCount: 85 }])
+  const [near] = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 85 }])
   assert.equal(near.status, 'approaching')
-  const [both] = evaluateUsNexus([{ state: 'NY', salesUsd: 600_000, txnCount: 150 }])
+  const [both] = evaluateUsNexus([{ state: 'NY', salesUsd: '600000', txnCount: 150 }])
   assert.equal(both.status, 'met')
 })
 
 test('approaching fires at 80% of the binding trigger', () => {
-  const [near] = evaluateUsNexus([{ state: 'FL', salesUsd: 85_000, txnCount: 10 }])
+  const [near] = evaluateUsNexus([{ state: 'FL', salesUsd: '85000', txnCount: 10 }])
   assert.equal(near.status, 'approaching') // 85% of $100k
-  const [far] = evaluateUsNexus([{ state: 'FL', salesUsd: 50_000, txnCount: 10 }])
+  const [far] = evaluateUsNexus([{ state: 'FL', salesUsd: '50000', txnCount: 10 }])
   assert.equal(far.status, 'none')
 })
 
 test('results sort most-urgent first: met, then approaching, then none', () => {
   const rows = evaluateUsNexus([
-    { state: 'FL', salesUsd: 50_000, txnCount: 5 }, // none
-    { state: 'TX', salesUsd: 600_000, txnCount: 5 }, // met (sales-only $500k)
-    { state: 'GA', salesUsd: 90_000, txnCount: 5 }, // approaching
+    { state: 'FL', salesUsd: '50000', txnCount: 5 }, // none
+    { state: 'TX', salesUsd: '600000', txnCount: 5 }, // met (sales-only $500k)
+    { state: 'GA', salesUsd: '90000', txnCount: 5 }, // approaching
   ])
   assert.deepEqual(rows.map((r) => r.state), ['TX', 'GA', 'FL'])
+})
+
+test('a penny under the dollar threshold is not met', () => {
+  const [justUnder] = evaluateUsNexus([{ state: 'FL', salesUsd: '99999.9999', txnCount: 0 }])
+  assert.equal(justUnder.status, 'approaching')
+  const [exact] = evaluateUsNexus([{ state: 'FL', salesUsd: '100000', txnCount: 0 }])
+  assert.equal(exact.status, 'met')
 })
