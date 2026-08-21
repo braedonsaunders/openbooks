@@ -25,6 +25,7 @@ import { AZ_TAX_YEAR_EDITIONS } from "./az.ts";
 import { CA_TAX_YEAR_EDITIONS } from "./ca.ts";
 import { CO_TAX_YEAR_EDITIONS } from "./co.ts";
 import { CT_TAX_YEAR_EDITIONS } from "./ct.ts";
+import { DE_TAX_YEAR_EDITIONS } from "./de.ts";
 import { GA_TAX_YEAR_EDITIONS } from "./ga.ts";
 import { IA_TAX_YEAR_EDITIONS } from "./ia.ts";
 import { IL_TAX_YEAR_EDITIONS } from "./il.ts";
@@ -70,6 +71,7 @@ export const US_STATE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
   ...UT_TAX_YEAR_EDITIONS,
   ...MD_TAX_YEAR_EDITIONS,
   ...OR_TAX_YEAR_EDITIONS,
+  ...DE_TAX_YEAR_EDITIONS,
 ];
 
 /**

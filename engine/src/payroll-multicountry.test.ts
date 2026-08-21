@@ -207,28 +207,29 @@ test("every T4127 province is supported, including QC and ZZ", () => {
 test("the US pack still refuses a withholding state, and an unknown one differently", () => {
   // Preserved behaviour — this was the good precedent the CA pack now follows.
   // WHICH states are refused has moved: `supported` is now DERIVED from the
-  // registered engines, so California, Colorado and Connecticut are supported
-  // (their tables are transcribed) and Delaware's is not.
+  // registered engines, so California, Colorado, Connecticut and Delaware are
+  // supported (their tables are transcribed) and Alabama's is not.
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CA"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CO"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CT"));
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "DE"));
   assert.throws(
-    () => assertPayrollRegionSupported("US", "DE"),
-    /DE income tax withholding is not implemented by the US payroll pack/,
+    () => assertPayrollRegionSupported("US", "AL"),
+    /AL income tax withholding is not implemented by the US payroll pack/,
   );
   assert.throws(
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
-  // Thirty-two: the twenty-three states whose income tax the pack computes
+  // Thirty-three: the twenty-four states whose income tax the pack computes
   // end to end, plus the nine that levy none. The old assertion pinned NINE — and
   // every one of those nine was a no-tax state, which is to say the pack
   // supported only the places with nothing to withhold and nothing in the
   // codebase could tell. Derived from the engine registry now, so the two
   // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 32,
-    "twenty-three states with an engine, nine with no wage income tax",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 33,
+    "twenty-four states with an engine, nine with no wage income tax",
   );
 });
 
