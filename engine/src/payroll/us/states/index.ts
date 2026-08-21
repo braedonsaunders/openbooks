@@ -26,6 +26,7 @@
 import { PayrollError } from "../../../payroll-error.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
 import { AL_WITHHOLDING } from "./al.ts";
+import { AR_WITHHOLDING } from "./ar.ts";
 import { AZ_WITHHOLDING } from "./az.ts";
 import { CA_WITHHOLDING } from "./ca.ts";
 import { CO_WITHHOLDING } from "./co.ts";
@@ -37,6 +38,7 @@ import { IL_WITHHOLDING } from "./il.ts";
 import { IN_WITHHOLDING } from "./in.ts";
 import { KY_WITHHOLDING } from "./ky.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
+import { ME_WITHHOLDING } from "./me.ts";
 import { MD_WITHHOLDING } from "./md.ts";
 import { DETROIT_WITHHOLDING, MI_WITHHOLDING } from "./mi.ts";
 import { MN_WITHHOLDING } from "./mn.ts";
@@ -101,6 +103,8 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   DE_WITHHOLDING,
   AL_WITHHOLDING,
   SC_WITHHOLDING,
+  AR_WITHHOLDING,
+  ME_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -124,13 +128,11 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  * the list stays honest as states are added.
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
-  AR: "Arkansas Withholding Tax Formula (AR4ECX)",
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
   HI: "Hawaii Booklet A, Employer's Tax Guide",
   ID: "Idaho Guide to Income Tax Withholding, Computer Formula",
   KS: "Kansas KW-100, Withholding Tax Guide",
   LA: "Louisiana Employer's Withholding Tax Formula (R-1306)",
-  ME: "Maine Withholding Tables for Individual Income Tax",
   MS: "Mississippi Computer Payroll Accounting Withholding Formula",
   MO: "Missouri Employer's Tax Guide, Withholding Formula",
   MT: "Montana Withholding Tax Guide",
@@ -225,7 +227,9 @@ export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
 export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
 export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
 export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
+export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";
 export { DE_WITHHOLDING, DE_RATES_2026 } from "./de.ts";
+export { ME_WITHHOLDING, ME_RATES_2026 } from "./me.ts";
 export { SC_WITHHOLDING, SC_RATES_2026 } from "./sc.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";

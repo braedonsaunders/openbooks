@@ -208,30 +208,32 @@ test("the US pack still refuses a withholding state, and an unknown one differen
   // Preserved behaviour — this was the good precedent the CA pack now follows.
   // WHICH states are refused has moved: `supported` is now DERIVED from the
   // registered engines, so California through South Carolina are supported
-  // (their tables are transcribed) and Arkansas's is not.
+  // (their tables are transcribed) and the District of Columbia's is not.
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CA"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CO"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CT"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "DE"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "AL"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "SC"));
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "AR"));
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "ME"));
   assert.throws(
-    () => assertPayrollRegionSupported("US", "AR"),
-    /AR income tax withholding is not implemented by the US payroll pack/,
+    () => assertPayrollRegionSupported("US", "DC"),
+    /DC income tax withholding is not implemented by the US payroll pack/,
   );
   assert.throws(
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
-  // Thirty-five: the twenty-six states whose income tax the pack computes
+  // Thirty-seven: the twenty-eight states whose income tax the pack computes
   // end to end, plus the nine that levy none. The old assertion pinned NINE — and
   // every one of those nine was a no-tax state, which is to say the pack
   // supported only the places with nothing to withhold and nothing in the
   // codebase could tell. Derived from the engine registry now, so the two
   // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 35,
-    "twenty-six states with an engine, nine with no wage income tax",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 37,
+    "twenty-eight states with an engine, nine with no wage income tax",
   );
 });
 
