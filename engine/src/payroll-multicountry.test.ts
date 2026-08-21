@@ -219,6 +219,7 @@ test("the US pack still refuses a withholding state, and an unknown one differen
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "ME"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "RI"));
   assert.doesNotThrow(() => assertPayrollRegionSupported("US", "VT"));
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "HI"));
   assert.throws(
     () => assertPayrollRegionSupported("US", "DC"),
     /DC income tax withholding is not implemented by the US payroll pack/,
@@ -227,15 +228,15 @@ test("the US pack still refuses a withholding state, and an unknown one differen
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
-  // Thirty-nine: the thirty states whose income tax the pack computes
+  // Forty: the thirty-one states whose income tax the pack computes
   // end to end, plus the nine that levy none. The old assertion pinned NINE — and
   // every one of those nine was a no-tax state, which is to say the pack
   // supported only the places with nothing to withhold and nothing in the
   // codebase could tell. Derived from the engine registry now, so the two
   // cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 39,
-    "thirty states with an engine, nine with no wage income tax",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 40,
+    "thirty-one states with an engine, nine with no wage income tax",
   );
 });
 
