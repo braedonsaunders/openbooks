@@ -265,7 +265,7 @@ const vendorPerformanceTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     // vendorData takes no orgId — it is scoped purely by the RLS GUC set here.
-    const r = await withOrg(authz.user.orgId, () => vendorData(period));
+    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId));
     return {
       ok: true,
       data: {

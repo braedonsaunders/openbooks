@@ -1,6 +1,7 @@
 import "server-only";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
 
@@ -370,7 +371,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const pFrom = priorYearIso(from);
   const pTo = priorYearIso(to);
   // Recency/overdue are measured "as of now", never a future period end.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = await businessToday(orgId);
   const ref = to < today ? to : today;
 
   // Per-org tunable thresholds (defaults reproduce the standard scoring exactly).

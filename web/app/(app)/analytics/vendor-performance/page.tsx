@@ -21,13 +21,13 @@ export default async function VendorPerformancePage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const t = await getTranslations('analytics.vendor')
-  await requirePermission('reports.read')
+  const authz = await requirePermission('reports.read')
 
   const sp = await searchParams
   const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
 
-  const data = await vendorData({ from: period.from, to: period.to, label: period.label })
+  const data = await vendorData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId)
 
   return (
     <ListPageLayout
