@@ -19,6 +19,7 @@ import { resolvePeriod } from '../../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
 
@@ -44,7 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   }
 
   const t = (await getTranslations('reports')) as unknown as Translator
-  const filename = `${safeName(kind)}-${new Date().toISOString().slice(0, 10)}`
+  const filename = `${safeName(kind)}-${await businessToday(gate.user.orgId)}`
   const branding = await orgBranding()
 
   const emitData = async (data: ExportData) => {

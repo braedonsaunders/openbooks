@@ -16,6 +16,7 @@ import {
   type Translator,
 } from '../../../../../../lib/report-pdf'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
 
@@ -61,7 +62,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
   }
 
-  const stamp = new Date().toISOString().slice(0, 10)
+  const stamp = await businessToday(user.orgId)
   const filename = `${safeName(def.slug)}-${stamp}`
 
   if (format === 'csv') {
