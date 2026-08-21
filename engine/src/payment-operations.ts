@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, schema, withBypassContext, withOrgContext } from "./db.ts";
 import { fromUnits, sum, toUnits } from "./money.ts";
+import { businessToday } from "./business-date.ts";
 import {
   PaymentError,
   decryptAccountNumber,
@@ -289,6 +290,8 @@ interface FormatContext {
     reference: string;
     mandateReference: string | null;
   }>;
+  /** The org's business day — the formatters' default when the run has no scheduled date. */
+  businessDate: string;
 }
 
 async function loadFormatContext(runId: string, orgId: string): Promise<FormatContext> {
@@ -340,6 +343,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
   `));
   return {
     run: row,
+    businessDate: await businessToday(orgId),
     profile: {
       id: row.payment_bank_profile_id,
       name: row.profile_name,
@@ -405,7 +409,7 @@ function genericRegister(ctx: FormatContext): { filename: string; content: strin
 
 function chequeRegister(ctx: FormatContext): { filename: string; content: string; contentType: string } {
   const header = ["payment_reference", "payee", "amount", "currency", "payment_date"];
-  const paymentDate = String(ctx.run.scheduled_for ?? new Date().toISOString().slice(0, 10));
+  const paymentDate = String(ctx.run.scheduled_for ?? ctx.businessDate);
   const rows = ctx.payments.map((p) => [p.reference, p.partyName, p.amount, p.currency, paymentDate]);
   return {
     filename: `CHEQUE-${String(ctx.run.run_number)}.${ctx.format.extension}`,
@@ -416,7 +420,7 @@ function chequeRegister(ctx: FormatContext): { filename: string; content: string
 
 function positivePayRegister(ctx: FormatContext): { filename: string; content: string; contentType: string } {
   const header = ["account", "issue_date", "payment_reference", "payee", "amount", "currency", "action"];
-  const issueDate = String(ctx.run.scheduled_for ?? new Date().toISOString().slice(0, 10));
+  const issueDate = String(ctx.run.scheduled_for ?? ctx.businessDate);
   const fundingAccount = String(ctx.profile.settings.positivePayAccountReference ?? "");
   if (!fundingAccount) throw new PaymentError("Positive Pay profile is missing its bank account reference");
   const rows = ctx.payments.map((p) => [fundingAccount, issueDate, p.reference, p.partyName, p.amount, p.currency, "issue"]);
@@ -482,7 +486,7 @@ function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content:
   const yymmdd = (d: Date) => `${String(d.getUTCFullYear() % 100).padStart(2, "0")}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
   const odfi8 = s.odfiRouting.slice(0, 8);
-  const effective = new Date(String(ctx.run.scheduled_for ?? now.toISOString().slice(0, 10)) + "T00:00:00Z");
+  const effective = new Date(String(ctx.run.scheduled_for ?? ctx.businessDate) + "T00:00:00Z");
   const lines = [
     "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(now) + hhmm(now) + "A094101" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
     "5" + "225" + field(s.companyName, 16) + field("", 20) + field(s.companyId, 10) + field(s.entryClassCode ?? "CCD", 3) + field(s.entryDescription ?? "COLLECT", 10) + field("", 6) + yymmdd(effective) + field("", 3) + "1" + odfi8 + "0000001",
@@ -537,7 +541,7 @@ function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: 
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
   const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
   const total2 = bankAmount2(total);
-  const collectionDate = String(ctx.run.scheduled_for ?? now.toISOString().slice(0, 10));
+  const collectionDate = String(ctx.run.scheduled_for ?? ctx.businessDate);
   const tx = ctx.payments.map((p) => {
     if (!p.mandateReference) throw new PaymentError(`${p.partyName} has no active debit mandate`);
     const iban = (p.routing.iban ?? p.accountNumber).replace(/\s/g, "");
@@ -549,19 +553,22 @@ function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: 
 }
 
 async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
-  if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(ctx.format.rail)) {
-    return loadRunFile(String(ctx.run.id), orgId, now);
+  // The org's calendar day backs every formatter's "no scheduled date" default,
+  // so bank files never inherit the server's UTC day by accident.
+  const scoped: FormatContext = { ...ctx, businessDate: await businessToday(orgId) };
+  if (["cpa005_credit", "nacha_credit", "sepa_credit"].includes(scoped.format.rail)) {
+    return loadRunFile(String(scoped.run.id), orgId, now);
   }
-  if (ctx.format.rail === "nacha_debit") return { ...nachaDebit(ctx, now), runNumber: String(ctx.run.run_number) };
-  if (ctx.format.rail === "sepa_debit") return { ...sepaDebit(ctx, now), runNumber: String(ctx.run.run_number) };
-  if (ctx.format.rail === "cheque") return { ...chequeRegister(ctx), runNumber: String(ctx.run.run_number) };
-  if (ctx.format.rail === "positive_pay") return { ...positivePayRegister(ctx), runNumber: String(ctx.run.run_number) };
-  if (ctx.format.rail !== "custom") return { ...genericRegister(ctx), runNumber: String(ctx.run.run_number) };
-  if (!ctx.format.formatterScript) throw new PaymentError("custom payment format has no formatter script");
+  if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "sepa_debit") return { ...sepaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "cheque") return { ...chequeRegister(scoped), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "positive_pay") return { ...positivePayRegister(scoped), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail !== "custom") return { ...genericRegister(scoped), runNumber: String(scoped.run.run_number) };
+  if (!scoped.format.formatterScript) throw new PaymentError("custom payment format has no formatter script");
   const org = (await db.execute<{ id: string; name: string; base_currency: string }>(sql`select id, name, base_currency from orgs where id = ${orgId}`));
-  const outcome = await runScript(ctx.format.formatterScript, {
+  const outcome = await runScript(scoped.format.formatterScript, {
     trigger: "payment_format",
-    request: { run: ctx.run, profile: ctx.profile, payments: ctx.payments, now: now.toISOString() },
+    request: { run: scoped.run, profile: scoped.profile, payments: scoped.payments, now: now.toISOString() },
     org: { id: orgId, name: org.rows[0]?.name ?? "", baseCurrency: org.rows[0]?.base_currency ?? "" },
   }, 10_000);
   if (outcome.status !== "ok") throw new PaymentError(`custom payment format ${outcome.status}: ${outcome.abortReason ?? "no output"}`);
@@ -569,7 +576,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
   if (!out || typeof out.filename !== "string" || typeof out.content !== "string") {
     throw new PaymentError("custom formatter must return { filename, content, contentType? }");
   }
-  return { filename: out.filename, content: out.content, contentType: typeof out.contentType === "string" ? out.contentType : ctx.format.contentType, runNumber: String(ctx.run.run_number) };
+  return { filename: out.filename, content: out.content, contentType: typeof out.contentType === "string" ? out.contentType : scoped.format.contentType, runNumber: String(scoped.run.run_number) };
 }
 
 async function storeArtifactFile(
@@ -889,6 +896,8 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
     const maximum = criteria.maximumRunAmount == null || criteria.maximumRunAmount === "" ? null : String(criteria.maximumRunAmount);
     try {
       await withOrgContext(schedule.org_id, async () => {
+        // The org's calendar day bounds due bills and stamps the created run.
+        const businessDate = await businessToday(schedule.org_id);
       const candidates = (await db.execute<{ id: string; open_balance: string }>(sql`
         select d.id, d.open_balance
           from documents d
@@ -897,7 +906,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
            and d.open_balance >= ${minimum}
            and d.currency = ${schedule.currency}
            and (${schedule.subsidiary_id}::uuid is null or d.subsidiary_id = ${schedule.subsidiary_id})
-           and coalesce(d.due_date, d.document_date) <= (${now.toISOString().slice(0, 10)}::date + ${dueDays}::integer)
+           and coalesce(d.due_date, d.document_date) <= (${businessDate}::date + ${dueDays}::integer)
          order by coalesce(d.due_date, d.document_date), d.document_number
       `));
       const selected: string[] = [];
@@ -921,7 +930,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
         createdBy: actor,
         paymentBankProfileId: schedule.payment_bank_profile_id,
         billDocumentIds: selected,
-        scheduledFor: now.toISOString().slice(0, 10),
+        scheduledFor: businessDate,
         sourceScheduleId: schedule.id,
         selectionCriteria: criteria,
       });

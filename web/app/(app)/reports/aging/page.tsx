@@ -22,6 +22,12 @@ export const dynamic = 'force-dynamic'
 
 const BUCKETS = ['current', 'b1', 'b2', 'b3', 'b4'] as const
 
+// Aging reads as of a POINT IN TIME, never a window: only presets whose end
+// date is a meaningful as-of instant (today, yesterday, end of last month)
+// plus the explicit custom date. Range presets like "this fiscal year" or
+// "next month" would file every open item as "current".
+const AS_OF_PERIOD_PRESETS = ['today', 'yesterday', 'last_month', 'custom']
+
 export default async function Aging({
   searchParams,
 }: {
@@ -37,7 +43,11 @@ export default async function Aging({
   const detail = sp.view === 'detail'
   const q = parseReportQuery(sp)
   // Aging is inherently "as of a date" — default to TODAY, not the fiscal year.
-  const period = await resolvePeriod(sp.period ?? 'today', { customFrom: q.from, customTo: q.to })
+  // The URL is untrusted: a hand-edited preset outside the as-of whitelist
+  // (say ?period=this_fiscal_year) must not compute a future as-of, so coerce
+  // it to today instead of resolving it.
+  const requestedPeriod = sp.period && AS_OF_PERIOD_PRESETS.includes(sp.period) ? sp.period : 'today'
+  const period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
   const asOf = period.to
   const dims = q.dims
   const [summary, detailResult, opts, org] = await Promise.all([
@@ -67,7 +77,8 @@ export default async function Aging({
             controls={{ period: true, asOf: true, dimensions: true }}
             dimensions={opts}
             defaultPeriod="today"
-            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="aging" params={sp} /></>}
+            periodPresets={AS_OF_PERIOD_PRESETS}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom({ ...sp, period: requestedPeriod })} /> : null}<SaveViewButton /><ExportMenu kind="aging" params={sp} /></>}
           />
         </>
       }

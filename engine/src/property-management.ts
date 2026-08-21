@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
@@ -525,7 +526,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
 export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
   const leaseResult = (await db.execute<any>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
-  const horizon = throughOn ?? addDays(addMonths(startOfMonth(new Date().toISOString().slice(0, 10)), 13), -1);
+  const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
   const charges = (await db.execute<any>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
   let created = 0;
   for (const charge of charges.rows) {
@@ -595,7 +596,7 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
     await assertEnabled(tx, orgId);
     const escalation = (await tx.execute<any>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
     const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
-    const chargeResult = (await tx.execute<any>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc limit 1 for update`));
+    const chargeResult = (await tx.execute<any>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
     const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
     if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
     const alreadyBilled = (await tx.execute(sql`select 1 from lease_schedule_lines where org_id=${orgId} and charge_id=${charge.id}
@@ -807,7 +808,7 @@ export async function levelLeaseRentStraightLine(
 }
 
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
-  const through = asOf ?? new Date().toISOString().slice(0, 10);
+  const through = asOf ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
   const due = (await db.execute<any>(sql`
     select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
@@ -861,7 +862,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
 }
 
 export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
-  const date = validDate(asOf ?? new Date().toISOString().slice(0, 10), "Late-fee date")!;
+  const date = validDate(asOf ?? await businessToday(orgId), "Late-fee date")!;
   await assertEnabled(db, orgId);
   const overdue = (await db.execute<any>(sql`
     select (array_agg(s.id order by s.id))[1] as source_schedule_id,s.lease_id,
@@ -1215,7 +1216,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
 }
 
 export async function billCamReconciliation(orgId: string, actorId: string, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
-  const date = validDate(invoiceDate ?? new Date().toISOString().slice(0, 10), "CAM invoice date")!;
+  const date = validDate(invoiceDate ?? await businessToday(orgId), "CAM invoice date")!;
   await assertEnabled(db, orgId);
   const allocations = (await db.execute<any>(sql`select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
     p.subsidiary_id,p.location_id,p.currency,p.cam_income_account_id,cp.name from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
@@ -1249,7 +1250,7 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
 }
 
 export async function securityDepositReconciliation(orgId: string, asOf?: string) {
-  const throughOn = validDate(asOf ?? new Date().toISOString().slice(0, 10), "Reconciliation date")!;
+  const throughOn = validDate(asOf ?? await businessToday(orgId), "Reconciliation date")!;
   await assertEnabled(db, orgId);
   const properties = (await db.execute<any>(sql`
     select p.id as "propertyId",p.code as "propertyCode",p.name as "propertyName",p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency,
@@ -1365,9 +1366,11 @@ export async function propertyManagementWorkspace(orgId: string) {
 
 /** Scheduler entry point. Each org/lease is idempotent through invoice billing keys and schedule status. */
 export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number }> {
-  const date = asOf ?? new Date().toISOString().slice(0, 10); const result = { billed: 0, invoices: 0, lateFees: 0 };
+  const result = { billed: 0, invoices: 0, lateFees: 0 };
   const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where coalesce((settings->'features'->>'propertyManagement')::boolean,false)`)));
   for (const org of orgs.rows) await withOrg(org.id, async () => {
+    // Each org bills on its own calendar day.
+    const date = asOf ?? await businessToday(org.id);
     const leases = (await db.execute<{ id: string; actor: string | null }>(sql`select id,coalesce(updated_by,created_by) as actor from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
     for (const lease of leases.rows) {
       if (!lease.actor) continue;

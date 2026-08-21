@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+// Server-only route: importing the engine adapter is fine, and the reserved
+// set must come from there so validation cannot drift from what headerValues
+// actually exposes at flow runtime.
+import { RESERVED_DOCUMENT_FIELD_KEYS } from '@openbooks/engine/src/flows/documents-adapter.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -49,6 +53,12 @@ function validateDef(body: Record<string, unknown>): string | null {
   }
   if (!/^[a-z][a-z0-9_]{1,60}$/.test(String(body.key ?? ''))) {
     return 'key must be snake_case (a-z, 0-9, _)'
+  }
+  // A documents key that collides with a real header field would shadow it in
+  // flow condition evaluation and {{token}} interpolation (e.g. a custom
+  // `total` feeding an approval threshold). Fail closed at registration.
+  if (body.targetTable === 'documents' && RESERVED_DOCUMENT_FIELD_KEYS.has(String(body.key))) {
+    return 'key conflicts with a built-in document field'
   }
   if (!body.label || String(body.label).length > 120) return 'label required'
   if (!FIELD_TYPES.includes(String(body.fieldType))) return 'invalid field type'

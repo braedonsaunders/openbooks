@@ -39,6 +39,8 @@ export interface AppLineInput {
   sovLineId: string;
   scheduledValue: string;
   previousCompleted: string;
+  /** Cumulative stored-materials balance already billed by prior applications. */
+  previousMaterialsStored: string;
   thisPeriodCompleted: string;
   materialsStored: string;
   /** Resolved retainage percent for this line (0–100). */
@@ -88,24 +90,34 @@ export function revisedScheduleValue(
 }
 
 /**
- * Pure G702/G703 math for one application. Gross this period = work completed +
- * materials stored this application; retainage is withheld on that gross; the
- * net is the current payment due. Exact money throughout — unit-tested.
+ * Pure G702/G703 math for one application. Materials stored is a cumulative
+ * balance, not a fresh charge: the draw bills only its increase over the
+ * balance prior applications already billed (mirroring the vendor-application
+ * model), and a decrease is refused — billed materials left the site, which is
+ * a credit/adjustment, not a negative draw. Gross this period = work completed
+ * + the stored increment; retainage is withheld on that gross; the net is the
+ * current payment due. Exact money throughout — unit-tested.
  */
 export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   const computed: ComputedAppLine[] = lines.map((l) => {
     const scheduled = normalizeMoney(l.scheduledValue || "0");
     const previous = normalizeMoney(l.previousCompleted || "0");
+    const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
     const thisPeriod = normalizeMoney(l.thisPeriodCompleted || "0");
     const stored = normalizeMoney(l.materialsStored || "0");
     const retainagePercent = normalizeMoney(l.retainagePercent || "0");
-    if ([scheduled, previous, thisPeriod, stored].some((value) => cmp(value, "0") < 0)) {
+    if ([scheduled, previous, previousStored, thisPeriod, stored].some((value) => cmp(value, "0") < 0)) {
       throw new ConstructionBillingError("Schedule values and application amounts cannot be negative");
     }
     if (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0) {
       throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
     }
-    const gross = add(thisPeriod, stored);
+    if (cmp(stored, previousStored) < 0) {
+      throw new ConstructionBillingError(
+        "Materials stored cannot fall below the balance prior applications billed — stored materials have left the site; handle the reduction through a credit or adjusting entry",
+      );
+    }
+    const gross = add(thisPeriod, add(stored, neg(previousStored)));
     const retainage = cmp(l.retainagePercent, "0") > 0 ? mulPercent(gross, l.retainagePercent) : "0.0000";
     const net = add(gross, neg(retainage));
     const completedToDate = add(previous, gross);
@@ -175,8 +187,9 @@ async function defaultIncomeAccount(tx: SqlExecutor, orgId: string): Promise<str
 
 /**
  * Create the next Application for Payment for a project, pre-filling each SOV
- * line's previous-completed from prior POSTED applications so the draw math is
- * cumulative.
+ * line's previous-completed (the exact gross billed to date, with each prior
+ * application's stored balance netted out) and prior stored-materials basis
+ * from prior POSTED applications so the draw math is cumulative.
  */
 export async function createPayApplication(
   orgId: string,
@@ -230,15 +243,26 @@ export async function createPayApplication(
     const appId = app.rows[0]!.id;
 
     for (const line of sov.rows) {
-      const prior = (await tx.execute<{ prev: string }>(sql`
-        select coalesce(sum(pal.this_period_completed + pal.materials_stored), 0) as prev
-          from pay_application_lines pal
-          join pay_applications pa on pa.id = pal.pay_application_id
-         where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')
+      // Previous completed sums each prior application's gross (its stored
+      // increment already netted via that line's own previous_materials_stored);
+      // the stored basis itself is the last posted application's balance, the
+      // customer-side mirror of the vendor-application prefill.
+      const prior = (await tx.execute<{ prev: string; prev_stored: string }>(sql`
+        select
+          coalesce((select sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored)
+              from pay_application_lines pal
+              join pay_applications pa on pa.id = pal.pay_application_id
+             where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')), 0) as prev,
+          coalesce((select pal.materials_stored
+              from pay_application_lines pal
+              join pay_applications pa on pa.id = pal.pay_application_id
+             where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')
+             order by pa.application_number desc limit 1), 0) as prev_stored
       `));
       await tx.execute(sql`
-        insert into pay_application_lines (org_id, pay_application_id, sov_line_id, previous_completed, created_by, updated_by)
-        values (${orgId}, ${appId}, ${line.id}, ${prior.rows[0]?.prev ?? "0"}, ${userId}, ${userId})
+        insert into pay_application_lines (org_id, pay_application_id, sov_line_id, previous_completed,
+                                           previous_materials_stored, created_by, updated_by)
+        values (${orgId}, ${appId}, ${line.id}, ${prior.rows[0]?.prev ?? "0"}, ${prior.rows[0]?.prev_stored ?? "0"}, ${userId}, ${userId})
       `);
     }
     await tx.execute(sql`
@@ -290,7 +314,8 @@ export async function submitPayApplication(
     }
 
     const linesRes = (await tx.execute<any>(sql`
-      select pal.sov_line_id, pal.previous_completed, pal.this_period_completed, pal.materials_stored,
+      select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
+             pal.this_period_completed, pal.materials_stored,
              sl.scheduled_value, sl.retainage_percent
         from pay_application_lines pal
         join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
@@ -301,6 +326,7 @@ export async function submitPayApplication(
       sovLineId: line.sov_line_id,
       scheduledValue: String(line.scheduled_value ?? "0"),
       previousCompleted: String(line.previous_completed ?? "0"),
+      previousMaterialsStored: String(line.previous_materials_stored ?? "0"),
       thisPeriodCompleted: String(line.this_period_completed ?? "0"),
       materialsStored: String(line.materials_stored ?? "0"),
       retainagePercent: line.retainage_percent != null ? String(line.retainage_percent) : app.retainage_percent,
@@ -412,7 +438,8 @@ export async function generatePayApplicationInvoice(
     if (!project.customer_id) throw new ConstructionBillingError("The project has no customer to invoice");
 
     const linesRes = (await tx.execute<any>(sql`
-      select pal.sov_line_id, pal.previous_completed, pal.this_period_completed, pal.materials_stored,
+      select pal.sov_line_id, pal.previous_completed, pal.previous_materials_stored,
+             pal.this_period_completed, pal.materials_stored,
              sl.description, sl.scheduled_value, sl.income_account_id, sl.retainage_percent
         from pay_application_lines pal
         join sov_lines sl on sl.id = pal.sov_line_id
@@ -425,6 +452,7 @@ export async function generatePayApplicationInvoice(
         sovLineId: l.sov_line_id,
         scheduledValue: String(l.scheduled_value ?? "0"),
         previousCompleted: String(l.previous_completed ?? "0"),
+        previousMaterialsStored: String(l.previous_materials_stored ?? "0"),
         thisPeriodCompleted: String(l.this_period_completed ?? "0"),
         materialsStored: String(l.materials_stored ?? "0"),
         retainagePercent: l.retainage_percent != null ? String(l.retainage_percent) : String(app.retainage_percent),

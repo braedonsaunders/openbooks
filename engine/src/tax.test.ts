@@ -5,6 +5,7 @@ import {
   computeLineTaxes,
   TaxCalculationError,
 } from "./tax.ts";
+import { requireEffectiveRateRow } from "./tax-persist.ts";
 
 const code = (
   overrides: Partial<Parameters<typeof computeLineTaxes>[1][number]> = {},
@@ -172,4 +173,25 @@ test("invalid mixed inclusive behavior and non-tax inclusive types are refused",
       ]),
     TaxCalculationError,
   );
+});
+
+test("a lapsed rate schedule is refused while a statutory zero rate stays legal", () => {
+  // Regression: the effective-rate lateral joins used to coalesce a MISSING
+  // rate row to 0%, so lapsed or misdated schedules posted real documents at
+  // 0% with full calculation evidence. "No row matched the document date" is
+  // now a precise failure naming the code and date…
+  const err = (() => {
+    try {
+      requireEffectiveRateRow("GB-VAT-STD", "2026-07-01", null);
+      return null;
+    } catch (e) {
+      return e;
+    }
+  })();
+  assert.ok(err instanceof TaxCalculationError);
+  assert.match(err.message, /GB-VAT-STD/);
+  assert.match(err.message, /2026-07-01/);
+  // …whereas a MATCHED row carrying 0% remains a legitimate statutory zero
+  // rate (zero-rated supplies exist) and flows through unchanged.
+  assert.equal(requireEffectiveRateRow("GB-VAT-ZERO", "2026-07-01", "0.0000"), "0.0000");
 });

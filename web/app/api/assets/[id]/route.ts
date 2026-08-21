@@ -6,6 +6,7 @@ import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { assetBasisChanges, mergedAssetBasis, postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -89,9 +90,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 /**
  * Save the asset flyout — all edits go through one explicit Save. Depreciation
  * parameters live in native fixed_assets columns; tenant-defined fields and
- * the three GL account overrides live in fixed_assets.custom. After a successful
- * save the primary-book schedule is rebuilt (unposted lines only) so the detail
- * view + a subsequent run reflect the new plan.
+ * the three GL account overrides live in fixed_assets.custom. The depreciation
+ * basis is immutable once any depreciation has posted (409); while nothing has
+ * posted, basis changes remain free and are written to audit_log. After a
+ * successful save the primary-book schedule is rebuilt (unposted lines only)
+ * so the detail view + a subsequent run reflect the new plan.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
@@ -312,6 +315,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return bad('Set expected lifetime units before placing the asset in service')
     }
   }
+
+  // The request fields that participate in computing the schedule, compared
+  // against the stored basis — the flyout resends every field on each save, so
+  // only an actual value change is a basis change.
+  const requestedBasis: RequestedAssetBasis = {
+    cost,
+    salvage,
+    lifeMonths,
+    ratePercent,
+    unitsTotal,
+    convention,
+    method,
+    depreciationMethodId,
+    inServiceOn: body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : undefined,
+  }
+
+  // -- posted-basis immutability --------------------------------------------
+  // Once any depreciation has posted, the basis the schedule was computed from
+  // (cost, salvage, life, in-service date, convention, method/rate/units) is
+  // fixed: editing it would replan unposted history and reinterpret the periods
+  // already posted. Corrections run through controlled adjustments instead.
+  // Nothing has posted yet → the edit stays free.
+  const postedRes = (await db.execute(sql`
+    select 1 from depreciation_schedules s
+    join depreciation_schedule_lines l on l.schedule_id = s.id
+     where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
+     limit 1`))
+  const basisConflict = postedAssetBasisEditRefusal(!!postedRes.rows[0], existing, requestedBasis)
+  if (basisConflict) return NextResponse.json({ error: basisConflict }, { status: 409 })
+  // A basis change that IS allowed (nothing has posted) is still audited.
+  const basisChanges = assetBasisChanges(existing, requestedBasis)
+
   if ((method !== undefined && method !== existing.depreciation_method) || (depreciationMethodId !== undefined && depreciationMethodId !== existing.depreciation_method_id)) {
     const inputEvidence = (await db.execute(sql`
       select 1 from depreciation_schedules s
@@ -348,6 +383,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       status = ${status !== undefined ? status : sql`status`},
       updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}`)
+      if (basisChanges.length > 0) {
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${user.orgId}, 'fixed_assets', ${id}, 'update',
+                  ${JSON.stringify({
+                    before: mergedAssetBasis(existing, {}),
+                    after: mergedAssetBasis(existing, requestedBasis),
+                    fields: basisChanges,
+                  })}::jsonb, ${user.id})`)
+      }
       try {
         await buildAllSchedulesWithRunner(tx, id, user.orgId, user.id)
       } catch (error) {

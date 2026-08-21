@@ -440,6 +440,62 @@ export function remittanceDueDate(
 }
 
 /**
+ * The identity of one remittance bill: destination vendor × period window ×
+ * filing account. One bill per key — the key is both the advisory lock's
+ * scope and the structured marker searched back before a second bill is minted.
+ */
+export interface RemittanceBillKey {
+  partyId: string;
+  from: string;
+  to: string;
+  filingAccountId: string | null;
+}
+
+/** The transaction advisory lock that serializes creation for one key. */
+export function remittanceBillLockKey(orgId: string, key: RemittanceBillKey): string {
+  return `payroll-remittance-bill:${orgId}:${key.partyId}:${key.from}:${key.to}:${key.filingAccountId ?? ""}`;
+}
+
+/**
+ * The duplicate refusal, or null when the coast is clear.
+ *
+ * Pure, so the rule — one NON-voided remittance bill per key, and no second
+ * short of voiding the first — is verifiable without a database. A voided bill
+ * frees the key deliberately: the correction path is void-then-recreate, never
+ * two live drafts debiting the same liabilities.
+ */
+export function duplicateRemittanceMessage(
+  existing: { documentNumber: string | null } | undefined,
+): string | null {
+  if (!existing) return null;
+  return `a remittance bill for this vendor, period and filing account already exists `
+    + `(${existing.documentNumber ?? "unnumbered"}) — one bill per remittance; `
+    + "post, edit or void that draft instead of raising a second";
+}
+
+/**
+ * Which vendor_bill series numbers the remittance bill: the org's EXISTING
+ * one, never a parallel series.
+ *
+ * The bill is a vendor_bill like any other, and documents_org_kind_number
+ * makes document numbers unique per (org, kind, number) — so allocating from
+ * a private org-level series hardcoded 'BILL-' forks the org's vendor-bill
+ * numbering and collides outright once the org's real series emits the same
+ * prefix and number. Preference follows the AP path's own rule
+ * (web/lib/bills.ts): the root subsidiary's series when the org scopes its
+ * vendor bills per subsidiary, else the org-wide series. Null when neither
+ * exists, and the caller seeds 'BILL-' exactly as it always did.
+ */
+export function pickRemittanceSequence(
+  rows: readonly { prefix: string; subsidiaryId: string | null }[],
+  rootSubsidiaryId: string,
+): { prefix: string; subsidiaryId: string | null } | null {
+  return rows.find((row) => row.subsidiaryId === rootSubsidiaryId)
+    ?? rows.find((row) => row.subsidiaryId === null)
+    ?? null;
+}
+
+/**
  * Materialize one destination's remittance as a draft vendor bill debiting
  * the liability accounts. Fails closed on unassigned accounts. The bill then
  * posts DR liabilities / CR AP and is paid like any other payable.
@@ -447,6 +503,11 @@ export function remittanceDueDate(
  * `filingAccountId` selects the payroll program/EIN account being remitted;
  * omit it (or pass null) for the unassigned bucket of a single-account org.
  * One bill per account keeps each PD7A remittance separately traceable.
+ *
+ * Creating is IDEMPOTENT per (destination, period, filing account): a
+ * transaction-scoped advisory lock serializes concurrent creators (a
+ * double-click, a retried request), and an existing non-voided bill for the
+ * same key is refused by name rather than minted twice.
  */
 export async function createRemittanceBill(
   orgId: string,
@@ -467,6 +528,15 @@ export async function createRemittanceBill(
   }
 
   return await db.transaction(async (tx) => {
+    // Serialize creators for this key BEFORE anything is read or written:
+    // the duplicate check below is only a control if two transactions cannot
+    // pass it simultaneously.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${remittanceBillLockKey(orgId, {
+        partyId: input.partyId, from: input.from, to: input.to, filingAccountId,
+      })}, 0))
+    `);
+
     const vendor = (await tx.execute(sql`
       select 1 from vendor_roles where org_id = ${orgId} and party_id = ${input.partyId} and is_active
     `));
@@ -479,9 +549,38 @@ export async function createRemittanceBill(
     `));
     if (!sub.rows[0]) throw new PayrollError("no active root subsidiary");
 
+    // The structured marker written below is the bill's identity — search it
+    // back and refuse the second bill inside the lock, naming the one found.
+    const duplicate = (await tx.execute<{ document_number: string | null }>(sql`
+      select document_number from documents
+       where org_id = ${orgId} and kind = 'vendor_bill' and status <> 'voided'
+         and custom->'payrollRemittance'->>'partyId' = ${input.partyId}
+         and custom->'payrollRemittance'->>'from' = ${input.from}
+         and custom->'payrollRemittance'->>'to' = ${input.to}
+         and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${filingAccountId}
+      order by created_at
+      limit 1
+    `));
+    const refusal = duplicateRemittanceMessage(
+      duplicate.rows[0] && { documentNumber: duplicate.rows[0].document_number },
+    );
+    if (refusal) throw new PayrollError(refusal);
+
+    // Number off the org's EXISTING vendor_bill series — its prefix, padding
+    // and current position — falling back to seeding the org-level 'BILL-'
+    // series only when the org has no vendor_bill numbering at all.
+    const sequences = (await tx.execute<{ prefix: string; subsidiary_id: string | null }>(sql`
+      select prefix, subsidiary_id from number_sequences
+       where org_id = ${orgId} and document_kind = 'vendor_bill'
+         and (subsidiary_id = ${sub.rows[0]!.id} or subsidiary_id is null)
+    `));
+    const chosen = pickRemittanceSequence(
+      sequences.rows.map((row) => ({ prefix: row.prefix, subsidiaryId: row.subsidiary_id })),
+      sub.rows[0]!.id,
+    );
     const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
-      values (${orgId}, 'vendor_bill', null, 'BILL-')
+      values (${orgId}, 'vendor_bill', ${chosen?.subsidiaryId ?? null}, ${chosen?.prefix ?? "BILL-"})
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
       returning prefix, next_number, padding

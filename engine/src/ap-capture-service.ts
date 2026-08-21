@@ -531,7 +531,7 @@ export async function materializeCapture(input: {
       update ap_capture_items set status = 'materialized', document_id = ${documentId},
              materialized_at = now(), validation_issues = '[]'::jsonb,
              updated_at = now(), updated_by = ${input.actorId}
-       where id = ${item.id} and org_id = ${input.orgId}
+       where id = ${item.id} and org_id = ${input.orgId} and status <> 'materialized'
     `);
     await tx.execute(sql`
       insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)

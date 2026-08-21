@@ -70,6 +70,45 @@ test('account register export includes every supplied line with debit and credit
   ])
 })
 
+test('zero-amount lines leave both columns empty like the on-screen register', () => {
+  // The drawer renders a 0.0000 line with empty debit AND credit cells
+  // (isZero guard); the export must agree — never park the zero in credit.
+  const data = accountRegisterExportData({
+    account: { number: '1000', name: 'Bank' },
+    total: 1,
+    balance: '0.0000',
+    lines: [
+      {
+        posting_date: '2026-07-03',
+        doc_kind: 'journal',
+        doc_number: null,
+        entry_number: 'JE-3',
+        party: null,
+        memo: 'Reversal stub',
+        entry_memo: null,
+        amount: '0.0000',
+      },
+    ],
+  }, {
+    register: 'Register',
+    date: 'Date',
+    type: 'Type',
+    number: 'Number',
+    party: 'Party',
+    memo: 'Memo',
+    debit: 'Debit',
+    credit: 'Credit',
+    balance: 'Balance',
+    lines: 'Lines',
+    dateRange: 'All',
+    docType: (kind) => kind ?? '',
+  })
+
+  assert.deepEqual(data.groups[0]?.rows, [
+    ['2026-07-03', 'journal', 'JE-3', '', 'Reversal stub', null, null],
+  ])
+})
+
 test('account register document type labels are localized with a safe fallback', () => {
   const t = (key: string) => `translated:${key}`
   assert.equal(

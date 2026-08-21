@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import {
   computeLineTaxes,
+  TaxCalculationError,
   type ComputedTaxComponent,
   type TaxComponentConfig,
 } from "./tax.ts";
@@ -17,6 +18,26 @@ import { cmp } from "./money.ts";
 
 type Runner = SqlExecutor;
 
+/**
+ * Fail closed when a tax code has NO rate row effective on the document date.
+ * A matched row carrying rate_percent=0 stays legal (statutory zero rates
+ * exist); the silent coalesce-to-zero this replaces posted lapsed or misdated
+ * schedules as genuine 0% tax with full calculation evidence. Shared by the
+ * engine and web lateral joins so both refuse identically.
+ */
+export function requireEffectiveRateRow(
+  code: string,
+  dateIso: string,
+  effectiveRatePercent: string | null | undefined,
+): string {
+  if (effectiveRatePercent == null || effectiveRatePercent === "") {
+    throw new TaxCalculationError(
+      `tax code ${code} has no rate effective on ${dateIso}; refusing to compute tax at 0%`,
+    );
+  }
+  return String(effectiveRatePercent);
+}
+
 /** Effective tax-code config (single code) for a date — mirrors web taxProfileMap. */
 export async function loadTaxComponentConfig(
   orgId: string,
@@ -25,7 +46,7 @@ export async function loadTaxComponentConfig(
   runner: Runner = db,
 ): Promise<TaxComponentConfig[]> {
   const r = (await runner.execute<Record<string, any>>(sql`
-    select tc.id, tc.code, coalesce(tr.rate_percent, 0)::text as rate,
+    select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent, tc.calculation_type,
            tc.price_includes_tax, tc.compound_on_previous, tc.rounding_scale,
            tc.collected_account_id, tc.paid_account_id, tc.withholding_account_id
@@ -44,7 +65,9 @@ export async function loadTaxComponentConfig(
       taxCodeId: String(row.id),
       code: String(row.code),
       sequence: 1,
-      ratePercent: String(row.rate),
+      // A NULL join result is "no rate row matched the document date", which is
+      // distinct from a matched statutory zero rate; refuse the former loudly.
+      ratePercent: requireEffectiveRateRow(String(row.code), dateIso, row.effective_rate),
       recoverablePercent: String(row.recoverable_percent),
       calculationType: row.calculation_type,
       priceIncludesTax: Boolean(row.price_includes_tax),

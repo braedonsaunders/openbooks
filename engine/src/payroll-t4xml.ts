@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add } from "./money.ts";
+import { add, formatMoney } from "./money.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
 import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "./payroll-filing.ts";
@@ -43,7 +43,18 @@ const esc = (value: string): string =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
-const amt = (value: string): string => Number(value || 0).toFixed(2);
+/**
+ * Exact decimal formatting — NEVER `Number(v).toFixed(2)`.
+ *
+ * Every box arrives as an exact numeric string, but a PG `sum` over
+ * numeric(19,4) stub lines is cent-quantized only by luck of the data: three
+ * taxable lines of 33.3350 sum to exactly 100.0050, where the CRA box must
+ * print 100.01 (half-up) and the binary double prints 100.00 because 100.005
+ * has no exact representation. These are statutory filing figures — the same
+ * rule the ROE builder documents (payroll-roexml.ts) — and money.ts is
+ * bigint-exact and rounds half-away-from-zero.
+ */
+const amt = (value: string): string => formatMoney(value || "0", 2);
 
 /**
  * The CRA's report-type code — the field that tells the agency what this

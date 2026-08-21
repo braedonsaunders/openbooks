@@ -9,7 +9,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   const generated = readdirSync("schema/migrations/generated")
     .filter((file) => file.endsWith(".sql"))
     .sort();
-  assert.deepEqual(generated, ["0001_baseline.sql"]);
+  // The canonical baseline plus reviewed forward migrations — anything else in
+  // this directory is an unreviewed artifact, not a migration.
+  assert.deepEqual(generated, ["0001_baseline.sql", "0002_kernel_hardening.sql"]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],

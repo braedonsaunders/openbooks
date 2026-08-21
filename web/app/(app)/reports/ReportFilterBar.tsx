@@ -82,6 +82,7 @@ export function ReportFilterBar({
   subsidiaries,
   actions,
   defaultPeriod = 'this_fiscal_year',
+  periodPresets,
   extraPeriods,
   extraPeriodsLabel,
 }: {
@@ -100,6 +101,9 @@ export function ReportFilterBar({
   actions?: ReactNode
   /** Preset shown when no `period` param is set (aging defaults to `today`). */
   defaultPeriod?: string
+  /** Restrict the picker to these PERIOD_PRESET ids (e.g. an as-of report
+   *  offering only point-in-time presets). Absent = the full catalog. */
+  periodPresets?: readonly string[]
   /** Domain-specific windows (pay periods…) listed before the fiscal presets. */
   extraPeriods?: ExtraPeriodOption[]
   extraPeriodsLabel?: string
@@ -123,18 +127,22 @@ export function ReportFilterBar({
   )
 
   const rawPeriod = params.get('period') ?? defaultPeriod
+  // A hand-edited URL can carry a preset the page doesn't offer (e.g. a range
+  // preset on an as-of report); show the page default rather than an option
+  // that isn't in the list. The server re-clamps the param authoritatively.
+  const period = periodPresets && !periodPresets.includes(rawPeriod) ? defaultPeriod : rawPeriod
   // An extra window is stored as period=custom + its exact bounds; keep the
   // select showing the named entry rather than the anonymous Custom row.
-  const activeExtra = rawPeriod === 'custom'
+  const activeExtra = period === 'custom'
     ? extraPeriods?.find((x) => x.from === params.get('from') && x.to === params.get('to'))
     : undefined
-  const period = activeExtra ? `x:${activeExtra.id}` : rawPeriod
+  const selectValue = activeExtra ? `x:${activeExtra.id}` : period
   const breakout = params.get('breakout') ?? 'none'
   const compare = params.get('compare') ?? 'none'
   const basis = params.get('basis') ?? 'accrual'
   const scale = params.get('scale') ?? 'actual'
   const showZero = params.get('zero') === '1'
-  const isCustom = rawPeriod === 'custom' && !activeExtra
+  const isCustom = period === 'custom' && !activeExtra
   const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
   const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
 
@@ -177,7 +185,7 @@ export function ReportFilterBar({
       {controls.period !== false && !controls.dateRange && (
         <Field label={controls.asOf ? t('asOf') : t('period')}>
           <Select
-            value={period}
+            value={selectValue}
             onChange={(e) => {
               const extra = e.target.value.startsWith('x:')
                 ? extraPeriods?.find((x) => `x:${x.id}` === e.target.value)
@@ -197,15 +205,19 @@ export function ReportFilterBar({
                 ))}
               </optgroup>
             ) : null}
-            {PRESET_GROUP_ORDER.map((group) => (
-              <optgroup key={group} label={PERIOD_PRESET_GROUP_LABELS[group]}>
-                {PERIOD_PRESETS.filter((p) => p.group === group).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
+            {PRESET_GROUP_ORDER.map((group) => {
+              const groupPresets = PERIOD_PRESETS.filter((p) => p.group === group
+                && (!periodPresets || periodPresets.includes(p.id)))
+              return groupPresets.length ? (
+                <optgroup key={group} label={PERIOD_PRESET_GROUP_LABELS[group]}>
+                  {groupPresets.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null
+            })}
           </Select>
         </Field>
       )}

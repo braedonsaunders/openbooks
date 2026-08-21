@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrg } from "./db.ts";
-import { now } from "./clock.ts";
+import { businessToday } from "./business-date.ts";
 import { neg } from "./money.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -27,13 +27,11 @@ function validateReason(reason: string): string {
   return value;
 }
 
-function validateDate(value?: string | null): string {
-  // Business-meaningful default date — honours a pinned simulation clock.
-  const date = value?.trim() || now().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+function validateDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
     throw new DocumentVoidError("reversalDate must be a valid YYYY-MM-DD date");
   }
-  return date;
+  return value;
 }
 
 /**
@@ -51,7 +49,9 @@ export async function requestDocumentVoid(input: {
   source?: FlowEventSource;
 }): Promise<DocumentVoidResult> {
   const reason = validateReason(input.reason);
-  const reversalDate = validateDate(input.reversalDate);
+  // Business-meaningful default date — the org's business day via a sim-clock-
+  // aware instant, not the server's UTC day.
+  const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
   return withOrg(input.orgId, async () => {
     const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, input.documentId));
     if (!doc) throw new DocumentVoidError("document not found");

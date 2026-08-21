@@ -183,7 +183,7 @@ export async function executeReport(
   maxRows: number = REPORT_MAX_ROWS,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  const resolved = await resolvePeriodPresets(query)
+  const resolved = await resolvePeriodPresets(query, orgId)
   return runCustomQuery(pool, resolved, {
     orgId,
     entityMap: REPORT_ENTITY_MAP,
@@ -199,9 +199,13 @@ export async function executeReport(
  * DB-free @openbooks/reports compiler unaware of fiscal config while giving the
  * studio the SAME ~50 presets as the financial statements — fixing the old
  * calendar-year-only relative-date behaviour. Resolution is done once here so
- * both interactive and scheduled runs share it.
+ * both interactive and scheduled runs share it, scoped to the EXPLICIT org id
+ * (never ambient request state — scheduled/internal runs have no session).
  */
-async function resolvePeriodPresets(query: ReportCustomQuery): Promise<ReportCustomQuery> {
+async function resolvePeriodPresets(
+  query: ReportCustomQuery,
+  orgId?: string,
+): Promise<ReportCustomQuery> {
   if (!query.filters) return query
   let touched = false
 
@@ -216,7 +220,7 @@ async function resolvePeriodPresets(query: ReportCustomQuery): Promise<ReportCus
       if (leaf.op === 'period_preset') {
         touched = true
         const presetId = typeof leaf.value === 'string' ? leaf.value : String(leaf.value ?? '')
-        const period = await resolvePeriod(presetId)
+        const period = await resolvePeriod(presetId, { orgId })
         rules.push({
           combinator: 'and',
           rules: [

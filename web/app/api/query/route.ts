@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runUserSql } from "@openbooks/engine/src/sqlapi.ts";
+import { runUserSql, validateUserSql } from "@openbooks/engine/src/sqlapi.ts";
 import { guardFeaturePermission } from "../../../lib/feature-gates";
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
@@ -36,6 +36,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing sql" }, { status: 400 });
   }
 
+  // Pure pre-validation: its messages are schema-free ("one statement per
+  // query", "read-only: …") and safe to echo. Anything thrown past this point
+  // is a real PostgreSQL error and must not leak relation/column names.
+  try {
+    validateUserSql(body.sql);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "invalid query" },
+      { status: 400 },
+    );
+  }
+
   try {
     const result = await runUserSql(body.sql, {
       orgId: gate.user.orgId,
@@ -46,7 +58,9 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(result);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "query failed";
-    return NextResponse.json({ error: message }, { status: 400 });
+    // Full error stays in the server log only; the client gets a generic
+    // message so database internals never reach the browser.
+    console.error("[query-console] execution failed", e);
+    return NextResponse.json({ error: "query failed" }, { status: 400 });
   }
 }

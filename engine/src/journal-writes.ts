@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, schema, withOrgTransaction } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { postDocument, runPostDocumentEffects } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
@@ -130,7 +131,13 @@ export async function createScriptJournal(
   input: ScriptJournalInput,
   opts: { post?: boolean } = {},
 ): Promise<ScriptJournalResult> {
-  const v = validateJournalInput(input);
+  // The pure validator cannot know the tenant, so the org's business-day
+  // default is applied here; validateJournalInput keeps a UTC fallback for
+  // direct callers.
+  const effective: ScriptJournalInput = input.documentDate
+    ? input
+    : { ...input, documentDate: await businessToday(orgId) };
+  const v = validateJournalInput(effective);
 
   // Resolve accountCode → id (org-scoped, active accounts only), and verify
   // provided accountIds actually exist in this org.

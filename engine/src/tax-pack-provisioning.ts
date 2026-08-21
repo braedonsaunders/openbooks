@@ -127,6 +127,126 @@ async function assertTaxCodeMatchesPack(
   }
 }
 
+type PackCodeRateRefreshArgs = {
+  tx: TaxPackExecutor;
+  orgId: string;
+  codeId: string;
+  jurisdictionId: string;
+  country: string;
+  region: string | null;
+  packCode: string;
+  actorId: string | null;
+  definition: CountryTaxCodeDefinition;
+};
+
+/**
+ * Pre-existing pack-owned codes skip the insert above, so a newer pack version's
+ * updated statutory rates never reached the org — and assertTaxCodeMatchesPack
+ * then hard-errored against the very pack being installed. For a code whose
+ * metadata still matches the pack AND that this org has never posted against,
+ * rewrite the stored rate history to the pack's current definition here, with
+ * before/after audit evidence: an unused rate schedule is configuration, not
+ * filed history, so replacement (rather than closing rows, which would leave
+ * the strict history assert permanently unsatisfiable) is the sound correction.
+ *
+ * Usage proxy, chosen as the cheapest sound check: any document_line_tax_components
+ * row referencing the code counts as posted history — it is the direct keyed
+ * probe (document_line_tax_components_code index). journal_lines only reference
+ * the code indirectly through its accounts, and tax_rate_quotes carry no code
+ * key at all. A used code keeps today's hard error — silently changing
+ * filed-history rates is forbidden — reported by the caller naming every stale
+ * code and the archive-then-re-run way out.
+ */
+async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Promise<string | null> {
+  const result = (await args.tx.execute<{
+      name: string;
+      jurisdictionId: string | null;
+      country: string | null;
+      region: string | null;
+      appliesTo: string;
+      isActive: boolean;
+      rates: Array<{ ratePercent: string; effectiveFrom: string; effectiveTo: string | null }>;
+    }>(sql`
+    select code.name, code.jurisdiction_id as "jurisdictionId",
+           code.country, code.region, code.applies_to as "appliesTo",
+           code.is_active as "isActive",
+           coalesce(
+             jsonb_agg(
+               jsonb_build_object(
+                 'ratePercent', rate.rate_percent::text,
+                 'effectiveFrom', rate.effective_from::text,
+                 'effectiveTo', rate.effective_to::text
+               ) order by rate.effective_from, rate.id
+             ) filter (where rate.id is not null),
+             '[]'::jsonb
+           ) as rates
+      from tax_codes code
+      left join tax_rates rate
+        on rate.org_id = code.org_id and rate.tax_code_id = code.id
+     where code.org_id = ${args.orgId} and code.id = ${args.codeId}
+     group by code.id, code.name, code.jurisdiction_id, code.country,
+              code.region, code.applies_to, code.is_active
+  `));
+  const actual = result.rows[0];
+  if (!actual) return null;
+  // Metadata drift means the tenant customized or renamed the code; that is not
+  // pack-owned anymore and belongs to the conflict assert below, not to us.
+  if (
+    actual.name !== args.definition.name
+    || actual.jurisdictionId !== args.jurisdictionId
+    || actual.country !== args.country
+    || actual.region !== args.region
+    || actual.appliesTo !== "both"
+    || !actual.isActive
+  ) {
+    return null;
+  }
+  const expectedRates = (args.definition.rates ?? []).map((rate) => ({
+    ratePercent: String(rate.ratePercent),
+    effectiveFrom: rate.effectiveFrom,
+    effectiveTo: rate.effectiveTo ?? null,
+  }));
+  const actualRates = (actual.rates ?? []).map((rate) => ({
+    ratePercent: String(Number(rate.ratePercent)),
+    effectiveFrom: rate.effectiveFrom,
+    effectiveTo: rate.effectiveTo,
+  }));
+  if (JSON.stringify(actualRates) === JSON.stringify(expectedRates)) return null;
+
+  const used = (await args.tx.execute(sql`
+    select 1 from document_line_tax_components
+     where org_id = ${args.orgId} and tax_code_id = ${args.codeId}
+     limit 1`));
+  if (used.rows.length > 0) return args.definition.code;
+
+  await args.tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${args.orgId}, 'tax_codes', ${args.codeId}, 'update',
+            ${JSON.stringify({
+              source: "tax_setup",
+              reason: `pack ${args.packCode} updated the statutory rate history for ${args.definition.code}; no posted documents reference the code`,
+              before: { rates: actualRates },
+              after: { rates: expectedRates },
+            })}::jsonb,
+            ${args.actorId})`);
+  await args.tx.execute(sql`
+    delete from tax_rates
+     where org_id = ${args.orgId} and tax_code_id = ${args.codeId}`);
+  for (const rate of args.definition.rates ?? []) {
+    const insertedRate = (await args.tx.execute<{ id: string }>(sql`
+      insert into tax_rates
+        (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
+      values (${args.orgId}, ${args.codeId}, ${rate.ratePercent}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${args.actorId}, ${args.actorId})
+      returning id`));
+    await args.tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'tax_rates', ${insertedRate.rows[0].id}, 'insert',
+              ${JSON.stringify({ source: "tax_setup", pack: args.packCode, taxCode: args.definition.code, refreshed: true, after: rate })}::jsonb,
+              ${args.actorId})`);
+  }
+  return null;
+}
+
 function countryPackHash(pack: CountryTaxPackDefinition): string {
   return createHash("sha256").update(JSON.stringify(pack)).digest("hex");
 }
@@ -324,6 +444,9 @@ async function provisionTaxPacksInTenant(
   let jurisdictionsCreated = 0;
   let taxCodesCreated = 0;
   let taxGroupsCreated = 0;
+  // Pack versions that update statutory rates for codes this org has already
+  // posted against; collected across both loops so one error names them all.
+  const staleUsedCodes: string[] = [];
 
   // 1) Jurisdictions + tax codes + rates + a per-jurisdiction tax group BEFORE
   //    installing packs, so each pack's boxes map to the jurisdiction's own code.
@@ -421,14 +544,29 @@ async function provisionTaxPacksInTenant(
       if (!codeId || !jurisdictionId) {
         throw new Error(`tax code ${def.code} could not be created or resolved`);
       }
-      await assertTaxCodeMatchesPack(tx, {
+      const staleCode = await refreshPackCodeRatesIfUnused({
+        tx,
         orgId,
         codeId,
         jurisdictionId,
         country: j.country,
         region: j.region ?? null,
+        packCode: pack.code,
+        actorId,
         definition: def,
       });
+      if (staleCode) {
+        staleUsedCodes.push(staleCode);
+      } else {
+        await assertTaxCodeMatchesPack(tx, {
+          orgId,
+          codeId,
+          jurisdictionId,
+          country: j.country,
+          region: j.region ?? null,
+          definition: def,
+        });
+      }
 
       // Tax group bundling the jurisdiction's code — ready for compound cases
       // (extra rate bands / local taxes applied together on a line).
@@ -547,14 +685,29 @@ async function provisionTaxPacksInTenant(
           codeId = existingCode.rows[0]?.id ?? null;
         }
         if (!codeId) throw new Error(`tax code ${def.code} could not be created or resolved`);
-        await assertTaxCodeMatchesPack(tx, {
+        const staleSubdivisionCode = await refreshPackCodeRatesIfUnused({
+          tx,
           orgId,
           codeId,
           jurisdictionId,
           country: subdivision.country,
           region: subdivision.region,
+          packCode: localization?.code ?? subdivision.country,
+          actorId,
           definition: def,
         });
+        if (staleSubdivisionCode) {
+          staleUsedCodes.push(staleSubdivisionCode);
+        } else {
+          await assertTaxCodeMatchesPack(tx, {
+            orgId,
+            codeId,
+            jurisdictionId,
+            country: subdivision.country,
+            region: subdivision.region,
+            definition: def,
+          });
+        }
 
         const groupCode = `${jurisdictionCode}-TAX`;
         const insertedGroup = (await tx.execute<{ id: string }>(sql`
@@ -584,6 +737,17 @@ async function provisionTaxPacksInTenant(
                     ${actorId})`);
         }
       }
+    }
+
+    // Fail the whole installation atomically when a pack updates rates for
+    // codes with filed history — rolled back like any other configuration
+    // conflict, but naming every stale code and the required way out.
+    if (staleUsedCodes.length > 0) {
+      throw new Error(
+        `country tax packs update statutory rate history for tax codes ${staleUsedCodes.join(", ")}, ` +
+          `but documents in this organization already reference them; filed-history rates cannot be rewritten — ` +
+          `archive or retire those usages, then re-run provisioning`,
+      );
     }
   });
 

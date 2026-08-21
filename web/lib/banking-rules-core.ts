@@ -5,7 +5,7 @@
  * composes these with posting + matching primitives.
  */
 
-import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
+import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 
 // ---------------------------------------------------------------------------
 // Condition model
@@ -199,8 +199,10 @@ export function firstMatchingRule(line: BankLine, accountId: string, rules: Rule
  * negated bank amount. `bankAmount` is signed from the bank's perspective (the
  * offsets carry the opposite sign). Percent lines take a share of the gross
  * absolute amount; fixed lines a set magnitude; the (single) remainder line
- * absorbs whatever is left, keeping the entry balanced to the penny. If no
- * remainder line exists, the last line absorbs the rounding delta.
+ * absorbs whatever is left, keeping the entry balanced exactly at the ledger's
+ * numeric(19,4) scale — cents-only rounding here could strand sub-cent deltas
+ * outside the posting. If no remainder line exists, the last line absorbs the
+ * rounding delta.
  */
 export function resolveSplitAmounts(
   bankAmount: string,
@@ -219,17 +221,15 @@ export function resolveSplitAmounts(
       resolved.push({ line, amount: '0.0000' })
       return
     }
-    const magnitude = roundMoney(
+    const magnitude =
       line.portion.kind === 'percent'
-        ? mulPercent(absGross, String(line.portion.value), 2)
-        : moneyAbs(normalizeMoney(String(line.portion.value))),
-      2,
-    )
+        ? mulPercent(absGross, String(line.portion.value))
+        : moneyAbs(normalizeMoney(String(line.portion.value)))
     allocated.push(magnitude)
     resolved.push({ line, amount: offsetNegative ? neg(magnitude) : magnitude })
   })
 
-  const remainderMagnitude = roundMoney(add(absGross, neg(sum(allocated))), 2)
+  const remainderMagnitude = add(absGross, neg(sum(allocated)))
   if (remainderIdx >= 0) {
     resolved[remainderIdx]!.amount = offsetNegative ? neg(remainderMagnitude) : remainderMagnitude
   } else if (resolved.length > 0) {
@@ -237,5 +237,5 @@ export function resolveSplitAmounts(
     resolved[resolved.length - 1]!.amount = add(resolved[resolved.length - 1]!.amount, signedRemainder)
   }
 
-  return resolved.map((r) => ({ line: r.line, amount: formatMoney(r.amount, 2) }))
+  return resolved.map((r) => ({ line: r.line, amount: formatMoney(r.amount, 4) }))
 }

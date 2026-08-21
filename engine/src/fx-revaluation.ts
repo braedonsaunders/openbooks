@@ -23,6 +23,13 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  *    revaluation.
  *  - A period that already has a revaluation entry is skipped (re-running posts
  *    nothing). Correcting a period is a reopen, not a silent re-post.
+ *  - A revaluation never posts without its mirror reversal: when no following
+ *    accounting period exists the run reports a problem and posts nothing,
+ *    because an unreversed revaluation would permanently book a delta the next
+ *    close must be free to re-measure.
+ *  - Concurrent runs serialize per (org, book, period, subsidiary) on a
+ *    transaction-scoped advisory lock taken before the duplicate check, so the
+ *    check-then-insert cannot double-post.
  *  - Every entry balances by construction (monetary deltas offset by one
  *    unrealized-gain/loss line); the kernel's deferred balance trigger is the
  *    final authority.
@@ -101,6 +108,28 @@ export interface RevaluationRunResult {
 export class RevaluationError extends Error {
   readonly name = "RevaluationError";
 }
+
+/** The transaction advisory lock that serializes one subsidiary's duplicate
+ *  check-and-post for a period. */
+export function revaluationLockKey(
+  orgId: string,
+  bookId: string,
+  periodId: string,
+  subsidiaryId: string,
+): string {
+  return `fxreval:${orgId}:${bookId}:${periodId}:${subsidiaryId}`;
+}
+
+/** Why a revaluation was refused: with no following period the mandatory
+ *  reversal has nowhere to land. Pure, so the wording is pinned in one place. */
+export function missingReversalPeriodReason(): string {
+  return "no following accounting period exists to reverse into — generate periods and re-run";
+}
+
+/** Skip reason for a period that already carries a revaluation entry — shared
+ *  by the fast-path check and the authoritative one under the lock so both
+ *  report identically. */
+const ALREADY_REVALUED = "already revalued for this period";
 
 /** org unrealized-FX gain/loss control account (orgs.settings.controlAccounts.fxUnrealizedGainLoss). */
 async function unrealizedAccount(orgId: string): Promise<string> {
@@ -189,7 +218,9 @@ async function loadPositions(
 }
 
 /** Latest spot rate foreign→functional on or before the date, with the inverse
- *  fallback the posting engine uses. */
+ *  fallback the posting engine uses. When the direct pair and an inverted quote
+ *  share the newest as_of, the DIRECT row wins (priority 0 beats 1) — the same
+ *  deterministic rule as labor-costing, so one pair/date always converts alike. */
 async function periodEndRate(
   orgId: string,
   from: string,
@@ -198,14 +229,14 @@ async function periodEndRate(
 ): Promise<string | null> {
   const r = (await db.execute<{ rate: string }>(sql`
     select rate::text from (
-      select rate, as_of from fx_rates
+      select rate, as_of, 0 as priority from fx_rates
        where org_id = ${orgId} and from_currency = ${from} and to_currency = ${to}
          and rate_type = 'spot' and as_of <= ${asOfDate}
       union all
-      select (1 / rate)::numeric(19,10) as rate, as_of from fx_rates
+      select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${asOfDate}
-    ) candidates order by as_of desc limit 1`));
+    ) candidates order by as_of desc, priority asc limit 1`));
   return r.rows[0]?.rate ?? null;
 }
 
@@ -214,6 +245,9 @@ async function periodEndRate(
  * with a nonzero delta, a period-end adjustment entry (origin 'revaluation') and
  * a mirror reversing entry on the first day of the next period. Idempotent: a
  * subsidiary that already carries a revaluation entry for the period is skipped.
+ * When no following accounting period exists the subsidiary is not revalued at
+ * all and a problem is reported — every posted revaluation must carry its
+ * reversal.
  */
 export async function runRevaluation(
   orgId: string,
@@ -249,14 +283,25 @@ export async function runRevaluation(
       continue;
     }
 
-    // Idempotency: never post a second revaluation into an already-revalued period.
+    // Idempotency fast path: never post a second revaluation into an
+    // already-revalued period. Advisory only — the authoritative check runs
+    // under the advisory lock inside postRevaluationEntry's transaction.
     const existing = (await db.execute(sql`
       select 1 from journal_entries
        where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
          and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
          and reverses_entry_id is null limit 1`));
     if (existing.rows.length > 0) {
-      result.skipped.push({ subsidiaryId, reason: "already revalued for this period" });
+      result.skipped.push({ subsidiaryId, reason: ALREADY_REVALUED });
+      continue;
+    }
+
+    // Fail closed: a revaluation whose mirror reversal has no period to land in
+    // would make the unrealized gain/loss permanent (later closes re-measure
+    // against stale carrying and re-book a delta the books already carry).
+    // Refuse rather than post unreversed.
+    if (!period.next_period_id || !period.next_starts_on) {
+      result.problems.push(`${subsidiary.name}: ${missingReversalPeriodReason()}`);
       continue;
     }
 
@@ -275,7 +320,7 @@ export async function runRevaluation(
     }
 
     try {
-      const { entryId, reversalEntryId } = await postRevaluationEntry(
+      const posted = await postRevaluationEntry(
         orgId,
         bookId,
         subsidiaryId,
@@ -288,7 +333,12 @@ export async function runRevaluation(
         lines,
         actorId,
       );
-      result.posted.push({ subsidiaryId, entryId, reversalEntryId, netDelta });
+      // Null: a concurrent run won the advisory lock and posted first.
+      if (!posted) {
+        result.skipped.push({ subsidiaryId, reason: ALREADY_REVALUED });
+        continue;
+      }
+      result.posted.push({ subsidiaryId, entryId: posted.entryId, reversalEntryId: posted.reversalEntryId, netDelta });
     } catch (err) {
       result.problems.push(`${subsidiary.name}: ${(err as Error).message}`);
     }
@@ -297,8 +347,18 @@ export async function runRevaluation(
   return result;
 }
 
-/** Insert the period-end adjustment and (when the next period exists) its
- *  reversal, atomically. Lines are booked in the functional currency. */
+/**
+ * Insert the period-end adjustment and its mandatory next-period reversal,
+ * atomically. Lines are booked in the functional currency.
+ *
+ * The duplicate check-then-insert is only a control because concurrent runs
+ * cannot pass it simultaneously: a transaction-scoped advisory lock keyed per
+ * (org, book, period, subsidiary) is taken BEFORE the check, so a retried
+ * worker racing the close automation serializes here and the loser reports the
+ * period as already revalued instead of double-posting. Returns null when
+ * another run already posted; throws when the reversal has no period to land
+ * in — an unreversed revaluation never posts.
+ */
 async function postRevaluationEntry(
   orgId: string,
   bookId: string,
@@ -311,11 +371,22 @@ async function postRevaluationEntry(
   nextStartsOn: string | null,
   lines: RevaluationLine[],
   actorId: string | null,
-): Promise<{ entryId: string; reversalEntryId: string | null }> {
+): Promise<{ entryId: string; reversalEntryId: string } | null> {
   if (!isZero(sum(lines.map((l) => l.amount)))) {
     throw new RevaluationError("revaluation entry does not balance");
   }
   return db.transaction(async (tx) => {
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
+
+    // Authoritative duplicate check — held under the lock above.
+    const existing = (await tx.execute(sql`
+      select 1 from journal_entries
+       where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
+         and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
+         and reverses_entry_id is null limit 1`));
+    if (existing.rows.length > 0) return null;
+
     const insertEntry = async (
       entryNumber: string,
       memo: string,
@@ -355,17 +426,17 @@ async function postRevaluationEntry(
       lines,
     );
 
-    let reversalEntryId: string | null = null;
-    if (nextPeriodId && nextStartsOn) {
-      reversalEntryId = await insertEntry(
-        `FXREVAL-${periodName}-R`,
-        `Unrealized FX revaluation reversal — ${periodName}`,
-        nextStartsOn,
-        nextPeriodId,
-        entryId,
-        lines.map((l) => ({ accountId: l.accountId, amount: neg(l.amount) })),
-      );
+    if (!nextPeriodId || !nextStartsOn) {
+      throw new RevaluationError(missingReversalPeriodReason());
     }
+    const reversalEntryId = await insertEntry(
+      `FXREVAL-${periodName}-R`,
+      `Unrealized FX revaluation reversal — ${periodName}`,
+      nextStartsOn,
+      nextPeriodId,
+      entryId,
+      lines.map((l) => ({ accountId: l.accountId, amount: neg(l.amount) })),
+    );
 
     return { entryId, reversalEntryId };
   });

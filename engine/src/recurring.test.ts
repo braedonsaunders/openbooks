@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { advanceCadence } from "./recurring.ts";
+import { advanceCadence, scheduleClaimRollback } from "./recurring.ts";
 
 test("weekly and biweekly step by exact day counts", () => {
   assert.equal(advanceCadence("2026-07-21", "weekly"), "2026-07-28");
@@ -26,4 +27,52 @@ test("quarterly and annually advance by 3 and 12 months", () => {
 
 test("a malformed custom cron falls back to a monthly step instead of looping", () => {
   assert.equal(advanceCadence("2026-07-21", "custom_cron", "not a cron"), "2026-08-21");
+});
+
+test("scheduleClaimRollback puts the pre-claim occurrence back so the next tick retries", () => {
+  const prior = { nextRunOn: "2026-06-01", lastRunAt: new Date("2026-05-15T09:30:00Z") };
+  const rollback = scheduleClaimRollback(prior, "2026-07-01");
+  // The restore targets the ORIGINAL occurrence, never the claimed (advanced)
+  // one, and reactivates — the due scan only ever claims active schedules.
+  assert.deepEqual(rollback, {
+    expectedNextRunOn: "2026-07-01", // guard: only while the row still holds the claim
+    nextRunOn: "2026-06-01",
+    isActive: true,
+    lastRunAt: prior.lastRunAt,
+  });
+});
+
+test("scheduleClaimRollback yields nothing when a concurrent writer moved the schedule", () => {
+  const prior = { nextRunOn: "2026-06-01", lastRunAt: null };
+  // The row moved past our claim — the rollback must not clobber it.
+  assert.equal(scheduleClaimRollback(prior, "2026-07-01", "2026-07-15"), null);
+  assert.equal(scheduleClaimRollback(prior, "2026-07-01", "2026-06-01"), null);
+  // Live value unknown → still build the payload; the SQL WHERE decides atomically.
+  assert.ok(scheduleClaimRollback(prior, "2026-07-01"));
+});
+
+test("a failed generation tick rolls its claim back instead of losing the occurrence", () => {
+  // The runner claims by advancing next_run_on before generateFromTemplate
+  // runs; if generation throws, the catch must restore the pre-claim
+  // occurrence — pinned structurally, like fx-revaluation does.
+  const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueRecurringSchedules");
+  const claim = source.indexOf("set next_run_on = ${advanced}", run);
+  const catchBlock = source.indexOf("} catch (e) {", claim);
+  const rollbackCall = source.indexOf("scheduleClaimRollback(s, advanced)", catchBlock);
+  const restore = source.indexOf("next_run_on = ${rollback.nextRunOn}", rollbackCall);
+  const restoreGuard = source.indexOf(
+    "next_run_on = ${rollback.expectedNextRunOn}",
+    rollbackCall,
+  );
+  const lastError = source.indexOf("last_error = ${message}", rollbackCall);
+  assert.ok(claim > run, "the occurrence is claimed by advancing next_run_on");
+  assert.ok(catchBlock > claim, "generation failures are caught after the claim");
+  assert.ok(rollbackCall > catchBlock, "the catch builds a claim rollback");
+  assert.ok(restore > rollbackCall, "the failed attempt restores the pre-claim next_run_on");
+  assert.ok(restoreGuard > restore, "the restore is guarded on the claimed value");
+  assert.ok(lastError > restoreGuard, "last_error is still written for observability");
+  // The claim itself stays compare-and-swap: only one tick can win an occurrence.
+  const claimSql = source.slice(claim, source.indexOf("returning id", claim));
+  assert.match(claimSql, /where id = \$\{s\.id\} and next_run_on = \$\{occurrenceDate\}/);
 });

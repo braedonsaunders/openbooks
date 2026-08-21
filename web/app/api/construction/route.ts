@@ -13,7 +13,7 @@ import {
 } from "@openbooks/engine/src/construction-billing.ts";
 import { guardPermission, requirePermission } from "../../../lib/authz";
 import { projectCostSummary } from "../../../lib/project-costing";
-import { cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
+import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
 
@@ -233,7 +233,27 @@ export async function POST(req: Request) {
           const row = co.rows[0];
           if (!row) throw new ConstructionBillingError("Change order not found or no longer draft");
           if (row.created_by === userId) throw new ConstructionBillingError("The preparer cannot approve the same change order");
-          await tx.execute(sql`select id from projects where id = ${row.project_id} and org_id = ${orgId} for update`);
+          // Contract value is the fixed-price ceiling behind Financials total
+          // price, revenue recognition's total transaction price, and the
+          // cockpit's earned view, so approval moves it by the change order's
+          // signed amount in this same transaction.
+          const project = (await tx.execute<{ contract_value: string | null }>(sql`
+            select contract_value from projects where id = ${row.project_id} and org_id = ${orgId} for update
+          `));
+          const effect = normalizeMoney(String(row.amount));
+          const contractValueBefore = project.rows[0]?.contract_value ?? null;
+          const contractValueAfter = add(contractValueBefore ?? "0", effect);
+          if (cmp(contractValueAfter, "0") < 0) {
+            throw new ConstructionBillingError("Approving this change order would drive the contract value below zero");
+          }
+          await tx.execute(sql`
+            update projects set contract_value = ${contractValueAfter}, updated_at = now(), updated_by = ${userId}
+             where id = ${row.project_id} and org_id = ${orgId}
+          `);
+          await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${orgId}, 'projects', ${row.project_id}, 'contract_value_adjustment',
+                    ${JSON.stringify({ changeOrderId: body.id, before: { contractValue: contractValueBefore }, after: { contractValue: contractValueAfter } })}::jsonb,
+                    ${userId})`);
           const activeApplication = (await tx.execute(sql`
             select 1 from pay_applications where org_id = ${orgId} and project_id = ${row.project_id}
              and status in ('draft', 'submitted', 'approved') limit 1
@@ -255,7 +275,7 @@ export async function POST(req: Request) {
             `));
             if (!target.rows[0]) throw new ConstructionBillingError("The target schedule line no longer exists");
             const billed = (await tx.execute<{ amount: string }>(sql`
-              select coalesce(sum(pal.this_period_completed + pal.materials_stored), 0) as amount
+              select coalesce(sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored), 0) as amount
                 from pay_application_lines pal
                 join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
                where pal.org_id = ${orgId} and pal.sov_line_id = ${row.target_sov_line_id}

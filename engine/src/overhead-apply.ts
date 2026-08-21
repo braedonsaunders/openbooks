@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
@@ -81,7 +82,11 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
 
     const idArr = `{${timeEntryIds.join(",")}}`;
     const rows = (await tx.execute<{ id: string; project_id: string; worked_on: string; amount: string }>(sql`
-      select te.id, te.project_id, te.worked_on, (te.hours * r.rate_percent) as amount
+      select te.id, te.project_id, te.worked_on,
+             -- hours × rate is quantized to the ledger scale at source: the raw
+             -- numeric(19,4)×numeric(19,4) product carries up to 8 decimals,
+             -- which money parsing would reject as over-precise.
+             round(te.hours * r.rate_percent, 4) as amount
         from time_entries te
         join overhead_rates r
           on r.org_id = te.org_id
@@ -140,7 +145,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     }
     lines.push({ accountId: settings.accountId, amount: neg(total), projectId: null, memo: "Overhead applied — contra" });
 
-    const postingDate = maxDate || new Date().toISOString().slice(0, 10);
+    const postingDate = maxDate || await businessToday(orgId);
     const entryId = await postProjectGlEntryWithinTransaction(tx, {
       orgId,
       actorId,

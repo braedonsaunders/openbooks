@@ -86,8 +86,15 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   // Drafts may retain authoring warnings, but an enabled flow must be fully
-  // executable against the tenant's current roles and custom fields.
-  if (body.enabled === true) {
+  // executable against the tenant's current roles and custom fields. The
+  // blocking lint applies whenever the save leaves the flow ENABLED — an
+  // explicit enable, or any save to an already-enabled flow (otherwise a
+  // graph edit could smuggle change_status→approved nodes past the
+  // engine-managed-release invariant as mere warnings). A flow being disabled,
+  // or a draft, stays warning-only so authoring keeps its work-in-progress.
+  const willBeEnabled =
+    body.enabled === undefined ? Boolean(flow.enabled) : Boolean(body.enabled)
+  if (willBeEnabled) {
     const candidateGraph = body.graph ?? flow.graph
     const profile = await flowSubjectProfileForOrg(user.orgId, String(flow.subject_kind))
     const lint = lintFlowGraphForSubject(
@@ -112,6 +119,26 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params
   const flow = await loadFlow(orgId, id)
   if (!flow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  // Fail closed: a flow with open approvals cannot be deleted. Wiping its
+  // gates would leave subjects stuck in pending_approval — invisible in
+  // approvals, uneditable and unpostable, with no release path. Escalated rows
+  // count as open too (same definition as the engine's gate accounting).
+  const open = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_gates
+     where flow_id = ${id} and org_id = ${orgId} and status in ('pending', 'escalated')
+  `))
+  const openGates = open.rows[0]?.n ?? 0
+  if (openGates > 0) {
+    return NextResponse.json(
+      {
+        error:
+          `this flow still has ${openGates} open approval${openGates === 1 ? '' : 's'} — ` +
+          'resolve or recall the pending approvals before deleting the flow',
+      },
+      { status: 409 },
+    )
+  }
 
   // Explicit child cleanup (gates → effects → runs → flow) inside one
   // transaction, so the delete works even before the cascade FKs land.

@@ -365,6 +365,20 @@ function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
 }
 
+/**
+ * Advance-timing schedules are not implemented yet, and measureLesseeLease
+ * refuses them at commencement. Front-load that refusal to creation so an
+ * agreement that could never be measured fails validation instead of surfacing
+ * only when it commences — the measurement guard stays as defense in depth.
+ */
+export function assertLeaseTimingSupported(timing: "arrears" | "advance"): void {
+  if (timing === "advance") {
+    throw new LeaseError(
+      "advance-timing payment schedules are not implemented yet — create the agreement with arrears timing",
+    );
+  }
+}
+
 export interface CreateLeaseInput {
   subsidiaryId: string;
   leaseNumber: string;
@@ -414,6 +428,7 @@ export async function createLeaseAgreement(
       );
     }
   }
+  assertLeaseTimingSupported(input.paymentTiming ?? "arrears");
 
   const leaseId = randomUUID();
   await db.execute(sql`

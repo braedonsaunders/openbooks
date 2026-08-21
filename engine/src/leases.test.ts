@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "./money.ts";
 import {
+  assertLeaseTimingSupported,
   classifyLease,
   classifyLessorLease,
+  LeaseError,
   lessorStraightLineSchedule,
   measureLesseeLease,
   salesTypeCommencement,
@@ -33,6 +35,17 @@ test("advance timing discounts one fewer period", () => {
   });
   // arrears PV × 1.05 = 90,919.0101
   assert.equal(pv, "90919.0101");
+});
+
+test("advance timing is refused at creation, not deferred to commencement", () => {
+  // createLeaseAgreement calls this pure seam before inserting the draft: an
+  // agreement that measureLesseeLease could never commence must fail
+  // validation up front. The measurement guard remains as defense in depth.
+  assert.throws(
+    () => assertLeaseTimingSupported("advance"),
+    (e) => e instanceof LeaseError && /advance-timing/.test(e.message),
+  );
+  assert.doesNotThrow(() => assertLeaseTimingSupported("arrears"));
 });
 
 test("a zero rate degenerates to the undiscounted sum", () => {

@@ -558,15 +558,36 @@ async function loadReconcilableAccount(orgId: string, accountId: string): Promis
 }
 
 /**
- * Deterministic fallback dedupe key for sources without a transaction id
- * (most CSV exports): hash of account + date + amount + description + the
- * line's occurrence index among identical tuples in the batch. Re-importing
- * the same file is a no-op; a second identical-looking real transaction on
- * the same day still imports (distinct occurrence index).
+ * Stable content hash of an import batch — the per-import salt for fallback
+ * dedupe keys. The same file content always yields the same token (re-import
+ * stays a clean no-op); any other file yields a different token, so separate
+ * imports never mint identical fallback keys.
  */
-function synthesizeTransactionIds(
+function statementBatchToken(lines: ParsedStatementLine[]): string {
+  const hash = createHash("sha256");
+  for (const l of lines) {
+    hash.update(
+      `${l.postedOn}|${l.amount}|${l.description ?? ""}|${l.counterpartyRef ?? ""}|${l.bankTransactionId ?? ""}\n`,
+    );
+  }
+  return hash.digest("hex").slice(0, 32);
+}
+
+/**
+ * Deterministic fallback dedupe key for sources without a transaction id
+ * (most CSV exports): hash of account + per-import batch token + date +
+ * amount + description + the line's occurrence index among identical tuples
+ * in the batch. The batch token salts every key per import, so genuinely
+ * distinct same-day/same-amount transactions arriving in two separate imports
+ * get distinct keys instead of the second being silently dropped as a
+ * duplicate; re-importing the same file reproduces the same keys and remains
+ * a no-op. A second identical-looking real transaction within one import
+ * still imports (distinct occurrence index).
+ */
+export function synthesizeTransactionIds(
   accountId: string,
   lines: ParsedStatementLine[],
+  batchToken: string,
 ): ParsedStatementLine[] {
   const seen = new Map<string, number>();
   return lines.map((l) => {
@@ -574,7 +595,10 @@ function synthesizeTransactionIds(
     const tuple = `${l.postedOn}|${l.amount}|${l.description ?? ""}`;
     const n = seen.get(tuple) ?? 0;
     seen.set(tuple, n + 1);
-    const hash = createHash("sha256").update(`${accountId}|${tuple}|${n}`).digest("hex").slice(0, 32);
+    const hash = createHash("sha256")
+      .update(`${accountId}|${batchToken}|${tuple}|${n}`)
+      .digest("hex")
+      .slice(0, 32);
     return { ...l, bankTransactionId: `gen:${hash}` };
   });
 }
@@ -636,7 +660,7 @@ export async function importStatement(
       bankTransactionId,
     };
   });
-  const keyed = synthesizeTransactionIds(account.id, validated);
+  const keyed = synthesizeTransactionIds(account.id, validated, statementBatchToken(validated));
   const openingBalance = opts.openingBalance
     ? normalizeAmount(opts.openingBalance, "Opening balance")
     : null;

@@ -100,6 +100,11 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
   const manifestJson = JSON.stringify(manifest)
 
   await db.transaction(async (tx) => {
+    // Prior grants (absent on first install) become the audit "before" state.
+    const prior = (await tx.execute<{ grantedPermissions: string[] | null }>(sql`
+      select granted_permissions as "grantedPermissions" from apps
+       where org_id = ${orgId} and key = ${manifest.key} limit 1`))
+
     // Upsert the app row (create, or update presentation on reinstall/upgrade).
     const appRes = (await tx.execute<{ id: string }>(sql`
       insert into apps (org_id, key, name, description, icon_key, status, granted_permissions, created_by, updated_by)
@@ -112,6 +117,19 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         status = 'installed', updated_at = now(), updated_by = ${userId}
       returning id`))
     const appId = appRes.rows[0]!.id
+
+    // Permission grants are audited with before/after evidence. Install keeps
+    // full-grant-at-install (the admin may narrow via bundle.grantedPermissions);
+    // a dedicated narrowing UI is follow-up work.
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'apps', ${appId}, 'insert',
+        ${JSON.stringify({
+          appKey: manifest.key,
+          permissionsBefore: prior.rows[0]?.grantedPermissions ?? null,
+          permissionsAfter: granted,
+        })}::jsonb,
+        ${userId})`)
 
     // Reject a duplicate version rather than silently overwriting history.
     const existing = (await tx.execute(
@@ -617,6 +635,22 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
         granted_permissions = ${JSON.stringify(granted)}::jsonb,
         updated_at = now(), updated_by = ${userId}
       where org_id = ${orgId} and key = ${key}`)
+    // Narrowing/expanding the granted set is a material security change —
+    // record before/after evidence whenever it actually changes.
+    if (
+      meta.grantedPermissions !== undefined &&
+      JSON.stringify([...app.grantedPermissions].sort()) !== JSON.stringify([...granted].sort())
+    ) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'apps', ${app.id}, 'update',
+          ${JSON.stringify({
+            appKey: key,
+            permissionsBefore: app.grantedPermissions,
+            permissionsAfter: granted,
+          })}::jsonb,
+          ${userId})`)
+    }
     await tx.execute(sql`
       update app_versions set manifest = ${JSON.stringify(manifest)}::jsonb, updated_at = now(), updated_by = ${userId}
       where id = ${app.activeVersionId}`)

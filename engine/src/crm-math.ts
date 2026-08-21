@@ -47,7 +47,10 @@ export function computeOpportunityTotals(lines: OpportunityLineMathInput[], prob
   return {
     lines: calculated,
     projectedAmount,
-    weightedAmount: weightAmount(projectedAmount, probability),
+    // Weighted follows the line detail: each line's own probability override,
+    // else the header probability. Applying the header rate wholesale would
+    // contradict the stored per-line expected_amounts.
+    weightedAmount: sum(calculated.map((line) => line.expectedAmount)),
   };
 }
 

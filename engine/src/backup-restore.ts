@@ -628,6 +628,13 @@ export async function restoreOrgBackup(args: {
         for (const tableName of [...targetTables].sort()) {
           await client.query(`alter table public."${tableName}" enable trigger user`);
         }
+        // The row triggers that maintain gl_month_activity and
+        // party_payment_stats were intentionally disabled during the bulk copy,
+        // and those derived tables are deliberately excluded from archives in
+        // expectation of a rebuild. Rebuild both aggregates explicitly for the
+        // restored organization so reporting is not permanently empty.
+        await client.query("select openbooks_gl_activity_rebuild($1)", [args.expectedOrgId]);
+        await client.query("select openbooks_party_payment_stats_rebuild($1)", [args.expectedOrgId]);
         // Redis queue state is intentionally not replayed by an organization
         // archive. A stored backup also snapshots its own backup_runs row while
         // that row is still "running". Close every in-flight backup ledger row

@@ -3,8 +3,10 @@ import { createHmac } from "node:crypto";
 import test from "node:test";
 import {
   ACCEPTANCE_ADAPTERS,
+  CLAIMABLE_FROM,
   computeSurcharge,
   toMinorUnits,
+  type WebhookEvent,
 } from "./payment-acceptance.ts";
 
 test("computeSurcharge: percent, fixed, combined, and cap are exact", () => {
@@ -40,15 +42,19 @@ function stripeSignature(secret: string, body: string, timestamp?: number): stri
   return `t=${t},v1=${v1}`;
 }
 
-test("stripe webhook: signature verified, tamper + replay rejected", () => {
+function stripeEvent(secret: string, type: string, obj: Record<string, unknown>, ageSeconds = 0): WebhookEvent | null {
+  const body = JSON.stringify({ id: "evt_1", type, data: { object: obj } });
+  return ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+    { "stripe-signature": stripeSignature(secret, body, Math.floor(Date.now() / 1000) - ageSeconds) },
+    body,
+    { webhookSecret: secret },
+  );
+}
+
+test("stripe webhook: signature verified, tamper rejected", () => {
   const secret = "whsec_test_123";
-  const body = JSON.stringify({
-    id: "evt_1",
-    type: "checkout.session.completed",
-    data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
-  });
-  const ok = ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature(secret, body) }, body, {
-    webhookSecret: secret,
+  const ok = stripeEvent(secret, "checkout.session.completed", {
+    id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300,
   });
   assert.ok(ok);
   assert.equal(ok.status, "succeeded");
@@ -56,26 +62,110 @@ test("stripe webhook: signature verified, tamper + replay rejected", () => {
   assert.equal(ok.linkToken, "tok_abc");
   assert.equal(ok.paidAmount, "103.0000");
 
+  const tamperedBody = JSON.stringify({
+    id: "evt_1",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
+  }) + "x";
   assert.equal(
-    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature("whsec_other", body) }, body, {
-      webhookSecret: secret,
-    }),
-    null,
-    "wrong secret rejected",
-  );
-  assert.equal(
-    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature(secret, body + "x") }, body + "x", {
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature(secret, tamperedBody) }, tamperedBody, {
       webhookSecret: secret,
     }),
     null,
     "tampered body rejected",
   );
-  const stale = stripeSignature(secret, body, Math.floor(Date.now() / 1000) - 3600);
   assert.equal(
-    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stale }, body, { webhookSecret: secret }),
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature("whsec_other", JSON.stringify({
+      id: "evt_1",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
+    })) }, JSON.stringify({
+      id: "evt_1",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
+    }), {
+      webhookSecret: secret,
+    }),
     null,
-    "outside replay window rejected",
+    "wrong secret rejected",
   );
+});
+
+test("stripe webhook: replay window accepts provider retries within 24h, rejects older and future", () => {
+  const secret = "whsec_replay";
+  const obj = { id: "cs_replay_1", client_reference_id: "tok_r", amount_total: 10300, payment_status: "paid" };
+  // An outage backlog redelivery from an hour ago must still settle.
+  assert.ok(stripeEvent(secret, "checkout.session.completed", obj, 3_600));
+  // Just inside the window.
+  assert.ok(stripeEvent(secret, "checkout.session.completed", obj, 23 * 3_600));
+  // Outside the window.
+  assert.equal(stripeEvent(secret, "checkout.session.completed", obj, 25 * 3_600), null);
+  // Future-dated beyond the clock-skew allowance is always rejected.
+  const futureBody = JSON.stringify({ id: "evt_1", type: "checkout.session.completed", data: { object: obj } });
+  assert.equal(
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+      { "stripe-signature": stripeSignature(secret, futureBody, Math.floor(Date.now() / 1000) + 600) },
+      futureBody,
+      { webhookSecret: secret },
+    ),
+    null,
+    "future-dated signature rejected",
+  );
+});
+
+test("stripe webhook: unpaid async completion stays in flight until the async terminal events", () => {
+  const secret = "whsec_async";
+  const session = { id: "cs_async_1", client_reference_id: "tok_async", amount_total: 10300, payment_intent: "pi_async_1" };
+
+  const unpaid = stripeEvent(secret, "checkout.session.completed", { ...session, payment_status: "unpaid" });
+  assert.ok(unpaid);
+  assert.equal(unpaid.status, "processing");
+  assert.equal(unpaid.paidAmount, null);
+  assert.equal(unpaid.intentRef, "pi_async_1");
+
+  const noPaymentRequired = stripeEvent(secret, "checkout.session.completed", { ...session, payment_status: "no_payment_required" });
+  assert.ok(noPaymentRequired);
+  assert.equal(noPaymentRequired.status, "succeeded");
+
+  const asyncOk = stripeEvent(secret, "checkout.session.async_payment_succeeded", session);
+  assert.ok(asyncOk);
+  assert.equal(asyncOk.status, "succeeded");
+  assert.equal(asyncOk.externalRef, "cs_async_1");
+  assert.equal(asyncOk.paidAmount, "103.0000");
+
+  const asyncFailed = stripeEvent(secret, "checkout.session.async_payment_failed", session);
+  assert.ok(asyncFailed);
+  assert.equal(asyncFailed.status, "failed");
+  assert.equal(asyncFailed.externalRef, "cs_async_1");
+});
+
+test("stripe webhook: refunds and disputes key off the persisted payment intent", () => {
+  const secret = "whsec_refund";
+  const refund = stripeEvent(secret, "charge.refunded", { id: "ch_1", payment_intent: "pi_async_1" });
+  assert.ok(refund);
+  assert.equal(refund.status, "refunded");
+  assert.equal(refund.externalRef, "pi_async_1");
+
+  const dispute = stripeEvent(secret, "charge.dispute.created", { id: "dp_1", payment_intent: "pi_async_1" });
+  assert.ok(dispute);
+  assert.equal(dispute.status, "refunded");
+  assert.equal(dispute.externalRef, "pi_async_1");
+});
+
+test("webhook claims: only pre-terminal states are claimable so redeliveries dedupe", () => {
+  assert.deepEqual(CLAIMABLE_FROM.succeeded, ["initiated"]);
+  assert.deepEqual(CLAIMABLE_FROM.processing, ["initiated"]);
+  assert.deepEqual(CLAIMABLE_FROM.failed, ["initiated"]);
+  assert.deepEqual(CLAIMABLE_FROM.cancelled, ["initiated"]);
+  // Refunds arrive after settlement succeeded — or before it ever settled.
+  assert.deepEqual(CLAIMABLE_FROM.refunded, ["succeeded", "initiated"]);
+  // No event may re-claim a settled or refunded attempt back into motion.
+  for (const status of Object.keys(CLAIMABLE_FROM) as (keyof typeof CLAIMABLE_FROM)[]) {
+    assert.ok(!CLAIMABLE_FROM[status].includes("refunded"), `${status} must not claim a refunded attempt`);
+    if (status !== "refunded") {
+      assert.ok(!CLAIMABLE_FROM[status].includes("succeeded"), `${status} must not claim a settled attempt`);
+    }
+  }
 });
 
 test("adyen webhook: per-item HMAC verified", () => {
@@ -125,5 +215,42 @@ test("gocardless webhook: raw-body HMAC verified", () => {
   assert.ok(ok);
   assert.equal(ok.status, "succeeded");
   assert.equal(ok.externalRef, "PM-1");
+  // Checkout keyed the attempt on the billing request; payment events must
+  // expose it so resolution can match either side.
+  assert.equal(ok.alternateExternalRef, "BRQ-1");
+  assert.equal(ok.linkToken, null);
   assert.equal(ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook({ "webhook-signature": "deadbeef" }, body, { webhookSecret: secret }), null);
+});
+
+test("gocardless webhook: payment lifecycle events resolve against the billing request", () => {
+  const secret = "gc-lifecycle";
+  const event = (action: string) => JSON.stringify({
+    events: [{ resource_type: "payments", action, links: { payment: "PM-9", billing_request: "BRQ-9" } }],
+  });
+  const verify = (action: string) => {
+    const payload = event(action);
+    return ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook(
+      { "webhook-signature": createHmac("sha256", secret).update(payload, "utf8").digest("hex") },
+      payload,
+      { webhookSecret: secret },
+    );
+  };
+
+  const paidOut = verify("paid_out");
+  assert.ok(paidOut);
+  assert.equal(paidOut.status, "succeeded");
+  assert.equal(paidOut.externalRef, "PM-9");
+  assert.equal(paidOut.alternateExternalRef, "BRQ-9");
+
+  const failed = verify("failed");
+  assert.ok(failed);
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.externalRef, "PM-9");
+  assert.equal(failed.alternateExternalRef, "BRQ-9");
+
+  const chargedBack = verify("charged_back");
+  assert.ok(chargedBack);
+  assert.equal(chargedBack.status, "refunded");
+  assert.equal(chargedBack.externalRef, "PM-9");
+  assert.equal(chargedBack.alternateExternalRef, "BRQ-9");
 });

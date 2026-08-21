@@ -657,7 +657,8 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
  * user_scripts scan.
  *
  * Reminders: remind_at <= now, not yet reminded → re-notify + email, stamp
- * reminded_at (fires once; the stamp is the claim).
+ * reminded_at (fires once; the stamp is the claim, released on notify failure
+ * so the next tick retries).
  *
  * Escalations: escalate_at <= now, still pending → resolve the gate node's
  * escalateTo target (fallback: the submitter's supervisor; last resort:
@@ -701,6 +702,15 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       reminded++;
     } catch (e) {
       console.error(`[flows] gate ${id} reminder failed:`, e);
+      // Release the claim so the next tick retries — a failed notify must not
+      // silence this gate's reminders forever. Conditional on the claimed
+      // stamp: only the tick that set it may clear it, so a concurrent tick
+      // (which saw the stamp and skipped) can never race a double-notify.
+      await withBypassContext(() =>
+        db.execute(sql`
+        update flow_gates set reminded_at = null
+         where id = ${id} and status = 'pending' and reminded_at = ${now}
+      `));
     }
   }
 

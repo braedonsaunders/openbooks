@@ -485,6 +485,20 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
   const rawStart = input.startOffsetDays ? addDays(input.startOn, Math.trunc(input.startOffsetDays)) : input.startOn;
   const start = monthStart(rawStart);
 
+  // Fail closed on an inverted term: end-before-start clamps every weight to
+  // zero in apportion(), silently planning an all-zero schedule instead of
+  // recognizing anything.
+  if (
+    input.method === "straight_line_even" ||
+    input.method === "straight_line_prorate_first_last" ||
+    input.method === "straight_line_daily"
+  ) {
+    const end = resolveEnd(rawStart, input);
+    if (epochDay(end) < epochDay(rawStart)) {
+      throw new Error(`recognition end (${end}) precedes the recognition start (${rawStart})`);
+    }
+  }
+
   const lines: { month: string; units: bigint }[] = (() => {
     switch (input.method) {
       case "point_in_time":
@@ -1077,10 +1091,36 @@ export async function runRevenueRecognition(
     }
   }
 
+  // Milestone/usage plans come from explicitly recorded events. A schedule
+  // built with none carries zero lines: nothing ever posts, nothing ever
+  // satisfies, and the invoiced amount sits parked in deferred revenue
+  // indefinitely. Surface the gap instead of skipping it silently.
+  const emptyPlans = (await db.execute<{ contract_number: string; description: string }>(sql`
+    select c.contract_number, o.description
+      from performance_obligations o
+      join revenue_contracts c on c.id = o.contract_id
+      join recognition_rules r on r.id = o.recognition_rule_id
+     where o.org_id = ${orgId} and o.status = 'open'
+       and r.method in ('milestone', 'usage')
+       ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
+       and exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+       and not exists (
+         select 1 from recognition_schedule_lines l
+           join recognition_schedules s on s.id = l.schedule_id
+          where s.obligation_id = o.id)`));
+  for (const row of emptyPlans.rows) {
+    result.problems.push(
+      `${row.contract_number} ${row.description}: milestone/usage obligation has no recognition events recorded`,
+    );
+  }
+
   // Flip fully-recognized obligations to 'satisfied' (no unposted non-zero lines
   // left). Percent-complete obligations are the exception: "caught up to the
   // current estimate" is not "done" — they satisfy only at 100% complete, so an
-  // ongoing project contract stays open between catch-ups.
+  // ongoing project contract stays open between catch-ups. The flip also
+  // demands positive evidence of completion — at least one schedule line — so a
+  // zero-line schedule (e.g. milestone/usage with no events recorded) can never
+  // vacuously satisfy an obligation with nothing recognized.
   await db.execute(sql`
     update performance_obligations o
        set status = 'satisfied', updated_at = now()
@@ -1089,7 +1129,10 @@ export async function runRevenueRecognition(
        and o.org_id = ${orgId} and o.status = 'open'
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
-       and exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+       and exists (
+         select 1 from recognition_schedule_lines l
+           join recognition_schedules s on s.id = l.schedule_id
+          where s.obligation_id = o.id)
        and not exists (
          select 1 from recognition_schedules s
            join recognition_schedule_lines l on l.schedule_id = s.id

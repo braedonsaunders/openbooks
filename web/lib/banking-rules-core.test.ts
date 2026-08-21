@@ -98,10 +98,11 @@ test('accountScope gates rules', () => {
 test('split: single remainder line equals the negated bank amount', () => {
   const lines: RuleSplitLine[] = [{ accountId: 'a', portion: { kind: 'remainder' } }]
   const r = resolveSplitAmounts('1204.55', lines)
-  assert.equal(r[0]!.amount, '-1204.55')
+  // Splits resolve at the ledger's numeric(19,4) scale, so amounts are 4dp.
+  assert.equal(r[0]!.amount, '-1204.5500')
 })
 
-test('split: percent + remainder balances to the penny (deposit)', () => {
+test('split: percent + remainder balances exactly at ledger scale (deposit)', () => {
   const lines: RuleSplitLine[] = [
     { accountId: 'revenue', portion: { kind: 'remainder' } },
     { accountId: 'fees', portion: { kind: 'percent', value: 2.9 } },
@@ -109,8 +110,10 @@ test('split: percent + remainder balances to the penny (deposit)', () => {
   const r = resolveSplitAmounts('1204.55', lines)
   const fee = r.find((x) => x.line.accountId === 'fees')!.amount
   const rev = r.find((x) => x.line.accountId === 'revenue')!.amount
-  assert.equal(fee, '-34.93') // 1204.55 * 2.9%
-  assert.equal(rev, '-1169.62')
+  // 1204.55 × 2.9% = 34.93195 → 34.9320 at the 4dp ledger scale (was clamped
+  // to 2dp); the remainder line absorbs the rest exactly, no stranded delta.
+  assert.equal(fee, '-34.9320')
+  assert.equal(rev, '-1169.6180')
   const sum = r.reduce((a, x) => a + Number(x.amount), 0)
   assert.equal(Math.round(sum * 100) / 100, -1204.55) // offsets negate the bank line exactly
 })
@@ -123,8 +126,8 @@ test('split: fixed + remainder on a withdrawal keeps offsets positive', () => {
   const r = resolveSplitAmounts('-500', lines) // money out: bank credited (negative)
   const total = r.reduce((a, x) => a + Number(x.amount), 0)
   assert.equal(Math.round(total * 100) / 100, 500) // offsets are positive debits summing to +500
-  assert.equal(r.find((x) => x.line.accountId === 'wireFee')!.amount, '15.00')
-  assert.equal(r.find((x) => x.line.accountId === 'principal')!.amount, '485.00')
+  assert.equal(r.find((x) => x.line.accountId === 'wireFee')!.amount, '15.0000')
+  assert.equal(r.find((x) => x.line.accountId === 'principal')!.amount, '485.0000')
 })
 
 test('split: no remainder folds rounding into the last line', () => {
@@ -133,6 +136,9 @@ test('split: no remainder folds rounding into the last line', () => {
     { accountId: 'b', portion: { kind: 'percent', value: 66.667 } },
   ]
   const r = resolveSplitAmounts('100', lines)
+  // Exact at 4dp — the fold branch leaves both lines untouched here.
+  assert.equal(r[0]!.amount, '-33.3330')
+  assert.equal(r[1]!.amount, '-66.6670')
   const sum = r.reduce((a, x) => a + Number(x.amount), 0)
   assert.equal(Math.round(sum * 100) / 100, -100) // still balances despite rounding
 })

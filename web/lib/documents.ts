@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
@@ -219,6 +219,14 @@ export async function createPostedCorrectionDraft(
  * (invoices, credits) the applied amount is summed from un-reversed
  * applications against the posted entry's control open-item line, and
  * `balance_due` = total − applied.
+ *
+ * `target_transaction_amount`, NOT `amount`: `documents.total` is in the
+ * document's TRANSACTION currency while `applications.amount` is the
+ * base-currency carrying amount. Subtracting one from the other produced a
+ * meaningless number for every FX document — the drawer showed a balance in
+ * neither currency, and an FX invoice could read as paid while still open.
+ * The transaction leg is the one denominated in the same currency as the
+ * total (same fix as engine/src/dunning.ts).
  */
 export async function loadDocument(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
@@ -230,7 +238,7 @@ export async function loadDocument(id: string, orgId?: string) {
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
       left join lateral (
-        select coalesce(sum(a.amount), 0) as applied
+        select coalesce(sum(a.target_transaction_amount), 0) as applied
           from journal_lines jl
           join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id and a.unapplied_at is null
          where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
@@ -337,6 +345,40 @@ export class DocumentEditError extends Error {
     this.status = status
     this.fieldErrors = fieldErrors
   }
+}
+
+/**
+ * Draft-line validation for the generic editor. The save path used to FILTER
+ * OUT every line without a positive amount, so a credit-memo leg, a discount
+ * line, or a zero memo line silently vanished on any edit and the totals were
+ * recomputed without it — silent data loss on a financial document. The tax
+ * engine computes signed bases (engine/src/tax.ts), so negative and zero
+ * lines are legitimate and pass through to computeBillTotals untouched; the
+ * only rejections are what the calculator provably cannot use — a missing
+ * account, or an amount that is not an exact decimal within ledger scale —
+ * and each rejection names its line so the editor can point at the cell.
+ *
+ * Pure — unit-tested directly in documents.test.ts.
+ */
+export function validateEditableDocumentLines(lines: DocumentLineInput[]): DocumentLineInput[] {
+  return lines.map((l, i) => {
+    const n = i + 1
+    if (!l.accountId) {
+      throw new DocumentEditError(422, `Line ${n}: an account is required`)
+    }
+    if (l.amount === undefined || l.amount === null || String(l.amount).trim() === '') {
+      throw new DocumentEditError(422, `Line ${n}: an amount is required`)
+    }
+    try {
+      toUnits(String(l.amount))
+    } catch {
+      throw new DocumentEditError(
+        422,
+        `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
+      )
+    }
+    return l
+  })
 }
 
 /**
@@ -448,8 +490,17 @@ export async function applyDocumentEdit(
           `change them on the source record`,
       )
     }
-    const valid = body.lines.filter((l) => l.accountId && cmp(l.amount, '0') > 0)
-    const computed = computeBillTotals(valid, await taxProfileMap(orgId, body.documentDate ?? current.documentDate))
+    // Validate, don't filter. The old `filter((l) => l.accountId && cmp(l.amount, '0') > 0)`
+    // dropped negative and zero lines before the totals were computed, so any
+    // edit of a document carrying one rewrote it without that line — the
+    // credit-memo leg disappeared and the balance silently moved. Every line
+    // the caller sent now either reaches computeBillTotals exactly as
+    // submitted (the tax engine handles signed bases) or fails closed with a
+    // 422 naming the offending line.
+    const computed = computeBillTotals(
+      validateEditableDocumentLines(body.lines),
+      await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
+    )
     totals = computed
     // A transfer moves one amount between two accounts; its two legs carry the
     // same amount, so the document total is that amount — NOT the summed legs.
