@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
@@ -500,7 +501,8 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   })
 
   const party = (await db.execute<{ display_name: string | null; email: string | null; phone: string | null }>(sql`
-    select display_name, email, phone from parties where id = (select party_id from documents where id = ${id})
+    select display_name, email, phone from parties
+     where org_id = ${orgId} and id = (select party_id from documents where id = ${id} and org_id = ${orgId})
   `))
 
   const totalHours = ticket.entries.reduce((a, e) => a + (Number(e.hours) || 0), 0)
@@ -533,7 +535,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
     customer_comment: ft.signatures?.customer?.comment ?? '',
     foreman_signature_image: ft.signatures?.foreman?.image ?? '',
     org_name: org.name,
-    printed_date: fmtDate(new Date().toISOString().slice(0, 10), locale),
+    printed_date: fmtDate(await businessToday(orgId), locale),
     crew,
     lines: ticket.lines.map((l) => ({
       item_name: l.item_name ?? '',
