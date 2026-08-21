@@ -24,6 +24,7 @@ import type {
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import { AZ_CERTIFICATE, AZ_REGION } from "./states/az-declaration.ts";
 import { CO_CERTIFICATE, CO_REGION } from "./states/co-declaration.ts";
+import { CT_CERTIFICATE, CT_REGION } from "./states/ct-declaration.ts";
 import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia-declaration.ts";
 import { IN_CERTIFICATE, IN_REGION } from "./states/in-declaration.ts";
 import { KY_CERTIFICATE, KY_REGION } from "./states/ky-declaration.ts";
@@ -946,7 +947,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
   certificates: [
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
-    MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE,
+    MA_M4, GA_G4, NC_NC4, CO_CERTIFICATE, CT_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
@@ -1342,7 +1343,7 @@ const NC_REGION: PayrollRegionWithholding = {
 };
 
 const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
-  CA: CA_REGION, CO: CO_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
+  CA: CA_REGION, CO: CO_REGION, CT: CT_REGION, NY: NY_REGION, PA: PA_REGION, IL: IL_REGION,
   NJ: NJ_REGION, OH: OH_REGION, MI: MI_REGION, MA: MA_REGION, GA: GA_REGION, NC: NC_REGION,
   AZ: AZ_REGION, IN: IN_REGION, KY: KY_REGION, VA: VA_REGION, WV: WV_REGION,
   IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,

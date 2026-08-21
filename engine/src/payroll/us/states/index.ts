@@ -28,6 +28,7 @@ import { NO_WITHHOLDING_STATES, US_STATES } from "../rates.ts";
 import { AZ_WITHHOLDING } from "./az.ts";
 import { CA_WITHHOLDING } from "./ca.ts";
 import { CO_WITHHOLDING } from "./co.ts";
+import { CT_WITHHOLDING } from "./ct.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
 import { IA_WITHHOLDING } from "./ia.ts";
 import { IL_WITHHOLDING } from "./il.ts";
@@ -66,6 +67,7 @@ export class UsStateWithholdingError extends PayrollError {}
 const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   CA_WITHHOLDING,
   CO_WITHHOLDING,
+  CT_WITHHOLDING,
   NY_WITHHOLDING,
   PA_WITHHOLDING,
   IL_WITHHOLDING,
@@ -114,7 +116,6 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   AL: "Alabama Withholding Tax Tables and Instructions for Employers",
   AR: "Arkansas Withholding Tax Formula (AR4ECX)",
-  CT: "Connecticut Circular CT, Employer's Tax Guide",
   DE: "Delaware Employer's Guide, Withholding Tax Computation",
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
   HI: "Hawaii Booklet A, Employer's Tax Guide",
@@ -217,6 +218,7 @@ export { pctToRate } from "./transcription.ts";
 export { AZ_WITHHOLDING, AZ_RATES_2026, AZ_PRINTED_PERCENTS } from "./az.ts";
 export { CA_WITHHOLDING, caAnnualizedMethod, CA_RATES_2026 } from "./ca.ts";
 export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
+export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
 export { IA_WITHHOLDING, IA_RATES_2026 } from "./ia.ts";
 export { IN_WITHHOLDING, IN_RATES_2026, IN_COUNTIES_2026 } from "./in.ts";
 export { KY_WITHHOLDING, KY_RATES_2026 } from "./ky.ts";
