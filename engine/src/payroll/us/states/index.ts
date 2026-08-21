@@ -35,18 +35,25 @@ import { DE_WITHHOLDING } from "./de.ts";
 import { GA_WITHHOLDING } from "./ga.ts";
 import { HI_WITHHOLDING } from "./hi.ts";
 import { IA_WITHHOLDING } from "./ia.ts";
+import { ID_WITHHOLDING } from "./id.ts";
 import { IL_WITHHOLDING } from "./il.ts";
 import { IN_WITHHOLDING } from "./in.ts";
+import { KS_WITHHOLDING } from "./ks.ts";
 import { KY_WITHHOLDING } from "./ky.ts";
+import { LA_WITHHOLDING } from "./la.ts";
 import { MA_WITHHOLDING } from "./ma.ts";
 import { ME_WITHHOLDING } from "./me.ts";
 import { MD_WITHHOLDING } from "./md.ts";
 import { DETROIT_WITHHOLDING, MI_WITHHOLDING } from "./mi.ts";
 import { MN_WITHHOLDING } from "./mn.ts";
+import { MO_WITHHOLDING } from "./mo.ts";
+import { MT_WITHHOLDING } from "./mt.ts";
 import { NC_WITHHOLDING } from "./nc.ts";
+import { ND_WITHHOLDING } from "./nd.ts";
 import { NJ_WITHHOLDING } from "./nj.ts";
 import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
+import { OK_WITHHOLDING } from "./ok.ts";
 import { OR_WITHHOLDING } from "./or.ts";
 import { PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING } from "./pa.ts";
 import { RI_WITHHOLDING } from "./ri.ts";
@@ -111,6 +118,13 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   RI_WITHHOLDING,
   VT_WITHHOLDING,
   HI_WITHHOLDING,
+  ID_WITHHOLDING,
+  KS_WITHHOLDING,
+  LA_WITHHOLDING,
+  MO_WITHHOLDING,
+  MT_WITHHOLDING,
+  ND_WITHHOLDING,
+  OK_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -135,16 +149,9 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
-  ID: "Idaho Guide to Income Tax Withholding, Computer Formula",
-  KS: "Kansas KW-100, Withholding Tax Guide",
-  LA: "Louisiana Employer's Withholding Tax Formula (R-1306)",
   MS: "Mississippi Computer Payroll Accounting Withholding Formula",
-  MO: "Missouri Employer's Tax Guide, Withholding Formula",
-  MT: "Montana Withholding Tax Guide",
   NE: "Nebraska Circular EN, Income Tax Withholding",
   NM: "New Mexico FYI-104, Wage Withholding Tax",
-  ND: "North Dakota Income Tax Withholding Rates and Instructions",
-  OK: "Oklahoma Income Tax Withholding Tables (Packet OW-2)",
 };
 
 /** The engines the pack carries, for the setup surface and readiness. */
@@ -244,6 +251,13 @@ export { OR_WITHHOLDING, OR_RATES_2026 } from "./or.ts";
 export { MN_WITHHOLDING, MN_RATES_2026 } from "./mn.ts";
 export { GA_WITHHOLDING, GA_EDITIONS, gaEditionForPayDate, gaStandardDeduction } from "./ga.ts";
 export { HI_WITHHOLDING, HI_RATES_2026 } from "./hi.ts";
+export { ID_WITHHOLDING, ID_RATES_2026_07_23 } from "./id.ts";
+export { KS_WITHHOLDING, KS_RATES_2026 } from "./ks.ts";
+export { LA_WITHHOLDING, LA_RATES_2026 } from "./la.ts";
+export { MO_WITHHOLDING, MO_RATES_2026 } from "./mo.ts";
+export { MT_WITHHOLDING, MT_RATES_2026 } from "./mt.ts";
+export { ND_WITHHOLDING, ND_RATES_2026 } from "./nd.ts";
+export { OK_WITHHOLDING, OK_RATES_2026 } from "./ok.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,
 } from "./ma.ts";

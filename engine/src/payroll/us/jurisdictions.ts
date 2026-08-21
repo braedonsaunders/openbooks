@@ -29,6 +29,13 @@ import { CO_CERTIFICATE, CO_REGION } from "./states/co-declaration.ts";
 import { CT_CERTIFICATE, CT_REGION } from "./states/ct-declaration.ts";
 import { DE_CERTIFICATE, DE_REGION } from "./states/de-declaration.ts";
 import { HI_CERTIFICATE, HI_REGION } from "./states/hi-declaration.ts";
+import { ID_CERTIFICATE, ID_REGION } from "./states/id-declaration.ts";
+import { KS_CERTIFICATE, KS_REGION } from "./states/ks-declaration.ts";
+import { LA_CERTIFICATE, LA_REGION } from "./states/la-declaration.ts";
+import { MO_CERTIFICATE, MO_REGION } from "./states/mo-declaration.ts";
+import { MT_CERTIFICATE, MT_REGION } from "./states/mt-declaration.ts";
+import { ND_CERTIFICATE, ND_REGION } from "./states/nd-declaration.ts";
+import { OK_CERTIFICATE, OK_REGION } from "./states/ok-declaration.ts";
 import { SC_CERTIFICATE, SC_REGION } from "./states/sc-declaration.ts";
 import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia-declaration.ts";
 import { IN_CERTIFICATE, IN_REGION } from "./states/in-declaration.ts";
@@ -961,6 +968,8 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     MD_CERTIFICATE, MD_MW507_NR, OR_CERTIFICATE, DE_CERTIFICATE,
     AL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
+    ID_CERTIFICATE, KS_CERTIFICATE, LA_CERTIFICATE,
+    MO_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, OK_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
@@ -1362,6 +1371,8 @@ const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
   IA: IA_REGION, MN: MN_REGION, WI: WI_REGION, UT: UT_REGION,
   MD: MD_REGION, OR: OR_REGION, DE: DE_REGION, AL: AL_REGION, SC: SC_REGION,
   AR: AR_REGION, ME: ME_REGION, RI: RI_REGION, VT: VT_REGION, HI: HI_REGION,
+  ID: ID_REGION, KS: KS_REGION, LA: LA_REGION,
+  MO: MO_REGION, MT: MT_REGION, ND: ND_REGION, OK: OK_REGION,
 };
 
 /**
