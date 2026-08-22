@@ -42,8 +42,9 @@ export function toXlsx(
   title: string,
   columns: { key: string; label: string }[],
   rows: Record<string, CellValue>[],
+  generatedAt?: Date,
 ): Promise<Buffer> {
-  return reportResultToXlsx(buildRunResult(title, columns, rows), { reportName: title })
+  return reportResultToXlsx(buildRunResult(title, columns, rows), { reportName: title, generatedAt })
 }
 
 /** Array-of-objects JSON keyed by column key — full-fidelity, human-diffable. */
