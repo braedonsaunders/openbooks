@@ -45,7 +45,7 @@ export async function resolveNav(
              coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
              coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
         from apps a
-        join app_versions v on v.id = a.active_version_id
+        join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.status = 'installed'
        order by a.sort_order, a.name
     `),
