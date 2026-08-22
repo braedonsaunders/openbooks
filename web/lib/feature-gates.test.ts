@@ -1043,6 +1043,16 @@ test('the surfaces this test was written for are covered', () => {
     'field-ticket catalog picker must drop inventory when Inventory is off — stored tickets stay',
   )
   assert.match(
+    read('lib/field-tickets.ts'),
+    /kind === 'inventory'[\s\S]{0,80}isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'field-ticket lines must not store inventory items when Inventory is off — existing lines stay',
+  )
+  assert.match(
+    read('app/api/field-tickets/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)[\s\S]{0,280}status: 404/,
+    'field-ticket add-line must 404 — not persist inventory items — when Inventory is off',
+  )
+  assert.match(
     read('app/(app)/items/page.tsx'),
     /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
     'the items page must not load recognition rules when Revenue Recognition is off',

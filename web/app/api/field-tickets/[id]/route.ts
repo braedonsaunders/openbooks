@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -88,6 +90,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const equipmentUnitId = isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+      if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
+        if (item.rows[0]?.kind === 'inventory') {
+          return NextResponse.json({ error: 'not found' }, { status: 404 })
+        }
       }
       await addTicketLine(orgId, userId, id, {
         itemId: body.itemId,
