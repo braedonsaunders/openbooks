@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import {
   accreteToZero,
@@ -40,6 +41,16 @@ import { orgReportingFramework, type ReportingFramework } from "./reporting-fram
 
 export class LeaseError extends Error {
   readonly name = "LeaseError";
+}
+
+function exactMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new LeaseError(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new LeaseError(`${label} must be an exact decimal`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +441,7 @@ export async function createLeaseAgreement(
   }
   assertLeaseTimingSupported(input.paymentTiming ?? "arrears");
 
+  const paymentAmount = exactMoney(input.paymentAmount, "Payment amount");
   const leaseId = randomUUID();
   await db.execute(sql`
     insert into lease_agreements
@@ -441,7 +453,7 @@ export async function createLeaseAgreement(
        department_id, project_id, location_id, custom, created_by, updated_by)
     values (${leaseId}, ${orgId}, ${input.subsidiaryId}, ${input.leaseNumber}, ${input.description ?? null},
             'draft', ${input.commencementOn}, ${input.termPeriods},
-            ${input.paymentFrequency}, ${input.paymentTiming ?? "arrears"}, ${normalizeMoney(input.paymentAmount)},
+            ${input.paymentFrequency}, ${input.paymentTiming ?? "arrears"}, ${paymentAmount},
             ${normalizeDecimal(input.annualDiscountRatePercent, 10)}, ${classification.model},
             ${JSON.stringify({ ...classificationInputs, resolvedCriteria: classification.criteria, framework })}::jsonb,
             ${input.exemption ?? null},
