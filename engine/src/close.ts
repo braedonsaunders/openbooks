@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
-import { businessToday } from "./business-date.ts";
+import { addCalendarDays, businessToday } from "./business-date.ts";
 import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
 
 export class CloseError extends Error {}
@@ -2771,22 +2771,26 @@ export async function runDueCloseAutomations(): Promise<number> {
   // executes inside its own tenant. Without this the contextless scheduler tick
   // is denied by default and no deadline automation ever runs.
   const due = await withBypassContext(() =>
-    db.execute<{ org_id: string; id: string }>(sql`
-    select distinct r.org_id, r.id
+    db.execute<{ org_id: string; id: string; target_close_date: string }>(sql`
+    select distinct r.org_id, r.id, r.target_close_date::text as target_close_date
       from close_runs r
       join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
       join orgs organization on organization.id = r.org_id and organization.env_kind = 'production'
-     where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 90
+     where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 91
   `));
   for (const run of due.rows) {
-    await withOrgContext(run.org_id, async () =>
-      runCloseAutomations({
-      orgId: run.org_id,
-      runId: run.id,
-      trigger: "deadline_approaching",
-      // The idempotency day is the org's business day, not the scheduler's UTC day.
-      eventKey: `deadline:${run.id}:${await businessToday(run.org_id)}`,
-    }));
+    await withOrgContext(run.org_id, async () => {
+      const today = await businessToday(run.org_id);
+      // Discovery is one UTC day wide so a west-coast org is not missed; the
+      // 90-day window is then applied on that org's own business day.
+      if (run.target_close_date > addCalendarDays(today, 90)) return;
+      await runCloseAutomations({
+        orgId: run.org_id,
+        runId: run.id,
+        trigger: "deadline_approaching",
+        eventKey: `deadline:${run.id}:${today}`,
+      });
+    });
   }
   return due.rows.length;
 }

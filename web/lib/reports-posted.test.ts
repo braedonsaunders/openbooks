@@ -108,8 +108,8 @@ test("financial statements exclude draft and other unposted journals", { skip: !
                    ), 0), 4)::text as total
               from documents
              where org_id = \${org.id} and status = 'posted'
-               and kind in (\${positiveKind}, \${creditKind}) and open_balance > 0.005
-               and coalesce(posting_date, document_date) <= current_date
+               and kind in (\${positiveKind}, \${creditKind}) and open_balance > 0
+               and coalesce(posting_date, document_date) <= \${asOf}
           \`);
           assert.equal(
             toUnits(aging.totals.total),

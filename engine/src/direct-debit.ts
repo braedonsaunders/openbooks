@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
 import { db, schema } from "./db.ts";
 import { sum } from "./money.ts";
 import { cancelPaymentRun, createPaymentDocument, nextNumber, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
@@ -12,6 +13,7 @@ export async function createDirectDebitRun(opts: {
   scheduledFor?: string | null;
 }): Promise<{ id: string; runNumber: string }> {
   if (!opts.invoiceDocumentIds.length) throw new PaymentError("select at least one invoice to collect");
+  const asOf = opts.scheduledFor ?? await businessToday(opts.orgId);
   const profileResult = (await db.execute<{ id: string; bank_account_id: string; subsidiary_id: string | null; currency: string; rail: string; direction: string }>(sql`
     select p.id, p.bank_account_id, p.subsidiary_id, p.currency, f.rail, f.direction
       from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.is_active
@@ -31,7 +33,7 @@ export async function createDirectDebitRun(opts: {
       from documents d join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount > 0
       left join lateral (select sum(a.amount) as applied from applications a where a.to_line_id = jl.id and a.unapplied_at is null) ap on true
-      join lateral (select pm.id, pm.party_bank_account_id from payment_mandates pm where pm.org_id = d.org_id and pm.party_id = d.party_id and pm.status = 'active' and (pm.valid_from is null or pm.valid_from <= coalesce(${opts.scheduledFor ?? null}::date, current_date)) and (pm.expires_on is null or pm.expires_on >= coalesce(${opts.scheduledFor ?? null}::date, current_date)) order by pm.signed_on desc nulls last, pm.created_at desc limit 1) m on true
+      join lateral (select pm.id, pm.party_bank_account_id from payment_mandates pm where pm.org_id = d.org_id and pm.party_id = d.party_id and pm.status = 'active' and (pm.valid_from is null or pm.valid_from <= ${asOf}::date) and (pm.expires_on is null or pm.expires_on >= ${asOf}::date) order by pm.signed_on desc nulls last, pm.created_at desc limit 1) m on true
      where d.id in ${opts.invoiceDocumentIds} and d.org_id = ${opts.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and d.currency = ${profile.currency} and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
        and abs(jl.amount) - coalesce(ap.applied, 0) > 0

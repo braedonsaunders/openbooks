@@ -395,7 +395,7 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
         from documents d
        where d.org_id = ${resolvedOrgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and d.open_balance > 0.005
+         and d.open_balance > 0
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     )
@@ -409,7 +409,7 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
       from open_items oi
       left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
      group by oi.party_id, p.display_name
-    having abs(sum(oi.open)) > 0.005
+    having abs(sum(oi.open)) > 0
      order by abs(sum(oi.open)) desc
   `));
   const rows: AgingRow[] = r.rows.map((x) => ({
@@ -1310,7 +1310,7 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
         from documents d
        where d.org_id = ${resolvedOrgId}
          and d.status = 'posted' and d.kind in (${positiveKind}, ${creditKind})
-         and d.open_balance > 0.005
+         and d.open_balance > 0
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
     )
@@ -1318,7 +1318,7 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
            oi.due as due_date, oi.age_days, oi.open
       from open_items oi
       left join parties p on p.id = oi.party_id and p.org_id = ${resolvedOrgId}
-     where abs(oi.open) > 0.005
+     where abs(oi.open) > 0
      order by p.display_name nulls last, oi.age_days desc
   `))
   const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }

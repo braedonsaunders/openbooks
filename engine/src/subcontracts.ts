@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "./money.ts";
 
@@ -783,6 +784,7 @@ export async function assertSubcontractPaymentCleared(
   vendorBillDocumentId: string,
   paymentAmount?: string | null,
 ): Promise<void> {
+  const today = await businessToday(orgId);
   const result = (await db.execute<{ control_type: string; reason: string; amount_limit: string | null; joint_payee: string | null }>(sql`
     select pc.control_type, pc.reason, pc.amount_limit::text, p.display_name as joint_payee
       from subcontract_payment_controls pc
@@ -791,7 +793,7 @@ export async function assertSubcontractPaymentCleared(
        and (pc.vendor_bill_document_id = ${vendorBillDocumentId}
          or exists(select 1 from vendor_pay_applications vpa where vpa.org_id = pc.org_id and vpa.id = pc.pay_application_id and vpa.vendor_bill_document_id = ${vendorBillDocumentId})
          or exists(select 1 from vendor_pay_applications vpa where vpa.org_id = pc.org_id and vpa.vendor_bill_document_id = ${vendorBillDocumentId} and vpa.subcontract_id = pc.subcontract_id and pc.pay_application_id is null and pc.vendor_bill_document_id is null))
-       and pc.effective_on <= current_date and (pc.expires_on is null or pc.expires_on >= current_date)
+       and pc.effective_on <= ${today} and (pc.expires_on is null or pc.expires_on >= ${today})
        and (${paymentAmount ?? null}::numeric is null or pc.amount_limit is null or ${paymentAmount ?? null}::numeric > pc.amount_limit)
      order by pc.amount_limit nulls first, pc.created_at
   `));
