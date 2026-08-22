@@ -37,6 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   await db.execute(sql`
     delete from account_group_members m using account_groups g
     where m.group_id = g.id and g.org_id = ${gate.user.orgId}
+      and m.org_id = ${gate.user.orgId}
       and g.dimension = ${group.dimension} and m.account_id = ${accountId}
   `);
   await db.execute(sql`
