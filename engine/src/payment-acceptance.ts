@@ -963,6 +963,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
         feeIncomeAccountId,
       },
       actorId,
+      orgId,
     );
     const submission = await submitAndReleaseIfUngated(
       "customer_payment",

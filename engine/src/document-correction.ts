@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "./db.ts";
 
 export class DocumentCorrectionError extends Error {}
@@ -76,7 +76,7 @@ export async function createDocumentCorrectionDraft(input: {
         ? await tx
             .select()
             .from(schema.documents)
-            .where(eq(schema.documents.id, input.sourceDocumentId))
+            .where(and(eq(schema.documents.id, input.sourceDocumentId), eq(schema.documents.orgId, input.orgId)))
         : [];
       if (!source) throw new DocumentCorrectionError("source document not found");
 

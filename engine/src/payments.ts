@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, sum, toUnits } from "./money.ts";
@@ -276,8 +276,9 @@ export async function updateDraftPayment(
     feeIncomeAccountId?: string | null;
   },
   userId: string,
+  orgId: string,
 ): Promise<void> {
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, id));
+  const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, id), eq(schema.documents.orgId, orgId)));
   if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
   if (doc.status !== "draft") throw new PaymentError("only draft payments can be edited");
 
@@ -364,7 +365,7 @@ export async function updateDraftPayment(
   const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits);
 
   await db.transaction(async (tx) => {
-    await tx.execute(sql`delete from document_lines where document_id = ${id}`);
+    await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`);
     if (bankAccountId && !isZero(total)) {
       await tx.insert(schema.documentLines).values({
         orgId: doc.orgId,
@@ -386,7 +387,7 @@ export async function updateDraftPayment(
         custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId })}::jsonb,
         subtotal = ${total}, tax_total = '0', total = ${total},
         updated_at = now(), updated_by = ${userId}
-      where id = ${id}
+      where id = ${id} and org_id = ${orgId}
     `);
   });
 }
@@ -1364,6 +1365,7 @@ export async function createPaymentRun(opts: {
         controlAccountId: first.control_account_id,
       },
       opts.createdBy,
+      opts.orgId,
     );
 
     // Latest approved, active bank account for the payee (may be none — the
@@ -1456,15 +1458,15 @@ export async function createPaymentRun(opts: {
 
 /** Cancel a draft run: void nothing — drafts are deleted, instructions cancelled. */
 export async function cancelPaymentRun(runId: string, orgId: string): Promise<void> {
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.status !== "draft" && run.status !== "rejected" && run.status !== "rolled_back") {
     throw new PaymentError(`a ${run.status} run cannot be cancelled`);
   }
   const instructions = await db
     .select()
     .from(schema.paymentInstructions)
-    .where(eq(schema.paymentInstructions.paymentRunId, runId));
+    .where(and(eq(schema.paymentInstructions.paymentRunId, runId), eq(schema.paymentInstructions.orgId, orgId)));
 
   await db.transaction(async (tx) => {
     for (const ins of instructions) {
@@ -1472,23 +1474,23 @@ export async function cancelPaymentRun(runId: string, orgId: string): Promise<vo
       await tx
         .update(schema.paymentInstructions)
         .set({ status: "cancelled", paymentDocumentId: null, updatedAt: new Date() })
-        .where(eq(schema.paymentInstructions.id, ins.id));
+        .where(and(eq(schema.paymentInstructions.id, ins.id), eq(schema.paymentInstructions.orgId, orgId)));
       if (ins.paymentDocumentId) {
         const [doc] = await tx
           .select({ status: schema.documents.status })
           .from(schema.documents)
-          .where(eq(schema.documents.id, ins.paymentDocumentId));
+          .where(and(eq(schema.documents.id, ins.paymentDocumentId), eq(schema.documents.orgId, orgId)));
         if (doc && doc.status !== "draft") {
           throw new PaymentError("run has payments that are no longer drafts — it cannot be cancelled");
         }
-        await tx.execute(sql`delete from document_lines where document_id = ${ins.paymentDocumentId}`);
-        await tx.execute(sql`delete from documents where id = ${ins.paymentDocumentId}`);
+        await tx.execute(sql`delete from document_lines where document_id = ${ins.paymentDocumentId} and org_id = ${orgId}`);
+        await tx.execute(sql`delete from documents where id = ${ins.paymentDocumentId} and org_id = ${orgId}`);
       }
     }
     await tx
       .update(schema.paymentRuns)
       .set({ status: "cancelled", updatedAt: new Date() })
-      .where(eq(schema.paymentRuns.id, runId));
+      .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   });
 }
 
@@ -1674,8 +1676,8 @@ export async function postPaymentRun(
   orgId: string,
   userId: string,
 ): Promise<{ posted: number; failures: { payee: string; error: string }[] }> {
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.status !== "generated" && run.status !== "delivered" && run.status !== "partially_failed") {
     throw new PaymentError(
       run.status === "confirmed"
@@ -2070,8 +2072,8 @@ export async function loadCpa005RunFile(
   orgId: string,
 ): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate EFT payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
   if (run.method !== "eft") throw new PaymentError(`CPA-005 export applies to EFT runs, not ${run.method}`);
 
@@ -2275,8 +2277,8 @@ function nachaCheckDigit(rt8: string): string {
 
 export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ filename: string; content: string; runNumber: string }> {
   await assertNotSandbox(orgId, "generate ACH payment file");
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
   if (run.method !== "ach") throw new PaymentError(`NACHA export applies to ACH runs, not ${run.method}`);
   const settings = await loadNachaSettings(orgId, runId);
@@ -2398,8 +2400,8 @@ ${tx}
 }
 
 export async function loadSepaRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
   if (run.method !== "sepa") throw new PaymentError(`SEPA export applies to SEPA runs, not ${run.method}`);
   const settings = await loadSepaSettings(orgId, runId);
@@ -2440,8 +2442,8 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
 
 /** Dispatch a payment run to its bank file by method (eft→CPA-005, ach→NACHA, sepa→pain.001). */
 export async function loadRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string; contentType: string }> {
-  const [run] = await db.select().from(schema.paymentRuns).where(eq(schema.paymentRuns.id, runId));
-  if (!run || run.orgId !== orgId) throw new PaymentError("payment run not found");
+  const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+  if (!run) throw new PaymentError("payment run not found");
   if (run.method === "ach") return { ...(await loadNachaRunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };
   if (run.method === "sepa") return { ...(await loadSepaRunFile(runId, orgId, now)), contentType: "application/xml" };
   return { ...(await loadCpa005RunFile(runId, orgId)), contentType: "text/plain; charset=us-ascii" };

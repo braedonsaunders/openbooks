@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
 import { runRecordFlows } from "./run.ts";
@@ -82,7 +82,7 @@ export async function submitForApproval(
     }
     const mutations = Object.assign({}, ...outcomes.map((o) => o.set ?? {}));
     if (Object.keys(mutations).length > 0) {
-      await db.update(schema.documents).set(mutations).where(eq(schema.documents.id, doc.id));
+      await db.update(schema.documents).set(mutations).where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     }
   }
 
@@ -105,7 +105,7 @@ export async function submitForApproval(
         updatedBy: actorId ?? doc.createdBy,
         updatedAt: new Date(),
       })
-      .where(eq(schema.documents.id, targetId));
+      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)));
     const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
     return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
   }
@@ -126,7 +126,7 @@ export async function submitForApproval(
       updatedBy: actorId ?? doc.createdBy,
       updatedAt: new Date(),
     })
-    .where(eq(schema.documents.id, targetId));
+    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)));
   return { gated: false, runId: null, flowError: null };
 }
 

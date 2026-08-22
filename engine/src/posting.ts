@@ -1275,7 +1275,7 @@ export async function postDocument(
     const [updated] = await db
       .update(schema.documents)
       .set(mutations)
-      .where(eq(schema.documents.id, doc.id))
+      .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)))
       .returning();
     effectiveDoc = updated;
   }
@@ -1326,7 +1326,7 @@ export async function postDocument(
     const [refreshed] = await db
       .select()
       .from(schema.documents)
-      .where(eq(schema.documents.id, doc.id));
+      .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     if (refreshed) effectiveDoc = refreshed;
   }
 
@@ -1523,6 +1523,7 @@ export async function postDocument(
       .where(
         and(
           eq(schema.documents.id, doc.id),
+          eq(schema.documents.orgId, doc.orgId),
           eq(schema.documents.status, "approved"),
         ),
       )
@@ -1618,7 +1619,7 @@ export async function runPostDocumentEffects(
   const lines = await db
     .select()
     .from(schema.documentLines)
-    .where(eq(schema.documentLines.documentId, documentId))
+    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
   const [org] = await db
     .select()
@@ -2209,6 +2210,7 @@ export async function regenerateGlImpactTx(
     .where(
       and(
         eq(schema.documents.id, doc.id),
+        eq(schema.documents.orgId, doc.orgId),
         eq(schema.documents.postedEntryId, entry.id),
         eq(schema.documents.status, "posted"),
       ),

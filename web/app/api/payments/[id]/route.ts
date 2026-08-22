@@ -61,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await updateDraftPayment(id, body, gate.authz.user.id)
+    await updateDraftPayment(id, body, gate.authz.user.id, gate.authz.user.orgId)
     const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
     return NextResponse.json(payment)
   } catch (e) {

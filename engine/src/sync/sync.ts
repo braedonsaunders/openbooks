@@ -1575,10 +1575,10 @@ export async function runSync(
                      posting_period_id = ${doc.postingPeriodId ?? null},
                      status = 'approved',
                      updated_at = now()
-               where id = ${have.id}
+               where id = ${have.id} and org_id = ${org.id}
             `);
             await db.execute(
-              sql`delete from document_lines where document_id = ${have.id}`,
+              sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
             );
             await insertImportedLines(
               db as unknown as SyncTx,
@@ -1752,9 +1752,9 @@ export async function runSync(
                 )}::jsonb
               end,
               updated_at = now()
-            where id = ${have.id}`);
+            where id = ${have.id} and org_id = ${org.id}`);
           await tx.execute(
-            sql`delete from document_lines where document_id = ${have.id}`,
+            sql`delete from document_lines where document_id = ${have.id} and org_id = ${org.id}`,
           );
           await insertImportedLines(
             tx,

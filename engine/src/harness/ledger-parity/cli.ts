@@ -2287,6 +2287,7 @@ async function runCore(): Promise<void> {
       referenceNumber: `PARITY-RCPT-${marker}`,
     },
     manifest.openbooks.actorId,
+    manifest.openbooks.orgId,
   );
   const erpCustomerPayment = await client.create<{ name: string }>(
     "Payment Entry",
@@ -2381,6 +2382,7 @@ async function runCore(): Promise<void> {
       referenceNumber: `PARITY-PAY-${marker}`,
     },
     manifest.openbooks.actorId,
+    manifest.openbooks.orgId,
   );
   const erpVendorPayment = await client.create<{ name: string }>(
     "Payment Entry",
@@ -3627,6 +3629,7 @@ async function runPostingRules(): Promise<void> {
           referenceNumber: `PARITY-EMP-PAY-${marker}`,
         },
         manifest.openbooks.actorId,
+        manifest.openbooks.orgId,
       );
       const erpEmployeePayment = await client.create<{ name: string }>(
         "Payment Entry",
@@ -5993,6 +5996,7 @@ async function runFxSettlementParity(): Promise<void> {
         referenceNumber: `FX-${paymentCase.label}-${marker}`,
       },
       manifest.openbooks.actorId,
+      manifest.openbooks.orgId,
     );
     await db.execute(sql`
       update documents
