@@ -193,7 +193,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'choose exactly one wage scope' }, { status: 422 })
     }
     const scopeRefs = await Promise.all([
-      employeePartyId ? db.execute(sql`select 1 from parties p join employee_roles er on er.party_id = p.id and er.is_active where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`) : null,
+      employeePartyId ? db.execute(sql`select 1 from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`) : null,
       tradeId ? db.execute(sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`) : null,
       departmentId ? db.execute(sql`select 1 from departments where org_id = ${orgId} and id = ${departmentId} and is_active`) : null,
       subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`) : null,
