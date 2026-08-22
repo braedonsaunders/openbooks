@@ -249,7 +249,8 @@ async function runMacrs(
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
       left join lateral (
         select e.occurred_on, e.amount from asset_events e
-         where e.asset_id = a.id and e.kind in ('disposed', 'written_off')
+         where e.asset_id = a.id and e.org_id = a.org_id and e.org_id = ${orgId}
+           and e.kind in ('disposed', 'written_off')
          order by e.occurred_on limit 1
       ) d on true
      where a.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}

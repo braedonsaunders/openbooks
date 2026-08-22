@@ -41,7 +41,8 @@ export async function computeUsNexusStatus(orgId: string, from: string, to: stri
       from documents d
       join orgs o on o.id = d.org_id
       left join addresses a
-        on a.party_id = d.party_id and a.is_default_shipping and a.country = 'US'
+        on a.org_id = d.org_id and a.org_id = ${orgId}
+       and a.party_id = d.party_id and a.is_default_shipping and a.country = 'US'
      where d.org_id = ${orgId}
        and d.kind in ('customer_invoice', 'customer_credit')
        and d.status = 'posted'
