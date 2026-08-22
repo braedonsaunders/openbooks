@@ -920,6 +920,7 @@ export async function recomputeFiling(args: {
               then information_return_recipients.exclusion_reason
             else excluded.exclusion_reason end,
           updated_at = now(), updated_by = ${args.actorId}
+        where information_return_recipients.org_id = ${args.orgId}
       `);
     }
     // Recipients that no longer trace to any cash: voided, never deleted.
