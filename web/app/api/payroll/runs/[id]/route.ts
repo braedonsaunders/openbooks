@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
            r.pay_date::text as pay_date, r.tax_year, r.run_status,
            r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
       from pay_runs r
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       left join pay_schedules s on s.id = r.pay_schedule_id
      where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]

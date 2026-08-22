@@ -1152,8 +1152,8 @@ async function readinessChecks(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounting_periods ep on ep.id = e.period_id and ep.org_id = e.org_id
-          join accounts a on a.id = l.account_id
-          join subsidiaries s on s.id = l.subsidiary_id
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+          join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
            and e.origin <> 'fx_revaluation'
            and (

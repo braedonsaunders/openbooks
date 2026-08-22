@@ -106,7 +106,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
                  r.period_start::text as period_start, r.period_end::text as period_end,
                  r.pay_date::text as pay_date, r.net_total, r.employee_count
             from pay_runs r
-            join documents d on d.id = r.document_id
+            join documents d on d.id = r.document_id and d.org_id = r.org_id
            where r.org_id = s.org_id and r.pay_schedule_id = s.id
            order by r.period_end desc limit 1) lr on true
        where s.org_id = ${orgId} and s.is_active
@@ -118,7 +118,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.net_total, r.employee_count
         from pay_runs r
-        join documents d on d.id = r.document_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules sc on sc.id = r.pay_schedule_id
        where r.org_id = ${orgId} and r.run_status = 'committed'
        order by r.pay_date desc, r.period_end desc limit 1
@@ -127,7 +127,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
       select
         (select count(*) from employee_payroll_profiles where org_id = ${orgId} and is_active) as active_employees,
         (select count(*) from pay_runs where org_id = ${orgId} and tax_year = ${taxYear} and run_status = 'committed') as runs_this_year,
-        (select count(*) from pay_runs r join documents d on d.id = r.document_id
+        (select count(*) from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
           where r.org_id = ${orgId} and d.status = 'draft') as in_progress,
         (select count(*) from pay_runs where org_id = ${orgId}) as total_runs
     `),

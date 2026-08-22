@@ -417,8 +417,8 @@ const getDocument: AssistantToolDef = {
              l.tax_amount, a.number as account_number, a.name as account_name,
              i.name as item_name
         from document_lines l
-       left join accounts a on a.id = l.account_id
-       left join items i on i.id = l.item_id
+       left join accounts a on a.id = l.account_id and a.org_id = l.org_id
+       left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.documentId} and l.org_id = ${authz.user.orgId}
        order by l.line_number
     `));

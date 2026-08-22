@@ -56,7 +56,7 @@ export default async function ReconcilePage({
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name
       from reconciliations r
-      join accounts a on a.id = r.account_id
+      join accounts a on a.id = r.account_id and a.org_id = r.org_id
       left join users u on u.id = r.signed_off_by
      where r.id = ${reconciliationId} and r.account_id = ${accountId}
        and r.org_id = ${authz.user.orgId}

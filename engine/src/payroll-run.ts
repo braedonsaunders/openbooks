@@ -800,7 +800,7 @@ export async function createPayRun(input: {
     if (runType === "regular") {
       const overlap = (await tx.execute<{ document_number: string }>(sql`
         select d.document_number from pay_runs r
-          join documents d on d.id = r.document_id
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
            and r.run_type = 'regular'
            and r.period_start <= ${periodEnd} and r.period_end >= ${periodStart}
@@ -1293,7 +1293,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
              sub.name as subsidiary_name, sub.country as subsidiary_country,
              sub.base_currency as subsidiary_currency
         from pay_runs r
-        join documents d on d.id = r.document_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        -- Lock the run and its document only. The subsidiary is read-only
@@ -3202,7 +3202,7 @@ export async function commitPayRun(input: {
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status from pay_runs r
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
     `));
     const run = runRows.rows[0];

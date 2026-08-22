@@ -16,7 +16,7 @@ export async function GET() {
            sv.name as server_name, a.number as account_number, a.name as account_name
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id
-      join accounts a on a.id = sc.account_id
+      join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
      where sc.org_id = ${gate.user.orgId} order by sc.created_at desc
   `))
   return NextResponse.json({ schedules: r.rows })

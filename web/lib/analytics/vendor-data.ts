@@ -129,7 +129,7 @@ export async function vendorData(
         sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend
       from ew e
       join journal_lines l on l.entry_id = e.id
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join parties p on p.id = l.party_id and p.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
@@ -149,7 +149,7 @@ export async function vendorData(
       select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as spend
       from ew e
       join journal_lines l on l.entry_id = e.id
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred')
       group by 1

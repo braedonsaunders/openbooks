@@ -22,7 +22,7 @@ export async function GET(req: Request) {
            r.signed_off_at, r.created_at,
            a.number as account_number, a.name as account_name
       from reconciliations r
-      join accounts a on a.id = r.account_id
+      join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.org_id = ${user.orgId}
        ${accountId ? sql` and r.account_id = ${accountId}` : sql``}
      order by r.created_at desc

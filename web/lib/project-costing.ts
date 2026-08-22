@@ -68,7 +68,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         coalesce(-sum(l.amount) filter (where a.type in ${REVENUE_SET}), 0) as revenue
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
     `) as any,
     // committed: open order remainders tagged to the project
@@ -77,7 +77,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
         coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'sales_order'), 0) as committed_revenue
       from document_lines dl
-      join documents d on d.id = dl.document_id
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
       where dl.org_id = ${orgId}
         and coalesce(dl.project_id, d.project_id) = ${projectId}
         and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
@@ -89,7 +89,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
         and a.type in ${COST_SET}
       group by a.id, a.number, a.name, a.type
@@ -315,7 +315,7 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
              coalesce(sum(dl.amount), 0) as cost,
              count(*) as cnt
         from document_lines dl
-        join documents d on d.id = dl.document_id
+        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable and dl.billed_by_line_id is null

@@ -441,7 +441,7 @@ export async function categoryWeekly(
              sum(l.amount) as net, sum(abs(l.amount)) as gross
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name
@@ -791,7 +791,7 @@ export async function categoryWeekly(
              coalesce(d.memo, e.memo, '') as memo, -l.amount as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-      left join documents d on d.id = e.source_document_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}

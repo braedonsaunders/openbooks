@@ -225,7 +225,7 @@ export async function RunsSection({
                  ps.return_code, ps.return_reason
             from payment_instructions i
             join parties p on p.id = i.payee_party_id
-            left join documents d on d.id = i.payment_document_id
+            left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
             left join payment_settlements ps on ps.payment_instruction_id = i.id
            where i.payment_run_id = ${runId}
            order by p.display_name
@@ -253,7 +253,7 @@ export async function RunsSection({
                  ri.payment_amount, ri.currency, ri.status, d.document_number,
                  p.display_name as party_name
             from payment_run_items ri
-            join documents d on d.id = ri.source_document_id
+            join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
            where ri.payment_run_id = ${runId}
            order by p.display_name, d.document_number

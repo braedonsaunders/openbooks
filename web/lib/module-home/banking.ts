@@ -108,7 +108,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
              sum(jl.amount) filter (where je.posting_date >= ${ago7}) as flow_7d
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-        join accounts a on a.id = jl.account_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
          and je.posting_date >= ${trendFrom}
@@ -119,9 +119,9 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
       select
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,
-        (select count(*) from bank_statements s join accounts a on a.id = s.account_id
+        (select count(*) from bank_statements s join accounts a on a.id = s.account_id and a.org_id = s.org_id
           where s.org_id = ${orgId} and a.is_active${acctScope}) as statements,
-        (select max(s.imported_at) from bank_statements s join accounts a on a.id = s.account_id
+        (select max(s.imported_at) from bank_statements s join accounts a on a.id = s.account_id and a.org_id = s.org_id
           where s.org_id = ${orgId} and a.is_active${acctScope}) as last_imported_at,
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}

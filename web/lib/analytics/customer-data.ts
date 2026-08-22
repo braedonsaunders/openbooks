@@ -277,7 +277,7 @@ export async function customerProfitability(period: { from: string; to: string }
       count(distinct e.id) as txns
     from ew e
     join journal_lines l on l.entry_id = e.id
-    join accounts a on a.id = l.account_id
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
     join projects pr on pr.id = l.project_id
     join parties cp on cp.id = pr.customer_id
     where a.type in ('income','income_other','cogs','expense','expense_deferred')

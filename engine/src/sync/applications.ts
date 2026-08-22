@@ -86,9 +86,9 @@ export async function reconcileApplications(
              l.account_id as account_id, l.party_id as party_id,
              l.subsidiary_id, l.currency, l.fx_rate, sign(l.amount) as amount_sign
         from journal_entries e
-        join documents d on d.id = e.source_document_id and d.posted_entry_id = e.id
-        join journal_lines l on l.entry_id = e.id and l.is_open_item
-        join accounts a on a.id = l.account_id
+        join documents d on d.id = e.source_document_id and d.posted_entry_id = e.id and d.org_id = e.org_id
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id and l.is_open_item
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where e.status = 'posted' and d.org_id = $1
          and a.type in ('liability_payable', 'asset_receivable')
          and d.custom->>$2 is not null`, [orgId, refKey]);

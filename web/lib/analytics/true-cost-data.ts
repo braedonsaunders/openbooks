@@ -251,7 +251,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       select l.account_id, a.number, a.name, to_char(e.posting_date, 'YYYY-MM') as month,
         l.department_id, sum(l.amount) as amount
       from journal_lines l
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId}
         and a.type in ('expense', 'expense_other', 'expense_deferred')
@@ -310,7 +310,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         (select coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) from time_entries t
           where t.org_id = ${orgId} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}) as nonbill_cost
       from journal_lines l
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
@@ -320,7 +320,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     db.execute(sql`
       select coalesce(-sum(l.amount), 0) as applied, count(*) as lines
       from journal_lines l
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.name ~* 'burden applied|overhead burden'
         and e.posting_date >= ${from} and e.posting_date <= ${to}

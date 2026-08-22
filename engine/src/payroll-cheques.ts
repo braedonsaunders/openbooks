@@ -56,7 +56,7 @@ export async function issuePayRunCheques(input: {
     const runRows = (await tx.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
       select r.run_status, d.subsidiary_id
         from pay_runs r
-        join documents d on d.id = r.document_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r
     `));

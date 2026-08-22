@@ -218,7 +218,7 @@ export async function listBillingRequests(orgId: string, projectId: string): Pro
                and selected.billing_request_id = br.id) as "fieldTicketCount",
            br.created_at as "createdAt"
       from billing_requests br
-      left join documents d on d.id = br.invoice_document_id
+      left join documents d on d.id = br.invoice_document_id and d.org_id = br.org_id
      where br.org_id = ${orgId} and br.project_id = ${projectId}
      order by br.created_at desc
   `))

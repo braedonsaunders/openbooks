@@ -33,7 +33,7 @@ const listBankReconciliations: AssistantToolDef = {
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
-        join accounts a on a.id = r.account_id
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId}
          ${a.accountId ? sql` and r.account_id = ${a.accountId}` : sql``}
        order by r.created_at desc
@@ -74,7 +74,7 @@ const getBankReconciliation: AssistantToolDef = {
              r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
-        join accounts a on a.id = r.account_id
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId} and r.id = ${a.reconciliationId}
     `));
     const recon = rows.rows[0];
@@ -126,7 +126,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                l.account_id, a.number as account_number, a.name as account_name
           from bank_statement_lines l
-          join accounts a on a.id = l.account_id
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where ${where}
          order by l.posted_on desc, l.line_number
          limit ${limit}

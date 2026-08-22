@@ -103,7 +103,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
       select g.id, g.title, g.subject_kind, g.subject_id, g.created_at,
              d.kind as doc_kind, d.total
         from flow_gates g
-        left join documents d on d.id = g.subject_id
+        left join documents d on d.id = g.subject_id and d.org_id = g.org_id
        where g.org_id = ${orgId} and g.status = 'pending'
        order by g.created_at desc
        limit 5

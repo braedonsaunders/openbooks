@@ -80,7 +80,7 @@ export async function loadOpportunity(id: string, orgId: string) {
        where m.opportunity_id = ${id} and m.org_id = ${orgId} order by m.is_primary desc, u.name`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency, d.total
-        from crm_opportunity_documents od join documents d on d.id = od.document_id
+        from crm_opportunity_documents od join documents d on d.id = od.document_id and d.org_id = od.org_id
        where od.opportunity_id = ${id} and od.org_id = ${orgId} and d.org_id = ${orgId}
        order by d.document_date desc, d.created_at desc`),
     db.execute(sql`
