@@ -451,7 +451,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
       select ${orgId}, ${request.subscriptionId}, coalesce(max(amendment_number), 0) + 1, ${request.type}, ${effectiveOn},
              'applied', ${request.idempotencyKey}, ${request.reason ?? null}, ${JSON.stringify(request)}::jsonb,
              ${JSON.stringify(before)}::jsonb, ${JSON.stringify(after)}::jsonb, now(), ${actorId}, ${actorId}, ${actorId}
-        from subscription_amendments where subscription_id = ${request.subscriptionId}
+        from subscription_amendments where org_id = ${orgId} and subscription_id = ${request.subscriptionId}
       returning id
     `));
     return { id: inserted.rows[0]!.id, replayed: false };
