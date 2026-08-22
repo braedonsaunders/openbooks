@@ -101,16 +101,16 @@ export async function insertEmailLog(row: {
   return r.rows[0]!.id;
 }
 
-export async function markEmailSent(id: string, providerMessageId: string): Promise<void> {
+export async function markEmailSent(orgId: string, id: string, providerMessageId: string): Promise<void> {
   await db.execute(sql`
     update email_log set status = 'sent', provider_message_id = ${providerMessageId}, sent_at = now(), updated_at = now()
-     where id = ${id}
+     where id = ${id} and org_id = ${orgId}
   `);
 }
 
-export async function markEmailFailed(id: string, error: string): Promise<void> {
+export async function markEmailFailed(orgId: string, id: string, error: string): Promise<void> {
   await db.execute(sql`
     update email_log set status = 'failed', error_message = ${error.slice(0, 500)}, updated_at = now()
-     where id = ${id}
+     where id = ${id} and org_id = ${orgId}
   `);
 }

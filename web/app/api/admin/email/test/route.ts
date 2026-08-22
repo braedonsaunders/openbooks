@@ -44,11 +44,11 @@ export async function POST(req: Request) {
       text: `This is a test email from OpenBooks, sent via ${transport.provider}.`,
       html: `<p>This is a test email from OpenBooks, sent via <strong>${transport.provider}</strong>.</p>`,
     })
-    await markEmailSent(logId, id)
+    await markEmailSent(orgId, logId, id)
     return NextResponse.json({ ok: true, provider: transport.provider, messageId: id })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'send failed'
-    await markEmailFailed(logId, message)
+    await markEmailFailed(orgId, logId, message)
     return NextResponse.json({ error: message }, { status: 422 })
   }
 }

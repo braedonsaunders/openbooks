@@ -86,12 +86,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
           text: d.text,
           attachments: d.attachments,
         });
-        await markEmailSent(logId, id);
+        await markEmailSent(d.orgId, logId, id);
         if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, logId, id);
         return { id };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        await markEmailFailed(logId, message);
+        await markEmailFailed(d.orgId, logId, message);
         if (reportDeliveryId) {
           const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           await markReportDeliveryFailed(d.orgId, reportDeliveryId, logId, message, finalQueueAttempt);

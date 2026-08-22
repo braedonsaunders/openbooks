@@ -329,15 +329,17 @@ export function startMirrorScheduler(): void {
                   and sr.status = 'failed'
                   and sr.started_at > coalesce((
                     select max(ok.finished_at) from sync_runs ok
-                     where ok.connection_id = c.id and ok.kind = 'incremental' and ok.status = 'ok'
+                     where ok.connection_id = c.id and ok.org_id = c.org_id
+                       and ok.kind = 'incremental' and ok.status = 'ok'
                   ), '-infinity'::timestamptz)
               ) as scheduled_failures_since_success
-            from sync_runs sr where sr.connection_id = c.id
+            from sync_runs sr where sr.connection_id = c.id and sr.org_id = c.org_id
           ) history
          where c.mirror_enabled and c.status not in ('paused', 'unconfigured')
            and not exists (
              select 1 from sync_runs running
-              where running.connection_id = c.id and running.kind = 'incremental' and running.status = 'running'
+              where running.connection_id = c.id and running.org_id = c.org_id
+                and running.kind = 'incremental' and running.status = 'running'
            )`))) as unknown as {
         rows: {
           id: string;
