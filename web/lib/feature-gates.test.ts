@@ -2082,6 +2082,21 @@ test('the surfaces this test was written for are covered', () => {
     'the item-rate-book form must hide the currency control when Multi-currency is off',
   )
   assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency[\s\S]{0,600}for update/,
+    'item-rate-book UPDATE must refuse currency when Multi-currency is off — stored books stay',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,200}status: 404[\s\S]{0,600}for update/,
+    'item-rate-book UPDATE must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /currency = case when \$\{body\.currency === undefined\} then currency/,
+    'item-rate-book UPDATE must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
     read('app/api/admin/payment-operations/[resource]/route.ts'),
     /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
     'payment-format create must refuse currency when Multi-currency is off — stored formats stay',
