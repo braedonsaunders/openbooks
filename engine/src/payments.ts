@@ -1439,10 +1439,10 @@ export async function createPaymentRun(opts: {
       updated_at = now(), updated_by = ${opts.createdBy}
     from (
       select payment_run_id, count(*)::integer as payment_count, coalesce(sum(amount), 0) as total_amount
-        from payment_instructions where payment_run_id = ${run.id} and status <> 'cancelled'
+        from payment_instructions where org_id = ${opts.orgId} and payment_run_id = ${run.id} and status <> 'cancelled'
        group by payment_run_id
     ) x
-    where r.id = x.payment_run_id
+    where r.id = x.payment_run_id and r.org_id = ${opts.orgId}
   `);
   await db.insert(schema.paymentEvents).values({
     orgId: opts.orgId,

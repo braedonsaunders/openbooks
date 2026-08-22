@@ -56,7 +56,7 @@ export async function captureTransactionAuditSnapshot(
       'applications', coalesce((
         select jsonb_agg(to_jsonb(a) order by a.applied_on, a.id)
           from applications a
-         where e.id is not null and (
+         where a.org_id = d.org_id and e.id is not null and (
            a.from_line_id in (
              select jl.id from journal_lines jl where jl.entry_id = e.id and jl.org_id = e.org_id
            )
