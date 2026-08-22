@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader, cn } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { listTaxRegimes } from '@openbooks/engine/src/tax-pool-run.ts'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
@@ -61,12 +62,20 @@ export default async function Assets({
   )
 
   if (tab === 'tax-depreciation') {
-    const regimes = await listTaxRegimes(orgId)
+    const [regimes, today] = await Promise.all([
+      listTaxRegimes(orgId),
+      businessToday(orgId),
+    ])
     return (
       <ListPageLayout
         header={<><PageHeader title={t('list.title')} description={t('list.description')} />{tabsNav}</>}
       >
-        <TaxPoolsView canRun={canManage} canConfigure={canSetupTaxDepreciation} regimes={regimes} />
+        <TaxPoolsView
+          canRun={canManage}
+          canConfigure={canSetupTaxDepreciation}
+          regimes={regimes}
+          defaultTaxYear={Number(today.slice(0, 4)) - 1}
+        />
       </ListPageLayout>
     )
   }
