@@ -429,6 +429,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           end,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
+        where customer_roles.org_id = ${user.orgId}
       `)
     }
   }
