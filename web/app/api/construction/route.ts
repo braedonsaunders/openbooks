@@ -14,6 +14,7 @@ import {
 import { guardPermission, requirePermission } from "../../../lib/authz";
 import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
+import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -200,7 +201,9 @@ export async function POST(req: Request) {
       case "addChangeOrder": {
         if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const number = String(body.number ?? "").trim();
-        const amount = normalizeMoney(String(body.amount ?? "0"));
+        const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
+        if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        const amount = normalizeMoney(amountRaw);
         const targetSovLineId = typeof body.targetSovLineId === "string" && body.targetSovLineId ? body.targetSovLineId : null;
         if (!number || cmp(amount, "0") === 0) throw new ConstructionBillingError("Change-order number and a non-zero amount are required");
         if (cmp(amount, "0") < 0 && !targetSovLineId) throw new ConstructionBillingError("A deductive change order must identify the schedule line it reduces");
@@ -371,7 +374,9 @@ export async function POST(req: Request) {
       }
       case "releaseRetainage": {
         if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
-        const r = await releaseRetainage(orgId, userId, body.projectId, body.periodEnd, String(body.amount ?? "0"));
+        const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
+        if (amountRaw === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        const r = await releaseRetainage(orgId, userId, body.projectId, body.periodEnd, normalizeMoney(amountRaw));
         return NextResponse.json(r);
       }
       default:

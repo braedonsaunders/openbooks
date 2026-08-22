@@ -5,6 +5,7 @@ import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { assetBasisChanges, mergedAssetBasis, postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset } from '../_lib'
@@ -248,7 +249,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   let ratePercent: string | null | undefined
   if (body.ratePercent !== undefined) {
-    const rate = body.ratePercent === null || body.ratePercent === '' ? null : String(body.ratePercent)
+    const rate = body.ratePercent === null || body.ratePercent === '' ? null : canonicalDecimal(body.ratePercent, 4)
+    if (body.ratePercent !== null && body.ratePercent !== '' && rate === null) {
+      return bad('Rate must be an exact non-negative percent')
+    }
     try {
       if (rate !== null && (toUnits(rate) < 0n || cmp(rate, '10000') > 0)) throw new Error('invalid rate')
     } catch {
