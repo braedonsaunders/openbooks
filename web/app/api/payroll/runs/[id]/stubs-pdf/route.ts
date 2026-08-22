@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { mergedRunStubsPdf } from '../../../../../../lib/payroll-outputs'
@@ -21,8 +22,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const set = new URL(req.url).searchParams.get('set') === 'print' ? 'print' : 'all'
   const merged = await mergedRunStubsPdf(gate.user.orgId, id, { set })
   if (!merged) return NextResponse.json({ error: 'no stubs to print' }, { status: 404 })
+  const stamp = await businessToday(gate.user.orgId)
   return pdfResponse(
     Buffer.from(merged.pdf),
-    safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}`),
+    safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}-${stamp}`),
   )
 }
