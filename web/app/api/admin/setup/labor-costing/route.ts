@@ -108,9 +108,25 @@ export async function PUT(req: Request) {
   const body = await req.json().catch(() => ({}))
 
   const s = body.settings ?? {}
+  const hoursPerDayRaw = s.hoursPerDay == null || s.hoursPerDay === ''
+    ? '8'
+    : canonicalDecimal(s.hoursPerDay, 4)
+  if (
+    hoursPerDayRaw === null ||
+    compareDecimal(hoursPerDayRaw, '0') <= 0 ||
+    compareDecimal(hoursPerDayRaw, '24') > 0
+  ) {
+    return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
+  }
+  let hoursPerDay: string
+  try {
+    hoursPerDay = normalizeMoney(hoursPerDayRaw)
+  } catch {
+    return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
+  }
   const settings = {
     mode: s.mode === 'post' ? 'post' : 'off',
-    hoursPerDay: Number(s.hoursPerDay) > 0 && Number(s.hoursPerDay) <= 24 ? Number(s.hoursPerDay) : 8,
+    hoursPerDay,
     annualHours: Number(s.annualHours) > 0 && Number(s.annualHours) <= 8784 ? Number(s.annualHours) : 2080,
     components: cleanComponents(s.components),
   }
