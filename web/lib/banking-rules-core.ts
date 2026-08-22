@@ -22,7 +22,7 @@ export type RuleOp = TextOp | NumberOp | FlowOp | DateOp
 export interface RuleCondition {
   field: RuleField
   op: RuleOp
-  value?: string | number | [number, number]
+  value?: string | number | [string | number, string | number]
 }
 
 export interface RuleConditionGroup {
@@ -42,7 +42,7 @@ export interface RuleCriteria {
 
 export interface RuleSplitLine {
   accountId: string
-  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: number }
+  portion: { kind: 'remainder' } | { kind: 'percent'; value: number } | { kind: 'fixed'; value: string | number }
   partyId?: string | null
   departmentId?: string | null
   projectId?: string | null
@@ -104,7 +104,11 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
       const absolute = moneyAbs(amount)
       if (cond.op === 'between' && Array.isArray(cond.value)) {
         const [min, max] = cond.value
-        return cmp(absolute, String(min)) >= 0 && cmp(absolute, String(max)) <= 0
+        try {
+          return cmp(absolute, normalizeMoney(String(min))) >= 0 && cmp(absolute, normalizeMoney(String(max))) <= 0
+        } catch {
+          return false
+        }
       }
       let value: string
       try { value = normalizeMoney(String(cond.value)) } catch { return false }
