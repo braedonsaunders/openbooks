@@ -35,6 +35,8 @@ export type EvalContext = {
   rows: RowMap
   requestContext?: {
     now?: Date
+    /** Org business day (YYYY-MM-DD). `today` defaults use this, never the UTC day. */
+    today?: string
     currentUserName?: string | null
   }
 }
@@ -296,10 +298,10 @@ export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalConte
     case 'literal':
       return expr.value
     case 'today':
-      // <input type="date"> expects the LOCAL wall-clock date (yyyy-mm-dd).
-      // Built from local components — toISOString() would yield the UTC date,
+      // Product writers pass the org business day. Without it, fall back to
+      // the local wall-clock date — toISOString() would yield the UTC day,
       // the wrong calendar day for evening fills west of Greenwich.
-      return localDateString(now)
+      return ctx.requestContext?.today ?? localDateString(now)
     case 'now':
       // <input type="datetime-local"> expects LOCAL yyyy-mm-ddThh:mm.
       return `${localDateString(now)}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`

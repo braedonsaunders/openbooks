@@ -177,9 +177,9 @@ export function parseRecurlySettlement(payload: {
     id?: string;
     description?: string;
   }[];
-}): ParsedSettlement {
+}, fallbackDate?: string): ParsedSettlement {
   const currency = (payload.currency ?? "USD").toUpperCase();
-  const date = (payload.closed_at ?? new Date().toISOString()).slice(0, 10);
+  const date = (payload.closed_at ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
   const lines: ParsedSettlementLine[] = [];
   if (payload.lines?.length) {
     for (const l of payload.lines) {
@@ -246,12 +246,12 @@ export function parseChargebeeSettlement(payload: {
     entity_type?: string;
   }[];
   // taxes/fees may appear as special entity types
-}): ParsedSettlement {
+}, fallbackDate?: string): ParsedSettlement {
   const currency = (payload.currency_code ?? "USD").toUpperCase();
   const settlementDate =
     typeof payload.date === "number"
       ? new Date(payload.date * 1000).toISOString().slice(0, 10)
-      : String(payload.date ?? new Date().toISOString()).slice(0, 10);
+      : String(payload.date ?? fallbackDate ?? new Date().toISOString()).slice(0, 10);
   const lines: ParsedSettlementLine[] = [];
   if (payload.line_items?.length) {
     for (const li of payload.line_items) {

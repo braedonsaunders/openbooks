@@ -170,7 +170,15 @@ async function createCustomRecord(
   // Seed field defaults (today/now/current-user/expression); repeating line
   // lists start empty — same as the interactive draft path.
   const values: FieldValueMap = {};
-  const ctx = { values, rows: {}, requestContext: { now: new Date(), currentUserName: user.name ?? null } };
+  const ctx = {
+    values,
+    rows: {},
+    requestContext: {
+      now: new Date(),
+      today: await businessToday(user.orgId),
+      currentUserName: user.name ?? null,
+    },
+  };
   for (const section of sections) {
     if (section.repeating) {
       values[section.id] = [];

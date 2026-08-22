@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { resolveDefaultValue, type FieldValueMap } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
 import { nextDocumentNumber } from '../../../../../lib/bills'
@@ -38,7 +39,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
   const ctx = {
     values,
     rows: {},
-    requestContext: { now: new Date(), currentUserName: user.name ?? null },
+    requestContext: {
+      now: new Date(),
+      today: await businessToday(user.orgId),
+      currentUserName: user.name ?? null,
+    },
   }
   // Seed header-field defaults (today/now/current-user/expression); repeating
   // line lists start empty — rows and their defaults are added in the drawer.
