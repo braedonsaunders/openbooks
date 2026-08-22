@@ -287,7 +287,8 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
       await db.execute(sql`
         insert into app_storage (org_id, app_id, namespace, key, value)
         values (${orgId}, ${appId}, ${namespace}, ${key}, ${JSON.stringify(value ?? null)}::jsonb)
-        on conflict (app_id, namespace, key) do update set value = excluded.value, updated_at = now()`)
+        on conflict (app_id, namespace, key) do update set value = excluded.value, updated_at = now()
+        where app_storage.org_id = ${orgId}`)
     },
     async list(prefix, namespace) {
       const like = prefix.replace(/[%_\\]/g, (m) => '\\' + m) + '%'
