@@ -85,6 +85,15 @@ test("payment-term insert persist writes discountPercent through canonicalDecima
   assert.doesNotMatch(body, /moneyOrNull\(f\.discountPercent\)/);
 });
 
+test("payment-term update persist writes discountPercent through canonicalDecimal then normalizeMoney", () => {
+  const start = loader.indexOf("update payment_terms");
+  const next = loader.indexOf("insert into payment_terms");
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.ok(start >= 0 && next > start, "payment-term discount UPDATE persist is defined");
+  assert.match(body, /persistPaymentTermDiscountPercent\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.discountPercent\)/);
+});
+
 test("time-entry insert persist writes hours through canonicalDecimal then normalizeMoney", () => {
   const helperStart = loader.indexOf("function persistTimeEntryHours");
   const helperEnd = loader.indexOf("\n}", helperStart);
