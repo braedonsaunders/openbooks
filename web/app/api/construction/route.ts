@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/src/db.ts";
 import {
   ConstructionBillingError,
   approvePayApplication,
@@ -39,7 +39,11 @@ export async function GET(req: Request) {
   }
 
   const retAcct = (await db.execute<{ acct: string | null }>(sql`
-    select settings->'controlAccounts'->>'retainageReceivable' as acct from orgs where id = ${orgId}
+    select a.id as acct
+      from orgs o
+      join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
+                     and a.org_id = o.id
+     where o.id = ${orgId}
   `));
   const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
@@ -89,6 +93,17 @@ export async function GET(req: Request) {
     committedCost: committed?.committed?.cost ?? "0.0000",
     retainageConfigured: Boolean(retainageAccountId),
   });
+}
+
+async function pinIncomeAccount(exec: SqlExecutor, orgId: string, accountId: unknown): Promise<string | null> {
+  if (accountId == null || accountId === "") return null;
+  const id = String(accountId);
+  const owned = (await exec.execute(sql`
+    select 1 from accounts
+     where org_id = ${orgId} and id = ${id} and is_active and not is_summary
+  `));
+  if (!owned.rows.length) throw new ConstructionBillingError("Income account not found");
+  return id;
 }
 
 async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
@@ -154,6 +169,7 @@ export async function POST(req: Request) {
         const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
         if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
         if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
+        const incomeAccountId = await pinIncomeAccount(db, orgId, body.incomeAccountId);
         const id = await db.transaction(async (tx) => {
           const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`));
           if (prior.rows.length) throw new ConstructionBillingError("After billing begins, contract value must change through an approved change order");
@@ -161,12 +177,12 @@ export async function POST(req: Request) {
             insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, retainage_percent,
                                    income_account_id, sort_order, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${body.itemNo ?? null}, ${description}, ${scheduledValue},
-                    ${retainagePercent}, ${body.incomeAccountId ?? null}, ${Number(body.sortOrder ?? 0)}, ${userId}, ${userId})
+                    ${retainagePercent}, ${incomeAccountId}, ${Number(body.sortOrder ?? 0)}, ${userId}, ${userId})
             returning id
           `));
           const createdId = created.rows[0]!.id;
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'sov_lines', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, itemNo: body.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId: body.incomeAccountId ?? null } })}::jsonb, ${userId})`);
+            values (${orgId}, 'sov_lines', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, itemNo: body.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId } })}::jsonb, ${userId})`);
           return createdId;
         });
         return NextResponse.json({ id }, { status: 201 });
@@ -188,9 +204,10 @@ export async function POST(req: Request) {
           const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
           if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
           if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
+          const incomeAccountId = await pinIncomeAccount(tx, orgId, body.incomeAccountId);
           const after = (await tx.execute<any>(sql`
             update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
-                   retainage_percent = ${retainagePercent}, income_account_id = ${body.incomeAccountId ?? null}, updated_at = now(), updated_by = ${userId}
+                   retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId} returning *
           `));
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

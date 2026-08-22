@@ -172,7 +172,11 @@ async function nextNumber(
 
 async function retainageReceivableAccount(tx: SqlExecutor, orgId: string): Promise<string | null> {
   const r = (await tx.execute<{ acct: string | null }>(sql`
-    select settings->'controlAccounts'->>'retainageReceivable' as acct from orgs where id = ${orgId}
+    select a.id as acct
+      from orgs o
+      join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
+                     and a.org_id = o.id
+     where o.id = ${orgId}
   `));
   return r.rows[0]?.acct ?? null;
 }
@@ -487,7 +491,17 @@ export async function generatePayApplicationInvoice(
     for (const src of linesRes.rows) {
       const c = byLine.get(src.sov_line_id)!;
       if (cmp(c.grossThisPeriod, "0") === 0) continue;
-      const acct = src.income_account_id ?? defIncome;
+      let acct = defIncome;
+      if (src.income_account_id) {
+        const owned = (await tx.execute<{ id: string }>(sql`
+          select id from accounts
+           where org_id = ${orgId} and id = ${src.income_account_id} and is_active and not is_summary
+        `));
+        if (!owned.rows[0]) {
+          throw new ConstructionBillingError("No income account configured for a schedule-of-values line");
+        }
+        acct = owned.rows[0].id;
+      }
       if (!acct) throw new ConstructionBillingError("No income account configured for a schedule-of-values line");
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description, quantity,
