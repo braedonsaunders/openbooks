@@ -13,7 +13,7 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadEquipment } from '../../../api/equipment/_lib'
 import { NewEquipmentButton } from './NewEquipmentButton'
 import { EquipmentDrawer } from './EquipmentDrawer'
-import { subsidiaryFeatureEnabled } from '../../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 export default async function EquipmentPage({ searchParams }: { searchParams: Promise<Record<string,string|string[]|undefined>> }) {
@@ -24,7 +24,7 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
    const canManage = can(authz,'assets.manage'); const sp = await searchParams
   const equipmentId = typeof sp.equipment === 'string' ? sp.equipment : undefined
   const allowed = authz.allowedSubsidiaryIds ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``
-  const [summary,open,pickers,subsidiaryUiEnabled] = await Promise.all([
+  const [summary,open,pickers,subsidiaryUiEnabled,fixedAssetsEnabled] = await Promise.all([
     db.execute(sql`
       select coalesce(sum(e.purchase_price),0) purchase,
              count(*) filter(where e.status='active') active,
@@ -42,11 +42,12 @@ export default async function EquipmentPage({ searchParams }: { searchParams: Pr
       db.execute(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active and not is_elimination ${authz.allowedSubsidiaryIds ? sql`and id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by name`) as any,
     ]) : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
   ])
   const requestedReturn = pickString(sp.drawerReturn)
-  return <ListPageLayout header={<><PageHeader title={t('title')} description={t('pageDescription')} actions={canManage?<NewEquipmentButton/>:undefined}/><div className="flex flex-wrap items-center gap-2"><Link href="/assets" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('fixedAssets')}</Link><Link href="/assets?tab=tax-depreciation" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('taxDepreciation')}</Link><Link href="/docs/item-rates" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link></div></>}>
+  return <ListPageLayout header={<><PageHeader title={t('title')} description={t('pageDescription')} actions={canManage?<NewEquipmentButton/>:undefined}/><div className="flex flex-wrap items-center gap-2">{fixedAssetsEnabled ? <><Link href="/assets" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('fixedAssets')}</Link><Link href="/assets?tab=tax-depreciation" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('taxDepreciation')}</Link></> : null}<Link href="/docs/item-rates" className="text-sm text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link></div></>}>
     <div className="space-y-5"><KpiStrip items={[{label:t('metrics.active'),value:String(summary.rows[0]?.active??0)},{label:t('metrics.purchaseBasis'),value:money(summary.rows[0]?.purchase)},{label:t('metrics.recovery'),value:money(summary.rows[0]?.recovery)},{label:t('metrics.billable'),value:money(summary.rows[0]?.billable)}]}/>
-    <EntityListView recordType="equipment_unit" orgId={authz.user.orgId} userId={authz.user.id} canManage={can(authz,'admin.customization.manage')} sp={sp} emptyAction={canManage?<NewEquipmentButton/>:undefined} drawer={open&&pickers&&(!authz.allowedSubsidiaryIds||authz.allowedSubsidiaryIds.has(String(open.unit.subsidiary_id)))?<EquipmentDrawer payload={open} items={pickers[0].rows} assets={pickers[1].rows} books={pickers[2].rows} subsidiaries={subsidiaryUiEnabled ? pickers[3].rows : []} canManage={canManage} closeHref={requestedReturn?.startsWith('/assets/equipment') ? requestedReturn : '/assets/equipment'}/>:null}/>
+    <EntityListView recordType="equipment_unit" orgId={authz.user.orgId} userId={authz.user.id} canManage={can(authz,'admin.customization.manage')} sp={sp} emptyAction={canManage?<NewEquipmentButton/>:undefined} drawer={open&&pickers&&(!authz.allowedSubsidiaryIds||authz.allowedSubsidiaryIds.has(String(open.unit.subsidiary_id)))?<EquipmentDrawer payload={open} items={pickers[0].rows} assets={fixedAssetsEnabled ? pickers[1].rows : []} books={pickers[2].rows} subsidiaries={subsidiaryUiEnabled ? pickers[3].rows : []} canManage={canManage} closeHref={requestedReturn?.startsWith('/assets/equipment') ? requestedReturn : '/assets/equipment'} fixedAssetsEnabled={fixedAssetsEnabled}/>:null}/>
     </div>
   </ListPageLayout>
 }

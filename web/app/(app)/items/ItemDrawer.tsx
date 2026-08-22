@@ -64,6 +64,7 @@ export function ItemDrawer({
   laborPricing = false,
   inventoryCosting = false,
   fairValuePrices = false,
+  timeTracking = false,
 }: {
   payload: ItemPayload
   accounts: AccountOpt[]
@@ -78,6 +79,8 @@ export function ItemDrawer({
   inventoryCosting?: boolean
   /** Standalone selling prices — Revenue Recognition Features switch. */
   fairValuePrices?: boolean
+  /** Show-on-timesheet flag — Time Tracking Features switch. */
+  timeTracking?: boolean
 }) {
   const t = useTranslations('items')
   const tCommon = useTranslations('common')
@@ -155,7 +158,7 @@ export function ItemDrawer({
       expenseAccountId: expenseAccountId || null,
       costRecoveryAccountId: costRecoveryAccountId || null,
       taxCodeId: taxCodeId || null,
-      showOnTimesheet,
+      ...(timeTracking ? { showOnTimesheet } : {}),
       ...(fairValuePrices
         ? {
             recognitionRuleId: recognitionRuleId || null,
@@ -167,7 +170,7 @@ export function ItemDrawer({
         : {}),
       custom: customValues,
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -567,7 +570,7 @@ export function ItemDrawer({
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
 
-        {/* -- flags --------------------------------------------------- */}
+        {timeTracking ? (
         <section className={editable ? 'flex flex-wrap items-center gap-6' : 'grid gap-4 sm:grid-cols-2'}>
           {editable ? <label className="flex items-center gap-2">
             <input
@@ -579,6 +582,7 @@ export function ItemDrawer({
             <span className="text-sm">{t('drawer.showOnTimesheet')}</span>
           </label> : <div className={field}><Label>{t('drawer.showOnTimesheet')}</Label><ReadOnlyValue value={showOnTimesheet ? tCommon('labels.yes') : tCommon('labels.no')} /></div>}
         </section>
+        ) : null}
       </div>
     </UrlDrawer>
   )

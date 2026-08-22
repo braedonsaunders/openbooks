@@ -834,8 +834,48 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/items/[id]/route.ts'),
+    /isFeatureEnabled\(user\.orgId, 'timeTracking'\)/,
+    'item catalog PATCH must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
     /status: 404/,
     'item catalog PATCH must 404 — not persist — revenue-recognition fields when the feature is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /timeTracking \? \{ showOnTimesheet \}/,
+    'the item drawer must not send show-on-timesheet when Time Tracking is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /\{timeTracking \? \(/,
+    'the item drawer must hide show-on-timesheet when Time Tracking is off',
+  )
+  assert.match(
+    read('app/api/equipment/[id]/capitalize/route.ts'),
+    /isFeatureEnabled\([^,]+, 'fixedAssets'\)/,
+    'equipment capitalize must not write fixed-asset rows when Fixed Assets is off — existing units stay',
+  )
+  assert.match(
+    read('app/api/equipment/[id]/capitalize/route.ts'),
+    /status: 404/,
+    'equipment capitalize must 404 — not mint a fixed asset — when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/api/equipment/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'fixedAssets'\)/,
+    'equipment PATCH must not change the fixed-asset link when Fixed Assets is off — existing links stay',
+  )
+  assert.match(
+    read('app/(app)/assets/equipment/EquipmentDrawer.tsx'),
+    /fixedAssetsEnabled && !e\.fixed_asset_id/,
+    'equipment drawer must hide capitalize when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/(app)/assets/equipment/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'fixedAssets'\)/,
+    'equipment page must hide Fixed Assets links when the switch is off',
   )
   assert.match(
     read('app/(app)/items/page.tsx'),
