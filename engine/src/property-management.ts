@@ -445,7 +445,7 @@ export async function createPropertyLease(input: {
       insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
         security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
       values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${input.billingDay ?? 1},
-        ${input.paymentTermsDays ?? 0},${normalizeMoney(input.securityDepositRequired ?? "0")},${input.camMethod ?? "none"},${camShare},
+        ${input.paymentTermsDays ?? 0},${exactMoney(input.securityDepositRequired ?? "0", "Security deposit")},${input.camMethod ?? "none"},${camShare},
         ${input.lateFeeType ?? "none"},${exactMoney(input.lateFeeValue ?? "0", "Late-fee value")},${input.graceDays ?? 0},${input.autoInvoice ?? true},${input.autoPost ?? false},${input.actorId},${input.actorId}) returning id
     `));
     const id = inserted.rows[0]!.id;
