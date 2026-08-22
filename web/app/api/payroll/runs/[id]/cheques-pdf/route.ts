@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -25,7 +26,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id)
     if (!merged) return NextResponse.json({ error: 'no cheques to print' }, { status: 404 })
-    return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}`))
+    const stamp = await businessToday(gate.user.orgId)
+    return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
   } catch (error) {
     if (error instanceof PayrollError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
