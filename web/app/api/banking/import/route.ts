@@ -12,7 +12,9 @@ import {
   type ParsedStatement,
   type ParsedStatementLine,
 } from '@openbooks/engine/src/banking.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { bankingErrorResponse } from '../util'
 
 export const runtime = 'nodejs'
@@ -32,6 +34,18 @@ interface ImportBody {
   statementDate?: string | null
   openingBalance?: string | null
   closingBalance?: string | null
+}
+
+/** Exact numeric(19,4) money string, null when omitted, or 'invalid'. */
+function persistMoney(value: unknown): string | null | 'invalid' {
+  if (value == null || value === '') return null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
 }
 
 export async function POST(req: Request) {
@@ -84,14 +98,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
     }
 
+    const openingBalance = persistMoney(body.openingBalance)
+    if (openingBalance === 'invalid') {
+      return NextResponse.json({ error: 'Opening balance must be an exact decimal' }, { status: 422 })
+    }
+    const closingFromRequest = persistMoney(body.closingBalance)
+    if (closingFromRequest === 'invalid') {
+      return NextResponse.json({ error: 'Closing balance must be an exact decimal' }, { status: 422 })
+    }
+
     const result = await importStatement(
       {
         accountId: body.accountId,
         source: body.source,
         lines,
         statementDate: body.statementDate ?? meta.statementDate ?? null,
-        openingBalance: body.openingBalance ?? null,
-        closingBalance: body.closingBalance ?? meta.closingBalance ?? null,
+        openingBalance,
+        closingBalance: closingFromRequest ?? meta.closingBalance ?? null,
         currency: meta.currency ?? null,
         dryRun: mode === 'preview',
       },
