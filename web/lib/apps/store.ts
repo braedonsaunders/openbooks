@@ -133,7 +133,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
 
     // Reject a duplicate version rather than silently overwriting history.
     const existing = (await tx.execute(
-      sql`select 1 from app_versions where app_id = ${appId} and version = ${manifest.version} limit 1`,
+      sql`select 1 from app_versions where org_id = ${orgId} and app_id = ${appId} and version = ${manifest.version} limit 1`,
     ))
     if (existing.rows.length) throw new AppError(`version ${manifest.version} already exists for this app`)
 
@@ -254,7 +254,7 @@ export async function getFrontendBundle(
   const files = await rows<{ path: string; contentType: string; content: string; isBinary: boolean }>(sql`
     select path, content_type as "contentType", content, is_binary as "isBinary"
       from app_files
-     where version_id = ${app.activeVersionId} and kind in ('frontend', 'asset')`)
+     where org_id = ${orgId} and version_id = ${app.activeVersionId} and kind in ('frontend', 'asset')`)
 
   const entry = app.manifest.frontend.entry
   const entryFile = files.find((f) => f.path === entry)
@@ -279,7 +279,7 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
   return {
     async get(key, namespace) {
       const r = await rows<{ value: unknown }>(
-        sql`select value from app_storage where app_id = ${appId} and namespace = ${namespace} and key = ${key} limit 1`,
+        sql`select value from app_storage where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key = ${key} limit 1`,
       )
       return r[0]?.value ?? null
     },
@@ -293,11 +293,11 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
       const like = prefix.replace(/[%_\\]/g, (m) => '\\' + m) + '%'
       return rows<{ key: string; value: unknown }>(sql`
         select key, value from app_storage
-         where app_id = ${appId} and namespace = ${namespace} and key like ${like}
+         where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key like ${like}
          order by key limit 500`)
     },
     async delete(key, namespace) {
-      await db.execute(sql`delete from app_storage where app_id = ${appId} and namespace = ${namespace} and key = ${key}`)
+      await db.execute(sql`delete from app_storage where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key = ${key}`)
     },
   }
 }
@@ -414,7 +414,7 @@ export async function runBridgeMethod(opts: {
     if (!endpoint) return { ok: false, error: `no such endpoint: ${endpointName}`, status: 404 }
 
     const src = await rows<{ content: string }>(
-      sql`select content from app_files where version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
+      sql`select content from app_files where org_id = ${opts.orgId} and version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
     )
     if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
 
@@ -620,7 +620,7 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
   }
 
   const paths = (await rows<{ path: string }>(
-    sql`select path from app_files where version_id = ${app.activeVersionId}`,
+    sql`select path from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId}`,
   )).map((r) => r.path)
   const vb = validateBundle(manifest, paths)
   if (!vb.ok) throw new AppError(vb.errors.join('; '))
@@ -675,7 +675,7 @@ export async function listAppFiles(orgId: string, key: string): Promise<AppFileR
   if (!app || !app.activeVersionId) throw new AppError('app not found', 404)
   return rows<AppFileRow>(sql`
     select path, kind, content_type as "contentType", is_binary as "isBinary", size, updated_at as "updatedAt"
-      from app_files where version_id = ${app.activeVersionId} order by path`)
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`)
 }
 
 export async function readAppFile(
@@ -687,7 +687,7 @@ export async function readAppFile(
   if (!app || !app.activeVersionId) throw new AppError('app not found', 404)
   const r = await rows<{ path: string; content: string; isBinary: boolean; contentType: string }>(sql`
     select path, content, is_binary as "isBinary", content_type as "contentType"
-      from app_files where version_id = ${app.activeVersionId} and path = ${path} limit 1`)
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path} limit 1`)
   if (!r[0]) throw new AppError('file not found', 404)
   return r[0]
 }
@@ -732,7 +732,7 @@ export async function deleteAppFile(orgId: string, key: string, path: string): P
   if (path === app.manifest.frontend.entry) throw new AppError('cannot delete the frontend entry file', 409)
   const endpoint = app.manifest.endpoints.find((e) => e.file === path)
   if (endpoint) throw new AppError(`cannot delete: endpoint "${endpoint.name}" uses this file`, 409)
-  await db.execute(sql`delete from app_files where version_id = ${app.activeVersionId} and path = ${path}`)
+  await db.execute(sql`delete from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -804,7 +804,7 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
 
   const files = await rows<{ path: string; content: string; isBinary: boolean }>(sql`
     select path, content, is_binary as "isBinary"
-      from app_files where version_id = ${app.activeVersionId} order by path`)
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`)
 
   const existing = await rows<{ id: string; publisherOrgId: string }>(
     sql`select id, publisher_org_id as "publisherOrgId" from app_listings where key = ${key} limit 1`,
