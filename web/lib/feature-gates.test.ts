@@ -201,9 +201,18 @@ test('the surfaces this test was written for are covered', () => {
     'app/api/documents/[id]/correct/route.ts',
     'app/api/documents/actions/route.ts',
     'app/api/documents/draft/route.ts',
+    'lib/application/documents.ts',
+    'lib/api/writers.ts',
   ]) {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
   }
+  assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
+  assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
+  assert.match(
+    read('lib/api/schema-registry.ts'),
+    /builtIn\.featureKey && !\(await isFeatureEnabled/,
+    'REST/MCP catalog must hide projects and assets when their Features switch is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

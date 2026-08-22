@@ -13,6 +13,7 @@ import {
   createPostedCorrectionDraft,
   DOC_KINDS,
   DocumentEditError,
+  isDocKindEnabled,
   loadDocument,
   postPermission,
   type DocumentEditInput,
@@ -45,6 +46,9 @@ async function documentHeader(
   `));
   const header = result.rows[0];
   if (!header) throw notFound("document");
+  if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
+    throw notFound("document");
+  }
   assertSubsidiaryAccess(context, header.subsidiaryId);
   return header;
 }
