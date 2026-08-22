@@ -167,6 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
          where x.amount <> 0 or x.note is not null
         on conflict on constraint budget_lines_cell do update set
           amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
+        where budget_lines.org_id = ${user.orgId}
       `)
       await tx.execute(sql`
         delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
