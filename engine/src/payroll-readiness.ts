@@ -1024,8 +1024,10 @@ export async function payRunStaleness(
                   select 1 from pay_stubs os
                     join pay_stubs mine
                       on mine.employee_party_id = os.employee_party_id
+                     and mine.org_id = os.org_id
                      and mine.pay_run_document_id = r.document_id
-                   where os.pay_run_document_id = other.document_id)) as ytd_changed
+                   where os.org_id = r.org_id
+                     and os.pay_run_document_id = other.document_id)) as ytd_changed
       from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
   `));
