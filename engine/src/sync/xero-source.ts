@@ -1,4 +1,4 @@
-import { businessToday } from "../business-date.ts";
+import { businessToday, parseIsoDate } from "../business-date.ts";
 import { XeroClient, xeroDate } from "../xero.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
@@ -292,9 +292,9 @@ export class XeroSource implements MigrationSource {
   private bucketsFromReports(): Promise<Map<string, bigint>> {
     this.monthlyBuckets ??= (async () => {
       const buckets = new Map<string, bigint>(); // `${accountRef}|${YYYY-MM}` → units
-      const now = new Date();
+      const today = parseIsoDate(await businessToday(this.orgId));
       for (let back = TB_LOOKBACK_MONTHS - 1; back >= 0; back--) {
-        const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back + 1, 0));
+        const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - back + 1, 0));
         const month = monthEnd.toISOString().slice(0, 7);
         const report = await this.client.get<XeroReport>("Reports/TrialBalance", {
           date: monthEnd.toISOString().slice(0, 10),
