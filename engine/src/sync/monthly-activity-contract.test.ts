@@ -125,7 +125,7 @@ test("QuickBooks exposes transaction account-month home-currency activity", asyn
       };
     },
   } as unknown as QboClient;
-  const source = new QboSource(client);
+  const source = new QboSource(client, { orgId: "00000000-0000-0000-0000-000000000000" });
 
   assert.deepEqual(await source.monthlyActivity(), [
     { accountRef: "42", month: "2026-03", amount: "15.0000" },
