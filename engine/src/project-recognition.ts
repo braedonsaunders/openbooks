@@ -251,7 +251,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   }
   const lines = (await tx.execute<any>(sql`
     select account_id, amount, currency, txn_amount, project_id, party_id, memo, subsidiary_id
-      from journal_lines where entry_id = ${entryId} order by line_number`));
+      from journal_lines where entry_id = ${entryId} and org_id = ${orgId} order by line_number`));
   const [rev] = (await tx.execute(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)

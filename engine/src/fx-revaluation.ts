@@ -413,7 +413,7 @@ async function postRevaluationEntry(
       }
       await tx.execute(sql`
         update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
-         where id = ${eid}`);
+         where id = ${eid} and org_id = ${orgId}`);
       return eid;
     };
 

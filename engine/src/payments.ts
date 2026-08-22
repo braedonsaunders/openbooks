@@ -707,7 +707,7 @@ export async function postPaymentWithApplications(
       ...allocs.map((a) => a.openLineId),
       ...creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId]),
     ])];
-    await db.execute(sql`select id from journal_lines where id in ${endpointIds} order by id for update`);
+    await db.execute(sql`select id from journal_lines where id in ${endpointIds} and org_id = ${doc.orgId} order by id for update`);
 
     const side = PAYMENT_KIND_SIDE[doc.kind];
     const openItems = await openItemsForParty(doc.partyId, side);
@@ -770,7 +770,7 @@ export async function postPaymentWithApplications(
       // targets' account is the only way such a payment can post at all;
       // mixed-account allocations keep the default and fail loudly below.
       const targetAccounts = (await db.execute<{ account_id: string }>(sql`
-        select distinct account_id from journal_lines where id in ${allocs.map((a) => a.openLineId)}
+        select distinct account_id from journal_lines where org_id = ${doc.orgId} and id in ${allocs.map((a) => a.openLineId)}
       `));
       const derived = targetAccounts.rows.length === 1 ? targetAccounts.rows[0]!.account_id : null;
       if (derived && derived !== controlAccountId) {

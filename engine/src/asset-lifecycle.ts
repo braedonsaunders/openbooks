@@ -222,7 +222,7 @@ export async function disposeAsset(
            a.department_id, a.project_id, a.location_id, sub.base_currency,
            c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
-                       join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
+                       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
                       where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
@@ -276,8 +276,8 @@ export async function disposeAsset(
                 ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
                 ${asset.location_id}, ${`${status} ${asset.asset_number}`})`);
     }
-    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid}`);
-    await tx.execute(sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId}`);
+    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
+    await tx.execute(sql`update fixed_assets set status = ${status}, updated_at = now(), updated_by = ${opts.actorId} where id = ${assetId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${status === "written_off" ? "written_off" : "disposed"}, ${opts.date}, ${proceeds}, ${eid}, ${opts.actorId})`);
@@ -552,7 +552,7 @@ export async function remeasureAsset(
            a.department_id, a.project_id, a.location_id, sub.base_currency,
            c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
-                       join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
+                       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
                       where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
@@ -612,7 +612,7 @@ export async function remeasureAsset(
                 ${asset.base_currency}, ${l.amount}, 1, ${asset.department_id}, ${asset.project_id},
                 ${asset.location_id}, ${`${kind} ${asset.asset_number}`})`);
     }
-    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid}`);
+    await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${opts.actorId} where id = ${eid} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId})`);
@@ -622,7 +622,7 @@ export async function remeasureAsset(
   // Rebuild remaining unposted lines: straight-line (newCV − salvage) over them.
   const remaining = (await db.execute<{ id: string }>(sql`
     select l.id from depreciation_schedule_lines l
-      join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
+      join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
      where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
      order by l.sequence`));
   const count = remaining.rows.length;
