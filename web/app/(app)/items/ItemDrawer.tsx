@@ -49,6 +49,7 @@ const KIND_VALUES = [
   'absence',
   'discount',
 ] as const
+const INVENTORY_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -91,9 +92,12 @@ export function ItemDrawer({
   const isPlaceholderName = it.name === 'New item'
 
   const kindOptions = useMemo(
-    () => KIND_VALUES.map((k) => ({ value: k, label: t(`kinds.${k}`) })),
-    [t],
+    () => KIND_VALUES
+      .filter((k) => inventoryCosting || !INVENTORY_KINDS.has(k) || k === (it.kind ?? 'service'))
+      .map((k) => ({ value: k, label: t(`kinds.${k}`) })),
+    [t, inventoryCosting, it.kind],
   )
+  const kindLocked = !inventoryCosting && INVENTORY_KINDS.has(String(it.kind ?? ''))
 
   const [kind, setKind] = useState<string>(it.kind ?? 'service')
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (it.name ?? ''))
@@ -146,7 +150,7 @@ export function ItemDrawer({
   // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
-      kind,
+      ...(inventoryCosting || !INVENTORY_KINDS.has(kind) ? { kind } : {}),
       name: name.trim() || (isActive ? name : 'New item'),
       description,
       code,
@@ -170,7 +174,7 @@ export function ItemDrawer({
         : {}),
       custom: customValues,
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -342,7 +346,7 @@ export function ItemDrawer({
           </div>
           <div className={field}>
             <Label>{t('labels.kind')}</Label>
-            {editable ? (
+            {editable && !kindLocked ? (
               <Select value={kind} onChange={(e) => setKind(e.target.value)}>
                 {kindOptions.map((o) => (
                   <option key={o.value} value={o.value}>

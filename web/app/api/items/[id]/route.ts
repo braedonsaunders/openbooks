@@ -23,6 +23,8 @@ const ITEM_KINDS = [
   'discount',
 ] as const
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
 }
@@ -100,8 +102,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const existing = (await db.execute<{ name: string; is_active: boolean }>(sql`
-    select name, is_active from items where id = ${id} and org_id = ${user.orgId}
+  const existing = (await db.execute<{ name: string; is_active: boolean; kind: string }>(sql`
+    select name, is_active, kind from items where id = ${id} and org_id = ${user.orgId}
   `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
@@ -111,6 +113,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  // Inventory kinds (inventory / assembly / kit) are Inventory configuration.
+  // Turning that switch off must refuse a new write; the stored kind stays.
+  if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
+    const nextKind = String(body.kind)
+    const storedKind = existing.rows[0].kind
+    if (INVENTORY_ITEM_KINDS.has(nextKind) || (INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind)) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
   }
 
   // -- kind ----------------------------------------------------------------
