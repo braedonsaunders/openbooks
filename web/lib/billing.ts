@@ -1,7 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from './exact-decimal'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -197,7 +198,14 @@ export async function generateInvoiceFromBillingRequest(
     const billsActualWork = req.basis === 'field_ticket' || req.basis === 'time_selection' || req.basis === 'date_range'
 
     if (req.basis === 'draw_amount') {
-      const amt = String(req.draw_amount ?? '0')
+      const exact = canonicalDecimal(req.draw_amount ?? '0', 4)
+      if (exact === null) throw new BillingError('Enter a draw amount to bill')
+      let amt: string
+      try {
+        amt = normalizeMoney(exact)
+      } catch {
+        throw new BillingError('Enter a draw amount to bill')
+      }
       if (!amt || isZero(amt)) throw new BillingError('Enter a draw amount to bill')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post the draw to')
       built.push({
