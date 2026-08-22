@@ -41,7 +41,7 @@ export default async function Timesheets({
     select p.id, p.display_name as name
       from parties p
      where p.org_id = ${orgId} and p.is_active
-       and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = ${orgId} and r.is_active)
+       and exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
      order by p.display_name`))
 
   // "New timesheet" targets the current user's linked employee (or the first
