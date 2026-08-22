@@ -974,7 +974,7 @@ async function employeeYtd(
       coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
       coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
     from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id
+    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
