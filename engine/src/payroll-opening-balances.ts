@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
@@ -216,9 +217,12 @@ export function normalizeOpeningBalance(input: Record<string, unknown>): Opening
       amounts[field.key] = "0.0000";
       continue;
     }
+    const cleaned = String(raw).trim().replace(/[,$]/g, "");
+    const exact = canonicalDecimal(cleaned, 4);
+    if (exact === null) throw new PayrollError(`${field.label} is not an amount: "${String(raw)}"`);
     let value: string;
     try {
-      value = normalizeMoney(String(raw).trim().replace(/[,$]/g, ""));
+      value = normalizeMoney(exact);
     } catch {
       throw new PayrollError(`${field.label} is not an amount: "${String(raw)}"`);
     }
