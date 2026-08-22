@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import {
   adjustInventory,
   buildAssembly,
@@ -15,6 +15,7 @@ import {
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -39,12 +40,9 @@ interface Body {
 }
 
 function num(v: unknown): string | null {
-  if (typeof v !== 'string' && typeof v !== 'number') return null
-  try {
-    return fromUnits(toUnits(v))
-  } catch {
-    return null
-  }
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return null
+  return normalizeMoney(exact)
 }
 
 /**
