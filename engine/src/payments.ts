@@ -674,7 +674,7 @@ export async function postPaymentWithApplications(
     }
     if (!doc.partyId) throw new PaymentError("select a party before posting");
     const auditBefore = userId
-      ? await captureTransactionAuditSnapshot(db, paymentDocId)
+      ? await captureTransactionAuditSnapshot(db, paymentDocId, doc.orgId)
       : null;
     if (doc.kind === "vendor_payment") {
       const hold = (await db.execute<{ hold_reason: string | null }>(sql`
@@ -950,7 +950,7 @@ export async function postPaymentWithApplications(
       })));
     }
     if (userId && auditBefore) {
-      const auditAfter = await captureTransactionAuditSnapshot(db, paymentDocId);
+      const auditAfter = await captureTransactionAuditSnapshot(db, paymentDocId, doc.orgId);
       if (!auditAfter) throw new PaymentError("payment disappeared while posting");
       await recordTransactionAudit(db, {
         orgId: doc.orgId,

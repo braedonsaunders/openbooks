@@ -1663,6 +1663,7 @@ export async function runSync(
             const auditBefore = await captureTransactionAuditSnapshot(
               tx,
               have.id,
+              org.id,
             );
             if (!auditBefore) {
               throw new Error(
@@ -1686,6 +1687,7 @@ export async function runSync(
             const auditAfter = await captureTransactionAuditSnapshot(
               tx,
               have.id,
+              org.id,
             );
             if (!auditAfter) {
               throw new Error(
@@ -1723,6 +1725,7 @@ export async function runSync(
           const auditCandidate = await captureTransactionAuditSnapshot(
             tx,
             have.id,
+            org.id,
           );
           const auditBefore =
             auditCandidate?.document.status === "posted"
@@ -1798,6 +1801,7 @@ export async function runSync(
             const auditAfter = await captureTransactionAuditSnapshot(
               tx,
               have.id,
+              org.id,
             );
             if (!auditAfter)
               throw new Error(

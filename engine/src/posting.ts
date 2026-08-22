@@ -1436,7 +1436,7 @@ export async function postDocument(
     if (deps.migration)
       await tx.execute(sql`set local openbooks.migration = on`);
     const auditBefore = options.audit
-      ? await captureTransactionAuditSnapshot(tx, documentId)
+      ? await captureTransactionAuditSnapshot(tx, documentId, doc.orgId)
       : null;
     if (options.audit && !auditBefore) {
       throw new PostingError(
@@ -1535,7 +1535,7 @@ export async function postDocument(
     }
 
     if (options.audit && auditBefore) {
-      const auditAfter = await captureTransactionAuditSnapshot(tx, documentId);
+      const auditAfter = await captureTransactionAuditSnapshot(tx, documentId, doc.orgId);
       if (!auditAfter)
         throw new PostingError(
           `document ${documentId} disappeared during posting`,

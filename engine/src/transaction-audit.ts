@@ -37,6 +37,7 @@ export interface TransactionAuditChanges {
 export async function captureTransactionAuditSnapshot(
   runner: Runner,
   documentId: string,
+  orgId: string,
 ): Promise<TransactionAuditSnapshot | null> {
   const result = (await runner.execute<{ snapshot: TransactionAuditSnapshot }>(sql`
     select jsonb_build_object(
@@ -90,7 +91,7 @@ export async function captureTransactionAuditSnapshot(
     ) as snapshot
       from documents d
      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
-     where d.id = ${documentId}
+     where d.id = ${documentId} and d.org_id = ${orgId}
      limit 1
      for update of d
   `));

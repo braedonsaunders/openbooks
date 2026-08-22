@@ -23,7 +23,7 @@ export async function voidDocument(
   actorId: string,
   reason: string,
 ): Promise<{ documentId: string }> {
-  return deleteDocument(documentId, actorId, { source: "sim", reason });
+  return deleteDocument(documentId, actorId, _world.orgId, { source: "sim", reason });
 }
 
 /** Post a negated reversing entry for a posted journal entry (flips the original to reversed). */

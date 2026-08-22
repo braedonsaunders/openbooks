@@ -142,7 +142,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   try {
     const body = (await req.json().catch(() => ({}))) as { reason?: string }
-    await deleteDocument(id, authz.user.id, {
+    await deleteDocument(id, authz.user.id, authz.user.orgId, {
       source: 'ui',
       reason: body.reason,
     })

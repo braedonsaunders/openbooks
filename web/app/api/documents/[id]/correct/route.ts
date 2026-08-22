@@ -79,7 +79,7 @@ export async function POST(
     )
   } catch (error) {
     if (replacement) {
-      await deleteDocument(replacement.id, authz.user.id, {
+      await deleteDocument(replacement.id, authz.user.id, authz.user.orgId, {
         source: 'posted_correction_rollback',
         reason: 'correction request failed',
       }).catch(() => {})

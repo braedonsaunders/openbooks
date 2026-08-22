@@ -123,7 +123,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   await db.transaction(async (tx) => {
-      const auditBefore = await captureTransactionAuditSnapshot(tx, id)
+      const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
       if (!auditBefore) throw new Error(`expense report ${id} disappeared before update`)
 
       if (preparedLines) {
@@ -164,7 +164,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         where id = ${id} and org_id = ${user.orgId}
       `)
 
-      const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+      const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
       if (!auditAfter) throw new Error(`expense report ${id} disappeared during update`)
       await recordTransactionAudit(tx, {
         orgId: user.orgId,
@@ -191,7 +191,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    await deleteDocument(id, gate.user.id)
+    await deleteDocument(id, gate.user.id, gate.user.orgId)
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })

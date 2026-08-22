@@ -47,7 +47,7 @@ test("controlled void preserves the source and posts an exact open-period revers
       { audit: { actorId, source: "test" } },
     );
     await assert.rejects(
-      deleteDocument(documentId, actorId),
+      deleteDocument(documentId, actorId, org.orgId),
       /cannot be deleted.*controlled void/i,
     );
 

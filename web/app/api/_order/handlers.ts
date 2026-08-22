@@ -286,7 +286,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
     ))
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     try {
-      await deleteDocument(id, user.id)
+      await deleteDocument(id, user.id, user.orgId)
       return NextResponse.json({ ok: true })
     } catch (e) {
       if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })

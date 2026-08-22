@@ -547,14 +547,14 @@ export async function applyDocumentEdit(
   const oldLines = ((await db.execute<{ lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }>(sql`
     select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
            project_id as "projectId", amount
-      from document_lines where document_id = ${id} order by line_number
+      from document_lines where document_id = ${id} and org_id = ${ctx.orgId} order by line_number
   `))).rows
 
   // All writes + the GL-Impact re-materialization happen in one transaction, so
   // a GL edit into a closed period rolls the whole edit back (nothing partial).
   try {
     await db.transaction(async (tx) => {
-      const auditBefore = await captureTransactionAuditSnapshot(tx, id)
+      const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
@@ -622,7 +622,7 @@ export async function applyDocumentEdit(
       }
 
       if (auditBefore) {
-        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+        const auditAfter = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
         if (!auditAfter) throw new Error(`document ${id} disappeared during amendment`)
         await recordTransactionAudit(tx, {
           orgId,
