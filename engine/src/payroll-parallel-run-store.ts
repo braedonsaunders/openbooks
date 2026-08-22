@@ -381,7 +381,8 @@ export async function savePriorStub(
         component_id = excluded.component_id,
         source_column = excluded.source_column,
         updated_at = now(),
-        updated_by = excluded.updated_by`);
+        updated_by = excluded.updated_by
+      where payroll_prior_amounts.org_id = ${input.orgId}`);
   }
 
   await runner.execute(sql`
