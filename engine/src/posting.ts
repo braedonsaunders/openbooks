@@ -28,7 +28,7 @@ import {
   applyInventoryReceiptsForBill,
   resolveBillInventoryAccounts,
 } from "./inventory.ts";
-import { createObligationsFromInvoice } from "./revenue-recognition.ts";
+import { createObligationsFromInvoice, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -169,6 +169,7 @@ async function resolveDeferralAccounts(
   documentId: string,
   orgId: string,
 ): Promise<Map<string, string>> {
+  if (!(await revenueRecognitionFeatureEnabled(runner, orgId))) return new Map();
   const r = (await runner.execute<{ line_id: string; deferred_account_id: string }>(sql`
     select dl.id as line_id,
            coalesce(it.deferred_account_id, r.deferred_account_id) as deferred_account_id

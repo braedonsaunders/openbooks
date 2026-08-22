@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts";
-import { buildAllRecognitionSchedules } from "./revenue-recognition.ts";
+import { buildAllRecognitionSchedules, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 
 /**
@@ -97,6 +97,7 @@ export async function syncProjectRevenueContracts(
   projectId?: string,
 ): Promise<ProjectRevenueSyncResult> {
   const result: ProjectRevenueSyncResult = { synced: [], problems: [] };
+  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) return result;
 
   const accts = await recognitionAccounts(orgId);
   if (!accts.unbilledReceivable || !accts.projectRevenue) {

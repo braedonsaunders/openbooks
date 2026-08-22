@@ -169,6 +169,28 @@ export class TransactionPriceError extends Error {
   readonly name = "TransactionPriceError";
 }
 
+export class RevenueRecognitionError extends Error {
+  readonly name = "RevenueRecognitionError";
+}
+
+/** Registry default is on — absence must not disable recognition. */
+export async function revenueRecognitionFeatureEnabled(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+): Promise<boolean> {
+  const result = await runner.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'revenueRecognition')::boolean, true) as enabled
+      from orgs where id = ${orgId}
+  `);
+  return result.rows[0]?.enabled === true;
+}
+
+async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
+  if (!(await revenueRecognitionFeatureEnabled(runner, orgId))) {
+    throw new RevenueRecognitionError("Revenue recognition feature is disabled");
+  }
+}
+
 export type VariableEstimationMethod = "expected_value" | "most_likely_amount";
 
 export interface VariableConsiderationInput {
@@ -754,6 +776,9 @@ export async function createObligationsFromInvoice(
   orgId: string,
   actorId: string | null,
 ): Promise<CreateObligationsResult> {
+  if (!(await revenueRecognitionFeatureEnabled(db, orgId))) {
+    return { created: 0, contractId: null, obligationIds: [] };
+  }
   const docRes = (await db.execute<{ id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }>(sql`
     select id, document_number, party_id, currency, document_date, subsidiary_id
       from documents where id = ${documentId} and org_id = ${orgId} and kind = 'customer_invoice'`));
@@ -890,6 +915,7 @@ export async function runRevenueRecognition(
   obligationId?: string,
   allowedSubsidiaryIds?: string[],
 ): Promise<RunRecognitionResult> {
+  await assertEnabled(db, orgId);
   const subsidiaryContext = await loadSubsidiaryContext(db, orgId);
 
   const due = (await db.execute<any>(sql`
