@@ -109,7 +109,7 @@ export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> 
       select is_super_admin from users where id = ${userId}`));
     const assignments = (await db.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
       select r.subsidiary_restriction as restriction
-        from role_assignments a join app_roles r on r.id = a.role_id
+        from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${userId}`));
     return { superAdmin: su.rows[0]?.is_super_admin === true, rows: assignments.rows as { restriction: SubsidiaryRestriction | null }[] };
   });

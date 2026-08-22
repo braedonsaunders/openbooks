@@ -98,7 +98,7 @@ export default async function AdminUsersPage({
       : ((await db.execute(sql`
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
-            join app_roles r on r.id = a.role_id
+            join app_roles r on r.id = a.role_id and r.org_id = a.org_id
            where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(',')}}`}::uuid[])
            order by r.name asc`)) as any)
   const assignments = assignmentsR.rows as { user_id: string; role_id: string; role_name: string }[]

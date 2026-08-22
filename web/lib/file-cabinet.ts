@@ -712,7 +712,7 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
     )
     select 1
       from file_attachments fa
-      join files fi on fi.id = fa.file_id
+      join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
       join descendants d on d.id = fi.folder_id
      where fa.org_id = ${orgId}
      limit 1
@@ -1274,7 +1274,7 @@ export async function listAttachments(
            fi.size_bytes as "sizeBytes", fa.created_at as "createdAt",
            fa.created_by as "createdBy", fa.id as "attachmentId"
       from file_attachments fa
-      join files fi on fi.id = fa.file_id
+      join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
      where fa.org_id = ${orgId} and fa.target_table = ${targetTable} and fa.target_id = ${targetId}
      order by fa.created_at desc
   `))

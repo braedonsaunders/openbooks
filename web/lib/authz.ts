@@ -35,7 +35,7 @@ export async function getAuthz(): Promise<Authz | null> {
     db.execute(sql`
       select r.permissions
         from role_assignments a
-        join app_roles r on r.id = a.role_id
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${user.id} and a.org_id = ${user.orgId}`),
     db.execute(sql`
       select permission, effect
