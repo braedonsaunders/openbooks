@@ -373,6 +373,27 @@ test('the surfaces this test was written for are covered', () => {
     /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'quote/SO/PO PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
   )
+  assert.match(
+    read('lib/order-cycle.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'order conversion must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('lib/order-cycle.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'convertOrder must not copy inventory/assembly/kit lines when Inventory is off — source lines stay',
+  )
+  for (const file of [
+    'app/api/estimates/[id]/convert/route.ts',
+    'app/api/sales-orders/[id]/convert/route.ts',
+    'app/api/purchase-orders/[id]/convert/route.ts',
+  ]) {
+    assert.match(
+      read(file),
+      /conversionWouldCopyInventoryKinds[\s\S]{0,200}status: 404/,
+      `${file} must 404 — not copy inventory/assembly/kit — when Inventory is off`,
+    )
+  }
   for (const file of [
     'app/(app)/estimates/page.tsx',
     'app/(app)/sales-orders/page.tsx',
