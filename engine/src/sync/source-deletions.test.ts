@@ -48,3 +48,13 @@ test("controller resolutions validate the actor and audit both decision and docu
   assert.match(controlled, /previousResolution/);
   assert.match(controlled, /currentResolution/);
 });
+
+test("resolution upserts pin the known tenant on the connection_id/source_ref conflict write", () => {
+  const controlled = source.slice(
+    source.indexOf("export async function resolveSourceDeletion"),
+  );
+  assert.match(
+    controlled,
+    /on conflict \(connection_id, source_ref\) do update set[\s\S]*?where source_deletion_resolutions\.org_id = \$\{input\.orgId\}/,
+  );
+});
