@@ -49,8 +49,8 @@ export async function PaymentsSection({
   if (openPayment) {
     const partyFilter =
       side === 'ap'
-        ? sql`exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.is_active)`
-        : sql`exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.is_active)`
+        ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
+        : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
     const [parties, banks] = await Promise.all([
       db.execute(sql`
         select id, display_name from parties p
