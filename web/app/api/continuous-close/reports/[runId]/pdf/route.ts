@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { readableContinuousCloseAgents } from '../../../../../../lib/continuous-close'
@@ -76,7 +77,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
   const branding = await orgBranding(gate.user.orgId)
   const layout = resolvePdfPageSetup({ paperSize: 'letter', orientation: 'portrait', marginMm: 16, density: 'standard' })
   const pdf = await exportDataToPdf(data, branding, layout, { showSummary: true })
-  return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}`))
+  const stamp = await businessToday(gate.user.orgId)
+  return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}-${stamp}`))
 }
 
 function textGroup(title: string, values: string[]): ExportData['groups'][number] {
