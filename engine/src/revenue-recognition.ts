@@ -1157,6 +1157,7 @@ export async function runRevenueRecognition(
        set status = 'satisfied', updated_at = now()
       from recognition_rules r
      where r.id = o.recognition_rule_id
+       and r.org_id = o.org_id
        and o.org_id = ${orgId} and o.status = 'open'
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
