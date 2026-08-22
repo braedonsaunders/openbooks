@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
+import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -227,8 +229,7 @@ export async function POST(req: NextRequest) {
       !/^\d{4}-\d{2}-\d{2}$/.test(body.periodStart ?? "") ||
       !/^\d{4}-\d{2}-\d{2}$/.test(body.periodEnd ?? "") ||
       body.periodEnd < body.periodStart ||
-      !/^[A-Z]{3}$/.test(String(body.currency ?? "").toUpperCase()) ||
-      !/^\d+(\.\d{0,4})?$/.test(String(body.amount ?? ""))
+      !/^[A-Z]{3}$/.test(String(body.currency ?? "").toUpperCase())
     )
       return NextResponse.json(
         {
@@ -237,6 +238,16 @@ export async function POST(req: NextRequest) {
         },
         { status: 422 },
       );
+    const amountRaw = canonicalDecimal(body.amount, 4);
+    if (amountRaw === null || compareDecimal(amountRaw, "0") < 0)
+      return NextResponse.json(
+        {
+          error:
+            "quota needs one target, a valid period, currency, and a non-negative amount",
+        },
+        { status: 422 },
+      );
+    const amount = normalizeMoney(amountRaw);
     const currency = String(body.currency).toUpperCase();
     if (
       !(
@@ -272,10 +283,10 @@ export async function POST(req: NextRequest) {
       );
     row = recordId
       ? await db.execute(
-          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${currency},amount=${String(body.amount)},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${currency},amount=${amount},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
         )
       : await db.execute(
-          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${currency},${String(body.amount)},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
+          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${currency},${amount},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
         );
   } else {
     return NextResponse.json({ error: "unknown action" }, { status: 400 });

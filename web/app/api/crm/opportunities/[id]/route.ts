@@ -7,6 +7,8 @@ import { guardPermission } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export const runtime = 'nodejs'
 
@@ -91,7 +93,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (lines) {
     if (!Array.isArray(lines)) return NextResponse.json({ error: 'lines must be an array' }, { status: 422 })
     try {
-      calculated = computeOpportunityTotals(lines.map((line) => ({ quantity: String(line.quantity), unitPrice: String(line.unitPrice), probability: line.probability == null ? null : Number(line.probability) })), probability)
+      calculated = computeOpportunityTotals(lines.map((line) => {
+        const quantity = canonicalDecimal(line.quantity, 4)
+        const unitPrice = canonicalDecimal(line.unitPrice, 4)
+        if (quantity === null || unitPrice === null) throw new Error('invalid lines')
+        return {
+          quantity,
+          unitPrice: normalizeMoney(unitPrice),
+          probability: line.probability == null ? null : Number(line.probability),
+        }
+      }), probability)
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid lines' }, { status: 422 })
     }
@@ -100,12 +111,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
   const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined
+  const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
   if (team) {
     if (!Array.isArray(team)) return NextResponse.json({ error: 'team must be an array' }, { status: 422 })
-    try { validateContributionTotal(team.map((member) => member.contributionPercent)) } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 422 }) }
-    if (team.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
-    for (const member of team) if (!await orgUuidExists('users', member.userId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
+    for (const member of team) {
+      const contribution = canonicalDecimal(member.contributionPercent, 4)
+      if (contribution === null) return NextResponse.json({ error: 'invalid sales-team contribution' }, { status: 422 })
+      teamRows.push({ ...member, contributionPercent: normalizeMoney(contribution) })
+    }
+    try { validateContributionTotal(teamRows.map((member) => member.contributionPercent)) } catch (error) { return NextResponse.json({ error: (error as Error).message }, { status: 422 }) }
+    if (teamRows.filter((member) => member.isPrimary).length !== 1) return NextResponse.json({ error: 'exactly one team member must be primary' }, { status: 422 })
+    for (const member of teamRows) if (!await orgUuidExists('users', member.userId, user.orgId)) return NextResponse.json({ error: 'invalid sales team member' }, { status: 422 })
   }
+  const rangeMoney = (raw: unknown) => {
+    if (raw == null || raw === '') return null
+    const exact = canonicalDecimal(raw, 4)
+    if (exact === null || compareDecimal(exact, '0') < 0) return 'invalid'
+    return normalizeMoney(exact)
+  }
+  const rangeLow = body.rangeLow !== undefined ? rangeMoney(body.rangeLow) : undefined
+  const rangeHigh = body.rangeHigh !== undefined ? rangeMoney(body.rangeHigh) : undefined
+  if (rangeLow === 'invalid' || rangeHigh === 'invalid') return NextResponse.json({ error: 'range must be a non-negative amount' }, { status: 422 })
 
   await db.transaction(async (tx) => {
     if (lines && calculated) {
@@ -122,9 +148,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                   ${math.expectedAmount}, ${user.id}, ${user.id})`)
       }
     }
-    if (team) {
+    if (teamRows.length) {
       await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
-      for (const member of team) await tx.execute(sql`
+      for (const member of teamRows) await tx.execute(sql`
         insert into crm_opportunity_team_members
           (org_id, opportunity_id, user_id, contribution_percent, is_primary, created_by, updated_by)
         values (${user.orgId}, ${id}, ${member.userId}, ${member.contributionPercent}, ${member.isPrimary === true}, ${user.id}, ${user.id})`)
@@ -141,8 +167,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         forecast_category = ${category}, probability = ${probability},
         currency = ${currency},
         projected_amount = ${projected}, weighted_amount = ${weighted},
-        range_low = ${body.rangeLow !== undefined ? textOrNull(body.rangeLow) : sql`range_low`},
-        range_high = ${body.rangeHigh !== undefined ? textOrNull(body.rangeHigh) : sql`range_high`},
+        range_low = ${rangeLow !== undefined ? rangeLow : sql`range_low`},
+        range_high = ${rangeHigh !== undefined ? rangeHigh : sql`range_high`},
         next_step = ${body.nextStep !== undefined ? textOrNull(body.nextStep) : sql`next_step`},
         competitor_notes = ${body.competitorNotes !== undefined ? textOrNull(body.competitorNotes) : sql`competitor_notes`},
         win_loss_reason = ${winLossReason}, description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},

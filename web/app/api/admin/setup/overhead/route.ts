@@ -9,6 +9,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,12 +38,16 @@ export async function POST(req: Request) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
-    const rates: { departmentId: string; ratePerHour: string }[] = Array.isArray(body.rates)
-      ? body.rates.map((r: { departmentId: string; ratePerHour: string | number }) => ({
-          departmentId: r.departmentId,
-          ratePerHour: formatMoney(String(r.ratePerHour), 2),
-        }))
-      : []
+    const rates: { departmentId: string; ratePerHour: string }[] = []
+    if (Array.isArray(body.rates)) {
+      for (const r of body.rates as { departmentId: string; ratePerHour: string | number }[]) {
+        const exact = canonicalDecimal(r.ratePerHour, 4)
+        if (exact === null || compareDecimal(exact, '0') < 0) {
+          return NextResponse.json({ error: 'ratePerHour must be a non-negative amount' }, { status: 400 })
+        }
+        rates.push({ departmentId: r.departmentId, ratePerHour: formatMoney(exact, 2) })
+      }
+    }
     const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
     if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
     return NextResponse.json({ ok: true, published: result.published })

@@ -8,8 +8,10 @@ import {
   testAcceptanceConnection,
 } from "@openbooks/engine/src/payment-acceptance.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
+import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -80,12 +82,24 @@ export async function POST(req: Request) {
     const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
     const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
     const id = typeof body.id === "string" ? body.id : null;
+    const moneyOrNull = (raw: unknown) => {
+      if (raw == null || raw === "") return null;
+      const exact = canonicalDecimal(raw, 4);
+      if (exact === null || compareDecimal(exact, "0") < 0) return "invalid";
+      return normalizeMoney(exact);
+    };
+    const percent = moneyOrNull(body.percent);
+    const fixedAmount = moneyOrNull(body.fixedAmount);
+    const capAmount = moneyOrNull(body.capAmount);
+    if (percent === "invalid" || fixedAmount === "invalid" || capAmount === "invalid") {
+      return NextResponse.json({ error: "surcharge amounts must be non-negative decimals" }, { status: 400 });
+    }
     const values = {
       name,
       calculation,
-      percent: typeof body.percent === "string" && body.percent ? body.percent : null,
-      fixedAmount: typeof body.fixedAmount === "string" && body.fixedAmount ? body.fixedAmount : null,
-      capAmount: typeof body.capAmount === "string" && body.capAmount ? body.capAmount : null,
+      percent,
+      fixedAmount,
+      capAmount,
       feeIncomeAccountId: body.feeIncomeAccountId,
       provider,
       paymentMethod,

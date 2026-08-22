@@ -9,7 +9,9 @@ import {
   type DifferenceInput,
   type PermanentDifference,
 } from "@openbooks/engine/src/income-tax-provision.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -48,30 +50,38 @@ export async function POST(req: Request) {
   if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 2200) {
     return NextResponse.json({ error: "fiscalYear is required" }, { status: 400 });
   }
-  const permanentDifferences = Array.isArray(body.permanentDifferences)
-    ? (body.permanentDifferences as { description?: unknown; amount?: unknown }[])
-        .filter((p) => typeof p?.description === "string" && typeof p?.amount === "string" && p.description.trim())
-        .map((p) => ({ description: String(p.description).trim(), amount: String(p.amount) }) satisfies PermanentDifference)
-    : [];
-  const additionalDifferences = Array.isArray(body.additionalDifferences)
-    ? (body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[])
-        .filter(
-          (d) =>
-            typeof d?.description === "string" &&
-            d.description.trim() &&
-            typeof d?.difference === "string" &&
-            DIFF_CATEGORIES.has(String(d.category)),
-        )
-        .map(
-          (d) =>
-            ({
-              category: String(d.category) as DifferenceInput["category"],
-              description: String(d.description).trim(),
-              difference: String(d.difference),
-              source: "manual",
-            }) satisfies DifferenceInput,
-        )
-    : [];
+  const money = (raw: unknown): string | null => {
+    const exact = canonicalDecimal(raw, 4);
+    return exact === null ? null : normalizeMoney(exact);
+  };
+  const permanentDifferences: PermanentDifference[] = [];
+  if (Array.isArray(body.permanentDifferences)) {
+    for (const p of body.permanentDifferences as { description?: unknown; amount?: unknown }[]) {
+      if (typeof p?.description !== "string" || !p.description.trim()) continue;
+      const amount = money(p.amount);
+      if (amount === null) return NextResponse.json({ error: "invalid permanent-difference amount" }, { status: 400 });
+      permanentDifferences.push({ description: p.description.trim(), amount });
+    }
+  }
+  const additionalDifferences: DifferenceInput[] = [];
+  if (Array.isArray(body.additionalDifferences)) {
+    for (const d of body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[]) {
+      if (typeof d?.description !== "string" || !d.description.trim() || !DIFF_CATEGORIES.has(String(d.category))) continue;
+      const difference = money(d.difference);
+      if (difference === null) return NextResponse.json({ error: "invalid temporary-difference amount" }, { status: 400 });
+      additionalDifferences.push({
+        category: String(d.category) as DifferenceInput["category"],
+        description: d.description.trim(),
+        difference,
+        source: "manual",
+      });
+    }
+  }
+  const lossCarryforwardUsed = money(body.lossCarryforwardUsed ?? "0");
+  const valuationAllowance = money(body.valuationAllowance ?? "0");
+  if (lossCarryforwardUsed === null || valuationAllowance === null) {
+    return NextResponse.json({ error: "invalid provision amount" }, { status: 400 });
+  }
   try {
     const runId = await computeProvisionRun(
       gate.user.orgId,
@@ -79,8 +89,8 @@ export async function POST(req: Request) {
       {
         permanentDifferences,
         additionalDifferences,
-        lossCarryforwardUsed: typeof body.lossCarryforwardUsed === "string" ? body.lossCarryforwardUsed : "0",
-        valuationAllowance: typeof body.valuationAllowance === "string" ? body.valuationAllowance : "0",
+        lossCarryforwardUsed,
+        valuationAllowance,
       },
       gate.user.id,
     );

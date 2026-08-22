@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { requirePermission } from "../../../lib/authz";
+import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -73,13 +75,18 @@ export async function POST(req: Request) {
   }
   const stages = validStages(body.stages ?? []);
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  const minBalanceRaw = canonicalDecimal(body.minBalance ?? "0", 4);
+  if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
+    return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
+  }
+  const minBalance = normalizeMoney(minBalanceRaw);
 
   const id = await db.transaction(async (tx) => {
     const created = (await tx.execute<{ id: string }>(sql`
       insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
                                     reply_to, is_active, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${(body.appliesToKind as string) ?? "customer_invoice"},
-              ${Number(body.gracePeriodDays ?? 0)}, ${String(body.minBalance ?? "0")},
+              ${Number(body.gracePeriodDays ?? 0)}, ${minBalance},
               ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
               ${authz.user.id}, ${authz.user.id})
       returning id

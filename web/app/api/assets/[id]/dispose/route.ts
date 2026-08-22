@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { disposeAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const AMOUNT_RE = /^\d+(\.\d+)?$/
 
 interface Body {
   date?: string
@@ -31,11 +32,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = (await req.json().catch(() => ({}))) as Body
   const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(gate.user.orgId)
   const writeOff = body.writeOff === true
-  const proceeds = writeOff ? '0' : (body.proceeds ?? '0')
-  if (!AMOUNT_RE.test(proceeds)) {
+  const proceedsRaw = writeOff ? '0' : canonicalDecimal(body.proceeds ?? '0', 4)
+  if (proceedsRaw === null || compareDecimal(proceedsRaw, '0') < 0) {
     return NextResponse.json({ error: 'proceeds must be a non-negative amount' }, { status: 422 })
   }
-  if (!writeOff && proceeds !== '0' && (!body.proceedsAccountId || !isUuid(body.proceedsAccountId))) {
+  const proceeds = normalizeMoney(proceedsRaw)
+  if (!writeOff && compareDecimal(proceeds, '0') > 0 && (!body.proceedsAccountId || !isUuid(body.proceedsAccountId))) {
     return NextResponse.json({ error: 'select the account the proceeds are deposited to' }, { status: 422 })
   }
 

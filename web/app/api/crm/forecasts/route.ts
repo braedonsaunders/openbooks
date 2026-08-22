@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
+import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -58,14 +60,19 @@ export async function POST(req: NextRequest) {
   const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
   const salesTeamId = body.salesTeamId ?? null
   if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) !== 1 || (ownerUserId && !isUuid(ownerUserId)) || (salesTeamId && !isUuid(salesTeamId))) return NextResponse.json({ error: 'choose exactly one owner or team' }, { status: 422 })
-  const overrideAmount = body.overrideAmount == null || body.overrideAmount === '' ? null : String(body.overrideAmount)
+  const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
+    ? null
+    : canonicalDecimal(body.overrideAmount, 4)
+  if (body.overrideAmount != null && body.overrideAmount !== '' && (overrideRaw === null || compareDecimal(overrideRaw, '0') < 0)) {
+    return NextResponse.json({ error: 'override must be a non-negative amount' }, { status: 422 })
+  }
+  const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
   const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
   if (!['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
   if (kind === 'manager_override' || (ownerUserId !== user.id && overrideAmount !== null)) {
     const overrideGate = await guardPermission('crm.forecasts.override')
     if (overrideGate instanceof NextResponse) return overrideGate
   }
-  if (overrideAmount !== null && !/^\d+(\.\d{0,4})?$/.test(overrideAmount)) return NextResponse.json({ error: 'override must be a non-negative amount' }, { status: 422 })
   const forecast = await calculateForecast({ orgId: user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId })
   const created = await db.transaction(async (tx) => {
     const ids: string[] = []

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { requirePermission } from "../../../../lib/authz";
+import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -52,13 +54,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const stages = "stages" in body ? validStages(body.stages) : undefined;
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  let minBalance: string | undefined;
+  if ("minBalance" in body) {
+    const minBalanceRaw = canonicalDecimal(body.minBalance, 4);
+    if (minBalanceRaw === null || compareDecimal(minBalanceRaw, "0") < 0) {
+      return NextResponse.json({ error: "minBalance must be a non-negative amount" }, { status: 400 });
+    }
+    minBalance = normalizeMoney(minBalanceRaw);
+  }
 
   await db.transaction(async (tx) => {
     const sets = [];
     if ("name" in body) sets.push(sql`name = ${body.name as string}`);
     if ("appliesToKind" in body) sets.push(sql`applies_to_kind = ${body.appliesToKind as string}`);
     if ("gracePeriodDays" in body) sets.push(sql`grace_period_days = ${Number(body.gracePeriodDays)}`);
-    if ("minBalance" in body) sets.push(sql`min_balance = ${String(body.minBalance)}`);
+    if (minBalance !== undefined) sets.push(sql`min_balance = ${minBalance}`);
     if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
     if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
     if (sets.length) {

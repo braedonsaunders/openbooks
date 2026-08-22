@@ -5,6 +5,7 @@ import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
+import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from './_lib'
 
 export const runtime = 'nodejs'
@@ -38,10 +39,10 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
 /** Parse an hours cell → non-negative 4dp string, or null (blank/zero). */
 function hoursOrNull(v: unknown): string | null | 'invalid' {
   if (v == null || v === '') return null
-  const n = Number(v)
-  if (Number.isNaN(n) || n < 0) return 'invalid'
-  if (n === 0) return null
-  return n.toFixed(4)
+  const hours = canonicalDecimal(v, 4)
+  if (hours === null || compareDecimal(hours, '0') < 0) return 'invalid'
+  if (compareDecimal(hours, '0') === 0) return null
+  return hours
 }
 
 /** GET ?employee=&week= → the week's grid rows + status. */
