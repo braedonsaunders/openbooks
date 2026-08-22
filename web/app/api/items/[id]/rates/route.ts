@@ -144,6 +144,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         values (${gate.user.orgId}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
         on conflict (org_id, item_id) do update set base_unit = excluded.base_unit, pricing_policy = excluded.pricing_policy,
           invoice_presentation = excluded.invoice_presentation, is_active = true, updated_at = now(), updated_by = excluded.updated_by
+        where item_rate_profiles.org_id = ${gate.user.orgId}
       `)
       await tx.execute(sql`
         update item_rate_versions set effective_to = (${body.effectiveFrom}::date - interval '1 day')::date, updated_at = now(), updated_by = ${gate.user.id}
