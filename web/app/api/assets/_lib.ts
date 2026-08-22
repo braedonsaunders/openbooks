@@ -147,13 +147,13 @@ export async function loadAsset(
              coalesce(sum(l.planned_amount),0)::text as planned,
              exists (
                select 1 from depreciation_schedules es
-               join depreciation_schedule_lines el on el.schedule_id=es.id
+               join depreciation_schedule_lines el on el.schedule_id=es.id and el.org_id=es.org_id
                where es.asset_id=${id} and es.org_id=${orgId}
                  and (el.posted_amount is not null or el.input_id is not null or el.source='imported')
              ) as has_evidence
         from depreciation_schedules s
         join accounting_books b on b.id=s.book_id and b.is_primary
-        left join depreciation_schedule_lines l on l.schedule_id=s.id
+        left join depreciation_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id
        where s.asset_id=${id} and s.org_id=${orgId}`),
   ])
   const linesRes = (await db.execute<Record<string, any>>(sql`
