@@ -116,6 +116,16 @@ export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const
 export const AR_KINDS = ['customer_invoice', 'customer_credit'] as const
 export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'] as const
 
+/** Optional-module kinds: the generic document APIs must 404 when the feature is off. */
+export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
+  quote: 'orders',
+  sales_order: 'orders',
+  purchase_order: 'orders',
+  expense_report: 'expenses',
+  pay_run: 'payroll',
+  project_charge: 'projects',
+}
+
 export function docKindConfig(kind: string): DocKindConfig | undefined {
   return DOC_KINDS[kind]
 }

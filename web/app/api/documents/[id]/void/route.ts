@@ -6,7 +6,7 @@ import {
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
 import { can, getAuthz } from '../../../../../lib/authz'
-import { createPermission, postPermission } from '../../../../../lib/documents'
+import { createPermission, isDocKindEnabled, postPermission } from '../../../../../lib/documents'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -44,6 +44,9 @@ export async function POST(
   `))
   const doc = found.rows[0]
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(authz.user.orgId, doc.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const permission = voidPermission(doc.kind)
   if (!permission) {
     return NextResponse.json(

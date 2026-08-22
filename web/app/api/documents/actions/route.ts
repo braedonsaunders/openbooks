@@ -4,7 +4,7 @@ import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { getAuthz, can } from '../../../../lib/authz'
-import { controlDeps, DOC_KINDS, createPermission, postPermission } from '../../../../lib/documents'
+import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
 
@@ -53,6 +53,9 @@ export async function POST(req: Request) {
     .from(schema.documents)
     .where(and(eq(schema.documents.id, body.documentId), eq(schema.documents.orgId, user.orgId)))
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(user.orgId, doc.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const cfg = DOC_KINDS[doc.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
 

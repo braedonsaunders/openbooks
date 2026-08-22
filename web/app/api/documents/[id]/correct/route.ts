@@ -11,6 +11,7 @@ import {
   createPermission,
   createPostedCorrectionDraft,
   DOC_KINDS,
+  isDocKindEnabled,
   DocumentEditError,
   postPermission,
   type DocumentEditInput,
@@ -34,6 +35,9 @@ export async function POST(
   `))
   const source = found.rows[0]
   if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(authz.user.orgId, source.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   if (!DOC_KINDS[source.kind]) {
     return NextResponse.json(
       { error: 'this transaction type uses its dedicated correction workflow' },

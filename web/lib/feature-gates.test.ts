@@ -195,6 +195,15 @@ test('the surfaces this test was written for are covered', () => {
     /isFeatureEnabled\(user\.orgId, 'revenueRecognition'\)/,
     'recognition posting must refuse when the revenue recognition gate is off',
   )
+  for (const file of [
+    'app/api/documents/[id]/route.ts',
+    'app/api/documents/[id]/void/route.ts',
+    'app/api/documents/[id]/correct/route.ts',
+    'app/api/documents/actions/route.ts',
+    'app/api/documents/draft/route.ts',
+  ]) {
+    assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
+  }
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
