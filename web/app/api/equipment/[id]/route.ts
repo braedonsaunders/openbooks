@@ -64,8 +64,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return bad(purchasePriceRaw === null ? 'purchase_price_invalid' : 'purchase_price_negative')
   }
   const purchasePrice = normalizeMoney(purchasePriceRaw)
-  const capacityQuantity = body.capacityQuantity !== undefined && text(body.capacityQuantity) ? String(body.capacityQuantity) : null
-  try { if (capacityQuantity && cmp(capacityQuantity, '0') <= 0) return bad('capacity_not_positive') } catch { return bad('capacity_invalid') }
+  const capacityInput = body.capacityQuantity !== undefined ? text(body.capacityQuantity) : undefined
+  const capacityRaw = capacityInput ? canonicalDecimal(capacityInput, 4) : null
+  if (capacityInput && capacityRaw === null) return bad('capacity_invalid')
+  let capacityQuantity: string | null = null
+  try {
+    capacityQuantity = capacityRaw === null ? null : normalizeMoney(capacityRaw)
+    if (capacityQuantity && cmp(capacityQuantity, '0') <= 0) return bad('capacity_not_positive')
+  } catch { return bad('capacity_invalid') }
   const acquiredOn = body.acquiredOn !== undefined ? text(body.acquiredOn) : current.rows[0].acquired_on
   const inServiceOn = body.inServiceOn !== undefined ? text(body.inServiceOn) : current.rows[0].in_service_on
   if (acquiredOn && inServiceOn && String(inServiceOn) < String(acquiredOn)) return bad('in_service_before_acquisition')

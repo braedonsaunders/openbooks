@@ -1,4 +1,5 @@
 import "server-only";
+import { canonicalDecimal } from "../exact-decimal";
 import type { ApiField } from "./schema-registry";
 
 /**
@@ -29,9 +30,11 @@ export function coerceScalar(
   const base = type.split(" (")[0]; // "string (uuid)" → "string"
   switch (base) {
     case "number": {
-      const n = typeof raw === "number" ? raw : Number(raw);
-      if (Number.isNaN(n)) return { ok: false, message: "must be a number" };
-      return { ok: true, value: n };
+      // Persist exact decimal strings. Entity money columns (numeric(19,4))
+      // must not cross IEEE-754 via Number() before the writer binds them.
+      const exact = canonicalDecimal(raw, 4);
+      if (exact === null) return { ok: false, message: "must be a number" };
+      return { ok: true, value: exact };
     }
     case "boolean": {
       if (typeof raw === "boolean") return { ok: true, value: raw };
