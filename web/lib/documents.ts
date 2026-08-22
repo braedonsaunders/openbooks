@@ -744,17 +744,17 @@ export async function partyOptions(role: 'vendor' | 'customer', orgId?: string):
   const filter =
     role === 'vendor'
       ? sql`exists (select 1 from vendor_roles vr
-                     where vr.org_id = ${resolvedOrgId}
-                       and vr.party_id = parties.id
+                     where vr.org_id = p.org_id
+                       and vr.party_id = p.id
                        and vr.is_active)`
       : sql`exists (select 1 from customer_roles cr
-                     where cr.org_id = ${resolvedOrgId}
-                       and cr.party_id = parties.id
+                     where cr.org_id = p.org_id
+                       and cr.party_id = p.id
                        and cr.is_active)`
   const r = (await db.execute<Opt>(sql`
-    select id, display_name, subsidiary_id from parties
-     where org_id = ${resolvedOrgId} and ${filter} and is_active
-     order by display_name limit 2000
+    select p.id, p.display_name, p.subsidiary_id from parties p
+     where p.org_id = ${resolvedOrgId} and ${filter} and p.is_active
+     order by p.display_name limit 2000
   `))
   return r.rows
 }
