@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
+import { canRunReportEntity, canRunReportStatement, guardReportEntity } from '../../../../../lib/report-authz'
 import {
   loadReportDefinition,
   slugifyReportName,
@@ -17,6 +18,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const def = await loadReportDefinition(gate.user.orgId, id)
   if (!def) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canRunReportEntity(gate, def.query))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canRunReportStatement(gate, def.statement?.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ definition: def })
 }
 
@@ -53,7 +58,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let queryJson = JSON.stringify(existing.query)
   if (body.query !== undefined) {
     try {
-      queryJson = JSON.stringify(validateCustomQuery(body.query))
+      const query = validateCustomQuery(body.query)
+      const denied = await guardReportEntity(gate, query)
+      if (denied) return denied
+      queryJson = JSON.stringify(query)
     } catch (err) {
       return NextResponse.json(
         { error: err instanceof Error ? err.message : 'Invalid report query' },

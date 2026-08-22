@@ -6,6 +6,7 @@ import { PageContainer } from '../../../components/page-layout'
 import { getAuthz, can } from '../../../lib/authz'
 import { ReportsHub, type HubGroup } from './ReportsHub'
 import { isFeatureEnabled } from '../../../lib/features'
+import { hiddenReportEntityKeys } from '../../../lib/report-authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export default async function Reports() {
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities] = await Promise.all([
     db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
@@ -26,14 +27,15 @@ export default async function Reports() {
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, 'orders') : Promise.resolve(false),
+    authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
   ])
 
-    // Hide definitions over permission-gated entities (payroll wages) from
-  // users who could not run them anyway.
-  const visibleDefinitions = custom.rows.filter((row) => {
-    const entity = row.entity ? REPORT_ENTITY_MAP[row.entity] : undefined
-    return !entity?.requiredPermission || (authz ? can(authz, entity.requiredPermission) : false)
-  })
+    // Hide definitions over permission-gated or feature-off entities from
+  // users who could not run them anyway. A payroll built-in must not fall
+  // into the Custom group when Payroll is off.
+  const hidden = new Set(hiddenEntities)
+  const visibleDefinitions = custom.rows.filter((row) => !row.entity || !hidden.has(row.entity))
 
   // Built-in reports over module entities are FIRST-CLASS: they get their own
   // hub group beside the standard statements. Custom keeps the rest.
@@ -94,12 +96,12 @@ const card = (key: string, href: string, icon: string) => ({
         card('payables', '/reports/partners?kind=payable', 'Landmark'),
       ],
     },
-    {
+    ...(ordersEnabled ? [{
       key: 'orders',
       label: t('hub.groups.orders'),
       accent: 'teal',
       cards: [card('orders', '/reports/orders', 'ClipboardList')],
-    },
+    } satisfies HubGroup] : []),
     ...(budgetsEnabled ? [{
       key: 'budgeting',
       label: t('hub.groups.budgeting'),
@@ -138,6 +140,7 @@ const card = (key: string, href: string, icon: string) => ({
         ...saved.rows.filter((s) =>
           (projectsEnabled || !s.path.startsWith('/reports/project-profitability'))
           && (budgetsEnabled || !s.path.startsWith('/reports/budget'))
+          && (ordersEnabled || !s.path.startsWith('/reports/orders'))
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
           return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark' }

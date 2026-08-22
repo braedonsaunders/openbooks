@@ -6,7 +6,8 @@ import { getTranslations } from 'next-intl/server'
 import { Button, PageHeader } from '@openbooks/ui'
 import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
 import { ListPageLayout } from '../../../../../../components/page-layout'
-import { can, requirePermission } from '../../../../../../lib/authz'
+import { requirePermission } from '../../../../../../lib/authz'
+import { canRunReportEntity } from '../../../../../../lib/report-authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import {
   applyPeriodOverride, executeReport, loadReportDefinition, reportPeriodField,
@@ -49,10 +50,10 @@ export default async function ReportRunPage({
   if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
   if (!definition.query) notFound()
 
-  // Sensitive entities (payroll wages) carry their own permission on top of
-  // reports.read — same gate as /api/reports/run.
+  // Sensitive / optional-module entities carry their own permission and
+  // Features switch on top of reports.read — same gate as /api/reports/run.
   const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
-  if (entity?.requiredPermission && !can(authz, entity.requiredPermission)) notFound()
+  if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
   const t = await getTranslations('reports')
   const tk = await getTranslations('reports.custom')

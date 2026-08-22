@@ -7,8 +7,9 @@ import { ListPageLayout } from '../../../../../components/page-layout'
 import { Pagination } from '../../../../../components/pagination'
 import { parseListParams } from '../../../../../lib/list-params'
 import { dateTime } from '../../../../../lib/format'
-import { can, requirePermission } from '../../../../../lib/authz'
-import { loadView, runView, viewEntityPermission } from '../../../../../lib/views'
+import { requirePermission } from '../../../../../lib/authz'
+import { canRunReportEntity } from '../../../../../lib/report-authz'
+import { loadView, runView } from '../../../../../lib/views'
 import type { ReportRunResult } from '@openbooks/reports'
 import { ResultView } from '../../../reports/custom/ResultView'
 import { orgBranding } from '../../../../../lib/report-pdf'
@@ -77,10 +78,9 @@ export default async function ViewRunPage({
     )
   }
 
-  // A shared view never widens what its reader may see: payroll entities keep
-  // their own permission, the same one the report surfaces enforce.
-  const neededPermission = viewEntityPermission(view.query)
-  if (neededPermission && !can(authz, neededPermission)) notFound()
+  // A shared view never widens what its reader may see: payroll / optional-
+  // module entities keep the same gate the report surfaces enforce.
+  if (!(await canRunReportEntity(authz, view.query))) notFound()
 
   const canEdit = authz.permissions.has('*') || view.owner_id === authz.user.id
   const [result, branding] = await Promise.all([

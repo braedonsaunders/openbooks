@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   `))
   const row = result.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardReportEntity(gate, row.query)
+  const denied = await guardReportEntity(gate, row.query)
   if (denied) return denied
   return blobResponse(req, {
     filename: row.filename,

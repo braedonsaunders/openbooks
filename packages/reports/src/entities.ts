@@ -97,6 +97,10 @@ export type ReportEntity = {
    *  sensitive data like payroll wages. Enforced at run time and filtered
    *  from the builder catalog. */
   requiredPermission?: string
+  /** Optional-feature gate (Company Settings → Features). When the feature is
+   *  off the entity disappears from the catalog and every execution path
+   *  refuses it — same contract as setup-registry `featureKey`. */
+  featureKey?: string
   /** Chronological ordering (SQL ORDER BY body, server-defined constant) that
    *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
    *  measures are rejected at compile time. */
@@ -297,6 +301,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'projects',
     label: 'Projects',
     category: 'catalog',
+    featureKey: 'projects',
     description: 'Projects / jobs — status, customer, project type, schedule and PO number.',
     from: `projects prj
       LEFT JOIN parties cust ON cust.id = prj.customer_id
@@ -322,6 +327,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'timesheets',
     label: 'Time entries',
     category: 'time',
+    featureKey: 'timeTracking',
     description: 'Timesheet entries — employee, date, hours, billable state, project and approval status.',
     from: `time_entries te
       LEFT JOIN parties emp ON emp.id = te.employee_party_id
@@ -349,6 +355,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'timesheet_weeks',
     label: 'Timesheet weeks',
     category: 'time',
+    featureKey: 'timeTracking',
     description: 'Weekly timesheets — who submitted, who approved, when, and the hours each week carries.',
     from: `timesheet_weeks tw
       LEFT JOIN parties emp ON emp.id = tw.employee_party_id AND emp.org_id = tw.org_id
@@ -377,6 +384,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'fixed_assets',
     label: 'Fixed assets',
     category: 'catalog',
+    featureKey: 'fixedAssets',
     description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
     from: `fixed_assets fa
       LEFT JOIN asset_categories ac ON ac.id = fa.category_id
@@ -406,6 +414,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'equipment',
     label: 'Equipment',
     category: 'catalog',
+    featureKey: 'equipment',
     description: 'Financial equipment register with shared charge items, purchase basis, utilization, cost recovery, billing and return.',
     from: `equipment_units eu
       LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id
@@ -522,6 +531,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id`,
     orgColumn: 's.org_id',
     requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
       { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
@@ -578,6 +588,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN departments dep ON dep.id = l.department_id`,
     orgColumn: 'l.org_id',
     requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
     latestOrderExpr: 's.pay_date DESC, s.id DESC, l.id DESC',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
@@ -639,6 +650,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN pay_runs r ON r.document_id = cmp.pay_run_document_id AND r.org_id = cmp.org_id`,
     orgColumn: 'f.org_id',
     requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
     latestOrderExpr: 'cmp.compared_at DESC, f.id DESC',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'f.employee_name' },
@@ -762,6 +774,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       ) lim ON TRUE`,
     orgColumn: 'bal.org_id',
     requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
       { key: 'plan', label: 'Plan', kind: 'text', expr: 'pln.name' },
@@ -821,6 +834,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN departments dep ON dep.id = er.department_id`,
     orgColumn: 't.org_id',
     requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
     baseFilter: {
       combinator: 'and',
       rules: [{ field: 'tier_active', op: 'is_true' }],

@@ -3,8 +3,8 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db, withOrg } from "@openbooks/engine/src/db.ts";
-import { REPORT_ENTITY_MAP } from "@openbooks/reports";
 import { can, type Authz } from "../authz";
+import { canRunReportEntity, canRunReportStatement } from "../report-authz";
 import {
   agingDetail,
   cashFlowIndirect,
@@ -37,11 +37,16 @@ import {
  * Same doctrine as tools.ts: page permissions, capped lists, exact query layer.
  */
 
-/** A definition over a permission-gated report entity (e.g. payroll wages) is
- *  hidden from users who could not run it anyway — mirrors the reports hub. */
-function entityPermitted(authz: Authz, entity: string | null): boolean {
-  const def = entity ? REPORT_ENTITY_MAP[entity] : undefined;
-  return !def?.requiredPermission || can(authz, def.requiredPermission);
+/** A definition over a permission- or feature-gated report entity (e.g.
+ *  payroll wages, projects) is hidden from users who could not run it —
+ *  mirrors the reports hub and the shared report-authz gate. */
+async function definitionPermitted(
+  authz: Authz,
+  entity: string | null,
+  statementKind: string | null,
+): Promise<boolean> {
+  if (!(await canRunReportEntity(authz, { entity }))) return false;
+  return canRunReportStatement(authz, statementKind);
 }
 
 /** Reports render through next-intl when a request locale exists; background
@@ -72,9 +77,10 @@ const listReportDefinitions: AssistantToolDef = {
     const rows = (await db.execute<{
         id: string; name: string; description: string | null; kind: string;
         report_type: string; slug: string | null; entity: string | null;
+        statement_kind: string | null;
       }>(sql`
       select id, name, description, kind, coalesce(report_type, 'query') as report_type,
-             slug, query->>'entity' as entity, updated_at
+             slug, query->>'entity' as entity, statement->>'kind' as statement_kind, updated_at
         from report_definitions
        where org_id = ${authz.user.orgId}
          ${a.reportType ? sql`and coalesce(report_type, 'query') = ${a.reportType}` : sql``}
@@ -82,7 +88,10 @@ const listReportDefinitions: AssistantToolDef = {
        order by updated_at desc
        limit 500
     `));
-    const visible = rows.rows.filter((row) => entityPermitted(authz, row.entity));
+    const visible = [];
+    for (const row of rows.rows) {
+      if (await definitionPermitted(authz, row.entity, row.statement_kind)) visible.push(row);
+    }
     return {
       ok: true,
       data: {
@@ -120,12 +129,15 @@ const runReport: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
-    const def = (await db.execute<{ entity: string | null }>(sql`
-      select query->>'entity' as entity from report_definitions
+    const def = (await db.execute<{ entity: string | null; statement_kind: string | null }>(sql`
+      select query->>'entity' as entity, statement->>'kind' as statement_kind
+        from report_definitions
        where id = ${a.definitionId} and org_id = ${orgId}
     `));
     if (!def.rows[0]) return { ok: false, error: "report_not_found" };
-    if (!entityPermitted(authz, def.rows[0].entity)) return { ok: false, error: "forbidden" };
+    if (!(await definitionPermitted(authz, def.rows[0].entity, def.rows[0].statement_kind))) {
+      return { ok: false, error: "forbidden" };
+    }
 
     const p = new URLSearchParams();
     if (a.period && a.period !== "custom") {
@@ -318,10 +330,16 @@ const listReportSchedules: AssistantToolDef = {
   inputSchema: z.object({ definitionId: uuidInput.optional() }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { definitionId?: string };
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = (await db.execute<{
+      id: unknown; definition_id: unknown; definition_name: unknown; cadence: unknown;
+      day_of_week: unknown; day_of_month: unknown; hour: unknown; minute: unknown;
+      timezone: unknown; recipient_emails: unknown; next_run_at: unknown; active: unknown;
+      entity: string | null; statement_kind: string | null;
+    }>(sql`
       select s.id, s.definition_id, d.name as definition_name, s.cadence,
              s.day_of_week, s.day_of_month, s.hour, s.minute, s.timezone,
-             s.recipient_emails, s.next_run_at, s.active
+             s.recipient_emails, s.next_run_at, s.active,
+             d.query->>'entity' as entity, d.statement->>'kind' as statement_kind
         from report_schedules s
         left join report_definitions d on d.id = s.definition_id and d.org_id = s.org_id
        where s.org_id = ${authz.user.orgId}
@@ -329,7 +347,13 @@ const listReportSchedules: AssistantToolDef = {
        order by s.next_run_at
        limit 200
     `));
-    return { ok: true, data: { schedules: rows.rows, href: "/reports" } };
+    const schedules = [];
+    for (const row of rows.rows) {
+      if (!(await definitionPermitted(authz, row.entity, row.statement_kind))) continue;
+      const { entity: _e, statement_kind: _s, ...schedule } = row;
+      schedules.push(schedule);
+    }
+    return { ok: true, data: { schedules, href: "/reports" } };
   },
 };
 

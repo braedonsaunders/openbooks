@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   // Sensitive entities (payroll wages) carry their own permission on top of
   // reports.read. The gate itself lives in lib/report-authz so the runner, the
   // export, the drill and the definition list cannot drift apart.
-  const entityGate = (entityKey: unknown): NextResponse | null =>
+  const entityGate = (entityKey: unknown): Promise<NextResponse | null> =>
     guardReportEntity(gate, { entity: entityKey })
 
   const body = (await req.json()) as {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (def.report_type === 'statement' || !def.query) {
       return NextResponse.json({ error: 'not a query report' }, { status: 422 })
     }
-    const denied = entityGate((def.query as { entity?: string }).entity)
+    const denied = await entityGate((def.query as { entity?: string }).entity)
     if (denied) return denied
     const run = await recordReportRun({
       orgId: user.orgId,
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
       { status: 422 },
     )
   }
-  const deniedAdhoc = entityGate(query.entity)
+  const deniedAdhoc = await entityGate(query.entity)
   if (deniedAdhoc) return deniedAdhoc
   const maxRows = body.preview === false ? REPORT_MAX_ROWS : REPORT_PREVIEW_ROWS
   try {

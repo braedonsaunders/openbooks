@@ -39,6 +39,24 @@ test('sensitive entities are reachable only through a declared permission', () =
   }
 })
 
+test('optional-module report entities declare the Features switch they follow', () => {
+  const expected: Record<string, string> = {
+    projects: 'projects',
+    timesheets: 'timeTracking',
+    timesheet_weeks: 'timeTracking',
+    fixed_assets: 'fixedAssets',
+    equipment: 'equipment',
+    pay_stubs: 'payroll',
+    pay_stub_lines: 'payroll',
+    payroll_parallel_findings: 'payroll',
+    entitlement_balances: 'payroll',
+    entitlement_service_milestones: 'payroll',
+  }
+  for (const [key, featureKey] of Object.entries(expected)) {
+    assert.equal(REPORT_ENTITY_MAP[key]?.featureKey, featureKey, key)
+  }
+})
+
 /** Every path that can execute a stored plan, and how it reaches the gate. */
 const EXECUTION_PATHS: Array<{ file: string; symbol: string; why: string }> = [
   {

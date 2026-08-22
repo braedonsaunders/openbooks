@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { orgInfo } from '../../../../lib/data'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
@@ -25,6 +26,7 @@ const KINDS = ['quote', 'sales_order', 'purchase_order'] as const
 export default async function OrdersReport() {
   const { money } = await getMoneyFormatter()
   const authz = await requirePermission('reports.read')
+  await requireFeatureEnabled(authz.user.orgId, 'orders')
   const t = await getTranslations('reports.orders')
   const tr = await getTranslations('reports')
   const orgId = authz.user.orgId
