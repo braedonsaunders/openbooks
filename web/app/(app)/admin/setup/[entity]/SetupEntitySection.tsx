@@ -91,11 +91,17 @@ export async function SetupEntitySection({
   basePath: string
   canManage: boolean
 }) {
-  const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
+  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
+  const gated = setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
-  }))
+  })
+  const entity = resolveDynamicSetupOptions(
+    gated.key === 'item-rate-books' && !multiCurrency
+      ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
+      : gated,
+  )
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'

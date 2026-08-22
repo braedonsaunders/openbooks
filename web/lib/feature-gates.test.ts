@@ -2057,6 +2057,31 @@ test('the surfaces this test was written for are covered', () => {
     'the labor-rate-card create must not send currency when Multi-currency is off',
   )
   assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'item-rate-book create must refuse currency when Multi-currency is off — stored books stay',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'item-rate-book create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /body\.currency !== undefined\s*\?\s*String\(body\.currency\)[\s\S]{0,80}base_currency/,
+    'item-rate-book create must fall back to the org base currency when currency is omitted',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/[entity]/SetupEntitySection.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'setup must not load the item-rate-book currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/[entity]/SetupEntitySection.tsx'),
+    /item-rate-books[\s\S]{0,200}!multiCurrency[\s\S]{0,160}field\.key !== 'currency'/,
+    'the item-rate-book form must hide the currency control when Multi-currency is off',
+  )
+  assert.match(
     read('app/api/admin/payment-operations/[resource]/route.ts'),
     /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
     'payment-format create must refuse currency when Multi-currency is off — stored formats stay',
