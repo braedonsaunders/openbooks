@@ -592,6 +592,7 @@ export async function provisionLocaleDepth(
         rate_bands = excluded.rate_bands,
         notes = excluded.notes,
         updated_at = now(), updated_by = ${actorId}
+      where tax_locale_pack_meta.org_id = ${orgId}
     `);
   }
   return { bandsCreated };
