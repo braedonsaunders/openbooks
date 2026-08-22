@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCalendarDays, businessToday } from "../business-date.ts";
+import { addCalendarDays, addCalendarMonthsStart, businessToday } from "../business-date.ts";
 import type { QboClient } from "../qbo.ts";
+import type { XeroClient } from "../xero.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
 import { NetSuiteSource } from "./netsuite-source.ts";
 import { OdooSource } from "./odoo-source.ts";
 import { QboSource } from "./qbo-source.ts";
+import { XeroSource } from "./xero-source.ts";
 
 test("NetSuite exposes posting account-month home-currency activity", async () => {
   const source = new NetSuiteSource({
@@ -132,4 +134,19 @@ test("QuickBooks exposes transaction account-month home-currency activity", asyn
   assert.deepEqual(await source.monthlyActivity(), [
     { accountRef: "42", month: "2026-03", amount: "15.0000" },
   ]);
+});
+
+test("Xero trial-balance month-ends follow the org calendar", async () => {
+  const orgId = "00000000-0000-0000-0000-000000000000";
+  const dates: string[] = [];
+  const source = new XeroSource({
+    get: async (path: string, params: Record<string, string> = {}) => {
+      assert.equal(path, "Reports/TrialBalance");
+      dates.push(params.date);
+      return { Reports: [{ Rows: [] }] };
+    },
+  } as unknown as XeroClient, { orgId });
+
+  await source.monthlyActivity();
+  assert.equal(dates.at(-1), addCalendarDays(addCalendarMonthsStart(await businessToday(orgId), 1), -1));
 });
