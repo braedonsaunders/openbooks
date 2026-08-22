@@ -2408,7 +2408,7 @@ ${tx}
 `;
 }
 
-export async function loadSepaRunFile(runId: string, orgId: string, now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
+export async function loadSepaRunFile(runId: string, orgId: string, _now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
@@ -2439,11 +2439,12 @@ export async function loadSepaRunFile(runId: string, orgId: string, now: Date): 
       remittance: r.document_number,
     };
   });
+  const today = await businessToday(orgId);
   const content = buildSepaFile({
     settings: settings.settings,
     messageId: `MSG-${run.runNumber}`,
-    creationDateTime: now.toISOString().replace(/\.\d{3}Z$/, ""),
-    executionDate: run.scheduledFor ?? await businessToday(orgId),
+    creationDateTime: `${today}T00:00:00`,
+    executionDate: run.scheduledFor ?? today,
     payments,
   });
   return { filename: `SEPA-${run.runNumber}.xml`, content, runNumber: run.runNumber };
