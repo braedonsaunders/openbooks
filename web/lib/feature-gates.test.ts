@@ -753,6 +753,21 @@ test('the surfaces this test was written for are covered', () => {
     'recurring run-now must 404 — not mint — when the template kind is off',
   )
   assert.match(
+    read('../engine/src/property-management.ts'),
+    /export async function addLeaseCharge[\s\S]{0,400}await assertEnabled\(db, input\.orgId\)/,
+    'lease-charge writes must refuse when Property Management is off — existing charges stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /export async function scheduleLeaseCharges[\s\S]{0,200}await assertEnabled\(db, orgId\)/,
+    'lease-schedule writes must refuse when Property Management is off — existing schedule lines stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /export async function finalizeCamPool[\s\S]{0,200}await assertEnabled\(tx, orgId\)/,
+    'CAM finalize must refuse when Property Management is off — existing pools stay',
+  )
+  assert.match(
     read('lib/api/registry-data.ts'),
     /ITEM_REVENUE_RECOGNITION_COLUMNS/,
     'REST/MCP items catalog must name the revenue-recognition columns the Features switch hides',
