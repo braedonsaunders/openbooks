@@ -122,7 +122,7 @@ export async function unionRemittanceReport(
            count(distinct s.employee_party_id)::int as employees,
            sum(l.hours) as hours, coalesce(sum(l.amount), 0) as amount
       from union_fringes f
-      join pay_components c on c.id = f.component_id
+      join pay_components c on c.id = f.component_id and c.org_id = f.org_id
       join pay_stub_lines l on l.component_id = c.id and l.org_id = f.org_id
       join pay_stubs s on s.id = l.stub_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'

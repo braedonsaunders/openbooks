@@ -35,8 +35,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
              p.originator_secrets_encrypted is not null as has_secrets, p.is_active,
              f.name as format_name, f.rail, a.number as bank_number, a.name as bank_name
         from payment_bank_profiles p
-        join payment_formats f on f.id = p.payment_format_id
-        join accounts a on a.id = p.bank_account_id
+        join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+        join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
        where p.org_id = ${gate.user.orgId} order by p.is_active desc, p.name
     `)
     return NextResponse.json({ rows: rows.rows })

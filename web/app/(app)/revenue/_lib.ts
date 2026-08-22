@@ -52,7 +52,7 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
     select c.id, c.contract_number, c.status, c.currency, c.total_transaction_price, c.starts_on, c.ends_on,
            coalesce(p.display_name, '—') as customer
       from revenue_contracts c
-      left join parties p on p.id = c.customer_id
+      left join parties p on p.id = c.customer_id and p.org_id = c.org_id
      where c.id = ${id} and c.org_id = ${orgId}`))
   const contract = cRes.rows[0]
   if (!contract) return null
@@ -72,9 +72,9 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
       select p.name as period_name, p.ends_on as period_ends_on,
              l.planned_amount, l.recognized_amount, l.journal_entry_id
         from recognition_schedules s
-        join accounting_books bk on bk.id = s.book_id and bk.is_primary
-        join recognition_schedule_lines l on l.schedule_id = s.id
-        join accounting_periods p on p.id = l.period_id
+        join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
+        join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+        join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where s.obligation_id = ${o.id} and s.org_id = ${orgId}
        order by l.sequence`))
     const planned = lRes.rows.reduce((a, r) => add(a, String(r.planned_amount ?? '0')), '0')

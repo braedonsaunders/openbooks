@@ -114,8 +114,8 @@ export async function generateInvoiceFromBillingRequest(
       select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
              p.invoicing_profile as project_invoicing, c.invoicing_profile as customer_invoicing,
              coalesce(s.base_currency,o.base_currency) as billing_currency
-        from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
-             left join parties c on c.id = p.customer_id
+        from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+             left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
     `))
     const project = projRes.rows[0]

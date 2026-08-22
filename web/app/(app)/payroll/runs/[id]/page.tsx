@@ -55,7 +55,7 @@ export default async function PayRunPage({
            r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
-      left join pay_schedules s on s.id = r.pay_schedule_id
+      left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]
   if (!run) notFound()
@@ -79,7 +79,7 @@ export default async function PayRunPage({
              c.code as component_code, pr.name as project_name, dep.name as department_name
         from pay_stub_lines l
         join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
-        left join pay_components c on c.id = l.component_id
+        left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
         left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
         left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
        where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
@@ -173,7 +173,7 @@ export default async function PayRunPage({
              a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
         from pay_run_adjustments a
         join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
-        left join pay_components c on c.id = a.component_id
+        left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
        where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
        order by p.display_name, a.created_at`),
     db.execute<any>(sql`

@@ -87,7 +87,7 @@ export async function POST(req: Request) {
                  bl.department_id, bl.project_id, bl.location_id, bl.class_id,
                  bl.amount, bl.note, ${user.id}, ${user.id}
             from budget_lines bl
-            join accounting_periods source_period on source_period.id = bl.period_id
+            join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
             join accounting_periods destination
               on destination.org_id = ${user.orgId}
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id

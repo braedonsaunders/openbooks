@@ -222,7 +222,7 @@ export async function completeRequestedDocumentVoid(
         const downstream = (await tx.execute<{ document_number: string }>(sql`
           select d2.document_number
             from document_links dl
-            join documents d2 on d2.id = dl.to_document_id
+            join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
            where dl.from_document_id = ${documentId}
              and d2.status in ('approved', 'posted')
              and dl.link_type <> 'pays'

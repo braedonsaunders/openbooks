@@ -59,10 +59,10 @@ export default async function PeriodClose({
                starter.name as starter_name, approver.name as approver_name,
                closer.name as closer_name, publisher.name as publisher_name
           from close_runs r
-          join accounting_periods p on p.id = r.period_id
-          join accounting_books b on b.id = r.book_id
-          join close_blueprints bp on bp.id = r.blueprint_id
-          left join close_reporting_packages pkg on pkg.id = r.reporting_package_id
+          join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+          join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
+          join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id
+          left join close_reporting_packages pkg on pkg.id = r.reporting_package_id and pkg.org_id = r.org_id
           left join users starter on starter.id = r.started_by
           left join users approver on approver.id = r.approved_by
           left join users closer on closer.id = r.closed_by
@@ -98,7 +98,7 @@ export default async function PeriodClose({
       db.execute(sql`
         select t.key,
                avg(extract(epoch from (t.completed_at - r.started_at)) / 86400.0)::numeric(10,1) as average_days
-          from close_run_tasks t join close_runs r on r.id = t.run_id
+          from close_run_tasks t join close_runs r on r.id = t.run_id and r.org_id = t.org_id
          where t.org_id = ${orgId} and t.completed_at is not null and r.id <> ${runId}
          group by t.key`),
     ])) as any[];

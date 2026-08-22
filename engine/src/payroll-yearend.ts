@@ -273,7 +273,7 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
     with committed as (
       select s.*, ${effectiveFilingAccountSql("prof")} as filing_account_id
         from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
@@ -290,15 +290,15 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'earning'
                   and coalesce(pc.taxable, true))) as taxable_income,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'deduction'
                   and pc.system_key = 'income_tax')) as income_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'deduction'
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
@@ -414,9 +414,9 @@ export async function t4Summary(
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_cpp,
       sum(case when pc.system_key = 'ei' then l.amount else 0 end) as employer_ei
       from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-      join pay_components pc on pc.id = l.component_id
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear}
@@ -498,7 +498,7 @@ export async function roeWorksheet(
            (select coalesce(sum(l.hours), 0) from pay_stub_lines l
              where l.stub_id = s.id and l.kind = 'earning') as hours
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
      order by s.pay_date desc
      limit ${limit}
@@ -619,7 +619,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
-      left join pay_schedules sched on sched.id = prof.pay_schedule_id
+      left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
        and coalesce(prof.country, 'CA') = 'CA'
   `));
@@ -661,9 +661,9 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       coalesce(sum(case when pc.system_key = any(${`{${separation17.vacationPay.join(",")}}`}::text[]) then l.amount else 0 end), 0) as vacation,
       coalesce(sum(case when pc.system_key = any(${`{${separation17.otherMonies.join(",")}}`}::text[]) then l.amount else 0 end), 0) as other
       from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-      left join pay_components pc on pc.id = l.component_id
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      left join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
        and l.kind = 'earning'
        and (${finalPeriod?.payDate ?? null}::date is null or s.pay_date = ${finalPeriod?.payDate ?? null})
@@ -711,7 +711,7 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
            max(s.pay_date)::text as last_pay_date
       from parties p
       join pay_stubs s on s.employee_party_id = p.id and s.org_id = p.org_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -756,21 +756,21 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
     select extract(quarter from s.pay_date)::int as quarter,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
            sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
            sum(s.pensionable_earnings) as medicare_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and pc.system_key = 'fit')) as fit,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and pc.system_key = 'ss')) as ss_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
@@ -852,22 +852,22 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
            array_agg(distinct s.province order by s.province) as states,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and pc.system_key = 'fit')) as fit,
            sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and l.kind = 'deduction' and pc.system_key = 'ss')) as ss_tax,
            sum(s.pensionable_earnings) as medicare_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = s.id and l.kind = 'deduction'
                   and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}

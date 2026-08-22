@@ -1489,7 +1489,7 @@ export async function milestonesReachedInPeriod(
       join employee_roles er on er.org_id = t.org_id and er.hired_on is not null and er.is_active
       join parties p on p.id = er.party_id and p.org_id = er.org_id
       left join entitlement_plans pl on pl.id = t.plan_id
-      left join pay_components c on c.id = t.component_id
+      left join pay_components c on c.id = t.component_id and c.org_id = t.org_id
      where t.org_id = ${orgId} and t.is_active
        and (er.terminated_on is null or er.terminated_on >= ${from})
        and (er.hired_on + make_interval(months => t.after_months))::date between ${from} and ${to}

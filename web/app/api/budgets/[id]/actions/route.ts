@@ -82,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                  bl.department_id, bl.project_id, bl.location_id, bl.class_id,
                  bl.amount, bl.note, ${user.id}, ${user.id}
             from budget_lines bl
-            join accounting_periods source_period on source_period.id = bl.period_id
+            join accounting_periods source_period on source_period.id = bl.period_id and source_period.org_id = bl.org_id
             join accounting_periods destination
               on destination.org_id = ${user.orgId}
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
@@ -134,7 +134,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
             join accounts a on a.id = l.account_id and a.org_id = ${user.orgId}
-            join accounting_periods source_period on source_period.id = e.period_id and source_period.fiscal_year = ${Number(scenario.fiscal_year) - 1}
+            join accounting_periods source_period on source_period.id = e.period_id and source_period.org_id = e.org_id and source_period.fiscal_year = ${Number(scenario.fiscal_year) - 1}
             join accounting_periods destination
               on destination.org_id = ${user.orgId}
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id

@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const run = (await db.execute<Record<string, unknown>>(sql`
     select r.*, a.number as bank_number, a.name as bank_name
       from payment_runs r
-      left join accounts a on a.id = r.bank_account_id
+      left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
      where r.id = ${id} and r.org_id = ${gate.user.orgId}
   `))
   if (!run.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       select i.id, i.amount, i.currency, i.status, p.display_name as payee,
              d.id as payment_document_id, d.document_number, d.status as payment_status
         from payment_instructions i
-        join parties p on p.id = i.payee_party_id
+        join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
         left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
        where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
        order by p.display_name

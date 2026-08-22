@@ -75,7 +75,7 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = {
                       where fa.org_id = r.org_id and fa.target_table = 'documents'
                         and fa.target_id = r.document_id) as evidence_attached
         from pay_runs r
-        left join pay_schedules s on s.id = r.pay_schedule_id
+        left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.document_id = ${subjectId}
     `));
     const row = run.rows[0];

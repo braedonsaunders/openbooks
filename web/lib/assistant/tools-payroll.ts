@@ -30,7 +30,7 @@ const PAY_RUN_SELECT = sql`
          r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
     from pay_runs r
     join documents d on d.id = r.document_id and d.org_id = r.org_id
-    left join pay_schedules s on s.id = r.pay_schedule_id`;
+    left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id`;
 
 function payRunRow(r: Record<string, unknown>) {
   return {
@@ -224,8 +224,8 @@ const listPayrollEmployees: AssistantToolDef = {
              prof.vacation_method, fa.account_number as filing_account_number
         from employee_payroll_profiles prof
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-        left join pay_schedules s on s.id = prof.pay_schedule_id
-        left join payroll_filing_accounts fa on fa.id = prof.filing_account_id
+        left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
+        left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
        where prof.org_id = ${authz.user.orgId}
          ${like ? sql` and p.display_name ilike ${like}` : sql``}
        order by p.display_name

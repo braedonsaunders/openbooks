@@ -149,8 +149,8 @@ const PAYMENT_BANK_EXPR = sql`coalesce(
   nullif(trim(concat_ws(' ', ca.number, ca.name)), ''),
   (select trim(concat_ws(' ', acc.number, acc.name))
      from journal_lines jl
-     join accounts acc on acc.id = jl.account_id
-    where jl.entry_id = d.posted_entry_id
+     join accounts acc on acc.id = jl.account_id and acc.org_id = jl.org_id
+    where jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id
       and acc.type not in ('liability_payable', 'asset_receivable')
     order by abs(jl.amount) desc
     limit 1)
@@ -162,8 +162,8 @@ export const PAYMENT_BANK_ID_EXPR = sql`coalesce(
   ca.id,
   (select acc.id
      from journal_lines jl
-     join accounts acc on acc.id = jl.account_id
-    where jl.entry_id = d.posted_entry_id
+     join accounts acc on acc.id = jl.account_id and acc.org_id = jl.org_id
+    where jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id
       and acc.type not in ('liability_payable', 'asset_receivable')
     order by abs(jl.amount) desc
     limit 1)

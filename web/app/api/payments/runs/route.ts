@@ -17,8 +17,8 @@ export async function GET() {
            count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
            coalesce(sum(i.amount) filter (where i.status <> 'cancelled'), 0) as total
       from payment_runs r
-      left join accounts a on a.id = r.bank_account_id
-      left join payment_instructions i on i.payment_run_id = r.id
+      left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
+      left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
      where r.org_id = ${gate.user.orgId}
      group by r.id, a.number, a.name
      order by r.created_at desc

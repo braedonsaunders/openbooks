@@ -124,7 +124,7 @@ async function loadDocumentValues(
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
            i.name as item_name
       from document_lines l
-      left join accounts acc on acc.id = l.account_id
+      left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
      where l.document_id = ${id}
      order by l.line_number
@@ -192,7 +192,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
     select l.line_number, l.amount, l.memo,
            acc.number as account_number, acc.name as account_name
       from journal_lines l
-      left join accounts acc on acc.id = l.account_id
+      left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
      where l.entry_id = ${id}
      order by l.line_number
   `))
