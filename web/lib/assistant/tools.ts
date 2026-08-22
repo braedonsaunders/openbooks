@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
@@ -722,6 +723,7 @@ const financialPeriods: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { completedOnly?: boolean; limit?: number };
     const limit = Math.min(a.limit ?? 15, 24);
+    const today = await businessToday(authz.user.orgId);
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select p.id, p.name, p.fiscal_year, p.period_number,
              p.starts_on::text, p.ends_on::text, p.is_adjustment,
@@ -732,7 +734,7 @@ const financialPeriods: AssistantToolDef = {
         left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
         left join period_locks l on l.period_id = p.id and l.org_id = p.org_id and l.state <> 'open'
        where p.org_id = ${authz.user.orgId} and fc.is_default and fc.is_active
-         ${a.completedOnly === false ? sql`` : sql`and p.ends_on < current_date`}
+         ${a.completedOnly === false ? sql`` : sql`and p.ends_on < ${today}`}
        group by p.id, r.id
        order by p.ends_on desc, p.period_number desc
        limit ${limit}

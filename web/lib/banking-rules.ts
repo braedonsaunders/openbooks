@@ -87,10 +87,11 @@ async function loadActiveRules(orgId: string): Promise<RuleRow[]> {
 }
 
 async function loadLines(orgId: string, accountId: string, status: 'unmatched' | 'any', windowDays?: number): Promise<BankLine[]> {
+  const today = await businessToday(orgId)
   const statusClause = status === 'unmatched' ? sql` and l.match_status = 'unmatched'` : sql``
   const windowClause =
     typeof windowDays === 'number'
-      ? sql` and l.posted_on >= (current_date - ${windowDays}::int)`
+      ? sql` and l.posted_on >= (${today}::date - ${windowDays}::int)`
       : sql``
   const res = (await db.execute<BankLine>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source

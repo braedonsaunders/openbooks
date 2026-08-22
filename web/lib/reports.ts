@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "./fiscal";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter } from "./gl-summary";
@@ -329,6 +330,7 @@ export type FinancialTrendRow = {
 
 /** Exact posted-only performance and cash position for recent completed periods. */
 export async function financialTrends(orgId: string, limit = 15): Promise<FinancialTrendRow[]> {
+  const today = await businessToday(orgId);
   const cappedLimit = Math.max(2, Math.min(limit, 15));
   const rows = (await db.execute<FinancialTrendRow>(sql`
     with recent as (
@@ -336,7 +338,7 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and fc.is_default and fc.is_active
-         and not p.is_adjustment and p.ends_on < current_date
+         and not p.is_adjustment and p.ends_on < ${today}
        order by p.ends_on desc limit ${cappedLimit}
     ), activity as (
       select p.id,
