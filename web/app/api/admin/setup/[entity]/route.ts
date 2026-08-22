@@ -38,6 +38,16 @@ export const runtime = 'nodejs'
 
 const PERMISSION = 'admin.setup.manage'
 
+const FX_RATE_COLUMNS = new Set(['rate', 'current_rate', 'average_rate', 'historical_rate'])
+
+function persistFxRateCols<T extends { column: string; value: unknown }>(cols: T[]): T[] {
+  return cols.map((column) =>
+    FX_RATE_COLUMNS.has(column.column)
+      ? { ...column, value: updateFxRate({ rate: column.value }) }
+      : column,
+  )
+}
+
 async function audit(args: {
   orgId: string | null
   table: string
@@ -664,18 +674,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   let cols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : [...built.cols]
-  if (entity.key === 'fx-rates') {
+  if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
-      cols = cols.map((column) =>
-        column.column === 'rate' ? { ...column, value: updateFxRate({ rate: column.value }) } : column,
-      )
+      cols = persistFxRateCols(cols)
     } catch (error) {
       return NextResponse.json({
         error: error instanceof CurrencyError ? error.message : 'Exchange rates must be an exact decimal',
       }, { status: 400 })
     }
-    cols.push({ column: 'source', value: 'manual' })
   }
+  if (entity.key === 'fx-rates') cols.push({ column: 'source', value: 'manual' })
   if (entity.orgScoped) cols.push({ column: 'org_id', value: orgId })
   if (entity.actorCols) {
     cols.push({ column: 'created_by', value: actorId })
@@ -829,11 +837,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   let updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
-  if (entity.key === 'fx-rates') {
+  if (entity.key === 'fx-rates' || entity.key === 'consolidated-fx-rates') {
     try {
-      updateCols = updateCols.map((column) =>
-        column.column === 'rate' ? { ...column, value: updateFxRate({ rate: column.value }) } : column,
-      )
+      updateCols = persistFxRateCols(updateCols)
     } catch (error) {
       return NextResponse.json({
         error: error instanceof CurrencyError ? error.message : 'Exchange rates must be an exact decimal',
