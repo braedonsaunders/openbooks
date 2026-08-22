@@ -4,8 +4,9 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
-import { computeOrderTotals, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
+import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
@@ -192,14 +193,32 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     let totals: { subtotal: string; taxTotal: string; total: string } | null = null
     let preparedLines: (ReturnType<typeof computeOrderTotals>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
     if (body.lines) {
-      const valid = body.lines.filter(
-        (l) => (l.itemId || l.accountId) && cmp(l.quantity ?? '0', '0') > 0 && cmp(l.unitPrice ?? '0', '0') >= 0,
-      )
+      const valid: OrderLineInput[] = []
+      for (const line of body.lines) {
+        if (!(line.itemId || line.accountId)) continue
+        const quantity = exactOrderQuantity(line.quantity ?? '0')
+        const unitPrice = exactOrderMoney(line.unitPrice ?? '0')
+        if (quantity === 'invalid' || unitPrice === 'invalid') {
+          return NextResponse.json({ error: 'Order lines contain an invalid quantity or amount' }, { status: 422 })
+        }
+        try {
+          toUnits(quantity)
+        } catch {
+          return NextResponse.json({ error: 'Order lines contain an invalid quantity or amount' }, { status: 422 })
+        }
+        if (compareDecimal(quantity, '0') > 0 && cmp(unitPrice, '0') >= 0) {
+          valid.push({ ...line, quantity, unitPrice })
+        }
+      }
       const computed = computeOrderTotals(
         valid,
         await orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
       )
-      totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
+      totals = {
+        subtotal: normalizeMoney(computed.subtotal),
+        taxTotal: normalizeMoney(computed.taxTotal),
+        total: normalizeMoney(computed.total),
+      }
       preparedLines = []
       for (let i = 0; i < computed.lines.length; i++) {
         const l = computed.lines[i]!
@@ -207,7 +226,15 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (!lineDims.ok) {
           return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
         }
-        preparedLines.push({ ...l, extraDims: lineDims.cleaned })
+        preparedLines.push({
+          ...l,
+          quantity: l.quantity ?? '0',
+          unitPrice: l.unitPrice ?? '0',
+          amount: normalizeMoney(l.amount),
+          taxInputAmount: normalizeMoney(l.taxInputAmount),
+          taxAmount: normalizeMoney(l.taxAmount),
+          extraDims: lineDims.cleaned,
+        })
       }
     }
 

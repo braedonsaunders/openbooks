@@ -1,10 +1,33 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, mul, sum } from '@openbooks/engine/src/money.ts'
+import { add, mul, normalizeDecimal, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
 import { taxProfileMap, type TaxProfiles } from '../../../lib/bills'
+import { canonicalDecimal } from '../../../lib/exact-decimal'
 import type { OrderKind } from '../../../lib/order-cycle'
+
+/** Exact numeric(19,4) money string, or 'invalid'. */
+export function exactOrderMoney(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
+
+/** Quantity columns are numeric(28,8); do not force ledger money scale. */
+export function exactOrderQuantity(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 8)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeDecimal(exact, 8)
+  } catch {
+    return 'invalid'
+  }
+}
 
 /**
  * Shared loader + line-save helpers for the order-cycle documents
