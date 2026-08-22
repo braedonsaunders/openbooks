@@ -421,6 +421,26 @@ test('the surfaces this test was written for are covered', () => {
     'timesheet save must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('app/api/timesheets/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'timesheet save must refuse equipment_charge when Equipment is off — stored week entries stay',
+  )
+  assert.match(
+    read('app/api/timesheets/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'timesheet save must 404 — not persist new equipment_charge items — when Equipment is off',
+  )
+  assert.match(
+    read('app/api/timesheets/_lib.ts'),
+    /isFeatureEnabled\([^,]+, ['"]equipment['"]\)/,
+    'the timesheet item picker must read the Equipment switch before offering equipment_charge',
+  )
+  assert.match(
+    read('app/api/timesheets/_lib.ts'),
+    /equipmentEnabled \? \['equipment_charge'\]/,
+    'the timesheet item picker must drop equipment_charge when Equipment is off — stored week entries stay',
+  )
+  assert.match(
     read('lib/order-cycle.ts'),
     /\['inventory', 'assembly', 'kit'\]/,
     'order conversion must name the inventory kinds the Features switch refuses',

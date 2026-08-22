@@ -187,6 +187,26 @@ async function save(req: Request) {
       }
     }
   }
+  // Stored time entries stay. Turning Equipment off must 404 a write that
+  // would persist a new equipment_charge item. Amendments that only reverse
+  // an existing locked row copy the original item and are not refused.
+  if (!(await isFeatureEnabled(orgId, 'equipment'))) {
+    const stored = (await db.execute<{ item_id: string }>(sql`
+      select item_id from time_entries
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and item_id is not null`))
+    const storedIds = new Set(stored.rows.map((row) => row.item_id))
+    for (const p of toPersist) {
+      if (!p.itemId || storedIds.has(p.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`))
+      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  }
 
   // Replace-in-place, but only over editable (draft/rejected) entries. We wipe
   // this employee+week's draft/rejected rows, then re-insert from the grid.

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
+import { isFeatureEnabled } from '../../../lib/features'
 import {
   lockReasonsFor,
   weekLockReasons,
@@ -420,6 +421,15 @@ export async function loadPickers(
   orgId: string,
   includeEmployeeId?: string | null,
 ): Promise<TimesheetPickers> {
+  const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
+  // Equipment stays on stored week entries. The picker only omits the kind
+  // once the Features switch is off so a draft cannot add a new one.
+  const catalogItemKinds = [
+    'service',
+    'labor',
+    'other_charge',
+    ...(equipmentEnabled ? ['equipment_charge'] : []),
+  ]
   const [employees, projects, items, timeTypes, departments] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select p.id, coalesce(p.display_name, '') as label,
@@ -443,7 +453,7 @@ export async function loadPickers(
     db.execute<Record<string, unknown>>(sql`
       select id, code, name from items
        where org_id = ${orgId} and is_active
-         and kind in ('service', 'labor', 'other_charge')
+         and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
        order by name`),
     db.execute<Record<string, unknown>>(sql`
       select id, name, cost_multiplier, is_billable_default from time_types
