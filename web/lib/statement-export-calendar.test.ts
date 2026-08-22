@@ -10,3 +10,10 @@ test('statement PDFs stamp the footer from the org business day', () => {
     /const stamp = await businessToday\(gate\.user\.orgId\)[\s\S]*?exportDataToPdf\(data, branding, page, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
   )
 })
+
+test('statement view PDFs stamp the footer from the org business day', () => {
+  assert.match(
+    route,
+    /renderStatementViewPdf\(view, branding, page, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
+  )
+})
