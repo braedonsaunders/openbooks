@@ -96,6 +96,24 @@ export interface SaveTaxRateProviderInput {
   licenseKey?: string | null;
 }
 
+function persistableTaxProviderSettings(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!("defaultRatePercent" in settings) || settings.defaultRatePercent == null || settings.defaultRatePercent === "") {
+    return settings;
+  }
+  try {
+    const rate = normalizeDecimal(settings.defaultRatePercent as string | number, 4);
+    if (rate.startsWith("-")) {
+      throw new TaxRateProviderError("settings.defaultRatePercent cannot be negative");
+    }
+    return { ...settings, defaultRatePercent: rate };
+  } catch (error) {
+    if (error instanceof TaxRateProviderError) throw error;
+    throw new TaxRateProviderError("settings.defaultRatePercent must be a finite non-negative decimal");
+  }
+}
+
 export async function saveTaxRateProviderConfig(
   orgId: string,
   input: SaveTaxRateProviderInput,
@@ -120,6 +138,7 @@ export async function saveTaxRateProviderConfig(
     ({ avalara: "Avalara AvaTax", taxjar: "TaxJar", custom_http: "Custom tax HTTP", manual: "Manual rates" } as const)[
       input.provider
     ];
+  const settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
 
   if (existing) {
     await db.execute(sql`
@@ -128,7 +147,7 @@ export async function saveTaxRateProviderConfig(
         display_name = ${displayName},
         is_enabled = ${input.isEnabled},
         prefer_provider = ${input.preferProvider ?? true},
-        settings = ${JSON.stringify(input.settings ?? existing.settings)}::jsonb,
+        settings = ${JSON.stringify(settings)}::jsonb,
         secrets = coalesce(${secrets === undefined ? null : secrets}, secrets),
         updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId}
@@ -147,7 +166,7 @@ export async function saveTaxRateProviderConfig(
       insert into tax_rate_provider_configs
         (org_id, provider, display_name, is_enabled, settings, secrets, prefer_provider, created_by, updated_by)
       values (${orgId}, ${input.provider}, ${displayName}, ${input.isEnabled},
-              ${JSON.stringify(input.settings ?? {})}::jsonb, ${sealed}, ${input.preferProvider ?? true},
+              ${JSON.stringify(settings)}::jsonb, ${sealed}, ${input.preferProvider ?? true},
               ${actorId}, ${actorId})
     `);
   }

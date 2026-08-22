@@ -7,6 +7,7 @@
 import { db } from "./db.ts";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
+import { canonicalizeProjectFinancialProfile } from "./project-financial-profile-versions.ts";
 
 export async function seedProjectTypes(
   orgId: string,
@@ -40,7 +41,7 @@ export async function seedProjectTypes(
           reason, created_by, updated_by
         )
         select ${orgId}, ${type.id}, date '0001-01-01',
-               ${JSON.stringify(t.financialProfile)}::jsonb,
+               ${JSON.stringify(canonicalizeProjectFinancialProfile(t.financialProfile))}::jsonb,
                'Initial built-in project financial policy',
                ${actorId ?? null}, ${actorId ?? null}
          where not exists (
