@@ -5,6 +5,7 @@ import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeOpportunityTotals, validateContributionTotal } from '@openbooks/engine/src/crm-math.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
@@ -84,6 +85,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!CATEGORIES.includes(category)) return NextResponse.json({ error: 'invalid forecast category' }, { status: 422 })
   const title = body.title === undefined ? current.title : textOrNull(body.title)
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
+  if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
   if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`) as any).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
   const winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)

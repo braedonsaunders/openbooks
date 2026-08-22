@@ -5,6 +5,7 @@ import { PageHeader } from '@openbooks/ui'
 import { EntityListView } from '../../../../components/entity-list-view'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { can, requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadOpportunity } from '../../../../lib/crm'
 import { CrmNewButton } from '../CrmNewButton'
@@ -40,6 +41,7 @@ export default async function Opportunities({
 
   let drawer: React.ReactNode = null
   if (openId && isUuid(openId)) {
+    const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
     const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId),
       db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`) as any,
@@ -49,7 +51,9 @@ export default async function Opportunities({
       db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id,concat_ws(' · ',code,name) name from items where org_id=${authz.user.orgId} and is_active order by name limit 2000`) as any,
-      db.execute(sql`select code,name from currencies order by code`) as any,
+      multiCurrency
+        ? db.execute(sql`select code,name from currencies order by code`) as any
+        : Promise.resolve({ rows: [] }),
     ])
     const requestedReturn = pickString(sp.drawerReturn)
     const closeHref = requestedReturn?.startsWith('/crm/opportunities')
@@ -69,6 +73,7 @@ export default async function Opportunities({
           currencies={currencies.rows}
           closeHref={closeHref}
           canManage={manage}
+          multiCurrency={multiCurrency}
         />
       )
     }
