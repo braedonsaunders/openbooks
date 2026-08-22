@@ -159,6 +159,13 @@ async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute">, org
   return result.rows[0]?.enabled !== false;
 }
 
+async function multiCurrencyFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
+  const result = (await runner.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'multiCurrency')::boolean, false) as enabled from orgs where id=${orgId}
+  `));
+  return result.rows[0]?.enabled === true;
+}
+
 async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string, changes: unknown) {
   await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values(${orgId},${table},${rowId},${action},${JSON.stringify(changes)}::jsonb,${actorId})`);
@@ -177,6 +184,9 @@ export async function createManagedProperty(input: {
     await assertEnabled(tx, input.orgId);
     if (input.fixedAssetId && !(await fixedAssetsFeatureEnabled(tx, input.orgId))) {
       throw new PropertyManagementError("Fixed assets feature is disabled");
+    }
+    if (requestedCurrency && !(await multiCurrencyFeatureEnabled(tx, input.orgId))) {
+      throw new PropertyManagementError("Multi-currency is disabled", 404);
     }
     const scope = (await tx.execute<{ currency: string; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }>(sql`
       select s.base_currency as currency,
@@ -216,7 +226,7 @@ export async function updateManagedProperty(input: {
   name: string;
   propertyType: string;
   status: string;
-  currency: string;
+  currency?: string;
   address?: Record<string, string>;
   rentIncomeAccountId?: string | null;
   camIncomeAccountId?: string | null;
@@ -226,10 +236,11 @@ export async function updateManagedProperty(input: {
 }): Promise<{ id: string }> {
   const code = input.code.trim();
   const name = input.name.trim();
-  const currency = input.currency.trim().toUpperCase();
+  const currencySubmitted = input.currency !== undefined && input.currency !== null && String(input.currency).trim() !== "";
+  const currency = currencySubmitted ? String(input.currency).trim().toUpperCase() : "";
   if (!code || !name)
     throw new PropertyManagementError("Property code and name are required");
-  if (!/^[A-Z]{3}$/.test(currency))
+  if (currencySubmitted && !/^[A-Z]{3}$/.test(currency))
     throw new PropertyManagementError(
       "Property currency must be a three-letter ISO code",
     );
@@ -280,6 +291,10 @@ export async function updateManagedProperty(input: {
     if (nextAssetId !== currentAssetId && !(await fixedAssetsFeatureEnabled(tx, input.orgId))) {
       throw new PropertyManagementError("Fixed assets feature is disabled");
     }
+    if (currencySubmitted && currency !== row.currentCurrency && !(await multiCurrencyFeatureEnabled(tx, input.orgId))) {
+      throw new PropertyManagementError("Multi-currency is disabled", 404);
+    }
+    const nextCurrency = currencySubmitted ? currency : row.currentCurrency;
     if (!row.subsidiary_ok || !row.location_ok || !row.asset_ok)
       throw new PropertyManagementError(
         "Property dimensions do not belong to this organization",
@@ -297,7 +312,7 @@ export async function updateManagedProperty(input: {
     if (
       row.has_leases &&
       (row.currentSubsidiaryId !== input.subsidiaryId ||
-        row.currentCurrency !== currency)
+        row.currentCurrency !== nextCurrency)
     ) {
       throw new PropertyManagementError(
         "Subsidiary and currency cannot change after a lease exists",
@@ -311,7 +326,7 @@ export async function updateManagedProperty(input: {
     await tx.execute(sql`
       update managed_properties set subsidiary_id=${input.subsidiaryId},location_id=${input.locationId ?? null},
         fixed_asset_id=${nextAssetId},code=${code},name=${name},property_type=${input.propertyType},
-        status=${input.status},currency=${currency},address=${JSON.stringify(input.address ?? {})}::jsonb,
+        status=${input.status},currency=${nextCurrency},address=${JSON.stringify(input.address ?? {})}::jsonb,
         rent_income_account_id=${input.rentIncomeAccountId ?? null},cam_income_account_id=${input.camIncomeAccountId ?? null},
         deposit_liability_account_id=${input.depositLiabilityAccountId ?? null},default_bank_account_id=${input.defaultBankAccountId ?? null},
         custom=${JSON.stringify(input.custom ?? {})}::jsonb,updated_at=now(),updated_by=${input.actorId}

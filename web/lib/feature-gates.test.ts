@@ -1552,6 +1552,41 @@ test('the surfaces this test was written for are covered', () => {
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
   assert.match(
+    read('../engine/src/property-management.ts'),
+    /coalesce\(\(settings->'features'->>'multiCurrency'\)::boolean, false\)/,
+    'property writes must not store a caller currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /PropertyManagementError\("Multi-currency is disabled", 404\)/,
+    'property create/update must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'property create/update must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'property create/update must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/page.tsx'),
+    /isFeatureEnabled\([^,]+, ["']multiCurrency["']\)/,
+    'property management must not load the currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the property form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    /case "currency":\s*if \(!multiCurrency\) return null/,
+    'the property form must hide the currency control when Multi-currency is off',
+  )
+  assert.match(
     read('app/api/property-management/route.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'lease-charge writes must name the inventory kinds the Features switch refuses',

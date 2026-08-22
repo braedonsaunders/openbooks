@@ -36,7 +36,7 @@ export default async function PropertyManagementPage({
       ? sql``
       : sql`and d.subsidiary_id = any(${`{${allowed.join(",")}}`}::uuid[])`;
   const fieldDefs = await loadFieldDefs("managed_properties");
-  const [resolvedForm, resolvedView, fixedAssetsEnabled] = await Promise.all([
+  const [resolvedForm, resolvedView, fixedAssetsEnabled, multiCurrency] = await Promise.all([
     resolveFormLayout({
       orgId,
       userId: authz.user.id,
@@ -54,6 +54,7 @@ export default async function PropertyManagementPage({
       showInListDefs: fieldDefs.filter((def) => def.config.showInList),
     }),
     isFeatureEnabled(orgId, "fixedAssets"),
+    isFeatureEnabled(orgId, "multiCurrency"),
   ]);
   const [
     subsidiaries,
@@ -67,7 +68,9 @@ export default async function PropertyManagementPage({
     openInvoices,
   ] = await Promise.all([
     db.execute(
-      sql`select id,name,base_currency as currency from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(",")}}`}::uuid[])`} order by name`,
+      multiCurrency
+        ? sql`select id,name,base_currency as currency from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(",")}}`}::uuid[])`} order by name`
+        : sql`select id,name from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(",")}}`}::uuid[])`} order by name`,
     ) as any,
     db.execute(
       sql`select id,concat_ws(' · ',code,name) as name from locations where org_id=${orgId} and is_active order by code,name`,
@@ -132,6 +135,7 @@ export default async function PropertyManagementPage({
           customize: can(authz, "admin.customization.manage"),
         }}
         fixedAssetsEnabled={fixedAssetsEnabled}
+        multiCurrency={multiCurrency}
       />
     </ListPageLayout>
   );
