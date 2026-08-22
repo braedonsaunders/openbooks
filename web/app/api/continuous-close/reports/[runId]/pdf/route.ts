@@ -76,8 +76,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
   }
   const branding = await orgBranding(gate.user.orgId)
   const layout = resolvePdfPageSetup({ paperSize: 'letter', orientation: 'portrait', marginMm: 16, density: 'standard' })
-  const pdf = await exportDataToPdf(data, branding, layout, { showSummary: true })
   const stamp = await businessToday(gate.user.orgId)
+  const pdf = await exportDataToPdf(data, branding, layout, {
+    showSummary: true,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  })
   return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}-${stamp}`))
 }
 
