@@ -117,6 +117,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         await exportDataToXlsx(data, {
           reportName: data.title,
           dateRangeLabel: data.dateRangeLabel,
+          generatedAt: new Date(`${stamp}T00:00:00Z`),
         }),
         filename,
       )
