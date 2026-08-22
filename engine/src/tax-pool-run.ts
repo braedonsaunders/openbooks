@@ -332,7 +332,7 @@ async function runMacrs(
           net_additions=excluded.net_additions, immediate_expense=excluded.immediate_expense, base=excluded.base,
           allowance=excluded.allowance, closing_balance=excluded.closing_balance, recapture=0, terminal_loss=0,
           short_year_factor=excluded.short_year_factor, updated_at=now(), updated_by=${opts.actorId}`);
-      await tx.execute(sql`update tax_depreciation_pools set opening_balance=${values.closingBalance}, updated_at=now(), updated_by=${opts.actorId} where id=${pool.id}`);
+      await tx.execute(sql`update tax_depreciation_pools set opening_balance=${values.closingBalance}, updated_at=now(), updated_by=${opts.actorId} where id=${pool.id} and org_id=${orgId}`);
     });
     lines.push({ classCode, className: group.def.name, openingBalance: values.openingBalance, additions: values.additions, dispositions: values.dispositions, allowance: values.allowance, closingBalance: values.closingBalance, recapture: "0.00", terminalLoss: "0.00" });
     totalAllowance = addStr(totalAllowance, values.allowance);

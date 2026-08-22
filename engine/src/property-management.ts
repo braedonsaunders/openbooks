@@ -552,7 +552,7 @@ export async function activatePropertyLease(orgId: string, actorId: string, leas
       if (conflict.rows.length) throw new PropertyManagementError("Unit already has an active lease");
       await tx.execute(sql`update property_units set status='occupied',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.unit_id}`);
     }
-    await tx.execute(sql`update property_leases set status='active',activated_at=now(),activated_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${leaseId}`);
+    await tx.execute(sql`update property_leases set status='active',activated_at=now(),activated_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${leaseId} and org_id=${orgId}`);
     await audit(tx, orgId, "property_leases", leaseId, "activate", actorId, { after: { status: "active" } });
   });
   return { scheduled: (await scheduleLeaseCharges(orgId, actorId, leaseId)).created };
@@ -614,10 +614,10 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
         await tx.execute(sql`update lease_schedule_lines set period_ends_on=${oldEnd},amount=${amount},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
       }
     }
-    await tx.execute(sql`update lease_charges set effective_to=(${e.effective_on}::date-interval '1 day')::date,updated_at=now(),updated_by=${actorId} where id=${charge.id}`);
+    await tx.execute(sql`update lease_charges set effective_to=(${e.effective_on}::date-interval '1 day')::date,updated_at=now(),updated_by=${actorId} where id=${charge.id} and org_id=${orgId}`);
     const inserted = (await tx.execute<{ id: string }>(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
       values(${orgId},${e.lease_id},'base_rent',${charge.description},${next},${charge.frequency},${e.effective_on},${charge.effective_to},${charge.income_account_id},${charge.item_id},${charge.tax_code_id},${actorId},${actorId}) returning id`));
-    await tx.execute(sql`update lease_escalations set status='applied',previous_amount=${charge.amount},new_amount=${next},applied_at=now(),applied_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${escalationId}`);
+    await tx.execute(sql`update lease_escalations set status='applied',previous_amount=${charge.amount},new_amount=${next},applied_at=now(),applied_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${escalationId} and org_id=${orgId}`);
     await audit(tx, orgId, "lease_escalations", escalationId, "apply", actorId, { previousAmount: charge.amount, newAmount: next, effectiveOn: e.effective_on });
     return { chargeId: inserted.rows[0]!.id, newAmount: next, leaseId: e.lease_id };
   });

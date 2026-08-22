@@ -612,7 +612,7 @@ export async function receiveInventory(
       await tx.execute(sql`
         update inventory_provisional_costs
            set remaining_quantity=remaining_quantity-${settlement.quantity},updated_at=now(),updated_by=${actorId}
-         where id=${settlement.id}
+         where id=${settlement.id} and org_id=${orgId}
       `);
       await tx.execute(sql`
         insert into inventory_provisional_settlements

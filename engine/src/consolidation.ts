@@ -194,7 +194,7 @@ export async function runOwnershipConsolidation(
           ]);
         }
       }
-      await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId}`);
+      await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`);
       return { runId, entryIds };
     });
   } catch (error) {

@@ -766,7 +766,7 @@ export function journalEntryBaseJoins(allowedSubsidiaryIds?: Set<string> | null)
       select count(l.id) as line_count,
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as total_debits
         from journal_lines l
-       where l.entry_id = e.id ${lineVisibility}
+       where l.entry_id = e.id and l.org_id = e.org_id ${lineVisibility}
     ) entry_totals on true`
 }
 
@@ -809,7 +809,8 @@ export function journalEntryWhere(
     const ids = [...allowedSubsidiaryIds]
     parts.push(ids.length ? sql`and exists (
       select 1 from journal_lines visible
-       where visible.entry_id=e.id and visible.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
+       where visible.entry_id=e.id and visible.org_id = e.org_id and visible.org_id = ${orgId}
+         and visible.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
     )` : sql`and false`)
   }
   for (const filter of view.filters) {
