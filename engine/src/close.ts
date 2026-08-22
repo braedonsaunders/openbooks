@@ -1449,7 +1449,7 @@ export async function refreshCloseRun(
     select t.id as task_id, t.key as task_key, t.status,
            x.id as exception_id, x.code as exception_code
       from close_run_tasks t
-      left join close_exceptions x on x.task_id = t.id and x.run_id = t.run_id and x.status = 'open'
+      left join close_exceptions x on x.task_id = t.id and x.run_id = t.run_id and x.org_id = t.org_id and x.status = 'open'
      where t.run_id = ${runId} and t.org_id = ${orgId} and (t.status = 'ready' or x.id is not null)
   `));
   for (const subject of automationSubjects.rows) {
@@ -1490,8 +1490,8 @@ async function resolveTaskDependenciesTx(
          when exists (
            select 1
              from close_blueprint_dependencies d
-             join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id
-            where d.step_id = t.blueprint_step_id and dep.status not in ('complete','waived')
+             join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
+            where d.step_id = t.blueprint_step_id and d.org_id = t.org_id and dep.status not in ('complete','waived')
          ) then 'blocked'
          else 'ready'
        end,
@@ -2529,8 +2529,8 @@ export async function runCloseAutomations(
       from close_runs r
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
-      left join close_run_tasks t on t.id = ${context.taskId ?? null} and t.run_id = r.id
-      left join close_exceptions x on x.id = ${context.exceptionId ?? null} and x.run_id = r.id
+      left join close_run_tasks t on t.id = ${context.taskId ?? null} and t.run_id = r.id and t.org_id = r.org_id
+      left join close_exceptions x on x.id = ${context.exceptionId ?? null} and x.run_id = r.id and x.org_id = r.org_id
      where r.id = ${context.runId} and r.org_id = ${context.orgId}
   `));
   const run = runResult.rows[0];

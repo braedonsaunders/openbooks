@@ -75,9 +75,9 @@ export default async function PeriodClose({
           from close_run_tasks t
           left join users owner on owner.id = t.owner_id
           left join users reviewer on reviewer.id = t.reviewer_id
-          left join close_blueprint_dependencies d on d.step_id = t.blueprint_step_id
-          left join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id
-          left join close_task_evidence ev on ev.task_id = t.id
+          left join close_blueprint_dependencies d on d.step_id = t.blueprint_step_id and d.org_id = t.org_id
+          left join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
+          left join close_task_evidence ev on ev.task_id = t.id and ev.org_id = t.org_id
          where t.run_id = ${runId} and t.org_id = ${orgId}
          group by t.id, owner.name, reviewer.name order by t.sort_order`),
       db.execute(
@@ -93,7 +93,7 @@ export default async function PeriodClose({
         sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`,
       ),
       db.execute(
-        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId}) and book_id = (select book_id from close_runs where id = ${runId}) order by subsidiary_id nulls first, module`,
+        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`,
       ),
       db.execute(sql`
         select t.key,

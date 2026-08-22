@@ -163,9 +163,9 @@ export async function vendorData(
         count(*) filter (where pe.posting_date <= coalesce(bl.due_date, be.posting_date))::int as on_time,
         coalesce(sum(a.amount) filter (where pe.posting_date > coalesce(bl.due_date, be.posting_date)), 0) as late_amount
       from applications a
-      join journal_lines bl on bl.id = a.to_line_id
+      join journal_lines bl on bl.id = a.to_line_id and bl.org_id = a.org_id
       join journal_entries be on be.id = bl.entry_id and be.org_id = bl.org_id
-      join journal_lines pl on pl.id = a.from_line_id
+      join journal_lines pl on pl.id = a.from_line_id and pl.org_id = a.org_id
       join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
       join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
       where a.org_id = ${orgId} and bl.org_id = ${orgId} and be.org_id = ${orgId}
