@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { canonicalDecimal } from "../../../lib/exact-decimal";
 import {
   PropertyManagementError,
   activatePropertyLease,
@@ -118,6 +120,27 @@ const knownActions = new Set([
 ]);
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function persistMoney(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new PropertyManagementError(
+      "Amount must be a number with no more than four decimal places",
+    );
+  }
+  return normalizeMoney(exact);
+}
+
+function requireMoney(value: unknown): string {
+  const persisted = persistMoney(value);
+  if (persisted === null) {
+    throw new PropertyManagementError(
+      "Amount must be a number with no more than four decimal places",
+    );
+  }
+  return persisted;
+}
 
 async function guardSubsidiaryAccess(
   authz: Authz,
@@ -289,10 +312,18 @@ export async function POST(request: Request) {
         );
         break;
       case "createUnit":
-        result = await createPropertyUnit({ ...body, ...common } as any);
+        result = await createPropertyUnit({
+          ...body,
+          ...common,
+          rentableArea: persistMoney(body.rentableArea),
+        } as any);
         break;
       case "updateUnit":
-        result = await updatePropertyUnit({ ...body, ...common } as any);
+        result = await updatePropertyUnit({
+          ...body,
+          ...common,
+          rentableArea: persistMoney(body.rentableArea),
+        } as any);
         break;
       case "deleteUnit":
         result = await deletePropertyUnit(
@@ -302,10 +333,24 @@ export async function POST(request: Request) {
         );
         break;
       case "createLease":
-        result = await createPropertyLease({ ...body, ...common } as any);
+        result = await createPropertyLease({
+          ...body,
+          ...common,
+          baseRent: requireMoney(body.baseRent),
+          securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
+          camSharePercent: persistMoney(body.camSharePercent),
+          lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
+        } as any);
         break;
       case "updateLease":
-        result = await updatePropertyLease({ ...body, ...common } as any);
+        result = await updatePropertyLease({
+          ...body,
+          ...common,
+          baseRent: requireMoney(body.baseRent),
+          securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
+          camSharePercent: persistMoney(body.camSharePercent),
+          lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
+        } as any);
         break;
       case "cancelLease":
         result = await cancelPropertyLease(
@@ -331,10 +376,18 @@ export async function POST(request: Request) {
         );
         break;
       case "addCharge":
-        result = await addLeaseCharge({ ...body, ...common } as any);
+        result = await addLeaseCharge({
+          ...body,
+          ...common,
+          amount: requireMoney(body.amount),
+        } as any);
         break;
       case "addEscalation":
-        result = await addLeaseEscalation({ ...body, ...common } as any);
+        result = await addLeaseEscalation({
+          ...body,
+          ...common,
+          value: requireMoney(body.value),
+        } as any);
         break;
       case "applyEscalation":
         result = await applyLeaseEscalation(
@@ -370,7 +423,11 @@ export async function POST(request: Request) {
         );
         break;
       case "recordDeposit":
-        result = await recordSecurityDeposit({ ...body, ...common } as any);
+        result = await recordSecurityDeposit({
+          ...body,
+          ...common,
+          amount: requireMoney(body.amount),
+        } as any);
         break;
       case "reverseDeposit":
         result = await reverseSecurityDepositTransaction({
@@ -379,10 +436,18 @@ export async function POST(request: Request) {
         } as any);
         break;
       case "createCamPool":
-        result = await createCamPool({ ...body, ...common } as any);
+        result = await createCamPool({
+          ...body,
+          ...common,
+          budgetAmount: requireMoney(body.budgetAmount),
+        } as any);
         break;
       case "updateCamPool":
-        result = await updateCamPool({ ...body, ...common } as any);
+        result = await updateCamPool({
+          ...body,
+          ...common,
+          budgetAmount: requireMoney(body.budgetAmount),
+        } as any);
         break;
       case "cancelCamPool":
         await cancelCamPool(common.orgId, common.actorId, String(body.poolId));

@@ -319,11 +319,13 @@ export async function deleteManagedProperty(orgId: string, actorId: string, prop
 
 export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
+  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : normalizeMoney(input.rentableArea);
+  if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     const result = (await tx.execute<{ id: string }>(sql`
       insert into property_units(org_id,property_id,code,name,unit_type,rentable_area,bedrooms,created_by,updated_by)
-      select ${input.orgId},id,${input.code.trim()},${input.name ?? null},${input.unitType ?? null},${input.rentableArea ?? null},${input.bedrooms ?? null},${input.actorId},${input.actorId}
+      select ${input.orgId},id,${input.code.trim()},${input.name ?? null},${input.unitType ?? null},${rentableArea},${input.bedrooms ?? null},${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id
     `));
     if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
@@ -392,8 +394,10 @@ export async function createPropertyLease(input: {
 }): Promise<{ id: string }> {
   const leaseNumber = input.leaseNumber.trim(); const startsOn = validDate(input.startsOn, "Lease start")!;
   const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = normalizeMoney(input.baseRent);
+  const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
   if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
+  if (camShare != null && (cmp(camShare, "0") < 0 || cmp(camShare, "100") > 0)) throw new PropertyManagementError("CAM share must be between 0 and 100");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     const scope = (await tx.execute<{ id: string; rent_income_account_id: string | null; tenant_ok: boolean; unit_ok: boolean }>(sql`
@@ -411,7 +415,7 @@ export async function createPropertyLease(input: {
       insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
         security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
       values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${input.billingDay ?? 1},
-        ${input.paymentTermsDays ?? 0},${normalizeMoney(input.securityDepositRequired ?? "0")},${input.camMethod ?? "none"},${input.camSharePercent ?? null},
+        ${input.paymentTermsDays ?? 0},${normalizeMoney(input.securityDepositRequired ?? "0")},${input.camMethod ?? "none"},${camShare},
         ${input.lateFeeType ?? "none"},${normalizeMoney(input.lateFeeValue ?? "0")},${input.graceDays ?? 0},${input.autoInvoice ?? true},${input.autoPost ?? false},${input.actorId},${input.actorId}) returning id
     `));
     const id = inserted.rows[0]!.id;
