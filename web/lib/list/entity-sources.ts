@@ -95,8 +95,8 @@ import {
 export interface EntityListSource {
   /** Customization record type key (must exist in RECORD_TYPES, category entity). */
   recordType: string
-  /** Backing table and its alias. */
-  table: string
+  /** Backing table and its alias. Derived aggregates may take orgId so the inner child scan is tenant-pinned. */
+  table: string | ((orgId: string) => SQL)
   alias: string
   /** Selected row id when it is not `<alias>.id` (for joined/profile tables). */
   idExpr?: SQL
@@ -523,7 +523,7 @@ const SOURCES: Record<string, EntityListSource> = {
   },
   timesheet_week: {
     recordType: 'timesheet_week',
-    table: `(select t.org_id, t.employee_party_id,
+    table: (orgId) => sql`(select t.org_id, t.employee_party_id,
                     (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date as week_start,
                     sum(t.hours) as total_hours,
                     coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
@@ -534,6 +534,7 @@ const SOURCES: Record<string, EntityListSource> = {
                       else 'draft'
                     end as status
                from time_entries t
+              where t.org_id = ${orgId}
               group by t.org_id, t.employee_party_id,
                        (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date)`,
     alias: 'tw',
