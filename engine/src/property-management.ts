@@ -2,11 +2,22 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
 import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
 
 export class PropertyManagementError extends Error {}
+
+function exactMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new PropertyManagementError(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new PropertyManagementError(`${label} must be an exact decimal`);
+  }
+}
 
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 function validDate(value: string | null | undefined, label: string): string | null {
@@ -534,7 +545,8 @@ export async function cancelPropertyLease(orgId: string, actorId: string, leaseI
 
 export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<{ id: string }> {
   await assertEnabled(db, input.orgId);
-  const amount = normalizeMoney(input.amount); if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
+  const amount = exactMoney(input.amount, "Charge amount");
+  if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
   const result = (await db.execute<{ id: string }>(sql`
     insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
     select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${input.effectiveFrom},${input.effectiveTo ?? null},
