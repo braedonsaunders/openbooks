@@ -491,6 +491,26 @@ test('the surfaces this test was written for are covered', () => {
     'subscription addPlan/updatePlan must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'advanced subscription component writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'assertCommercialRefs must not persist inventory/assembly/kit items when Inventory is off — stored components stay when itemId is omitted',
+  )
+  assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /AdvancedSubscriptionError\("Inventory is disabled", 404\)/,
+    'createPlanVersion and change-order add/change component must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
+    read('app/api/subscriptions/advanced/route.ts'),
+    /error instanceof AdvancedSubscriptionError[\s\S]{0,160}status: error\.status/,
+    'advanced subscription writes must 404 — not persist inventory/assembly/kit items — when Inventory is off',
+  )
+  assert.match(
     read('../engine/src/ap-capture-service.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'AP capture materialize must name the inventory kinds the Features switch refuses',
