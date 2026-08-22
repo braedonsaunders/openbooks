@@ -430,6 +430,21 @@ test('the surfaces this test was written for are covered', () => {
     /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
     'convertOrder must not copy inventory/assembly/kit lines when Inventory is off — source lines stay',
   )
+  assert.match(
+    read('lib/order-cycle.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,80}Equipment is disabled/,
+    'convertOrder must not copy equipment_charge lines when Equipment is off — stored source order lines stay',
+  )
+  assert.match(
+    read('lib/order-cycle.ts'),
+    /ConversionError\('Equipment is disabled', 404\)/,
+    'convertOrder must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
+    read('app/api/_order/handlers.ts'),
+    /e instanceof ConversionError[\s\S]{0,80}status: e\.status/,
+    'order convert must 404 — not persist equipment_charge — when Equipment is off',
+  )
   for (const file of [
     'app/api/estimates/[id]/convert/route.ts',
     'app/api/sales-orders/[id]/convert/route.ts',
