@@ -72,6 +72,7 @@ export async function upsertUnionFringe(
             paid_by = excluded.paid_by, job_costed = excluded.job_costed,
             classification_id = excluded.classification_id, component_id = excluded.component_id,
             sequence = excluded.sequence, updated_by = ${actorId}, updated_at = now()
+      where union_fringes.org_id = ${orgId}
       returning id
     `));
     return { fringeId: fringe.rows[0]!.id, componentId };
