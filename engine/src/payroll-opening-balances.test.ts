@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
@@ -32,6 +33,14 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./tes
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+const openingBalancesSource = readFileSync(new URL("./payroll-opening-balances.ts", import.meta.url), "utf8");
+
+test("opening-balance component upserts pin the known tenant on the opening_balance_id/component_id conflict write", () => {
+  assert.match(
+    openingBalancesSource,
+    /insert into payroll_opening_balance_components[\s\S]*?on conflict \(opening_balance_id, component_id\) do update[\s\S]*?where payroll_opening_balance_components\.org_id = \$\{input\.orgId\}/,
+  );
+});
 
 /* ------------------------------------------------------------------ */
 /* Validation (no database)                                            */
