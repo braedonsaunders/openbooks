@@ -64,6 +64,8 @@ test('opportunity insert persists projected_amount through canonicalDecimal then
   const body = crmSource.slice(insert, insert + 900)
   assert.match(body, /persistSyncLineMoney\(opportunity\.foreigntotal \|\| '0', 'projected_amount'\)/)
   assert.doesNotMatch(body, /normalizeMoney\(opportunity\.foreigntotal/)
+  assert.match(body, /persistSyncLineMoney\(0, 'weighted_amount'\)/)
+  assert.doesNotMatch(body, /normalizeMoney\(0\)/)
 })
 
 test('resolves opportunity currencies through configured ISO currencies', () => {
