@@ -205,7 +205,7 @@ const findJournalEntries: AssistantToolDef = {
              count(l.id) as line_count,
              sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
         from journal_entries e
-        join journal_lines l on l.entry_id = e.id
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where ${where}
        group by e.id
        order by e.posting_date desc, e.entry_number desc

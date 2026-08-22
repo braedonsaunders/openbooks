@@ -1137,17 +1137,17 @@ export async function runRevenueRecognition(
        and exists (
          select 1 from recognition_schedule_lines l
            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-          where s.obligation_id = o.id)
+          where s.obligation_id = o.id and s.org_id = o.org_id)
        and not exists (
          select 1 from recognition_schedules s
-           join recognition_schedule_lines l on l.schedule_id = s.id
-          where s.obligation_id = o.id and l.journal_entry_id is null and l.planned_amount <> '0')`);
+           join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+          where s.obligation_id = o.id and s.org_id = o.org_id and l.journal_entry_id is null and l.planned_amount <> '0')`);
 
   // Advance schedule status for reporting.
   await db.execute(sql`
     update recognition_schedules s set status = case
-        when not exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.journal_entry_id is null and l.planned_amount <> '0') then 'complete'
-        when exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.journal_entry_id is not null) then 'in_progress'
+        when not exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is null and l.planned_amount <> '0') then 'complete'
+        when exists (select 1 from recognition_schedule_lines l where l.schedule_id = s.id and l.org_id = s.org_id and l.journal_entry_id is not null) then 'in_progress'
         else 'planned' end,
       updated_at = now()
     where s.org_id = ${orgId}

@@ -591,7 +591,7 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
             join journal_lines tl on tl.id = a.to_line_id and tl.org_id = jl.org_id
             join journal_entries te on te.id = tl.entry_id and te.org_id = tl.org_id
             left join documents td on td.id = te.source_document_id and td.org_id = te.org_id
-           where jl.entry_id = ${row.posted_entry_id}
+           where jl.entry_id = ${row.posted_entry_id} and jl.org_id = ${orgId}
            order by te.posting_date, te.entry_number
         `))).rows
       : [];
@@ -796,7 +796,7 @@ export async function postPaymentWithApplications(
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
-       where jl.entry_id = ${entryId} and jl.account_id = ${controlAccountId}
+       where jl.entry_id = ${entryId} and jl.org_id = ${doc.orgId} and jl.account_id = ${controlAccountId}
        limit 1
     `));
     const source = sourceResult.rows[0];
@@ -1161,7 +1161,7 @@ export async function createPaymentRun(opts: {
       left join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
       left join payment_terms pt on pt.id = vr.payment_terms_id and pt.org_id = d.org_id and pt.is_active
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
-      join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0
+      join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
       left join lateral (
         select sum(a.amount) as applied from applications a
          where a.to_line_id = jl.id and a.unapplied_at is null
@@ -1275,7 +1275,7 @@ export async function createPaymentRun(opts: {
              abs(jl.amount) - coalesce(ap.applied, 0) as open_base
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
-        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount > 0
+        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
         left join lateral (
           select sum(a.amount) as applied from applications a
            where a.from_line_id = jl.id and a.unapplied_at is null

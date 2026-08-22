@@ -269,7 +269,7 @@ export async function recomputeOpenBalances(orgId: string): Promise<number> {
           -- LEFT join: a posted document with NO open-item lines must resolve
           -- to null (matching recompute_document_open_balance), else a stale
           -- stored balance on such a document can never be healed.
-          left join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+          left join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.is_open_item
           left join lateral (
             select sum(a.amount) as applied
               from applications a

@@ -59,21 +59,22 @@ export async function resolveSubsidiaryView(
   if (consolidated) {
     const ownership = (await db.execute<{ id: string; factor: string }>(sql`
       with recursive ownership_scope as (
-        select s.id, 1::numeric as factor
+        select s.id, s.org_id, 1::numeric as factor
           from subsidiaries s where s.id=${node.id}
         union all
-        select child.id,
+        select child.id, parent.org_id,
                parent.factor * case
                  when interest.method='equity' then 0::numeric
                  when interest.method='proportionate' then interest.ownership_percent / 100::numeric
                  else 1::numeric
                end
           from ownership_scope parent
-          join subsidiaries child on child.parent_id=parent.id and child.is_active
+          join subsidiaries child on child.parent_id=parent.id and child.org_id=parent.org_id and child.is_active
           left join lateral (
             select method,ownership_percent
               from subsidiary_ownership_interests policy
              where policy.subsidiary_id=child.id and policy.parent_subsidiary_id=parent.id
+               and policy.org_id=child.org_id
                and policy.is_active and policy.effective_from<=${periodTo}
                and (policy.effective_to is null or policy.effective_to>=${periodTo})
              order by policy.effective_from desc limit 1
