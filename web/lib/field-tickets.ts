@@ -7,6 +7,7 @@ import {
   type FieldTicketLaborEvidenceLine,
 } from '@openbooks/engine/src/field-ticket-labor-evidence.ts'
 import { mul, div, isZero, add, sum } from '@openbooks/engine/src/money.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { nextDocumentNumber } from './bills'
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
@@ -76,8 +77,9 @@ export function ticketWindow(period: TicketPeriod, anchorIso: string): { start: 
 export async function resolveTicketPeriod(
   orgId: string,
   projectId: string | null,
-  onDate = iso(new Date()),
+  onDate?: string,
 ): Promise<TicketPeriod> {
+  const asOf = onDate ?? await businessToday(orgId)
   const valid = (v: unknown): v is TicketPeriod => TICKET_PERIODS.includes(v as TicketPeriod)
   const resolved = (await db.execute<{ period: string }>(sql`
     select policy.period
@@ -86,8 +88,8 @@ export async function resolveTicketPeriod(
         on project.id = ${projectId} and project.org_id = policy.org_id
      where policy.org_id = ${orgId}
        and policy.is_active
-       and policy.effective_from <= ${onDate}::date
-       and (policy.effective_to is null or policy.effective_to >= ${onDate}::date)
+       and policy.effective_from <= ${asOf}::date
+       and (policy.effective_to is null or policy.effective_to >= ${asOf}::date)
        and (
          (policy.scope = 'project' and policy.project_id = ${projectId})
          or (policy.scope = 'customer' and policy.customer_party_id = project.customer_id)
@@ -120,7 +122,7 @@ export async function createFieldTicket(
       ).rows[0] ?? null
     : null
   if (input.projectId && !proj) throw new FieldTicketError('Project not found')
-  const anchorDate = input.date ?? iso(new Date())
+  const anchorDate = input.date ?? await businessToday(orgId)
   const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
   const window = ticketWindow(period, anchorDate)
   const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))

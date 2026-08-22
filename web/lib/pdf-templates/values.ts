@@ -99,7 +99,7 @@ async function loadDocumentValues(
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
            case when d.status = 'posted' then d.total - ap.applied end as balance_due
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join lateral (
         select * from addresses where party_id = d.party_id
          order by is_default_billing desc, created_at limit 1

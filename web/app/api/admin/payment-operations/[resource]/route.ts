@@ -52,8 +52,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   const rows = await db.execute(sql`
     select m.*, p.display_name as party_name, b.bank_name, b.account_last_four
       from payment_mandates m
-      join parties p on p.id = m.party_id
-      join party_bank_accounts b on b.id = m.party_bank_account_id
+      join parties p on p.id = m.party_id and p.org_id = m.org_id
+      join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
      where m.org_id = ${gate.user.orgId} order by m.created_at desc
   `)
   return NextResponse.json({ rows: rows.rows })
@@ -128,7 +128,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json({ error: 'partyId, partyBankAccountId, and mandateReference are required' }, { status: 400 })
     }
     const mandateBank = (await db.execute(sql`
-      select 1 from party_bank_accounts b join parties p on p.id = b.party_id
+      select 1 from party_bank_accounts b join parties p on p.id = b.party_id and p.org_id = b.org_id
        where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
          and p.org_id = ${gate.user.orgId} and p.is_active and b.is_active and b.approved_at is not null
     `))

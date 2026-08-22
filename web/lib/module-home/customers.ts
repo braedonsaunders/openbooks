@@ -127,7 +127,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
              min(oi.due_date) as oldest_due,
              coalesce(opp.n, 0) as open_opps
         from oi
-        left join parties p on p.id = oi.party_id
+        left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
         left join lateral (
           select count(*) as n
             from crm_opportunities o

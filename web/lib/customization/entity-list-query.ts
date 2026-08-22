@@ -248,8 +248,8 @@ export function projectWhere(
 /* ------------------------------------------------------------------ */
 
 export const OPPORTUNITY_BASE_JOINS = sql`
-  join crm_opportunity_statuses s on s.id = o.status_id
-  left join parties p on p.id = o.party_id
+  join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+  left join parties p on p.id = o.party_id and p.org_id = o.org_id
   left join users u on u.id = o.owner_user_id`
 
 export const OPPORTUNITY_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -353,8 +353,8 @@ export function opportunityWhere(
 /* ------------------------------------------------------------------ */
 
 export const CRM_ACCOUNT_BASE_JOINS = sql`
-  join parties p on p.id = cp.party_id
-  left join crm_account_statuses s on s.id = cp.status_id
+  join parties p on p.id = cp.party_id and p.org_id = cp.org_id
+  left join crm_account_statuses s on s.id = cp.status_id and s.org_id = cp.org_id
   left join users u on u.id = cp.owner_user_id
   left join crm_sales_territories territory on territory.id = cp.territory_id`
 

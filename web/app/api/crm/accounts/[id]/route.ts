@@ -38,7 +38,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json() as Record<string, unknown>
   const current = (await db.execute<any>(sql`
     select cp.*, p.display_name, p.is_active as party_active
-      from crm_account_profiles cp join parties p on p.id = cp.party_id
+      from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
      where cp.party_id = ${id} and cp.org_id = ${user.orgId}`))
   const row = current.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })

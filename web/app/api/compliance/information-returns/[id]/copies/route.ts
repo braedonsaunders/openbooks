@@ -75,7 +75,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
            r.recipient_snapshot->'address' as address
       from information_return_recipients r
-      join parties p on p.id = r.party_id
+      join parties p on p.id = r.party_id and p.org_id = r.org_id
      where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
        and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
      order by name

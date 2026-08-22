@@ -126,7 +126,7 @@ export default async function ReconcilePage({
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-            left join parties p on p.id = jl.party_id
+            left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
            where ${glWhere}
            order by ${GL_SORTS[glParams.sort]} ${glParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, jl.line_number
            limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}

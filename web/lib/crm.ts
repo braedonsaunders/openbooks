@@ -64,7 +64,7 @@ export async function loadOpportunity(id: string, orgId: string) {
            u.name as owner_name, st.name as sales_team_name, ls.name as lead_source_name
       from crm_opportunities o
       join crm_opportunity_statuses s on s.id = o.status_id
-      left join parties p on p.id = o.party_id
+      left join parties p on p.id = o.party_id and p.org_id = o.org_id
       left join contacts c on c.id = o.primary_contact_id
       left join users u on u.id = o.owner_user_id
       left join crm_sales_teams st on st.id = o.sales_team_id

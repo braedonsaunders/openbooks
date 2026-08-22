@@ -113,7 +113,7 @@ export async function entryDetail(orgId: string, id: string) {
   const e = (await db.execute(sql`
     select e.*, re.entry_number as reverses_number
       from journal_entries e
-      left join journal_entries re on re.id = e.reverses_entry_id
+      left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}
   `)) as any;
   const lines = (await db.execute(sql`
@@ -121,9 +121,9 @@ export async function entryDetail(orgId: string, id: string) {
            a.number as account_number, a.name as account_name,
            p.display_name as party, d.name as department
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      left join parties p on p.id = l.party_id
-      left join departments d on d.id = l.department_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join departments d on d.id = l.department_id and d.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `)) as any;

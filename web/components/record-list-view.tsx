@@ -169,7 +169,7 @@ export async function RecordListView({
     db.execute(sql`
       select d.id, d.kind, d.currency${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
         ${joins}
        where ${where}
        order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
@@ -181,7 +181,7 @@ export async function RecordListView({
        group by d.status`) as any,
     db.execute(sql`
       select count(*) as n from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
         ${joins}
        where ${where}`) as any,
   ])

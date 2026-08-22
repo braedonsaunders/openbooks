@@ -46,18 +46,9 @@ interface SubsidiaryOpt extends Opt {
 
 type ScopeKind = 'job_title' | 'trade' | 'department' | 'subsidiary' | 'org'
 
-const today = () => {
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function rateState(row: RateRow): 'current' | 'scheduled' | 'ended' {
-  const date = today()
-  if (row.effective_from > date) return 'scheduled'
-  if (row.effective_to && row.effective_to < date) return 'ended'
+function rateState(row: RateRow, today: string): 'current' | 'scheduled' | 'ended' {
+  if (row.effective_from > today) return 'scheduled'
+  if (row.effective_to && row.effective_to < today) return 'ended'
   return 'current'
 }
 
@@ -449,7 +440,7 @@ export function LaborCostingWorkspace(props: {
                     rate: row.id,
                     guide: undefined,
                   })
-                  const status = rateState(row)
+                  const status = rateState(row, today)
                   return (
                     <TableRow
                       key={row.id}
@@ -856,6 +847,7 @@ function RateDrawer({
   const t = useTranslations('admin.setup.laborCosting')
   const tc = useTranslations('common')
   const router = useRouter()
+  const today = useBusinessToday()
   const creating = !row
   const [busy, setBusy] = useState(false)
   const [scope, setScope] = useState<ScopeKind>(() => row
@@ -869,7 +861,7 @@ function RateDrawer({
   const [rate, setRate] = useState(row?.rate ?? '')
   const [basis, setBasis] = useState<'hour' | 'year'>(() => (row?.basis === 'year' ? 'year' : 'hour'))
   const [annualHours, setAnnualHours] = useState(row?.annual_hours ?? String(defaultAnnualHours))
-  const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? today())
+  const [effectiveFrom, setEffectiveFrom] = useState(row?.effective_from ?? today)
   const [effectiveTo, setEffectiveTo] = useState(row?.effective_to ?? '')
   const [notes, setNotes] = useState(row?.notes ?? '')
 

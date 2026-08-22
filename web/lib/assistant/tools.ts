@@ -352,7 +352,7 @@ const findDocuments: AssistantToolDef = {
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
              p.id as party_id, p.display_name as party
         from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where ${where}
        order by d.document_date desc, d.document_number desc
        limit ${limit}
@@ -360,7 +360,7 @@ const findDocuments: AssistantToolDef = {
     const c = (await db.execute<{ n: string }>(sql`
       select count(*) as n
         from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where ${where}
     `));
     const total = Number(c.rows[0]?.n ?? 0);
@@ -405,7 +405,7 @@ const getDocument: AssistantToolDef = {
     const doc = (await db.execute<any>(sql`
       select d.*, p.display_name as party
         from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
     `));
     const d = doc.rows[0];

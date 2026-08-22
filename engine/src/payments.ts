@@ -1156,8 +1156,8 @@ export async function createPaymentRun(opts: {
            round((abs(jl.amount) - coalesce(ap.applied, 0)) / d.fx_rate, 4) as open,
            pt.discount_days, pt.discount_percent
       from documents d
-      join parties p on p.id = d.party_id
-      left join vendor_roles vr on vr.party_id = d.party_id
+      join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
       left join payment_terms pt on pt.id = vr.payment_terms_id and pt.is_active
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0

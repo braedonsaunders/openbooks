@@ -96,7 +96,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
         count(*) filter (where d.posting_date >= ${from}) as report_count
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
         and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
       group by 1, 2
@@ -142,7 +142,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       select d.id, d.document_number, d.document_date::text as date, d.total, d.status,
         p.display_name as employee
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
         and d.status in ('pending_approval', 'draft', 'approved')
       order by case d.status when 'pending_approval' then 0 when 'approved' then 1 else 2 end,

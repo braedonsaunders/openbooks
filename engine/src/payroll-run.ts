@@ -49,6 +49,7 @@ import { componentYearToDate as openingComponentYtd } from "./payroll-opening-ba
 import { resolveStatutoryRates } from "./payroll/statutory-rates.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
+import { businessToday } from "./business-date.ts";
 import {
   loadActiveDerivedRules,
   resolveDerivedEarnings,
@@ -820,7 +821,7 @@ export async function createPayRun(input: {
     // Processing a few days before period END is normal payroll practice;
     // opening a period that starts in the future is not, and it would compute
     // statutory amounts from time that cannot exist yet.
-    const today = iso(new Date());
+    const today = await businessToday(orgId);
     if (periodStart > today) {
       throw new PayrollError(
         `pay period starts ${periodStart}, which has not begun yet`,

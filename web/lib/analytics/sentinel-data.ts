@@ -214,7 +214,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
              when trunc(abs(d.total))::bigint % 1000 = 999 then '999'
              else '99' end as trap
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
@@ -264,7 +264,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         t.party_id, coalesce(p.display_name, 'Unknown') as party_name, t.same_memo,
         null::bigint as pair_count
       from top t
-      left join parties p on p.id = t.party_id
+      left join parties p on p.id = t.party_id and p.org_id = ${orgId}
       union all
       select 'agg', null::uuid, null::uuid, null::text, null::text, null::text,
         null::text, null::text, null::int, coalesce(sum(amount), 0), null::uuid,
@@ -278,7 +278,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         abs(d.total) as amount, d.party_id, coalesce(p.display_name, '') as party_name,
         extract(dow from coalesce(d.document_date, d.posting_date))::int as dow
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
@@ -320,7 +320,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
           coalesce(d.document_date, d.posting_date)::text as date,
           abs(d.total) as amount, d.party_id, coalesce(p.display_name, 'Unknown') as party_name
         from documents d
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
         where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
           and d.party_id is not null
           and coalesce(d.document_date, d.posting_date) >= ${from}
@@ -379,7 +379,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       )
       select i.*, coalesce(p.display_name, 'Unknown') as party_name
       from islands i
-      left join parties p on p.id = i.party_id
+      left join parties p on p.id = i.party_id and p.org_id = ${orgId}
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
       order by i.span_days desc, i.total_amount desc
       limit 50
