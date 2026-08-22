@@ -1392,7 +1392,8 @@ export async function refreshCloseRun(
           on conflict (run_id, code) do update set
             task_id = excluded.task_id, severity = excluded.severity, status = 'open',
             title = excluded.title, message = excluded.message, details = excluded.details,
-            resolved_at = null, resolved_by = null, resolution = null, updated_at = now()`);
+            resolved_at = null, resolved_by = null, resolution = null, updated_at = now()
+          where close_exceptions.org_id = ${orgId}`);
       } else {
         await tx.execute(sql`
           update close_exceptions set status = 'resolved', resolved_at = now(),
