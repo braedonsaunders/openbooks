@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { classifyBudgetVariance, classifyPeriodPerformance, classifyUnmatchedBankActivity, nextContinuousCloseRunAt } from "./continuous-close.ts";
 import {
   defaultContinuousCloseDetectors,
@@ -8,6 +9,8 @@ import {
   normalizeContinuousCloseAnalysisSettings,
   normalizeContinuousCloseDetectors,
 } from "./continuous-close-config.ts";
+
+const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
 
 test("unmatched bank activity escalates for age, count, or exact materiality", () => {
   const now = new Date("2026-07-16T12:00:00Z");
@@ -50,6 +53,13 @@ test("unmatched bank activity escalates for age, count, or exact materiality", (
       now,
     }),
     "critical",
+  );
+});
+
+test("unmatched-bank age uses the org business day, not UTC today", () => {
+  assert.match(
+    source,
+    /const today = await businessToday\(orgId\);[\s\S]*?classifyUnmatchedBankActivity\(\{[\s\S]*?now: parseIsoDate\(today\)/,
   );
 });
 
