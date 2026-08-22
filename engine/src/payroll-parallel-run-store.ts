@@ -639,7 +639,14 @@ export async function saveParallelTolerance(input: {
   tolerance: string;
   reason: string;
 }): Promise<void> {
-  const tolerance = normalizeMoney(input.tolerance);
+  const exact = canonicalDecimal(input.tolerance, 4);
+  if (exact === null) throw new ParallelRunStoreError("tolerance is not an amount");
+  let tolerance: string;
+  try {
+    tolerance = normalizeMoney(exact);
+  } catch {
+    throw new ParallelRunStoreError("tolerance is not an amount");
+  }
   if (cmp(tolerance, "0") < 0) {
     throw new ParallelRunStoreError("a tolerance cannot be negative");
   }
