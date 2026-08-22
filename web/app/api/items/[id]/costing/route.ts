@@ -123,7 +123,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         allow_negative_inventory = excluded.allow_negative_inventory,
         negative_cost_basis = excluded.negative_cost_basis,
         provisional_unit_cost = excluded.provisional_unit_cost,
-        updated_at = now(), updated_by = ${actorId}`)
+        updated_at = now(), updated_by = ${actorId}
+      where item_inventory_profiles.org_id = ${orgId}`)
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'item_inventory_profiles', ${id}, 'update',
