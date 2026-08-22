@@ -2,6 +2,7 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
 import { Alert, AlertDescription, AlertTitle, Badge, Table, TableBody, TableCell, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
@@ -68,6 +69,7 @@ export async function RunsSection({
   basePath?: '/payments' | '/receipts'
 }) {
   const { money } = await getMoneyFormatter()
+  const today = await businessToday(orgId)
   const t = await getTranslations('payments')
   const tCommon = await getTranslations('common')
   const building = pickString(sp.newRun) === '1'
@@ -110,7 +112,7 @@ export async function RunsSection({
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.unapplied_at is null), 0) as open,
-           exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= current_date) and (m.expires_on is null or m.expires_on >= current_date)) as has_bank
+           exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= ${today}) and (m.expires_on is null or m.expires_on >= ${today})) as has_bank
       from documents d
       join parties p on p.id = d.party_id
       join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'

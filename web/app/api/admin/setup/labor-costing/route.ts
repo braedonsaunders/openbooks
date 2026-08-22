@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -72,11 +73,12 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const employee = url.searchParams.get('employee')
   if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
+  const today = await businessToday(gate.user.orgId)
   const [rates, org, currencies, employeeContext] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select id, rate, currency, basis, annual_hours, effective_from::text as effective_from,
              effective_to::text as effective_to, notes,
-             effective_from <= current_date and (effective_to is null or effective_to >= current_date) as is_current
+             effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
         from labor_cost_rates
        where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
        order by effective_from desc`),

@@ -36,7 +36,7 @@ export const FILTER_OPS = [
   'contains',
   'is_null',
   'is_not_null',
-  // relative date windows, anchored to the server clock at compile time
+  // relative date windows, anchored to the org business day passed into compile
   'last_n_days',
   'this_month',
   'this_quarter',

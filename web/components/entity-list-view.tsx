@@ -18,6 +18,7 @@ import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
 import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { entityListSource } from '../lib/list/entity-sources'
 
 /**
@@ -133,7 +134,10 @@ export async function EntityListView({
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
   )
-  const allowedSubs = await allowedSubsidiaryIds(userId)
+  const [allowedSubs, today] = await Promise.all([
+    allowedSubsidiaryIds(userId),
+    businessToday(orgId),
+  ])
   const adhoc = { q: params.q, filters: quickValues, showInactive }
   const where = source.where(view, adhoc, orgId, allowedSubs)
   // Counts ignore the ad-hoc status selection so every status remains visible
@@ -146,9 +150,9 @@ export async function EntityListView({
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`
   const tableSql = sql.raw(`${source.table} ${source.alias}`)
   const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
-  const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs) : source.baseJoins
+  const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins
   const countJoinsSource = source.countJoins ?? source.baseJoins
-  const countJoins = typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs) : countJoinsSource
+  const countJoins = typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource
 
   const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
     db.execute(sql`

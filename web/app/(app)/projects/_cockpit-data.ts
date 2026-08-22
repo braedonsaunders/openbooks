@@ -21,9 +21,10 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean } = {},
 ): Promise<ProjectCockpitData> {
-  const [projectType, fieldTicketsEnabled] = await Promise.all([
+  const [projectType, fieldTicketsEnabled, today] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
+    businessToday(orgId),
   ])
   const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
@@ -71,8 +72,8 @@ export async function loadProjectCockpit(
        left join performance_obligations o on o.contract_id = c.id
        where p.id = ${projectId} and p.org_id = ${orgId}`),
     db.execute(sql`
-      select coalesce(min(e.posting_date), current_date)::text as "from",
-             greatest(coalesce(max(e.posting_date), current_date), current_date)::text as "to"
+      select coalesce(min(e.posting_date), ${today})::text as "from",
+             greatest(coalesce(max(e.posting_date), ${today}), ${today})::text as "to"
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId}
@@ -156,7 +157,7 @@ export async function loadProjectCockpit(
     },
     recognition,
     glRange: ((glRangeRes as unknown as { rows: { from: string; to: string }[] }).rows[0]
-      ?? { from: await businessToday(orgId), to: await businessToday(orgId) }),
+      ?? { from: today, to: today }),
     transactions: financials.documents as ProjectCockpitData['transactions'],
   }
 }

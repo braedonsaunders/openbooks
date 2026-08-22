@@ -28,7 +28,7 @@ import {
   ITEM_BUILT_IN_EXPR,
   ITEM_SORTS,
   ITEM_STATUS_EXPR,
-  ACCOUNT_BASE_JOINS,
+  accountBaseJoins,
   ACCOUNT_BUILT_IN_EXPR,
   ACCOUNT_SORTS,
   ACCOUNT_STATUS_EXPR,
@@ -107,14 +107,14 @@ export interface EntityListSource {
   /** Optional target kind for shared custom-field tables such as documents. */
   customFieldKind?: string
   /** FROM joins after `<table> <alias>`. */
-  baseJoins: SQL | ((allowedSubsidiaryIds?: Set<string> | null) => SQL)
+  baseJoins: SQL | ((allowedSubsidiaryIds?: Set<string> | null, today?: string) => SQL)
   /**
    * Joins for the count/status-count queries when the row joins include work
    * the aggregates don't need (e.g. per-row lateral totals whose columns only
    * appear in SELECT). Must still include every join the WHERE references.
    * Defaults to baseJoins.
    */
-  countJoins?: SQL | ((allowedSubsidiaryIds?: Set<string> | null) => SQL)
+  countJoins?: SQL | ((allowedSubsidiaryIds?: Set<string> | null, today?: string) => SQL)
   /** Built-in column key → SELECT expression. */
   builtInExpr: Record<string, SQL>
   /** Sort key → ORDER BY expression. */
@@ -357,7 +357,7 @@ const SOURCES: Record<string, EntityListSource> = {
     table: 'accounts',
     alias: 'a',
     customFieldTable: 'accounts',
-    baseJoins: ACCOUNT_BASE_JOINS,
+    baseJoins: (_allowed, today) => accountBaseJoins(today!),
     builtInExpr: ACCOUNT_BUILT_IN_EXPR,
     sorts: ACCOUNT_SORTS,
     defaultSort: sql`a.number`,

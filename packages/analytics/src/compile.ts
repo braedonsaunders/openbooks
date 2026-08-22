@@ -118,6 +118,8 @@ function measureType(agg: AggFn, field: AnalyticsField | null): SemanticType {
 type Ctx = {
   source: AnalyticsSource
   params: unknown[]
+  /** Org business day (YYYY-MM-DD). Relative date filters bind this, never current_date. */
+  asOf: string
 }
 
 /** Push a bound value and return its `$n` placeholder. */
@@ -166,16 +168,16 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
       const n = Number(v)
       if (!Number.isFinite(n) || n < 0)
         throw new InsightCompileError('last_n_days_needs_number', '"within last N days" needs a number')
-      return `${ref} >= (current_date - ${bind(ctx, Math.trunc(n))}::int)`
+      return `${ref} >= (${bind(ctx, ctx.asOf)}::date - ${bind(ctx, Math.trunc(n))}::int)`
     }
     case 'this_month':
-      return `${ref} >= date_trunc('month', current_date)::date and ${ref} < (date_trunc('month', current_date) + interval '1 month')::date`
+      return `${ref} >= date_trunc('month', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('month', ${bind(ctx, ctx.asOf)}::date) + interval '1 month')::date`
     case 'this_quarter':
-      return `${ref} >= date_trunc('quarter', current_date)::date and ${ref} < (date_trunc('quarter', current_date) + interval '3 months')::date`
+      return `${ref} >= date_trunc('quarter', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('quarter', ${bind(ctx, ctx.asOf)}::date) + interval '3 months')::date`
     case 'this_year':
-      return `${ref} >= date_trunc('year', current_date)::date and ${ref} < (date_trunc('year', current_date) + interval '1 year')::date`
+      return `${ref} >= date_trunc('year', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('year', ${bind(ctx, ctx.asOf)}::date) + interval '1 year')::date`
     case 'ytd':
-      return `${ref} >= date_trunc('year', current_date)::date and ${ref} <= current_date`
+      return `${ref} >= date_trunc('year', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} <= ${bind(ctx, ctx.asOf)}::date`
     default:
       throw new InsightCompileError('unknown_operator', `unknown filter operator "${op as string}"`, op as string)
   }
@@ -231,13 +233,14 @@ export function compileInsightQuery(
   query: InsightQuery,
   orgId: string,
   labels: InsightLabelResolver = {},
+  asOf = '1970-01-01',
 ): CompiledQuery {
   const source = getSource(query.source)
   if (!source)
     throw new InsightCompileError('unknown_source', `unknown source "${query.source}"`, query.source)
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
-  const ctx: Ctx = { source, params: [orgId] }
+  const ctx: Ctx = { source, params: [orgId], asOf }
   const wheres: string[] = [`${source.orgColumn} = $1`]
   const base = compileBaseFilter(ctx)
   if (base) wheres.push(base)

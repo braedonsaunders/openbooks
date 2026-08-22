@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
@@ -11,6 +12,7 @@ export default async function ProjectTypesSetup() {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
+  const today = await businessToday(orgId)
   const [typesRes, dimsRes, acctRes, fieldTicketsEnabled] = await Promise.all([
     db.execute(sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
@@ -24,8 +26,8 @@ export default async function ProjectTypesSetup() {
             from project_financial_profile_versions v
            where v.org_id = project_types.org_id
              and v.project_type_id = project_types.id
-             and v.effective_from <= current_date
-             and (v.effective_to is null or v.effective_to >= current_date)
+             and v.effective_from <= ${today}
+             and (v.effective_to is null or v.effective_to >= ${today})
            order by v.effective_from desc
            limit 1
         ) version on true

@@ -591,7 +591,8 @@ export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 
  * ran a recursive descendant roll-up over the raw lines once per listed
  * account, which scanned the ledger dozens of times per page.
  */
-export const ACCOUNT_BASE_JOINS = sql`
+export function accountBaseJoins(today: string): SQL {
+  return sql`
   left join accounts parent on parent.id = a.parent_id
   left join lateral (
     with recursive descendants(id) as (
@@ -604,22 +605,22 @@ export const ACCOUNT_BASE_JOINS = sql`
     ),
     fy as (
       select make_date(
-        case when extract(month from current_date) >= 4 then extract(year from current_date)::int else extract(year from current_date)::int - 1 end,
+        case when extract(month from ${today}::date) >= 4 then extract(year from ${today}::date)::int else extract(year from ${today}::date)::int - 1 end,
         4, 1) as starts_on
     ),
     movement as (
       select (g.debit_total - g.credit_total) as amt, g.month as d
         from gl_month_activity g
         join descendants tree on tree.id = g.account_id
-       where g.org_id = a.org_id and g.month < date_trunc('month', current_date)::date
+       where g.org_id = a.org_id and g.month < date_trunc('month', ${today}::date)::date
       union all
       select l.amount, e.posting_date
         from journal_lines l
         join descendants tree on tree.id = l.account_id
         join journal_entries e on e.id = l.entry_id and e.org_id = a.org_id
          and e.status in ('posted', 'reversed')
-         and e.posting_date >= date_trunc('month', current_date)::date
-         and e.posting_date <= current_date
+         and e.posting_date >= date_trunc('month', ${today}::date)::date
+         and e.posting_date <= ${today}::date
        where l.org_id = a.org_id
     )
     select coalesce(sum(m.amt), 0)
@@ -628,6 +629,7 @@ export const ACCOUNT_BASE_JOINS = sql`
      where a.type not in ('income','income_other','cogs','expense','expense_other','expense_deferred')
         or m.d >= fy.starts_on
   ) account_balance on true`
+}
 
 export const ACCOUNT_BUILT_IN_EXPR: Record<string, SQL> = {
   number: sql`a.number`,

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
@@ -18,6 +19,7 @@ export async function POST(req: Request) {
   const kind = BUDGET_KINDS.includes(body.kind as any) ? (body.kind as string) : 'budget'
   const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId) ? body.sourceScenarioId : null
 
+  const today = await businessToday(user.orgId)
   const defaults = (await db.execute<{ book_id: string | null; fiscal_year: number | null }>(sql`
     select
       (select id from accounting_books
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
         order by is_primary desc, name limit 1) as book_id,
       coalesce(
         (select fiscal_year from accounting_periods
-          where org_id = ${user.orgId} and current_date between starts_on and ends_on and not is_adjustment
+          where org_id = ${user.orgId} and ${today}::date between starts_on and ends_on and not is_adjustment
           order by starts_on desc limit 1),
         (select max(fiscal_year) from accounting_periods where org_id = ${user.orgId})
       ) as fiscal_year

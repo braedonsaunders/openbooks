@@ -76,6 +76,26 @@ test("an entity's implicit baseFilter is applied to insight queries too", () => 
   assert.equal(compiled.params[0], 'org-1')
 })
 
+test('relative date filters bind the org business day, never current_date', () => {
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'count' }],
+      filters: [
+        { field: 'posting_date', op: 'ytd' },
+        { field: 'posting_date', op: 'last_n_days', value: 30 },
+      ],
+    },
+    'org-1',
+    {},
+    '2026-08-21',
+  )
+  assert.doesNotMatch(compiled.sql, /current_date/i)
+  assert.ok(compiled.params.includes('2026-08-21'))
+  assert.ok(compiled.params.includes(30))
+  assert.match(compiled.sql, /::date/)
+})
+
 test('bound parameters stay numbered in order when a baseFilter binds values', () => {
   const compiled = compileInsightQuery(
     {
