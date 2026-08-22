@@ -37,7 +37,7 @@ export async function deleteDocument(
       select d2.document_number
         from document_links dl
         join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
-       where dl.from_document_id = ${documentId}
+       where dl.from_document_id = ${documentId} and dl.org_id = ${doc.orgId}
          and dl.link_type <> 'reverses'
        limit 1
     `));
