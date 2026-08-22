@@ -1412,6 +1412,16 @@ test('the surfaces this test was written for are covered', () => {
     'field-ticket add-line must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('lib/field-tickets.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,80}isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'field-ticket lines must not store equipment_charge items when Equipment is off — existing lines stay',
+  )
+  assert.match(
+    read('app/api/field-tickets/[id]/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'field-ticket add-line must 404 — not persist equipment_charge items — when Equipment is off',
+  )
+  assert.match(
     read('app/api/field-tickets/item-rate/route.ts'),
     /\['inventory', 'assembly', 'kit'\]/,
     'field-ticket item-rate preview must name the inventory kinds the Features switch 404s',

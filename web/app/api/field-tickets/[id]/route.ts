@@ -93,6 +93,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
+      if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'equipment'))) {
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
+        if (item.rows[0]?.kind === 'equipment_charge') {
+          return NextResponse.json({ error: 'not found' }, { status: 404 })
+        }
+      }
       if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))

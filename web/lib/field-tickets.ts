@@ -380,6 +380,13 @@ export async function addTicketLine(
   if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(orgId, 'inventory'))) {
     throw new FieldTicketError('Inventory is disabled')
   }
+  // The drawer already hides equipment_charge from the picker. Turning
+  // Equipment off must also refuse a new equipment_charge line so a crafted
+  // add-line cannot write one without a unit. Lines that already carry those
+  // items stay.
+  if (item.rows[0].kind === 'equipment_charge' && !(await isFeatureEnabled(orgId, 'equipment'))) {
+    throw new FieldTicketError('Equipment is disabled')
+  }
   const quantity = exactTicketQuantity(input.quantity)
 
   if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
