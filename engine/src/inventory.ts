@@ -323,6 +323,18 @@ interface JournalLineInput {
 
 type Runner = Pick<typeof db, "execute">;
 
+/** Registry default is on — absence must not disable inventory. */
+export async function inventoryFeatureEnabled(
+  runner: Runner,
+  orgId: string,
+): Promise<boolean> {
+  const result = await runner.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'inventory')::boolean, true) as enabled
+      from orgs where id = ${orgId}
+  `);
+  return result.rows[0]?.enabled === true;
+}
+
 /** Post one balanced inventory journal (draft→lines→posted, origin 'inventory').
  *  Exported for the NRV remeasurement module, which shares this GL path. */
 export async function postInventoryEntry(
@@ -2540,6 +2552,7 @@ export async function resolveBillInventoryAccounts(
   orgId: string,
   documentId: string,
 ): Promise<Map<string, string>> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return new Map();
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   const map = new Map<string, string>();
   for (const l of lines)
@@ -2562,6 +2575,7 @@ export async function applyInventoryReceiptsForBill(
   date: string,
   subsidiaryId: string,
 ): Promise<number> {
+  if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
   const lines = await loadDocumentInventoryLines(db, orgId, documentId);
   let count = 0;
   for (const l of lines) {
@@ -2601,6 +2615,7 @@ export async function applyInventoryIssuesForInvoice(
   date: string,
   subsidiaryId: string,
 ): Promise<number> {
+  if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
   const lines = await loadDocumentInventoryLines(db, orgId, documentId);
   let count = 0;
   for (const l of lines) {
