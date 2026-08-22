@@ -344,7 +344,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Nothing has posted yet → the edit stays free.
   const postedRes = (await db.execute(sql`
     select 1 from depreciation_schedules s
-    join depreciation_schedule_lines l on l.schedule_id = s.id
+    join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
      limit 1`))
   const basisConflict = postedAssetBasisEditRefusal(!!postedRes.rows[0], existing, requestedBasis)
@@ -355,7 +355,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ((method !== undefined && method !== existing.depreciation_method) || (depreciationMethodId !== undefined && depreciationMethodId !== existing.depreciation_method_id)) {
     const inputEvidence = (await db.execute(sql`
       select 1 from depreciation_schedules s
-      join depreciation_schedule_lines l on l.schedule_id = s.id
+      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
       where s.org_id = ${user.orgId} and s.asset_id = ${id} and l.source <> 'formula'
       limit 1`))
     if (inputEvidence.rows[0]) return bad('Depreciation method cannot change after manual or production evidence exists')
@@ -432,7 +432,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const evidence = (await db.execute(sql`
     select 1
       from depreciation_schedules s
-      join depreciation_schedule_lines l on l.schedule_id = s.id
+      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId}
        and (l.posted_amount is not null or l.input_id is not null or l.source = 'imported')
      limit 1`))
@@ -446,7 +446,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       delete from depreciation_schedule_lines
-       where schedule_id in (select id from depreciation_schedules where asset_id = ${id} and org_id = ${user.orgId})`)
+       where org_id = ${user.orgId}
+         and schedule_id in (select id from depreciation_schedules where asset_id = ${id} and org_id = ${user.orgId})`)
     await tx.execute(sql`delete from depreciation_schedules where asset_id = ${id} and org_id = ${user.orgId}`)
     await tx.execute(sql`delete from asset_events where asset_id = ${id} and org_id = ${user.orgId}`)
     await tx.execute(sql`delete from fixed_assets where id = ${id} and org_id = ${user.orgId}`)
