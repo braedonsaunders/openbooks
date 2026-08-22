@@ -82,8 +82,13 @@ export async function GET(req: Request) {
       { orgId, t, period: scheduledPeriod, query: scheduledQ },
       { extraFilters },
     )
+    const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
-      const xlsx = await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel })
+      const xlsx = await exportDataToXlsx(data, {
+        reportName: data.title,
+        dateRangeLabel: data.dateRangeLabel,
+        generatedAt: new Date(`${stamp}T00:00:00Z`),
+      })
       return new NextResponse(new Uint8Array(xlsx), {
         status: 200,
         headers: {
@@ -94,7 +99,6 @@ export async function GET(req: Request) {
     }
     const branding = await orgBranding(orgId)
     const { page, showSummary } = resolveLayout(null)
-    const stamp = await businessToday(orgId)
     const pdf = await exportDataToPdf(data, branding, page, {
       showSummary,
       generatedAt: new Date(`${stamp}T00:00:00Z`),
