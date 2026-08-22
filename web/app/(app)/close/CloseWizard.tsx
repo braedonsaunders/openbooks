@@ -56,6 +56,7 @@ type Props = {
   canReopen: boolean;
   canManageFlows: boolean;
   subsidiaryEnabled: boolean;
+  multiCurrency: boolean;
   advancedClose: boolean;
 };
 
@@ -663,6 +664,7 @@ function TaskCard(props: Props & { task: Row }) {
           </div>
         ) : null}
         {props.canRun &&
+        props.multiCurrency &&
         props.task.key === "fx-revalued" &&
         !["complete", "waived"].includes(props.task.status) ? (
           <Button size="sm" disabled={busy} onClick={runRevaluation}>
@@ -671,6 +673,7 @@ function TaskCard(props: Props & { task: Row }) {
           </Button>
         ) : null}
         {props.canRun &&
+        props.subsidiaryEnabled &&
         props.task.key === "consolidation" &&
         !["complete", "waived"].includes(props.task.status) ? (
           <Button size="sm" disabled={busy} onClick={runConsolidation}>

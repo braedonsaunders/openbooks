@@ -844,7 +844,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   if (replacements.length === 0) {
     // Unresolvable: tell the admins, stop re-scanning, keep the gate actionable.
     await db.execute(sql`
-      update flow_gates set escalate_at = null, updated_at = now() where id = ${gateId} and status = 'pending'
+      update flow_gates set escalate_at = null, updated_at = now() where id = ${gateId} and org_id = ${gate.orgId} and status = 'pending'
     `);
     const admins = await roleUsers(gate.orgId, GATE_ADMIN_ROLE);
     if (admins.length > 0) {

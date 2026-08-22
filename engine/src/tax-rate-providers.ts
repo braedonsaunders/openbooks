@@ -416,7 +416,7 @@ export async function quoteExternalTax(
     throw new TaxRateProviderError("no enabled tax rate provider");
   }
   await db.execute(sql`
-    update tax_rate_provider_configs set last_attempt_at = now(), last_error = null where id = ${cfg.id}
+    update tax_rate_provider_configs set last_attempt_at = now(), last_error = null where id = ${cfg.id} and org_id = ${orgId}
   `);
   try {
     let result: TaxQuoteResult;
@@ -449,13 +449,13 @@ export async function quoteExternalTax(
     `));
 
     await db.execute(sql`
-      update tax_rate_provider_configs set last_success_at = now(), last_error = null where id = ${cfg.id}
+      update tax_rate_provider_configs set last_success_at = now(), last_error = null where id = ${cfg.id} and org_id = ${orgId}
     `);
     return { ...result, quoteId: inserted.rows[0]?.id ?? null };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await db.execute(sql`
-      update tax_rate_provider_configs set last_error = ${message} where id = ${cfg.id}
+      update tax_rate_provider_configs set last_error = ${message} where id = ${cfg.id} and org_id = ${orgId}
     `);
     throw e;
   }
