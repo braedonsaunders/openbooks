@@ -338,7 +338,7 @@ const PAY_RUN_STAGE_MATCH = (stage: string): SQL =>
   stage === "posted"
     ? sql`d.status = 'posted'`
     : sql`d.status in ('draft', 'approved') and exists (
-        select 1 from pay_runs pr where pr.document_id = d.id and pr.run_status = ${stage})`;
+        select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.run_status = ${stage})`;
 
 export function payRunWhere(
   kinds: readonly string[],
@@ -354,7 +354,7 @@ export function payRunWhere(
       if (clause.operator === "eq") parts.push(sql`and ${PAY_RUN_STAGE_MATCH(value)}`);
       else if (clause.operator === "ne") parts.push(sql`and not (${PAY_RUN_STAGE_MATCH(value)})`);
     } else if (clause.key === "pay_schedule_id" && value) {
-      const match = sql`exists (select 1 from pay_runs pr where pr.document_id = d.id and pr.pay_schedule_id = ${value})`;
+      const match = sql`exists (select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.pay_schedule_id = ${value})`;
       if (clause.operator === "eq") parts.push(sql`and ${match}`);
       else if (clause.operator === "ne") parts.push(sql`and not ${match}`);
     }
@@ -362,7 +362,7 @@ export function payRunWhere(
   if (adhoc.filters?.run_stage) parts.push(sql`and ${PAY_RUN_STAGE_MATCH(adhoc.filters.run_stage)}`);
   if (adhoc.filters?.pay_schedule_id) {
     parts.push(sql`and exists (
-      select 1 from pay_runs pr where pr.document_id = d.id and pr.pay_schedule_id = ${adhoc.filters.pay_schedule_id})`);
+      select 1 from pay_runs pr where pr.document_id = d.id and pr.org_id = d.org_id and pr.pay_schedule_id = ${adhoc.filters.pay_schedule_id})`);
   }
   return sql.join(parts, sql` `);
 }
