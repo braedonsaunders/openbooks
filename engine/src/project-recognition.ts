@@ -157,7 +157,7 @@ export async function postProjectGlEntryWithinTransaction(
     update journal_entries
        set status = 'posted', posted_at = now(), posted_by = ${actorId},
            updated_at = now(), updated_by = ${actorId}
-     where id = ${eid}`);
+     where id = ${eid} and org_id = ${orgId}`);
   await tx.execute(sql`
     insert into audit_log
       (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -271,11 +271,11 @@ export async function reverseProjectGlEntryWithinTransaction(
     update journal_entries
        set status = 'posted', posted_at = now(), posted_by = ${actorId},
            updated_at = now(), updated_by = ${actorId}
-     where id = ${rev.id}`);
+     where id = ${rev.id} and org_id = ${orgId}`);
   await tx.execute(sql`
     update journal_entries
        set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-     where id = ${entryId}`);
+     where id = ${entryId} and org_id = ${orgId}`);
   await tx.execute(sql`
     insert into audit_log
       (org_id, table_name, row_id, action, changes, actor_id, request_id)

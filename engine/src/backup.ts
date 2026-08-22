@@ -436,7 +436,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
     // callback carries no context of its own and must re-enter it explicitly.
     void withOrgContext(run.org_id, () => db.execute(sql`
       update backup_runs set updated_at = now()
-       where id = ${run.id} and status = 'running'
+       where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
     `)).catch((error) => {
       console.error(`[backup] run ${run.id}: heartbeat failed:`, (error as Error).message);
     }).finally(() => {
@@ -490,7 +490,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
                byte_size = ${byteSize}, sha256 = ${sha256},
                table_count = ${stats.tables.length}, row_count = ${stats.totalRows},
                updated_at = now()
-         where id = ${run.id} and status = 'running'
+         where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
          returning id`));
       if (!intended.rows[0]) throw new Error("backup run lost its running claim before upload");
 
@@ -510,7 +510,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
       update backup_runs
          set status = 'completed', completed_at = now(), updated_at = now(),
              error = null
-       where id = ${run.id} and status = 'running'
+       where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
        returning id`));
     if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
     completed = true;
@@ -523,7 +523,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
     let state: { status: string } | undefined;
     try {
       const stateResult = (await db.execute<{ status: string }>(sql`
-        select status from backup_runs where id = ${runId}`));
+        select status from backup_runs where id = ${runId} and org_id = ${run.org_id}`));
       state = stateResult.rows[0];
     } catch (stateError) {
       console.error(
@@ -552,7 +552,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
           update backup_runs
              set status = 'failed', object_key = null, error = ${message},
                  completed_at = now(), updated_at = now()
-           where id = ${runId} and status = 'running'`);
+           where id = ${runId} and org_id = ${run.org_id} and status = 'running'`);
         await auditBackupEvent({
           orgId: run.org_id,
           tableName: "backup_runs",
@@ -564,7 +564,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
         await db.execute(sql`
           update backup_runs
              set error = ${`upload/finalization uncertain; awaiting reconciliation: ${message}`}, updated_at = now()
-           where id = ${runId} and status = 'running'`);
+           where id = ${runId} and org_id = ${run.org_id} and status = 'running'`);
       }
     }
   }
@@ -644,7 +644,7 @@ export async function rotateBackups(orgId: string): Promise<void> {
     await db.execute(sql`
       update backup_runs
          set purged_at = now(), purge_reason = 'rotated', updated_at = now()
-       where id = ${run.id}`);
+       where id = ${run.id} and org_id = ${orgId}`);
     await auditBackupEvent({
       orgId,
       tableName: "backup_runs",

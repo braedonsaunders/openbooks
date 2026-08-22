@@ -203,7 +203,7 @@ export async function runTaxPool(
           updated_at = now(), updated_by = ${opts.actorId}`);
       await tx.execute(sql`
         update tax_depreciation_pools set opening_balance = ${result.closingBalance}, updated_at = now(), updated_by = ${opts.actorId}
-         where id = ${pool.id}`);
+         where id = ${pool.id} and org_id = ${orgId}`);
     });
 
     lines.push({
