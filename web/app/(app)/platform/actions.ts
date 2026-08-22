@@ -188,6 +188,7 @@ export async function grantAccessAction(formData: FormData): Promise<void> {
         is_active = true,
         updated_at = now(),
         updated_by = excluded.updated_by
+      where user_org_access.org_id = ${orgId}
       returning id
     `)) as { rows: { id: string }[] };
     const accessId = result.rows[0]?.id;
