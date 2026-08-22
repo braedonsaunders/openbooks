@@ -152,8 +152,8 @@ export async function syncProjectRevenueContracts(
           coalesce((select sum(t.estimated_cost) from project_tasks t
                      where t.project_id = ${p.id} and t.org_id = ${orgId}), 0) as budget,
           coalesce((select sum(l.amount) from journal_lines l
-                     join journal_entries e on e.id = l.entry_id
-                     join accounts a on a.id = l.account_id
+                     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+                     join accounts a on a.id = l.account_id and a.org_id = l.org_id
                     where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
                       and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`));
       percent = costToCostPercent(cc.rows[0]?.budget ?? "0", cc.rows[0]?.actual ?? "0");

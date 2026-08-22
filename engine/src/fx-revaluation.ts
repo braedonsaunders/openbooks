@@ -180,8 +180,8 @@ async function loadPositions(
            sum(l.amount)::text                  as carrying_base,
            sum(l.txn_amount)::text              as foreign_balance
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.book_id = ${bookId}

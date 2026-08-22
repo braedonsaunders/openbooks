@@ -514,8 +514,8 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
            coalesce(ap.applied, 0) as applied,
            coalesce(ap.transaction_applied, 0) as transaction_applied
       from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
-      left join documents d on d.id = je.source_document_id
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+      left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
       left join lateral (
         select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
           from applications a
@@ -561,10 +561,10 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
     select d.*, p.display_name as party_name, e.id as entry_id, e.entry_number,
            ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name
       from documents d
-      left join parties p on p.id = d.party_id
-      left join journal_entries e on e.id = d.posted_entry_id
-      left join document_lines dl on dl.document_id = d.id and dl.line_number = 1
-      left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id)
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
+      left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+      left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id and dl.line_number = 1
+      left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id) and ba.org_id = d.org_id
      where d.id = ${id} and d.kind = ${kind}
   `));
   const row = doc.rows[0];
@@ -587,9 +587,9 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
                  td.kind as target_document_kind, td.reference_number as target_reference_number
             from journal_lines jl
             join applications a on a.from_line_id = jl.id and a.unapplied_at is null
-            join journal_lines tl on tl.id = a.to_line_id
-            join journal_entries te on te.id = tl.entry_id
-            left join documents td on td.id = te.source_document_id
+            join journal_lines tl on tl.id = a.to_line_id and tl.org_id = jl.org_id
+            join journal_entries te on te.id = tl.entry_id and te.org_id = tl.org_id
+            left join documents td on td.id = te.source_document_id and td.org_id = te.org_id
            where jl.entry_id = ${row.posted_entry_id}
            order by te.posting_date, te.entry_number
         `))).rows
@@ -793,8 +793,8 @@ export async function postPaymentWithApplications(
              jl.subsidiary_id, je.posting_date, je.period_id, je.book_id,
              s.base_currency as functional_currency
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id
-        join subsidiaries s on s.id = jl.subsidiary_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+        join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
        where jl.entry_id = ${entryId} and jl.account_id = ${controlAccountId}
        limit 1
     `));
@@ -812,7 +812,7 @@ export async function postPaymentWithApplications(
              abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
              abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
         left join applications a on a.to_line_id = jl.id
        where jl.id in ${allocs.map((a) => a.openLineId)}
        group by jl.id
@@ -936,7 +936,7 @@ export async function postPaymentWithApplications(
     const targetIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
     const targets = (await db.execute<{ doc_id: string }>(sql`
       select distinct je.source_document_id as doc_id
-        from journal_lines jl join journal_entries je on je.id = jl.entry_id
+        from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.id in ${targetIds} and je.source_document_id is not null
     `));
     if (targets.rows.length > 0) {
@@ -1159,7 +1159,7 @@ export async function createPaymentRun(opts: {
       join parties p on p.id = d.party_id
       left join vendor_roles vr on vr.party_id = d.party_id
       left join payment_terms pt on pt.id = vr.payment_terms_id and pt.is_active
-      join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0
       left join lateral (
         select sum(a.amount) as applied from applications a
@@ -1273,7 +1273,7 @@ export async function createPaymentRun(opts: {
       select d.id as document_id, jl.id as open_line_id,
              abs(jl.amount) - coalesce(ap.applied, 0) as open_base
         from documents d
-        join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+        join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount > 0
         left join lateral (
           select sum(a.amount) as applied from applications a

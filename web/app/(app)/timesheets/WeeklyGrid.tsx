@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { useBusinessToday } from '../../../components/business-date-provider'
 import { confirmDialog } from '../../../lib/confirm'
 import { promptDialog } from '../../../lib/prompt'
 import { ChevronLeft, ChevronRight, FilePenLine, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
@@ -128,9 +129,9 @@ function shiftWeek(sundayIso: string, deltaWeeks: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
-function thisWeekSunday(): string {
-  const now = new Date()
-  const dt = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12))
+function sundayOf(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d, 12))
   dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay())
   return dt.toISOString().slice(0, 10)
 }
@@ -171,6 +172,7 @@ export function WeeklyGrid({
   const statusLabel = (s: string) =>
     COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
   const router = useRouter()
+  const today = useBusinessToday()
   const [rows, setRows] = useState<GridRow[]>(() => fromPayload(payload.rows, pickers.timeTypes))
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
@@ -472,7 +474,7 @@ export function WeeklyGrid({
           <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
             {tCommon('actions.next')} <ChevronRight size={15} />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => go(employeeId, thisWeekSunday())} disabled={!employeeId}>
+          <Button size="sm" variant="ghost" onClick={() => go(employeeId, sundayOf(today))} disabled={!employeeId}>
             {t('grid.thisWeek')}
           </Button>
           {readOnly && status === 'approved' ? (

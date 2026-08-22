@@ -89,7 +89,7 @@ export async function captureTransactionAuditSnapshot(
       ) end
     ) as snapshot
       from documents d
-     left join journal_entries e on e.id = d.posted_entry_id
+     left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
      where d.id = ${documentId}
      limit 1
      for update of d

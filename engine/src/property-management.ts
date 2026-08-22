@@ -735,7 +735,7 @@ export async function levelLeaseRentStraightLine(
     const posted = (await db.execute<{ accrual: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as accrual
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted','reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted','reversed')
        where jl.org_id = ${orgId} and je.origin = 'lease'
          and je.custom->'propertyManagement'->>'levellingLeaseId' = ${lease.id}
          and (${straightLineRentAccountId}::uuid is null or jl.account_id = ${straightLineRentAccountId}::uuid)

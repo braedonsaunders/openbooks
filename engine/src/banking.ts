@@ -874,7 +874,7 @@ async function reconciliationTotalsUsing(
       coalesce((
         select sum(jl.txn_amount)
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
          where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
            and jl.currency = ${recon.currency}
            and je.posting_date <= ${recon.through_date}
@@ -974,7 +974,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     const glRes = (await tx.execute<{ id: string; posting_date: string; amount: string }>(sql`
       select jl.id, je.posting_date, jl.txn_amount as amount
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
@@ -1082,7 +1082,7 @@ export async function createMatch(
     const gl = (await tx.execute<{ id: string; amount: string }>(sql`
       select jl.id, jl.txn_amount as amount
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        where jl.id = any(${sql.param(journalLineIds)}::uuid[])
          and jl.org_id = ${ctx.orgId}
          and jl.account_id = ${recon.account_id}
@@ -1376,6 +1376,7 @@ export async function markReconciled(
          and jl.org_id = m.org_id
         join journal_entries je
           on je.id = jl.entry_id
+         and je.org_id = jl.org_id
          and je.status in ('posted', 'reversed')
        where m.reconciliation_id = ${recon.id}
          and m.org_id = ${ctx.orgId}
@@ -1401,7 +1402,7 @@ export async function markReconciled(
     const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}

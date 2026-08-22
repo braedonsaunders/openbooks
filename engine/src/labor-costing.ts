@@ -455,20 +455,20 @@ async function laborClearingReconciliationFrom(
       coalesce(sum(l.amount) filter (where e.origin is distinct from 'labor_burden'
                                        and e.origin is distinct from 'payroll_variance'), 0) as payroll_posted
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`));
   const open = (await executor.execute<{ balance: string }>(sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and l.subsidiary_id = ${subsidiaryId}`));
   const perProject = (await executor.execute<{ project_id: string; name: string; standard: string }>(sql`
     select l.project_id, p.name, sum(l.amount) as standard
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
       join projects p on p.id = l.project_id
      where l.org_id = ${orgId} and l.project_id is not null
        and l.subsidiary_id = ${subsidiaryId}
