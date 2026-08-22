@@ -141,6 +141,7 @@ export default async function CustomersHomePage({
             value={moneyCompact(data.pipeline.closed)}
             tone="positive"
           />
+          {data.ordersEnabled ? (
           <HomeStatTile
             icon="clipboard"
             accent="sky"
@@ -151,6 +152,7 @@ export default async function CustomersHomePage({
               orders: data.badges.openSalesOrders,
             })}
           />
+          ) : null}
           <HomeStatTile
             icon="wallet"
             accent="emerald"

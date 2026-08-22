@@ -27,6 +27,7 @@ import {
   createPermission,
   dimensionOptions,
   itemOptions,
+  isDocKindEnabled,
   loadDocument,
   partyOptions,
   postPermission,
@@ -76,6 +77,7 @@ export async function loadRelatedTransactionDrawerData({
   authz: Authz
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
+  if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null
   if (projectId) {
     const related = (await db.execute<{ id: string }>(sql`
       select d.id

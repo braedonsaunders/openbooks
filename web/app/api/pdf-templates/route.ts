@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../lib/authz";
+import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
 import { starterTemplate } from "../../../lib/pdf-templates/starters";
@@ -18,7 +19,12 @@ export async function GET(req: Request) {
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
-  const rows = await listPdfTemplates(user.orgId, recordType);
+  if (recordType && !(await isDocKindEnabled(user.orgId, recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const hidden = new Set(await disabledDocKinds(user.orgId));
+  const rows = (await listPdfTemplates(user.orgId, recordType))
+    .filter((row) => !hidden.has(row.recordType));
   // The list payload doesn't need the (potentially large) HTML bodies.
   return NextResponse.json({
     rows: rows.map(({ sourceHtml: _s, compiledHtml: _c, ...row }) => row),
@@ -45,6 +51,9 @@ export async function POST(req: Request) {
   };
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  if (!(await isDocKindEnabled(user.orgId, meta.key))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
   const org = (await db.execute<{ brand_primary: string | null }>(sql`

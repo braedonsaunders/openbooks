@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../../lib/authz'
+import { isDocKindEnabled } from '../../../../../../lib/documents'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/catalog'
 import { resolveRecordRecipient, sendRecordPdfEmail } from '../../../../../../lib/pdf-templates/send'
 
@@ -12,6 +13,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ recordTy
   if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
+  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const info = await resolveRecordRecipient(recordType, gate.user.orgId, id)
   if (!info) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   return NextResponse.json(info)
@@ -24,6 +28,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
   if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
+  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const body = (await req.json().catch(() => ({}))) as { to?: string; message?: string; template?: string }
   try {

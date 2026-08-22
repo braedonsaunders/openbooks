@@ -120,6 +120,10 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   multiSubsidiary: ['app/api/consolidation'],
   multiCurrency: ['app/api/admin/fx-provider', 'app/api/close/run-revaluation'],
   apiAccess: ['app/api/admin/api-keys'],
+  // orders: omitted — /api/estimates|sales-orders|purchase-orders route.ts files
+  // are thin re-exports of _order/handlers.ts, which already calls
+  // guardFeaturePermission(..., 'orders'). Listing the dirs here would fail
+  // the per-file GATE scan on those wrappers.
 }
 
 function routeFilesUnder(dir: string): string[] {
@@ -251,12 +255,85 @@ test('the surfaces this test was written for are covered', () => {
     'app/api/documents/draft/route.ts',
     'app/api/crm/opportunities/[id]/estimate/route.ts',
     'app/api/parties/[id]/transactions/route.ts',
+    'app/api/ap-capture/[id]/route.ts',
+    'app/api/record-pdf/[recordType]/[id]/route.ts',
+    'app/api/record-pdf/[recordType]/options/route.ts',
+    'app/api/record-pdf/[recordType]/[id]/send/route.ts',
+    'app/api/pdf-templates/route.ts',
+    'app/api/pdf-templates/[id]/route.ts',
+    'app/api/pdf-templates/preview/route.ts',
+    'app/(app)/ap/capture/page.tsx',
+    'app/(app)/admin/pdf-templates/[id]/page.tsx',
     'lib/application/documents.ts',
     'lib/api/writers.ts',
     'lib/assistant/tools.ts',
     'lib/crm.ts',
+    'lib/documents.ts',
+    'components/related-transaction-drawer.tsx',
   ]) {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
+  }
+  assert.match(
+    read('lib/search.ts'),
+    /disabledDocKinds\(/,
+    'global search must hide optional-module kinds when the feature is off',
+  )
+  assert.match(
+    read('lib/module-home/customers.ts'),
+    /isFeatureEnabled\(orgId, 'orders'\)/,
+    'customer home must not count quotes/sales orders when Orders is off',
+  )
+  assert.match(
+    read('lib/module-home/purchasing.ts'),
+    /isFeatureEnabled\(orgId, 'orders'\)/,
+    'purchasing home must not count purchase orders when Orders is off',
+  )
+  assert.match(
+    read('lib/module-home/purchasing.ts'),
+    /isFeatureEnabled\(orgId, 'expenses'\)/,
+    'purchasing home must not count unposted expenses when Expenses is off',
+  )
+  assert.match(
+    read('app/(app)/customers/page.tsx'),
+    /data\.ordersEnabled/,
+    'customer home must hide the quotes/orders vital when Orders is off',
+  )
+  assert.match(
+    read('app/(app)/purchasing/page.tsx'),
+    /data\.ordersEnabled/,
+    'purchasing home must hide the open-PO vital when Orders is off',
+  )
+  assert.match(
+    read('app/(app)/purchasing/page.tsx'),
+    /data\.expensesEnabled/,
+    'purchasing home must hide the unposted-expense vital when Expenses is off',
+  )
+  assert.match(
+    read('app/(app)/ap/capture/page.tsx'),
+    /isDocKindEnabled\([^,]+, 'purchase_order'\)/,
+    'AP capture must not look up purchase orders when Orders is off',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /isDocKindEnabled\([^,]+, 'purchase_order'\)/,
+    'AP capture must refuse a new PO assignment when Orders is off',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /status: 404/,
+    'AP capture must 404 — not attach a PO — when Orders is off',
+  )
+  assert.match(
+    read('app/(app)/admin/pdf-templates/page.tsx'),
+    /disabledDocKinds\(/,
+    'PDF template catalog must hide quote/SO/PO/expense-report kinds when the feature is off',
+  )
+  for (const file of [
+    'app/api/record-pdf/[recordType]/[id]/route.ts',
+    'app/api/record-pdf/[recordType]/options/route.ts',
+    'app/api/record-pdf/[recordType]/[id]/send/route.ts',
+  ]) {
+    assert.match(read(file), /status: 404/, `${file} must 404 optional-module PDFs when the feature is off`)
   }
   assert.match(
     read('app/api/crm/opportunities/[id]/estimate/route.ts'),

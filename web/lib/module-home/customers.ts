@@ -5,6 +5,7 @@ import {
 } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculateForecast } from '../crm'
+import { isFeatureEnabled } from '../features'
 
 /**
  * Customers module home — one light round trip for the relationship-to-cash
@@ -45,11 +46,14 @@ export interface CustomersHome {
     collected7d: number
     customers: number
   }
+  /** False when Orders is off — hide quote/SO vitals rather than show zeros. */
+  ordersEnabled: boolean
 }
 
 const TREND_WEEKS = 13
 
 export async function customersHome(orgId: string, subIds?: string[]): Promise<CustomersHome> {
+  const ordersOn = await isFeatureEnabled(orgId, 'orders')
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
   const ago365 = addCalendarDays(today, -365)
@@ -154,10 +158,10 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       select
         (select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
           where o.org_id = ${orgId} and o.is_active and not s.is_closed) as open_opps,
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_quotes,
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_sos,
+        ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_quotes,
+        ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_sos,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as receipts_7d,
@@ -213,5 +217,6 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       collected7d: Number(badge.collected_7d ?? 0),
       customers: Number(badge.customers ?? 0),
     },
+    ordersEnabled: ordersOn,
   }
 }

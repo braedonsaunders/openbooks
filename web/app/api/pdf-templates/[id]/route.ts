@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
+import { isDocKindEnabled } from "../../../../lib/documents";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
 import { getPdfTemplate } from "../../../../lib/pdf-templates/store";
 
@@ -17,6 +18,9 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
   const row = await getPdfTemplate(gate.user.orgId, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isDocKindEnabled(gate.user.orgId, row.recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   return NextResponse.json({ row });
 }
 
@@ -28,6 +32,9 @@ export async function PATCH(req: Request, { params }: Params) {
   const { id } = await params;
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as {
     name?: string;
@@ -106,6 +113,9 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params;
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   await db.transaction(async (tx) => {
     await tx.execute(sql`delete from pdf_templates where org_id = ${user.orgId} and id = ${id}`);
     await tx.execute(sql`

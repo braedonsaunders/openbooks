@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
+import { disabledDocKinds } from '../../../../lib/documents'
 import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
 import { starterTemplate } from '../../../../lib/pdf-templates/starters'
 import { listPdfTemplates } from '../../../../lib/pdf-templates/store'
@@ -25,7 +26,9 @@ export default async function PdfTemplatesPage() {
   const t = await getTranslations('pdfTemplates')
   const tHub = await getTranslations('admin.hub')
 
-  const all = await listPdfTemplates(authz.user.orgId)
+  const hiddenKinds = new Set(await disabledDocKinds(authz.user.orgId))
+  const catalog = PDF_RECORD_TYPES.filter((meta) => !hiddenKinds.has(meta.key))
+  const all = (await listPdfTemplates(authz.user.orgId)).filter((tp) => !hiddenKinds.has(tp.recordType))
   const templates: TemplateRow[] = all.map((tp) => ({
     id: tp.id,
     name: tp.name,
@@ -37,7 +40,7 @@ export default async function PdfTemplatesPage() {
     isDefault: tp.isDefault,
   }))
   const defaultedTypes = new Set(all.filter((tp) => tp.isDefault).map((tp) => tp.recordType))
-  const starters: StarterRow[] = PDF_RECORD_TYPES.map((meta) => {
+  const starters: StarterRow[] = catalog.map((meta) => {
     const starter = starterTemplate(meta)
     return {
       recordType: meta.key,
@@ -62,7 +65,7 @@ export default async function PdfTemplatesPage() {
       <TemplatesList
         templates={templates}
         starters={starters}
-        recordTypes={PDF_RECORD_TYPES.map((meta) => ({ key: meta.key, label: meta.label }))}
+        recordTypes={catalog.map((meta) => ({ key: meta.key, label: meta.label }))}
       />
     </ListPageLayout>
   )

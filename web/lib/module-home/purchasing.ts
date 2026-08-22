@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isFeatureEnabled } from '../features'
 
 /**
  * Purchasing module home — one light round trip for the buy-to-pay workspace
@@ -41,11 +42,19 @@ export interface PurchasingHome {
     unpostedExpenses: number
     vendors: number
   }
+  /** False when Orders is off — hide PO vitals rather than show zeros. */
+  ordersEnabled: boolean
+  /** False when Expenses is off — hide unposted-expense vitals rather than show zeros. */
+  expensesEnabled: boolean
 }
 
 const TREND_WEEKS = 13
 
 export async function purchasingHome(orgId: string, subIds?: string[]): Promise<PurchasingHome> {
+  const [ordersOn, expensesOn] = await Promise.all([
+    isFeatureEnabled(orgId, 'orders'),
+    isFeatureEnabled(orgId, 'expenses'),
+  ])
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
   const ago30 = addCalendarDays(today, -30)
@@ -107,11 +116,13 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
                min(due_date) as oldest_due
           from oi where remaining > 0 group by party_id
       ), pos as (
+        ${ordersOn ? sql`
         select d.party_id, coalesce(sum(abs(d.total)), 0) as po_value, count(*) as n
           from documents d
          where d.org_id = ${orgId} and d.kind = 'purchase_order'
            and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}
-         group by d.party_id
+         group by d.party_id` : sql`
+        select null::uuid as party_id, 0::numeric as po_value, 0::int as n where false`}
       )
       select coalesce(b.party_id, po.party_id) as party_id,
              coalesce(p.display_name, 'Unspecified') as name,
@@ -140,18 +151,18 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
     // Directory badges + the remaining vitals.
     db.execute<any>(sql`
       select
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_pos,
-        (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_po_value,
+        ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_pos,
+        ${ordersOn ? sql`(select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
+          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_po_value,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as paid_7d_value,
-        (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
-          and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope}) as unposted_expenses,
+        ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
+          and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago30}) as spend_30d,
@@ -192,5 +203,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
       unpostedExpenses: Number(badge.unposted_expenses ?? 0),
       vendors: Number(badge.vendors ?? 0),
     },
+    ordersEnabled: ordersOn,
+    expensesEnabled: expensesOn,
   }
 }

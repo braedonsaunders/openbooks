@@ -11,6 +11,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission, can } from '../../../../lib/authz'
+import { isDocKindEnabled } from '../../../../lib/documents'
 import { CaptureUploadButton } from './CaptureUploadButton'
 import { CaptureList, type CaptureListRow } from './CaptureList'
 import { CaptureReviewDrawer, type CaptureDetail } from './CaptureReviewDrawer'
@@ -85,6 +86,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
   const selectedId = pickString(sp.capture)
   let detail: CaptureDetail | null = null
   let options: { vendors: any[]; accounts: any[]; purchaseOrders: any[] } | null = null
+  let canLookupPurchaseOrders = false
   if (selectedId) {
     const selected = (await db.execute<CaptureDetail>(sql`
       select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
@@ -107,6 +109,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
         : allowed.length === 0
           ? sql`and false`
           : sql`and (d.subsidiary_id is null or d.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
+      canLookupPurchaseOrders = await isDocKindEnabled(authz.user.orgId, 'purchase_order')
       const [vendors, accounts, purchaseOrders, evidence] = await Promise.all([
         db.execute(sql`
           select p.id, p.display_name as label from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
@@ -117,11 +120,13 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
           select id, concat_ws(' · ', number, name) as label from accounts
            where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last limit 3000
         `),
-        db.execute(sql`
+        canLookupPurchaseOrders
+          ? db.execute(sql`
           select d.id, d.document_number as label from documents d
            where d.org_id = ${authz.user.orgId} and d.kind = 'purchase_order' and d.status = 'approved' ${poScope}
            order by d.document_date desc limit 1000
-        `),
+        `)
+          : Promise.resolve({ rows: [] }),
         db.execute(sql`
           select af.field_key as "fieldKey", af.line_index as "lineIndex", af.confidence,
                  af.page_number as "pageNumber", af.polygon
@@ -161,7 +166,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
     >
       <CaptureList rows={rows} currentParams={sp} canCreate={canCreate} sort={list.sort} dir={list.dir} />
       <Pagination basePath="/ap/capture" currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
-      {detail && options ? <CaptureReviewDrawer initial={detail} vendors={options.vendors} accounts={options.accounts} purchaseOrders={options.purchaseOrders} canCreate={canCreate} /> : null}
+      {detail && options ? <CaptureReviewDrawer initial={detail} vendors={options.vendors} accounts={options.accounts} purchaseOrders={options.purchaseOrders} canLookupPurchaseOrders={canLookupPurchaseOrders} canCreate={canCreate} /> : null}
     </ListPageLayout>
   )
 }
