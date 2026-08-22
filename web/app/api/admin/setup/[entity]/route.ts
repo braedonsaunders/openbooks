@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
@@ -660,10 +661,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     if (dup.rows.length > 0) return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
   }
 
-  const cols = entity.key === 'fx-rates'
+  let cols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : [...built.cols]
-  if (entity.key === 'fx-rates') cols.push({ column: 'source', value: 'manual' })
+  if (entity.key === 'fx-rates') {
+    try {
+      cols = cols.map((column) =>
+        column.column === 'rate' ? { ...column, value: updateFxRate({ rate: column.value }) } : column,
+      )
+    } catch (error) {
+      return NextResponse.json({
+        error: error instanceof CurrencyError ? error.message : 'Exchange rates must be an exact decimal',
+      }, { status: 400 })
+    }
+    cols.push({ column: 'source', value: 'manual' })
+  }
   if (entity.orgScoped) cols.push({ column: 'org_id', value: orgId })
   if (entity.actorCols) {
     cols.push({ column: 'created_by', value: actorId })
@@ -814,9 +826,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     }
   }
 
-  const updateCols = entity.key === 'fx-rates'
+  let updateCols = entity.key === 'fx-rates'
     ? built.cols.filter((column) => !['source', 'provider_config_id', 'imported_at'].includes(column.column))
     : built.cols
+  if (entity.key === 'fx-rates') {
+    try {
+      updateCols = updateCols.map((column) =>
+        column.column === 'rate' ? { ...column, value: updateFxRate({ rate: column.value }) } : column,
+      )
+    } catch (error) {
+      return NextResponse.json({
+        error: error instanceof CurrencyError ? error.message : 'Exchange rates must be an exact decimal',
+      }, { status: 400 })
+    }
+  }
   const setParts = updateCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
   if (entity.key === 'fx-rates') {
     // Any human edit is an explicit override. Provider synchronization never

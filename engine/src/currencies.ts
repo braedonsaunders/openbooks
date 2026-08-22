@@ -1,3 +1,6 @@
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { normalizeDecimal } from "./money.ts";
+
 /**
  * Supported ISO 4217 currencies for a self-hosted OpenBooks installation.
  *
@@ -5,6 +8,30 @@
  * bootstrap seeds it into `currencies`, while client pickers consume the same
  * list. `minorUnits` is the ISO accounting exponent, not a cash-rounding rule.
  */
+
+export class CurrencyError extends Error {
+  readonly name = "CurrencyError";
+}
+
+/**
+ * Persist-time FX rate: exact decimal at numeric(19,10). Fail closed — a
+ * non-canonical or non-positive rate must not be written.
+ */
+export function updateFxRate(input: { rate: unknown }): string {
+  const exact = canonicalDecimal(input.rate, 10);
+  if (exact === null) throw new CurrencyError("FX rate must be an exact decimal");
+  try {
+    const rate = normalizeDecimal(exact, 10);
+    if (rate.startsWith("-") || /^0(?:\.0+)?$/.test(rate)) {
+      throw new CurrencyError("FX rate must be greater than zero");
+    }
+    return rate;
+  } catch (error) {
+    if (error instanceof CurrencyError) throw error;
+    throw new CurrencyError("FX rate must be an exact decimal");
+  }
+}
+
 export interface SupportedCurrency {
   code: string;
   name: string;
