@@ -94,6 +94,7 @@ export async function SetupEntitySection({
   const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
+    fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   }))
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
