@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../business-date.ts";
+import { businessToday, calendarQuarterBounds, startOfMonth } from "../business-date.ts";
 import { db, pool, withBypassContext, withOrgContext } from "../db.ts";
 import { appBaseUrl } from "./render-client.ts";
 
@@ -22,10 +22,9 @@ const TICK_INTERVAL_MS = 60 * 60 * 1000; // hourly
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
-/** First day of the current cadence period, as ISO. */
-export function periodStartFor(cadence: "monthly" | "quarterly", now = new Date()): string {
-  const month = cadence === "quarterly" ? Math.floor(now.getUTCMonth() / 3) * 3 : now.getUTCMonth();
-  return new Date(Date.UTC(now.getUTCFullYear(), month, 1)).toISOString().slice(0, 10);
+/** First day of the cadence period that contains the org calendar day. */
+export function periodStartFor(cadence: "monthly" | "quarterly", today: string): string {
+  return cadence === "quarterly" ? calendarQuarterBounds(today).start : startOfMonth(today);
 }
 
 export function startOverheadScheduler(): void {
@@ -59,8 +58,7 @@ export async function tick(): Promise<void> {
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
       const today = await businessToday(org.id);
-      const [year, month, day] = today.split("-").map(Number);
-      await publishForOrg(org.id, periodStartFor(cadence, new Date(Date.UTC(year!, month! - 1, day!))));
+      await publishForOrg(org.id, periodStartFor(cadence, today));
     }
   } catch (e) {
     console.error("[overhead-scheduler] tick failed:", (e as Error).message);
