@@ -52,13 +52,23 @@ async function audit(args: {
 }
 
 /** Reconcile a tax group's members join table to exactly `taxCodeIds`. */
-async function syncMembers(groupId: string, taxCodeIds: string[], runner: Pick<typeof db, 'execute'> = db) {
+async function syncMembers(
+  orgId: string,
+  groupId: string,
+  taxCodeIds: string[],
+  runner: Pick<typeof db, 'execute'> = db,
+) {
   const clean = [...new Set(taxCodeIds.filter((v) => UUID_RE.test(v)))]
-  await runner.execute(sql`delete from tax_group_members where tax_group_id = ${groupId}`)
+  await runner.execute(sql`
+    delete from tax_group_members
+     where tax_group_id = ${groupId}
+       and exists (select 1 from tax_groups where id = ${groupId} and org_id = ${orgId})`)
   for (let i = 0; i < clean.length; i++) {
     await runner.execute(sql`
       insert into tax_group_members (tax_group_id, tax_code_id, sequence)
-      values (${groupId}, ${clean[i]}, ${i + 1})`)
+      select tg.id, ${clean[i]}, ${i + 1}
+        from tax_groups tg
+       where tg.id = ${groupId} and tg.org_id = ${orgId}`)
   }
 }
 
@@ -172,7 +182,11 @@ async function validateEntityIntegrity(
       ? body.members.map(String)
       : rowId
         ? ((await db.execute(sql`
-            select tax_code_id from tax_group_members where tax_group_id = ${rowId} order by sequence`)) as any).rows.map((row: any) => String(row.tax_code_id))
+            select tgm.tax_code_id
+              from tax_group_members tgm
+              join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
+             where tgm.tax_group_id = ${rowId}
+             order by tgm.sequence`)) as any).rows.map((row: any) => String(row.tax_code_id))
         : []
     if (members.length === 0) return 'tax-group-members-required'
     if (new Set(members).size !== members.length || members.some((id: string) => !UUID_RE.test(id))) return 'invalid-tax-group-members'
@@ -626,7 +640,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
       const id = String(inserted.rows[0]?.id)
       const members = multirefField(entity)
       if (members && Array.isArray(body[members.key])) {
-        await syncMembers(id, (body[members.key] as unknown[]).map(String), tx)
+        await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
       await audit({
         orgId: entity.orgScoped ? orgId : null,
@@ -789,7 +803,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
       if (updated.rows.length === 0) return false
       const members = multirefField(entity)
       if (members && Array.isArray(body[members.key])) {
-        await syncMembers(id, (body[members.key] as unknown[]).map(String), tx)
+        await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
       }
       await audit({
         orgId: entity.orgScoped ? orgId : null,
