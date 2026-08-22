@@ -763,7 +763,8 @@ export async function releasePayRunBankFile(
     select ${artifactColumns("f")}, fv.storage_kind as "storageKind",
            fb.bytes as "dbBytes", f.file_version_id as "versionId"
       from pay_run_bank_files f
-      join file_versions fv on fv.id = f.file_version_id
+      join files fi on fi.id = f.file_id and fi.org_id = ${orgId}
+      join file_versions fv on fv.id = f.file_version_id and fv.file_id = fi.id
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${artifactId}
   `));

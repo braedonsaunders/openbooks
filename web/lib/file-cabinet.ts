@@ -743,19 +743,25 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
       )
     `)
     await tx.execute(sql`
-      update files set current_version_id = null where folder_id in (${descendants})
+      update files set current_version_id = null
+       where folder_id in (${descendants}) and org_id = ${orgId}
     `)
     await tx.execute(sql`
-      delete from file_versions where file_id in (
-        select fi.id from files fi where fi.folder_id in (${descendants})
-      )
+      delete from file_versions fv
+      using files fi
+      where fv.file_id = fi.id and fi.org_id = ${orgId}
+        and fi.folder_id in (${descendants})
     `)
     await tx.execute(sql`
-      delete from file_attachments where file_id in (
-        select fi.id from files fi where fi.folder_id in (${descendants})
-      )
+      delete from file_attachments
+       where org_id = ${orgId} and file_id in (
+         select fi.id from files fi
+          where fi.folder_id in (${descendants}) and fi.org_id = ${orgId}
+       )
     `)
-    await tx.execute(sql`delete from files where folder_id in (${descendants})`)
+    await tx.execute(sql`
+      delete from files where folder_id in (${descendants}) and org_id = ${orgId}
+    `)
     await tx.execute(sql`delete from folders where id in (${descendants})`)
     return s3Versions.rows.map((v) => v.id)
   })
@@ -865,7 +871,10 @@ export async function listFiles(
         from files fi
         left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
         left join lateral (
-          select count(*)::int as n from file_versions fv where fv.file_id = fi.id
+          select count(*)::int as n
+            from file_versions fv
+            join files fx on fx.id = fv.file_id and fx.org_id = ${orgId}
+           where fv.file_id = fi.id
         ) vc on true
        where ${where}
        order by ${sortColumn} ${dir} nulls last

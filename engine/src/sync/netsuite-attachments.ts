@@ -580,7 +580,7 @@ async function verifyImport(
            f.content_hash as "contentHash", fv.storage_kind as "versionStorageKind",
            fv.size_bytes as "versionSizeBytes", fv.content_hash as "versionContentHash"
       from files f
-      left join file_versions fv on fv.id = f.current_version_id
+      left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
        and f.source_id in (${sourceIdsSql})
   `));
@@ -756,7 +756,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
            f.source_modified_at as "sourceModifiedAt",
            fv.created_at as "versionCreatedAt"
       from files f
-      left join file_versions fv on fv.id = f.current_version_id
+      left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id is not null
        ${requestedIdsSql}
   `));
