@@ -440,6 +440,26 @@ test('the surfaces this test was written for are covered', () => {
     /WipBillingError\('Inventory is disabled', 404\)/,
     'convertPrebill must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
+  assert.match(
+    read('../engine/src/subscription-billing.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'subscription invoice generate must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('../engine/src/subscription-billing.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'createSubscriptionInvoice must not persist inventory/assembly/kit lines when Inventory is off — stored subscriptions and existing invoices stay',
+  )
+  assert.match(
+    read('../engine/src/subscription-billing.ts'),
+    /SubscriptionError\("Inventory is disabled", 404\)/,
+    'createSubscriptionInvoice must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /e instanceof SubscriptionError[\s\S]{0,120}status: e\.status/,
+    'subscription bill-now must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
