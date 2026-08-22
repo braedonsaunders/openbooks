@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
+import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
@@ -534,13 +534,21 @@ export async function applyDocumentEdit(
       if (!lv.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
       const lineDims = validateExtraDims(l.extraDims ?? {}, segments)
       if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
+      let unitPrice: string | null = null
+      if (l.unitPrice != null && String(l.unitPrice).trim() !== '') {
+        try {
+          unitPrice = normalizeMoney(l.unitPrice)
+        } catch {
+          throw new DocumentEditError(422, `Line ${i + 1}: unit price is not a valid amount`)
+        }
+      }
       preparedLines.push({
         accountId: l.accountId!,
         itemId: l.itemId ?? null,
         description: l.description ?? null,
         quantity: l.quantity ?? null,
         unit: l.unit ?? null,
-        unitPrice: l.unitPrice ?? null,
+        unitPrice,
         amount: l.amount,
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,

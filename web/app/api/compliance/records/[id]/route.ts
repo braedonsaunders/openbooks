@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { getAuthz, can } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
+
+function optionalCoverageMoney(value: unknown): string | null | 'invalid' {
+  if (value == null || value === '') return null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  return normalizeMoney(exact)
+}
 
 type Action = 'verify' | 'reject' | 'reopen' | 'update'
 
@@ -93,6 +102,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id}`)
     } else {
+      const coverageAmount = body.coverageAmount === undefined
+        ? undefined
+        : optionalCoverageMoney(body.coverageAmount)
+      const aggregateAmount = body.aggregateAmount === undefined
+        ? undefined
+        : optionalCoverageMoney(body.aggregateAmount)
+      if (coverageAmount === 'invalid') {
+        return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
+      }
+      if (aggregateAmount === 'invalid') {
+        return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+      }
       // Editing the substance of a VERIFIED certificate voids its verification:
       // the attestation was about the old numbers.
       await db.execute(sql`
@@ -101,8 +122,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                policy_number = coalesce(${body.policyNumber ?? null}, policy_number),
                effective_from = coalesce(${body.effectiveFrom ?? null}::date, effective_from),
                expires_on = ${body.expiresOn === undefined ? sql`expires_on` : sql`${body.expiresOn}::date`},
-               coverage_amount = ${body.coverageAmount === undefined ? sql`coverage_amount` : sql`${body.coverageAmount}::numeric`},
-               aggregate_amount = ${body.aggregateAmount === undefined ? sql`aggregate_amount` : sql`${body.aggregateAmount}::numeric`},
+               coverage_amount = ${coverageAmount === undefined ? sql`coverage_amount` : sql`${coverageAmount}`},
+               aggregate_amount = ${aggregateAmount === undefined ? sql`aggregate_amount` : sql`${aggregateAmount}`},
                coverage_currency = coalesce(${body.coverageCurrency ?? null}, coverage_currency),
                additional_insured = coalesce(${body.additionalInsured ?? null}, additional_insured),
                waiver_of_subrogation = coalesce(${body.waiverOfSubrogation ?? null}, waiver_of_subrogation),
