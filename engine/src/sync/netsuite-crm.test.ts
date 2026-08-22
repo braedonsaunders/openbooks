@@ -16,6 +16,13 @@ test('recent-activity upserts pin the known tenant on the id conflict write', ()
   )
 })
 
+test('account-profile upserts pin the known tenant on the party_id conflict write', () => {
+  assert.match(
+    crmSource,
+    /on conflict\(party_id\) do update set[\s\S]*?where crm_account_profiles\.org_id=\$\{orgId\}/,
+  )
+})
+
 test('maps typed recent-activity notes into sales visits and account links', () => {
   const visit = normalizeNetSuiteRecentActivityNote({
     id: '1845',
