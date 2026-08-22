@@ -41,7 +41,10 @@ export default async function Opportunities({
 
   let drawer: React.ReactNode = null
   if (openId && isUuid(openId)) {
-    const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
+    const [multiCurrency, inventoryEnabled] = await Promise.all([
+      isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
+      isFeatureEnabled(authz.user.orgId, 'inventory'),
+    ])
     const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId),
       db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`) as any,
@@ -50,7 +53,17 @@ export default async function Opportunities({
       db.execute(sql`select id,party_id,name from contacts where org_id=${authz.user.orgId} and is_active order by name limit 4000`) as any,
       db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select id,concat_ws(' · ',code,name) name from items where org_id=${authz.user.orgId} and is_active order by name limit 2000`) as any,
+      db.execute(sql`
+        select id, concat_ws(' · ', code, name) name from items
+         where org_id = ${authz.user.orgId} and is_active
+           and (
+             ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+             or id in (
+               select item_id from crm_opportunity_lines
+                where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
+             )
+           )
+         order by name limit 2000`) as any,
       multiCurrency
         ? db.execute(sql`select code,name from currencies order by code`) as any
         : Promise.resolve({ rows: [] }),

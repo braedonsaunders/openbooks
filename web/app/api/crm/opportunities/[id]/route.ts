@@ -14,6 +14,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 export const runtime = 'nodejs'
 
 const CATEGORIES = ['omitted', 'worst_case', 'most_likely', 'upside']
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -112,6 +113,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     for (const line of lines) {
       if (!line.itemId || !isUuid(line.itemId) || !(await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`) as any).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
+    }
+    // Stored inventory / assembly / kit lines stay. Turning Inventory off must
+    // 404 a write that would persist a new one of those kinds.
+    if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+      const stored = (await db.execute<{ item_id: string }>(sql`
+        select item_id from crm_opportunity_lines
+         where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`))
+      const storedIds = new Set(stored.rows.map((row) => row.item_id))
+      for (const line of lines) {
+        if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          return NextResponse.json({ error: 'not found' }, { status: 404 })
+        }
+      }
     }
   }
   const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined

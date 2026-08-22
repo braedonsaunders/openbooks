@@ -1463,6 +1463,31 @@ test('the surfaces this test was written for are covered', () => {
     'opportunity PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
   )
   assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'opportunity line writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /storedIds\.has\(line\.itemId\)/,
+    'opportunity PATCH must keep stored inventory lines when Inventory is off',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'opportunity PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/crm/opportunities/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]inventory['"]\)/,
+    'the opportunities page must not offer inventory/assembly/kit items when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/crm/opportunities/page.tsx'),
+    /kind not in \('inventory', 'assembly', 'kit'\)/,
+    'the opportunity item picker must drop inventory/assembly/kit when Inventory is off — stored lines stay',
+  )
+  assert.match(
     read('app/(app)/crm/opportunities/page.tsx'),
     /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
     'the opportunities page must not load the currency picker when Multi-currency is off',
