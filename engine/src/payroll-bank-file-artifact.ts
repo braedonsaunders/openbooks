@@ -597,6 +597,7 @@ export async function generatePayRunBankFile(
               ${scoped ? entitlement.subsidiaryId : null}, ${PAYROLL_BANK_FILE_PREFIX})
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
     `));
     const seq = allocated.rows[0]!;
