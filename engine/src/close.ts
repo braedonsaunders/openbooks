@@ -1396,7 +1396,7 @@ export async function refreshCloseRun(
         await tx.execute(sql`
           update close_exceptions set status = 'resolved', resolved_at = now(),
                  resolution = 'close.diagnostics.autoResolved', updated_at = now()
-           where run_id = ${runId} and code = ${check.code} and status = 'open'`);
+           where run_id = ${runId} and org_id = ${orgId} and code = ${check.code} and status = 'open'`);
       }
       if (taskId) {
         const status = check.count === 0 ? "complete" : "ready";
@@ -1422,8 +1422,9 @@ export async function refreshCloseRun(
                when status in ('closed','published') then 'publish'
                when status = 'approved' and not ${dataChanged} then 'lock'
                when exists (select 1 from close_exceptions x where x.run_id = ${runId}
-                 and x.status = 'open' and x.severity in ('error','critical')) then 'readiness'
+                 and x.org_id = ${orgId} and x.status = 'open' and x.severity in ('error','critical')) then 'readiness'
                when exists (select 1 from close_run_tasks t where t.run_id = ${runId}
+                 and t.org_id = ${orgId}
                  and t.workstream not in ('review','publish') and t.key not like 'lock-%'
                  and t.status not in ('complete','waived')) then 'execute'
                else 'review'
@@ -1431,7 +1432,7 @@ export async function refreshCloseRun(
              last_validated_at = now(), updated_at = now(), updated_by = ${actorId ?? null}
        where id = ${runId} and org_id = ${orgId}`);
     const open = (await tx.execute<{ count: string }>(sql`
-      select count(*) as count from close_exceptions where run_id = ${runId} and status = 'open'`));
+      select count(*) as count from close_exceptions where run_id = ${runId} and org_id = ${orgId} and status = 'open'`));
     return {
       readinessScore,
       fingerprint,
@@ -1640,15 +1641,16 @@ export async function addCloseEvidence(args: {
 
 async function assertCloseReadyForApproval(
   executor: SqlExecutor,
+  orgId: string,
   runId: string,
 ): Promise<void> {
   const blockers = (await executor.execute<{ tasks: string; exceptions: string }>(sql`
     select
-      (select count(*) from close_run_tasks where run_id = ${runId} and gate_type = 'hard'
+      (select count(*) from close_run_tasks where run_id = ${runId} and org_id = ${orgId} and gate_type = 'hard'
         and task_type <> 'approval'
         and key not in ('lock-subledgers','lock-gl','publish-package')
         and status not in ('complete','waived')) as tasks,
-      (select count(*) from close_exceptions where run_id = ${runId} and status = 'open'
+      (select count(*) from close_exceptions where run_id = ${runId} and org_id = ${orgId} and status = 'open'
         and severity in ('error','critical')) as exceptions
   `));
   if (
@@ -1691,7 +1693,7 @@ export async function attestOwnerManagedClose(
       throw new CloseError("only an in-progress close run can be attested");
     }
     if (!row.data_fingerprint) throw new CloseError("validate the close run before attesting");
-    await assertCloseReadyForApproval(db, runId);
+    await assertCloseReadyForApproval(db, orgId, runId);
     await db.execute(sql`
       update close_runs set status='approved', current_stage='lock', approved_at=now(),
              approved_by=${actorId}, updated_at=now(), updated_by=${actorId}
@@ -1739,7 +1741,7 @@ export async function requestCloseApproval(
     } else if (run.rows[0].status !== "in_progress") {
       throw new CloseError("only an in-progress close run can be submitted for approval");
     }
-    await assertCloseReadyForApproval(db, runId);
+    await assertCloseReadyForApproval(db, orgId, runId);
 
     const { runRecordFlows } = await import("./flows/index.ts");
     const result = await runRecordFlows(
@@ -1870,7 +1872,7 @@ export async function finalizeCloseFlowApproval(args: {
     return;
   }
 
-  await assertCloseReadyForApproval(db, args.runId);
+  await assertCloseReadyForApproval(db, args.orgId, args.runId);
   await db.execute(sql`
     update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
            approved_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
@@ -2000,7 +2002,7 @@ export async function closeApprovedRun(
       );
     const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
-       where run_id = ${runId} and status = 'open' and severity in ('error','critical')`));
+       where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`));
     if (Number(blockers.rows[0].count) > 0)
       throw new CloseError(
         "critical exceptions reappeared after approval; review the run again",
