@@ -1757,13 +1757,13 @@ export async function requestCloseApproval(
           update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${actorId}
            where run_id in (
              select jsonb_array_elements_text(${JSON.stringify(flowRunIds)}::jsonb)::uuid
-           ) and status in ('pending','escalated')
+           ) and org_id = ${orgId} and status in ('pending','escalated')
         `);
         await db.execute(sql`
           update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(), updated_by = ${actorId}
            where id in (
              select jsonb_array_elements_text(${JSON.stringify(flowRunIds)}::jsonb)::uuid
-           ) and status in ('running','waiting')
+           ) and org_id = ${orgId} and status in ('running','waiting')
         `);
       }
       return {
