@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute(sql`
-    select s.id, s.name from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id
+    select s.id, s.name from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
       join sftp_servers s on s.org_id = r.org_id and s.is_active and (p.sftp_server_id is null or p.sftp_server_id = s.id)
      where r.id = ${id} and r.org_id = ${gate.user.orgId} order by s.name
   `))

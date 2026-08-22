@@ -147,7 +147,7 @@ export default async function Approvals({
              d.document_number as "documentNumber", d.kind as "docKind", d.total,
              p.display_name as "partyName", cp.name as "closePeriodName"
         from flow_gates g
-        join flows f on f.id = g.flow_id
+        join flows f on f.id = g.flow_id and f.org_id = g.org_id
         left join users u on u.id = g.assignee_user_id
         left join documents d on d.id = g.subject_id and d.org_id = g.org_id
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -196,8 +196,8 @@ export default async function Approvals({
              min(g.created_at) as "waitingSince",
              string_agg(distinct coalesce(u.name, g.assignee_role), ', ') as "pendingWith"
         from flow_runs r
-        join flows f on f.id = r.flow_id
-        join flow_gates g on g.run_id = r.id and g.status = 'pending'
+        join flows f on f.id = r.flow_id and f.org_id = r.org_id
+        join flow_gates g on g.run_id = r.id and g.org_id = r.org_id and g.status = 'pending'
         left join documents d on d.id = r.subject_id and d.org_id = r.org_id
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join close_runs cr on cr.id = r.subject_id and cr.org_id = r.org_id and r.subject_kind = 'close_run'

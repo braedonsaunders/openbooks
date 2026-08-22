@@ -374,7 +374,7 @@ export async function runFxProvider(
     ? { from: addDays(isoDate(now), -6), to: isoDate(now) }
     : syncRange(config, now);
   const runId = await createRun(config, trigger, range.from, range.to, actorId);
-  await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id}`);
+  await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`);
   try {
     const snapshots = await fetchProviderSnapshots(config, range.from, range.to);
     if (snapshots.length === 0) throw new FxProviderError("provider returned no observations for the requested period");
@@ -426,21 +426,21 @@ export async function runFxProvider(
       update fx_provider_runs set status = 'ok', finished_at = now(),
         observations_received = ${result.observationsReceived}, rates_inserted = ${result.ratesInserted},
         rates_updated = ${result.ratesUpdated}, manual_overrides_preserved = ${result.manualOverridesPreserved}
-       where id = ${runId}
+       where id = ${runId} and org_id = ${orgId}
     `);
     await db.execute(sql`
       update fx_provider_configs set
         last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
         last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
         last_error = null, next_sync_at = ${next}, updated_at = now()
-       where id = ${config.id}
+       where id = ${config.id} and org_id = ${orgId}
     `);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : "FX provider synchronization failed";
     const retryAt = config.isEnabled && config.schedule !== "manual" ? new Date(now.getTime() + 60 * 60 * 1000) : null;
-    await db.execute(sql`update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)}, finished_at = now() where id = ${runId}`);
-    await db.execute(sql`update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt}, updated_at = now() where id = ${config.id}`);
+    await db.execute(sql`update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)}, finished_at = now() where id = ${runId} and org_id = ${orgId}`);
+    await db.execute(sql`update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt}, updated_at = now() where id = ${config.id} and org_id = ${orgId}`);
     throw error;
   }
 }
@@ -468,7 +468,7 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
     const claim = await withBypassContext(() =>
       db.execute(sql`
       update fx_provider_configs set next_sync_at = ${next}
-       where id = ${config.id} and next_sync_at = ${config.nextSyncAt}
+       where id = ${config.id} and org_id = ${config.orgId} and next_sync_at = ${config.nextSyncAt}
     `));
     if (!claim.rowCount) continue;
     claimedCount++;
