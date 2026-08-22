@@ -231,7 +231,14 @@ export async function generateInvoiceFromBillingRequest(
       if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
       for (const m of scheds.rows) {
-        const amt = String(m.amount_billed ?? '0')
+        const exact = canonicalDecimal(m.amount_billed ?? '0', 4)
+        if (exact === null) throw new BillingError('A milestone billed amount is invalid')
+        let amt: string
+        try {
+          amt = normalizeMoney(exact)
+        } catch {
+          throw new BillingError('A milestone billed amount is invalid')
+        }
         if (isZero(amt)) continue
         built.push({
           itemId: null,
