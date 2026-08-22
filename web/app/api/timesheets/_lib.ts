@@ -96,6 +96,62 @@ export interface WeekRow {
   immutable: boolean
 }
 
+/** Pin a party to the known tenant. Returns the owned id, or null. */
+export async function pinTimesheetEmployee(
+  orgId: string,
+  employeeId: string,
+): Promise<string | null> {
+  const owned = (await db.execute<{ id: string }>(sql`
+    select id from parties
+     where org_id = ${orgId} and id = ${employeeId}
+     limit 1`))
+  return owned.rows[0]?.id ?? null
+}
+
+export interface TimesheetLineRefs {
+  projectId: string | null
+  itemId: string | null
+  timeTypeId: string | null
+  departmentId: string | null
+}
+
+/**
+ * Re-select line FKs against the known tenant and bind the owned ids.
+ * Missing optional refs stay null; a leftover UUID that is not in this org
+ * refuses the write instead of copying a foreign key across tenants.
+ */
+export async function pinTimesheetLineRefs(
+  orgId: string,
+  refs: TimesheetLineRefs,
+): Promise<TimesheetLineRefs | null> {
+  const pinOne = async (
+    table: 'projects' | 'items' | 'time_types' | 'departments',
+    id: string | null,
+  ): Promise<string | null | 'missing'> => {
+    if (id == null) return null
+    const owned = table === 'projects'
+      ? (await db.execute<{ id: string }>(sql`
+          select id from projects where org_id = ${orgId} and id = ${id} limit 1`))
+      : table === 'items'
+        ? (await db.execute<{ id: string }>(sql`
+            select id from items where org_id = ${orgId} and id = ${id} limit 1`))
+        : table === 'time_types'
+          ? (await db.execute<{ id: string }>(sql`
+              select id from time_types where org_id = ${orgId} and id = ${id} limit 1`))
+          : (await db.execute<{ id: string }>(sql`
+              select id from departments where org_id = ${orgId} and id = ${id} limit 1`))
+    return owned.rows[0]?.id ?? 'missing'
+  }
+  const projectId = await pinOne('projects', refs.projectId)
+  const itemId = await pinOne('items', refs.itemId)
+  const timeTypeId = await pinOne('time_types', refs.timeTypeId)
+  const departmentId = await pinOne('departments', refs.departmentId)
+  if (projectId === 'missing' || itemId === 'missing' || timeTypeId === 'missing' || departmentId === 'missing') {
+    return null
+  }
+  return { projectId, itemId, timeTypeId, departmentId }
+}
+
 export interface WeekPayload {
   employeeId: string | null
   week: string
@@ -139,11 +195,13 @@ export async function loadWeek(
   employeeId: string,
   sundayIso: string,
 ): Promise<WeekPayload> {
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId)
+  if (!ownedEmployee) throw new Error('employee not found')
   const days = weekWindow(sundayIso)
   const week = days[0]
   // The header owns the week's lifecycle. It is created on demand so a week
   // that has never been touched still reads consistently.
-  const header = await ensureTimesheetWeek(orgId, employeeId, week)
+  const header = await ensureTimesheetWeek(orgId, ownedEmployee, week)
   const dayIndex = new Map(days.map((d, i) => [d, i]))
 
   const res = (await db.execute<{
@@ -172,7 +230,7 @@ export async function loadWeek(
            overhead_journal_entry_id, field_ticket_id, billing_status, amends_entry_id
       from time_entries
      where org_id = ${orgId}
-       and employee_party_id = ${employeeId}
+       and employee_party_id = ${ownedEmployee}
        and worked_on >= ${days[0]} and worked_on <= ${days[6]}
      order by created_at, id
   `))
@@ -227,7 +285,7 @@ export async function loadWeek(
   }
 
   return {
-    employeeId,
+    employeeId: ownedEmployee,
     week,
     days,
     rows: Array.from(byKey.values()),
@@ -263,12 +321,14 @@ export async function ensureTimesheetWeek(
   weekStartIso: string,
   actorId?: string | null,
 ): Promise<{ id: string; status: WeekStatus; rejectionReason: string | null }> {
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId)
+  if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   const inserted = (await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
     insert into timesheet_weeks
       (org_id, employee_party_id, week_start, status,
        approved_by, approved_at, rejection_reason, created_by, updated_by)
-    select ${orgId}, ${employeePartyId}, ${week}::date,
+    select ${orgId}, ${ownedEmployee}, ${week}::date,
            coalesce(seed.status, 'draft'), seed.approved_by, seed.approved_at,
            seed.rejection_reason, ${actorId ?? null}, ${actorId ?? null}
       from (
@@ -284,7 +344,7 @@ export async function ensureTimesheetWeek(
                (array_agg(te.rejection_reason) filter (where te.rejection_reason is not null))[1] as rejection_reason
           from time_entries te
          where te.org_id = ${orgId}
-           and te.employee_party_id = ${employeePartyId}
+           and te.employee_party_id = ${ownedEmployee}
            and te.worked_on >= ${week}::date
            and te.worked_on <= ${week}::date + 6
       ) seed
@@ -294,7 +354,7 @@ export async function ensureTimesheetWeek(
   const row = inserted.rows[0]
     ?? ((await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
       select id, status, rejection_reason from timesheet_weeks
-       where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+       where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
          and week_start = ${week}
     `))).rows[0]
   return { id: row.id, status: row.status, rejectionReason: row.rejection_reason }
@@ -309,6 +369,8 @@ export async function setTimesheetWeekStatus(
   actorId: string,
   rejectionReason?: string | null,
 ): Promise<void> {
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employeePartyId)
+  if (!ownedEmployee) throw new Error('employee not found')
   const week = weekStart(weekStartIso)
   // Explicit casts: an untyped `null` in a CASE makes postgres infer text for
   // the whole expression, which a uuid column rejects.
@@ -325,7 +387,7 @@ export async function setTimesheetWeekStatus(
                               then now() else null::timestamptz end,
            rejection_reason = ${rejectionReason ?? null}::text,
            updated_by = ${actorId}::uuid, updated_at = now()
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+     where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
        and week_start = ${week}::date`)
 }
 

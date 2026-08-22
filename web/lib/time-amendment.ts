@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { neg } from '@openbooks/engine/src/money.ts'
-import { setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
+import { pinTimesheetEmployee, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
 import { lockReasonsFor } from './time-lifecycle'
 
 /**
@@ -51,6 +51,9 @@ export async function amendTimeEntry(
     const row = src.rows[0]
     if (!row) throw new Error('time entry not found')
     if (row.amends_entry_id) throw new Error('an amendment cannot itself be amended — amend the original')
+    const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
+    if (!ownedEmployee) throw new Error('employee not found')
+    row.employee_party_id = ownedEmployee
     const already = (await db.execute(sql`
       select 1 from time_entries
        where org_id = ${orgId} and amends_entry_id = ${entryId}
@@ -94,14 +97,23 @@ async function insertAmendment(
   actorId: string,
   row: AmendableRow,
 ): Promise<string> {
+  const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
+  if (!ownedEmployee) throw new Error('employee not found')
+  const ownedRefs = await pinTimesheetLineRefs(orgId, {
+    projectId: row.project_id,
+    itemId: row.item_id,
+    timeTypeId: row.time_type_id,
+    departmentId: row.department_id,
+  })
+  if (!ownedRefs) throw new Error('amendment line references are not in this organization')
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into time_entries
       (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
        project_id, department_id, memo, is_billable, status, custom,
        amends_entry_id, created_by, updated_by)
     values
-      (${orgId}, ${row.employee_party_id}, ${row.worked_on}, ${neg(row.hours)},
-       ${row.time_type_id}, ${row.item_id}, ${row.project_id}, ${row.department_id},
+      (${orgId}, ${ownedEmployee}, ${row.worked_on}, ${neg(row.hours)},
+       ${ownedRefs.timeTypeId}, ${ownedRefs.itemId}, ${ownedRefs.projectId}, ${ownedRefs.departmentId},
        ${row.memo}, ${row.is_billable}, 'draft', ${JSON.stringify(row.custom ?? {})}::jsonb,
        ${row.id}, ${actorId}, ${actorId})
     returning id
@@ -121,6 +133,8 @@ export async function amendLockedWeek(
   sundayIso: string,
 ): Promise<{ amended: number }> {
   return withOrgTransaction(orgId, async () => {
+    const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId)
+    if (!ownedEmployee) throw new Error('employee not found')
     const week = weekStart(sundayIso)
     const days = weekWindow(week)
 
@@ -132,7 +146,7 @@ export async function amendLockedWeek(
              amends_entry_id, status
         from time_entries
        where org_id = ${orgId}
-         and employee_party_id = ${employeeId}
+         and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
     `))
@@ -160,7 +174,7 @@ export async function amendLockedWeek(
       amended += 1
     }
     if (amended === 0) throw new Error('no locked entries to amend')
-    await setTimesheetWeekStatus(orgId, employeeId, week, 'draft', actorId, null)
+    await setTimesheetWeekStatus(orgId, ownedEmployee, week, 'draft', actorId, null)
     return { amended }
   })
 }
