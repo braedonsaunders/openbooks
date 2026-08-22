@@ -496,6 +496,24 @@ export async function materializeCapture(input: {
         }
       }
     }
+    // Stored captures and existing bills stay. Turning Equipment off must
+    // refuse a materialize that would persist equipment_charge.
+    const equipmentOn = (await tx.execute<{ enabled: boolean }>(sql`
+      select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
+        from orgs where id = ${input.orgId}
+    `)).rows[0]?.enabled === true;
+    if (!equipmentOn) {
+      const itemIds = [...new Set(
+        capture.lines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )];
+      for (const itemId of itemIds) {
+        const kindRow = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${input.orgId}`));
+        if (kindRow.rows[0] && kindRow.rows[0].kind === "equipment_charge") {
+          throw new CaptureMaterializationError("Equipment is disabled", 404);
+        }
+      }
+    }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind, subsidiaryId);
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
