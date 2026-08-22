@@ -81,6 +81,7 @@ export function CrmSetupWorkspace({
   teams,
   baseCurrency,
   currencies,
+  multiCurrency = false,
 }: {
   tab: CrmSetupTab;
   rows: Record<string, any>[];
@@ -94,6 +95,7 @@ export function CrmSetupWorkspace({
   teams: Option[];
   baseCurrency: string;
   currencies: CurrencyOption[];
+  multiCurrency?: boolean;
 }) {
   const t = useTranslations("crm");
   const searchParams = useSearchParams();
@@ -163,6 +165,7 @@ export function CrmSetupWorkspace({
           teams={teams}
           baseCurrency={baseCurrency}
           currencies={currencies}
+          multiCurrency={multiCurrency}
           closeHref={closeHref}
         />
       ) : null}
@@ -270,6 +273,7 @@ function CrmSetupDrawer({
   teams,
   baseCurrency,
   currencies,
+  multiCurrency = false,
   closeHref,
 }: {
   tab: CrmSetupTab;
@@ -278,6 +282,7 @@ function CrmSetupDrawer({
   teams: Option[];
   baseCurrency: string;
   currencies: CurrencyOption[];
+  multiCurrency?: boolean;
   closeHref: string;
 }) {
   const t = useTranslations("crm");
@@ -302,6 +307,10 @@ function CrmSetupDrawer({
     } catch {
       toast.error(t("setup.validation.invalidRules"));
       return;
+    }
+    if (tab === "quotas") {
+      const { currency, ...fields } = payload;
+      payload = { ...fields, ...(multiCurrency ? { currency } : {}) };
     }
     setBusy(true);
     try {
@@ -364,6 +373,7 @@ function CrmSetupDrawer({
             users={users}
             teams={teams}
             currencies={currencies}
+            multiCurrency={multiCurrency}
             t={t}
           />
         ) : null}
@@ -702,11 +712,13 @@ function QuotaFields({
   users,
   teams,
   currencies,
+  multiCurrency,
   t,
 }: FieldProps & {
   users: Option[];
   teams: Option[];
   currencies: CurrencyOption[];
+  multiCurrency: boolean;
 }) {
   const options = form.targetType === "team" ? teams : users;
   return (
@@ -747,18 +759,20 @@ function QuotaFields({
         value={form.periodEnd}
         onChange={(v) => set("periodEnd", v)}
       />
-      <div className="space-y-1.5">
-        <Label>{t("fields.currency")}</Label>
-        <SearchSelect
-          value={form.currency}
-          onChange={(value) => set("currency", value)}
-          options={currencies.map((currency) => ({
-            value: currency.code,
-            label: `${currency.code} · ${currency.name}`,
-          }))}
-          ariaLabel={t("fields.currency")}
-        />
-      </div>
+      {multiCurrency ? (
+        <div className="space-y-1.5">
+          <Label>{t("fields.currency")}</Label>
+          <SearchSelect
+            value={form.currency}
+            onChange={(value) => set("currency", value)}
+            options={currencies.map((currency) => ({
+              value: currency.code,
+              label: `${currency.code} · ${currency.name}`,
+            }))}
+            ariaLabel={t("fields.currency")}
+          />
+        </div>
+      ) : null}
       <TextField
         label={t("forecasts.quota")}
         type="number"

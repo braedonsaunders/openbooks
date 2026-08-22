@@ -1342,6 +1342,36 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? <div className=\{field\}>/,
     'the party form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/crm/setup/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'CRM quota writes must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/crm/setup/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'CRM quota writes must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/crm/setup/route.ts'),
+    /currency !== undefined \? currency : sql`crm_sales_quotas\.currency`/,
+    'CRM quota writes must keep the stored currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/crm/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'CRM setup must not load the quota currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/crm/CrmSetupWorkspace.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the quota form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/crm/CrmSetupWorkspace.tsx'),
+    /\{multiCurrency \? \(/,
+    'the quota form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

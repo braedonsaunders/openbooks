@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { requirePermission } from "../../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../../lib/features";
 import {
   isUuid,
   parseListParams,
@@ -118,6 +119,7 @@ export default async function CrmSetup({
     ]);
   }
 
+  const multiCurrency = await isFeatureEnabled(orgId, "multiCurrency");
   const [usersResult, teamsResult, orgResult, currenciesResult] =
     (await Promise.all([
       db.execute(
@@ -127,7 +129,9 @@ export default async function CrmSetup({
         sql`select id,name from crm_sales_teams where org_id=${orgId} and is_active order by name`,
       ),
       db.execute(sql`select base_currency from orgs where id=${orgId}`),
-      db.execute(sql`select code,name from currencies order by code`),
+      multiCurrency
+        ? db.execute(sql`select code,name from currencies order by code`)
+        : Promise.resolve({ rows: [] }),
     ])) as any[];
 
   const rowParam = pickString(sp.row);
@@ -185,6 +189,7 @@ export default async function CrmSetup({
       teams={teamsResult.rows}
       baseCurrency={orgResult.rows[0]?.base_currency ?? ""}
       currencies={currenciesResult.rows}
+      multiCurrency={multiCurrency}
     />
   );
 }
