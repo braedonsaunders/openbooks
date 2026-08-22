@@ -291,6 +291,16 @@ test('the surfaces this test was written for are covered', () => {
     /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'document PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
   )
+  assert.match(
+    read('app/api/documents/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'document PATCH must refuse equipment_charge when Equipment is off — stored lines stay',
+  )
+  assert.match(
+    read('app/api/documents/[id]/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'document PATCH must 404 — not persist equipment_charge lines — when Equipment is off',
+  )
   for (const file of [
     'app/(app)/ar/invoices/page.tsx',
     'app/(app)/ap/bills/page.tsx',
@@ -306,6 +316,16 @@ test('the surfaces this test was written for are covered', () => {
       read(file),
       /kind not in \('inventory', 'assembly', 'kit'\)/,
       `${file} must drop inventory/assembly/kit from the picker when Inventory is off — stored lines stay`,
+    )
+    assert.match(
+      read(file),
+      /isFeatureEnabled\([^,]+, ['"]equipment['"]\)/,
+      `${file} must not offer equipment_charge items when Equipment is off`,
+    )
+    assert.match(
+      read(file),
+      /kind <> 'equipment_charge'/,
+      `${file} must drop equipment_charge from the picker when Equipment is off — stored lines stay`,
     )
   }
   assert.match(
