@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
@@ -115,10 +116,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
      where org_id = ${orgId} and filing_id = ${id} and status = 'included'
        and (${recipientId ?? null}::uuid is null or id = ${recipientId ?? null}::uuid)`)
 
+  const stamp = await businessToday(orgId)
   const filename =
     forms.length === 1
-      ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, '_')}.pdf`
-      : `${filing.form_type}-${filing.tax_year}-recipient-copies.pdf`
+      ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, '_')}-${stamp}.pdf`
+      : `${filing.form_type}-${filing.tax_year}-recipient-copies-${stamp}.pdf`
   const body = new Uint8Array(pdf)
   return new NextResponse(body, {
     status: 200,
