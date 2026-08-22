@@ -229,7 +229,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
       custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
       updated_at = now(), updated_by = ${user.id}
-    where id = ${id}
+    where id = ${id} and org_id = ${user.orgId}
   `)
 
   const payload = await loadProject(id, user.orgId)
