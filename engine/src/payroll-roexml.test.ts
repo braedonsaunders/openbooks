@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./payroll-roexml.ts";
+import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
+import { withSimClock } from "./clock.ts";
+import { db } from "./db.ts";
+import { buildRoeXml, isRoeReasonCode, renderRoeXml, type RoeRecordToFile } from "./payroll-roexml.ts";
+import { sealSecret } from "./secrets.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 import type { RoeRecord } from "./payroll-yearend.ts";
 
 /**
@@ -125,4 +132,74 @@ test("reason-for-issue codes are a closed statutory set", () => {
   assert.ok(!isRoeReasonCode("Q"));
   assert.ok(!isRoeReasonCode(""));
   assert.ok(!isRoeReasonCode(undefined));
+});
+
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({
+        timeZone: "Pacific/Auckland",
+        payroll: {
+          t4Transmitter: {
+            bn: "999999999RP0001",
+            name: "Acme Ltd",
+            contactName: "Pat Payroll",
+            contactPhone: "5555550100",
+          },
+        },
+      })}::jsonb where id = ${org.orgId}`);
+
+    const employeeId = randomUUID();
+    const scheduleId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
+      values (${employeeId}, ${org.orgId}, 'person', 'Grace Hopper', true, ${org.subsidiaryId}, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                 pay_date_offset_days, is_active, created_by, updated_by)
+      values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+              ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                             pay_basis, country, federal_claim_code,
+                                             provincial_claim_code, vacation_percent, vacation_method,
+                                             sin_encrypted, sin_last3, is_active, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
+              ${sealSecret("046454286")}, '286', true, ${actorId}, ${actorId})`);
+
+    const documentId = randomUUID();
+    await db.execute(sql`
+      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
+                             currency, status, created_by, updated_by)
+      values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
+              ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
+                            tax_year, run_status, calculated_at, created_by, updated_by)
+      values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
+              2026, 'committed', now(), ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+                             periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
+                             pensionable_earnings, insurable_earnings, factors, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, 'ON', 26, '2026-07-21',
+              2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
+              '{}'::jsonb, ${actorId}, ${actorId})`);
+
+    // 13:00Z on Jun 15 is already Jun 16 in Auckland. UTC today and wall-clock
+    // today must not leak into a Service Canada upload filename.
+    await withSimClock("2026-06-15T13:00:00Z", async () => {
+      const file = await buildRoeXml(org.orgId, [{ employeePartyId: employeeId, reasonCode: "A" }]);
+      assert.equal(file.filename, `ROE-${await businessToday(org.orgId)}.xml`);
+      assert.equal(file.filename, "ROE-2026-06-16.xml");
+      assert.notEqual(file.filename, `ROE-${new Date().toISOString().slice(0, 10)}.xml`);
+      assert.notEqual(file.filename, "ROE-2026-06-15.xml");
+    });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
 });

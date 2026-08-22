@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 import { formatMoney } from "./money.ts";
 import { unsealSecret } from "./secrets.ts";
@@ -169,7 +170,7 @@ export async function buildRoeXml(
   if (problems.length > 0) throw new PayrollError(problems.join("; "));
 
   return {
-    filename: `ROE-${new Date().toISOString().slice(0, 10)}.xml`,
+    filename: `ROE-${await businessToday(orgId)}.xml`,
     xml: renderRoeXml({ employer, records }),
     roeCount: records.length,
   };
