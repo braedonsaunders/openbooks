@@ -26,6 +26,7 @@ import {
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission, requirePermission } from "../../../lib/authz";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { isFeatureEnabled } from "../../../lib/features";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
 
 export const runtime = "nodejs";
@@ -180,6 +181,15 @@ export async function POST(request: Request) {
     let result: unknown = { ok: true };
     switch (action) {
       case "createSubcontract": {
+        // Transaction currency is Multi-currency configuration. Turning that
+        // switch off must refuse a new write; omitting currency keeps the
+        // vendor / subsidiary / org fallback so stored contracts stay valid.
+        if (
+          body.currency !== undefined &&
+          !(await isFeatureEnabled(orgId, "multiCurrency"))
+        ) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         const originalCommitment = exactMoney(body.originalCommitment);
         if (originalCommitment === null) return invalidDecimal("Original commitment");
         const retainageInput = body.defaultRetainagePercent;

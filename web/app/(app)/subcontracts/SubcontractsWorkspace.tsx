@@ -59,12 +59,14 @@ export function SubcontractsWorkspace({
   expenseAccounts,
   parties,
   permissions,
+  multiCurrency = false,
 }: {
   projects: Option[];
   vendors: Option[];
   expenseAccounts: Option[];
   parties: Option[];
   permissions: Permissions;
+  multiCurrency?: boolean;
 }) {
   const { money: localizedMoney } = useMoney();
   const money = useCallback(
@@ -153,7 +155,7 @@ export function SubcontractsWorkspace({
         </CardContent>
       </Card>
 
-      <CreateSubcontractDrawer open={createOpen} onClose={() => setCreateOpen(false)} projects={projects} vendors={vendors} busy={busy} onCreate={async (payload) => {
+      <CreateSubcontractDrawer open={createOpen} onClose={() => setCreateOpen(false)} projects={projects} vendors={vendors} busy={busy} multiCurrency={multiCurrency} onCreate={async (payload) => {
         const result = await act({ action: "createSubcontract", ...payload }, "Subcontract created");
         if (result?.id) { setCreateOpen(false); setSelectedId(result.id); setTab("sov"); }
       }} />
@@ -269,8 +271,8 @@ function ControlsSection({ detail, parties, canPay, busy, act, money }: any) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>; }
 
-function CreateSubcontractDrawer({ open, onClose, projects, vendors, busy, onCreate }: { open: boolean; onClose: () => void; projects: Option[]; vendors: Option[]; busy: boolean; onCreate: (value: any) => void }) {
+function CreateSubcontractDrawer({ open, onClose, projects, vendors, busy, onCreate, multiCurrency = false }: { open: boolean; onClose: () => void; projects: Option[]; vendors: Option[]; busy: boolean; onCreate: (value: any) => void; multiCurrency?: boolean }) {
   const [form, setForm] = useState({ projectId: "", vendorId: "", number: "", title: "", description: "", currency: "", originalCommitment: "", defaultRetainagePercent: "10", startsOn: "", endsOn: "" });
   const vendorCurrency = useMemo(() => vendors.find((v) => v.id === form.vendorId)?.currency || "", [vendors, form.vendorId]);
-  return <Drawer open={open} onClose={onClose} size="md" title="New subcontract" description="Create the commitment, then add its vendor schedule of values." headerActions={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy || !form.projectId || !form.vendorId || !form.number || !form.title || !form.originalCommitment} onClick={() => onCreate({ ...form, currency: form.currency || vendorCurrency || null, startsOn: form.startsOn || null, endsOn: form.endsOn || null })}>Create</Button></>}><div className="grid gap-4 p-1 sm:grid-cols-2"><Field label="Project"><Select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}><option value="">Select project</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field><Field label="Vendor"><Select value={form.vendorId} onChange={(e) => setForm({ ...form, vendorId: e.target.value })}><option value="">Select vendor</option>{vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</Select></Field><Field label="Number"><Input value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} /></Field><Field label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field><Field label="Original commitment"><Input type="number" min="0" step="0.01" value={form.originalCommitment} onChange={(e) => setForm({ ...form, originalCommitment: e.target.value })} /></Field><Field label="Retainage %"><Input type="number" min="0" max="100" value={form.defaultRetainagePercent} onChange={(e) => setForm({ ...form, defaultRetainagePercent: e.target.value })} /></Field><Field label="Currency"><Input maxLength={3} placeholder={vendorCurrency || "Org currency"} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} /></Field><Field label="Starts"><Input type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} /></Field><Field label="Ends"><Input type="date" value={form.endsOn} onChange={(e) => setForm({ ...form, endsOn: e.target.value })} /></Field><div className="sm:col-span-2"><Field label="Description"><Textarea rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div></div></Drawer>;
+  return <Drawer open={open} onClose={onClose} size="md" title="New subcontract" description="Create the commitment, then add its vendor schedule of values." headerActions={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={busy || !form.projectId || !form.vendorId || !form.number || !form.title || !form.originalCommitment} onClick={() => { const { currency, ...fields } = form; onCreate({ ...fields, ...(multiCurrency ? { currency: currency || vendorCurrency || null } : {}), startsOn: form.startsOn || null, endsOn: form.endsOn || null }); }}>Create</Button></>}><div className="grid gap-4 p-1 sm:grid-cols-2"><Field label="Project"><Select value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })}><option value="">Select project</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field><Field label="Vendor"><Select value={form.vendorId} onChange={(e) => setForm({ ...form, vendorId: e.target.value })}><option value="">Select vendor</option>{vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}</Select></Field><Field label="Number"><Input value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} /></Field><Field label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field><Field label="Original commitment"><Input type="number" min="0" step="0.01" value={form.originalCommitment} onChange={(e) => setForm({ ...form, originalCommitment: e.target.value })} /></Field><Field label="Retainage %"><Input type="number" min="0" max="100" value={form.defaultRetainagePercent} onChange={(e) => setForm({ ...form, defaultRetainagePercent: e.target.value })} /></Field>{multiCurrency ? <Field label="Currency"><Input maxLength={3} placeholder={vendorCurrency || "Org currency"} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })} /></Field> : null}<Field label="Starts"><Input type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} /></Field><Field label="Ends"><Input type="date" value={form.endsOn} onChange={(e) => setForm({ ...form, endsOn: e.target.value })} /></Field><div className="sm:col-span-2"><Field label="Description"><Textarea rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div></div></Drawer>;
 }
