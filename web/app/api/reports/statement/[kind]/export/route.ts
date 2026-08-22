@@ -82,7 +82,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
           marginMm: 16,
           density: 'standard',
         })
-        return pdfResponse(await renderStatementViewPdf(view, branding, page, { title, periodPhrase, scale: q.scale }), filename)
+        return pdfResponse(await renderStatementViewPdf(view, branding, page, {
+          title,
+          periodPhrase,
+          scale: q.scale,
+          generatedAt: new Date(`${stamp}T00:00:00Z`),
+        }), filename)
       }
       if (format === 'xlsx') {
         return xlsxResponse(
