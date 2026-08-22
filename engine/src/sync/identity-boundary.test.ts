@@ -70,6 +70,21 @@ test("tax-code persist writes ratePercent through canonicalDecimal then normaliz
   assert.doesNotMatch(body, /normalizeMoney\("0"\)/);
 });
 
+test("time-entry insert persist writes hours through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistTimeEntryHours");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistTimeEntryHours helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf("const flush = async () => {");
+  const next = loader.indexOf("for (const rec of records)", start);
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistTimeEntryHours\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.hours\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);
