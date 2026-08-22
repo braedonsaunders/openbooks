@@ -459,19 +459,19 @@ export async function reverseAssetLifecycleEvent(
              case when quantity is null then null else -quantity end,
              unit, null, false, custom
         from journal_lines
-       where entry_id = ${source.journal_entry_id}
+       where entry_id = ${source.journal_entry_id} and org_id = ${orgId}
        order by line_number
     `);
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_at = now(), posted_by = ${opts.actorId},
              updated_at = now(), updated_by = ${opts.actorId}
-       where id = ${reversalEntryId}
+       where id = ${reversalEntryId} and org_id = ${orgId}
     `);
     await tx.execute(sql`
       update journal_entries
          set status = 'reversed', updated_at = now(), updated_by = ${opts.actorId}
-       where id = ${source.journal_entry_id}
+       where id = ${source.journal_entry_id} and org_id = ${orgId}
     `);
 
     let restoredStatus: "in_service" | "fully_depreciated" | null = null;
@@ -480,8 +480,9 @@ export async function reverseAssetLifecycleEvent(
         select coalesce(sum(line.posted_amount), 0)::text as accumulated
           from depreciation_schedule_lines line
           join depreciation_schedules schedule
-            on schedule.id = line.schedule_id
-         where schedule.asset_id = ${source.asset_id}
+            on schedule.id = line.schedule_id and schedule.org_id = line.org_id
+         where schedule.org_id = ${orgId}
+           and schedule.asset_id = ${source.asset_id}
            and schedule.book_id = ${source.book_id}
       `));
       restoredStatus =

@@ -423,7 +423,7 @@ export async function importSettlementBatch(
         line_count = ${parsed.lines.length},
         memo = ${parsed.memo ?? null},
         updated_at = now(), updated_by = ${actorId}
-       where id = ${batchId}
+       where id = ${batchId} and org_id = ${orgId}
     `);
     await insertLines(orgId, batchId, parsed.lines, actorId);
     return { batchId, created };

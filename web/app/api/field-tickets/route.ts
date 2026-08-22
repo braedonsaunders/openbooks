@@ -41,7 +41,7 @@ export async function GET(req: Request) {
                and request.sent_at is not null) as sent_at,
            cust.display_name as customer_name, p.name as project_name, p.code as project_code,
            fm.display_name as foreman_name,
-           (select coalesce(sum(te.hours), 0) from time_entries te where te.field_ticket_id = d.id) as total_hours
+           (select coalesce(sum(te.hours), 0) from time_entries te where te.field_ticket_id = d.id and te.org_id = d.org_id) as total_hours
       from documents d
       join field_tickets ft
         on ft.document_id = d.id and ft.org_id = d.org_id

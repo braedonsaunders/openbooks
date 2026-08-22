@@ -1210,8 +1210,8 @@ export async function purgeFile(orgId: string, id: string): Promise<boolean> {
     await tx.execute(sql`
       delete from file_blobs where version_id in (select id from file_versions where file_id = ${id})
     `)
-    await tx.execute(sql`delete from file_attachments where file_id = ${id}`)
-    await tx.execute(sql`update files set current_version_id = null where id = ${id}`)
+    await tx.execute(sql`delete from file_attachments where file_id = ${id} and org_id = ${orgId}`)
+    await tx.execute(sql`update files set current_version_id = null where id = ${id} and org_id = ${orgId}`)
     await tx.execute(sql`delete from file_versions where file_id = ${id}`)
     await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`)
     return s3Versions.rows.map((v) => v.id)

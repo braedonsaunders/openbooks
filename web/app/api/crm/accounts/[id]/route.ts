@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { promoteCrmAccount, routeCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -56,8 +58,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const employeeCount = body.employeeCount === undefined || body.employeeCount === null || body.employeeCount === ''
     ? null : Number(body.employeeCount)
   if (employeeCount !== null && (!Number.isInteger(employeeCount) || employeeCount < 0)) return NextResponse.json({ error: 'employee count must be non-negative' }, { status: 422 })
-  const annualRevenue = textOrNull(body.annualRevenue)
-  if (annualRevenue !== null && (!/^\d+(\.\d{0,4})?$/.test(annualRevenue))) return NextResponse.json({ error: 'annual revenue must be a non-negative amount' }, { status: 422 })
+  const annualRevenueRaw = body.annualRevenue === undefined || body.annualRevenue === null || body.annualRevenue === ''
+    ? null
+    : canonicalDecimal(body.annualRevenue, 4)
+  if (body.annualRevenue !== undefined && body.annualRevenue !== null && body.annualRevenue !== ''
+    && (annualRevenueRaw === null || compareDecimal(annualRevenueRaw, '0') < 0)) {
+    return NextResponse.json({ error: 'annual revenue must be a non-negative amount' }, { status: 422 })
+  }
+  const annualRevenue = annualRevenueRaw === null ? null : normalizeMoney(annualRevenueRaw)
   const qualification = body.qualification === undefined ? undefined : body.qualification
   if (qualification !== undefined && (qualification === null || typeof qualification !== 'object' || Array.isArray(qualification))) {
     return NextResponse.json({ error: 'qualification must be an object' }, { status: 422 })
@@ -90,7 +98,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const reason = textOrNull(body.stageReason)
         await tx.execute(sql`
           update crm_account_profiles set lifecycle_stage = ${stage}, status_id = ${statusId ?? null},
-                 updated_at = now(), updated_by = ${user.id} where id = ${row.id}`)
+                 updated_at = now(), updated_by = ${user.id} where id = ${row.id} and org_id = ${user.orgId}`)
         await tx.execute(sql`
           insert into crm_account_stage_events
             (org_id, account_profile_id, from_stage, to_stage, source_kind, reason, created_by, updated_by)
@@ -112,7 +120,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         next_action_at = ${body.nextActionAt !== undefined ? textOrNull(body.nextActionAt) : sql`next_action_at`},
         is_active = ${body.isActive !== undefined ? body.isActive === true : sql`is_active`},
         updated_at = now(), updated_by = ${user.id}
-      where id = ${row.id}`)
+      where id = ${row.id} and org_id = ${user.orgId}`)
     if ((ownerUserId !== undefined && ownerUserId !== row.owner_user_id) || (territoryId !== undefined && territoryId !== row.territory_id)) {
       await tx.execute(sql`
         insert into crm_account_assignment_events
