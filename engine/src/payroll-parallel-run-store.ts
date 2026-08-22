@@ -674,6 +674,7 @@ export async function saveParallelTolerance(input: {
     on conflict (org_id, kind, slot) do update set
       tolerance = excluded.tolerance, reason = excluded.reason,
       updated_at = now(), updated_by = excluded.updated_by
+    where payroll_parallel_tolerances.org_id = ${input.orgId}
     returning id`));
 
   await db.execute(sql`
