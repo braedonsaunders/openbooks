@@ -136,6 +136,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (!period || !ID_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
     refuseUnprintedPeriod(ID_WITHHOLDING, input.periodsPerYear);
   }
+  const published = period as IdPeriod;
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
@@ -158,11 +159,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("ID_TAXABLE", taxable);
 
   const threshold = U(
-    married ? ID_THRESHOLDS_2026_07_23[period].married : ID_THRESHOLDS_2026_07_23[period].single,
+    married ? ID_THRESHOLDS_2026_07_23[published].married : ID_THRESHOLDS_2026_07_23[published].single,
   );
   trace("ID_THRESHOLD", threshold);
 
-  const periodTax = idPeriodTax(taxable, period, married, rates);
+  const periodTax = idPeriodTax(taxable, published, married, rates);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   const total = periodTax + extra;
   trace("ID_WITHHELD", total);

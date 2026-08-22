@@ -33,8 +33,10 @@ import { ID_CERTIFICATE, ID_REGION } from "./states/id-declaration.ts";
 import { KS_CERTIFICATE, KS_REGION } from "./states/ks-declaration.ts";
 import { LA_CERTIFICATE, LA_REGION } from "./states/la-declaration.ts";
 import { MO_CERTIFICATE, MO_REGION } from "./states/mo-declaration.ts";
+import { MS_CERTIFICATE, MS_REGION } from "./states/ms-declaration.ts";
 import { MT_CERTIFICATE, MT_REGION } from "./states/mt-declaration.ts";
 import { ND_CERTIFICATE, ND_REGION } from "./states/nd-declaration.ts";
+import { NE_CERTIFICATE, NE_REGION } from "./states/ne-declaration.ts";
 import { OK_CERTIFICATE, OK_REGION } from "./states/ok-declaration.ts";
 import { SC_CERTIFICATE, SC_REGION } from "./states/sc-declaration.ts";
 import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia-declaration.ts";
@@ -969,7 +971,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     AL_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
     ID_CERTIFICATE, KS_CERTIFICATE, LA_CERTIFICATE,
-    MO_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, OK_CERTIFICATE,
+    MO_CERTIFICATE, MS_CERTIFICATE, MT_CERTIFICATE, ND_CERTIFICATE, NE_CERTIFICATE, OK_CERTIFICATE,
     AZ_CERTIFICATE, IN_CERTIFICATE, KY_CERTIFICATE, VA_CERTIFICATE, WV_CERTIFICATE,
     UT_CERTIFICATE, MN_CERTIFICATE, MN_MWR, WI_CERTIFICATE, WI_W220, IA_CERTIFICATE, IA_44016,
   ],
@@ -1372,7 +1374,7 @@ const IMPLEMENTED: Readonly<Record<string, PayrollRegionWithholding>> = {
   MD: MD_REGION, OR: OR_REGION, DE: DE_REGION, AL: AL_REGION, SC: SC_REGION,
   AR: AR_REGION, ME: ME_REGION, RI: RI_REGION, VT: VT_REGION, HI: HI_REGION,
   ID: ID_REGION, KS: KS_REGION, LA: LA_REGION,
-  MO: MO_REGION, MT: MT_REGION, ND: ND_REGION, OK: OK_REGION,
+  MO: MO_REGION, MS: MS_REGION, MT: MT_REGION, ND: ND_REGION, NE: NE_REGION, OK: OK_REGION,
 };
 
 /**

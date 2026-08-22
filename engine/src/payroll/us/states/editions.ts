@@ -36,8 +36,10 @@ import { ID_TAX_YEAR_EDITIONS } from "./id.ts";
 import { KS_TAX_YEAR_EDITIONS } from "./ks.ts";
 import { LA_TAX_YEAR_EDITIONS } from "./la.ts";
 import { MO_TAX_YEAR_EDITIONS } from "./mo.ts";
+import { MS_TAX_YEAR_EDITIONS } from "./ms.ts";
 import { MT_TAX_YEAR_EDITIONS } from "./mt.ts";
 import { ND_TAX_YEAR_EDITIONS } from "./nd.ts";
+import { NE_TAX_YEAR_EDITIONS } from "./ne.ts";
 import { OK_TAX_YEAR_EDITIONS } from "./ok.ts";
 import { IL_TAX_YEAR_EDITIONS } from "./il.ts";
 import { IN_TAX_YEAR_EDITIONS } from "./in.ts";
@@ -97,8 +99,10 @@ export const US_STATE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
   ...KS_TAX_YEAR_EDITIONS,
   ...LA_TAX_YEAR_EDITIONS,
   ...MO_TAX_YEAR_EDITIONS,
+  ...MS_TAX_YEAR_EDITIONS,
   ...MT_TAX_YEAR_EDITIONS,
   ...ND_TAX_YEAR_EDITIONS,
+  ...NE_TAX_YEAR_EDITIONS,
   ...OK_TAX_YEAR_EDITIONS,
 ];
 
