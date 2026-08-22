@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../exact-decimal";
 import type { ApiField } from "./schema-registry";
 
@@ -34,7 +35,11 @@ export function coerceScalar(
       // must not cross IEEE-754 via Number() before the writer binds them.
       const exact = canonicalDecimal(raw, 4);
       if (exact === null) return { ok: false, message: "must be a number" };
-      return { ok: true, value: exact };
+      try {
+        return { ok: true, value: normalizeMoney(exact) };
+      } catch {
+        return { ok: false, message: "must be a number" };
+      }
     }
     case "boolean": {
       if (typeof raw === "boolean") return { ok: true, value: raw };
