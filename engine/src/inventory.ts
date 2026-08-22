@@ -640,7 +640,7 @@ export async function receiveInventory(
           : unitCostPerQuantity(newValue, newQty)!;
         await tx.execute(sql`
           update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${excessQuantity},
-             unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
+             unit_cost = ${newCost}, updated_at = now() where id = ${cur.id} and org_id = ${orgId}`);
       } else {
         await insertLayer(
           tx,
@@ -1018,7 +1018,7 @@ async function recordConsumptions(
   for (const c of consumptions) {
     await tx.execute(sql`
       update cost_layers set remaining_quantity = remaining_quantity - ${c.quantity}, updated_at = now()
-       where id = ${c.layerId}`);
+       where id = ${c.layerId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into cost_layer_consumptions (org_id, cost_layer_id, issue_movement_id, quantity, unit_cost, created_by, updated_by)
       values (${orgId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${actorId}, ${actorId})`);
@@ -1133,7 +1133,7 @@ async function addLayerAtCost(
         : unitCostPerQuantity(newValue, newQty)!;
       await tx.execute(sql`
         update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${quantity},
-           unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
+           unit_cost = ${newCost}, updated_at = now() where id = ${cur.id} and org_id = ${orgId}`);
       return;
     }
   }
@@ -1612,12 +1612,12 @@ async function reverseInventoryJournal(
     update journal_entries
        set status = 'posted', posted_at = now(), posted_by = ${actorId},
            updated_at = now(), updated_by = ${actorId}
-     where id = ${reversalEntryId}
+     where id = ${reversalEntryId} and org_id = ${orgId}
   `);
   await tx.execute(sql`
     update journal_entries
        set status = 'reversed', updated_at = now(), updated_by = ${actorId}
-     where id = ${sourceEntryId}
+     where id = ${sourceEntryId} and org_id = ${orgId}
   `);
   return reversalEntryId;
 }
@@ -3072,7 +3072,7 @@ export async function shipTransferOrder(
       await tx.execute(sql`
         update transfer_order_lines
            set quantity_shipped = ${line.quantity}, ship_movement_id = ${moved.fromMovementId}, updated_at = now(), updated_by = ${actorId}
-         where id = ${line.id}`);
+         where id = ${line.id} and org_id = ${orgId}`);
       amounts.push({
         assetAccountId: profile.assetAccountId,
         value: moved.value,
@@ -3089,7 +3089,7 @@ export async function shipTransferOrder(
     await tx.execute(sql`
       update transfer_orders
          set status = 'in_transit', shipped_on = ${shipDate}, ship_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${orderId}`);
+       where id = ${orderId} and org_id = ${orgId}`);
     return { id: orderId, status: "in_transit", entryId };
   });
 }
@@ -3137,7 +3137,7 @@ export async function receiveTransferOrder(
       await tx.execute(sql`
         update transfer_order_lines
            set quantity_received = ${line.quantity_shipped}, receive_movement_id = ${moved.toMovementId}, updated_at = now(), updated_by = ${actorId}
-         where id = ${line.id}`);
+         where id = ${line.id} and org_id = ${orgId}`);
       amounts.push({
         assetAccountId: profile.assetAccountId,
         value: moved.value,
@@ -3154,7 +3154,7 @@ export async function receiveTransferOrder(
     await tx.execute(sql`
       update transfer_orders
          set status = 'received', received_on = ${receiveDate}, receive_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${orderId}`);
+       where id = ${orderId} and org_id = ${orgId}`);
     return { id: orderId, status: "received", entryId };
   });
 }
@@ -3414,7 +3414,7 @@ export async function postLandedCostVoucher(
          and id in (${joinIds(allocationIds)})`);
     await tx.execute(sql`
       update landed_cost_vouchers set status = 'posted', journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${voucherId}`);
+       where id = ${voucherId} and org_id = ${orgId}`);
     return { id: voucherId, documentNumber, entryId };
   });
 }
