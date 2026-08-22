@@ -272,7 +272,7 @@ export async function assembleInvoiceBackup(
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
 export async function loadInvoiceBackup(orgId: string, documentId: string): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
   const r = (await db.execute<{ file_id: string; name: string }>(sql`
-    select ib.file_id, fi.name from invoice_backups ib join files fi on fi.id = ib.file_id
+    select ib.file_id, fi.name from invoice_backups ib join files fi on fi.id = ib.file_id and fi.org_id = ib.org_id
      where ib.org_id = ${orgId} and ib.document_id = ${documentId}
   `))
   const row = r.rows[0]

@@ -76,22 +76,22 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
           select sum(jl.amount) as balance
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-           where jl.account_id = a.id${lineScope}) bal on true
+           where jl.account_id = a.id and jl.org_id = a.org_id${lineScope}) bal on true
         left join lateral (
           select count(*) as n
             from bank_statement_lines l
-            join bank_statements s on s.id = l.statement_id
-           where s.account_id = a.id and l.match_status = 'unmatched') unm on true
+            join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+           where s.account_id = a.id and s.org_id = a.org_id and l.match_status = 'unmatched') unm on true
         left join lateral (
           select r.id from reconciliations r
-           where r.account_id = a.id and r.status <> 'signed_off'
+           where r.account_id = a.id and r.org_id = a.org_id and r.status <> 'signed_off'
            order by r.created_at desc limit 1) openrec on true
         left join lateral (
           select max(r.through_date) as through from reconciliations r
-           where r.account_id = a.id and r.status = 'signed_off') rec on true
+           where r.account_id = a.id and r.org_id = a.org_id and r.status = 'signed_off') rec on true
         left join lateral (
           select s.statement_date, s.imported_at from bank_statements s
-           where s.account_id = a.id
+           where s.account_id = a.id and s.org_id = a.org_id
            order by s.imported_at desc limit 1) st on true
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}
