@@ -91,7 +91,7 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
                     when r.department_id is not null then 2 when r.subsidiary_id is not null then 3 else 4 end,
                coalesce(r.job_title, tr.name, dep.name, sub.name, ''), r.effective_from desc
       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    db.execute(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id left join departments dep on dep.id = r.department_id left join subsidiaries sub on sub.id = r.subsidiary_id ${rateFilter}`),
+    db.execute(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id ${rateFilter}`),
     rateParam && rateParam !== 'new' && isUuid(rateParam)
       ? db.execute(sql`${rateSelect}
           where r.org_id = ${orgId} and r.id = ${rateParam} and r.is_active and r.employee_party_id is null

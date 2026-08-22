@@ -62,7 +62,7 @@ export async function loadContract(id: string, orgId: string): Promise<ContractP
            o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name
       from performance_obligations o
-      join recognition_rules r on r.id = o.recognition_rule_id
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.contract_id = ${id} and o.org_id = ${orgId}
      order by o.created_at`))
 

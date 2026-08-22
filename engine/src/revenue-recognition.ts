@@ -634,8 +634,8 @@ export async function buildRecognitionSchedule(
            r.method, r.recognition_periods, r.period_offset, r.start_offset_days,
            r.initial_amount_percent, r.start_date_source, r.end_date_source
       from performance_obligations o
-      join revenue_contracts c on c.id = o.contract_id
-      join recognition_rules r on r.id = o.recognition_rule_id
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.id = ${obligationId} and o.org_id = ${orgId}`));
   const o = oblRes.rows[0];
   if (!o) throw new Error("obligation not found");
@@ -782,8 +782,8 @@ export async function createObligationsFromInvoice(
            r.end_date_source,
            fv.unit_price as fair_value, fv.low_value as fair_value_low, fv.high_value as fair_value_high
       from document_lines dl
-      join items it on it.id = dl.item_id and it.recognition_rule_id is not null
-      join recognition_rules r on r.id = it.recognition_rule_id
+      join items it on it.id = dl.item_id and it.org_id = dl.org_id and it.recognition_rule_id is not null
+      join recognition_rules r on r.id = it.recognition_rule_id and r.org_id = it.org_id
       left join lateral (
         select unit_price, low_value, high_value from fair_value_prices f
          where f.org_id = ${orgId} and f.item_id = dl.item_id and f.is_active
@@ -792,7 +792,7 @@ export async function createObligationsFromInvoice(
            and (f.effective_to is null or f.effective_to >= ${doc.document_date})
          order by f.effective_from desc nulls last limit 1
       ) fv on true
-     where dl.document_id = ${documentId}
+     where dl.document_id = ${documentId} and dl.org_id = ${orgId}
      order by dl.line_number`));
   if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
@@ -1098,19 +1098,19 @@ export async function runRevenueRecognition(
   const emptyPlans = (await db.execute<{ contract_number: string; description: string }>(sql`
     select c.contract_number, o.description
       from performance_obligations o
-      join revenue_contracts c on c.id = o.contract_id
-      join recognition_rules r on r.id = o.recognition_rule_id
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.org_id = ${orgId} and o.status = 'open'
        and r.method in ('milestone', 'usage')
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
        and (
-         not exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+         not exists (select 1 from recognition_schedules s where s.obligation_id = o.id and s.org_id = o.org_id)
          or (
-           exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
+           exists (select 1 from recognition_schedules s where s.obligation_id = o.id and s.org_id = o.org_id)
            and not exists (
              select 1 from recognition_schedule_lines l
                join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-              where s.obligation_id = o.id)
+              where s.obligation_id = o.id and s.org_id = o.org_id)
          )
        )`));
   for (const row of emptyPlans.rows) {

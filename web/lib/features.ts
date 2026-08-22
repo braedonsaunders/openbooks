@@ -495,7 +495,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     const n = await countRows(sql`
       select count(*)::int as n
         from performance_obligations o
-        join recognition_rules r on r.id = o.recognition_rule_id
+        join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
        where o.org_id = ${orgId}
          and r.method <> 'point_in_time'
          and r.is_forecast = false
