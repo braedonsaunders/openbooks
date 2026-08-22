@@ -868,6 +868,7 @@ export async function createPayRun(input: {
       values (${orgId}, 'pay_run', null, 'PAY-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
     `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
