@@ -7,7 +7,7 @@ export const payroll: DocArticle = {
   order: 6,
   summary:
     "Run payroll with installable country packs: CRA T4127 (Canada) and IRS Pub 15-T (US) statutory engines, pay schedules, TD1/W-4 profiles, pay runs, union fringes, and GL posting.",
-  updated: "2026-08-04",
+  updated: "2026-08-22",
   keywords: [
     "payroll",
     "pay run",
@@ -53,11 +53,11 @@ stub so any amount can be explained line by line.
 The United States pack computes federal withholding with the IRS Publication
 15-T percentage method for automated payroll systems, plus Social Security,
 Medicare (including Additional Medicare), FUTA, and configurable state
-unemployment insurance. It currently covers federal taxes and the nine states
-with no wage withholding (Alaska, Florida, Nevada, New Hampshire, South
-Dakota, Tennessee, Texas, Washington, Wyoming); employees in other states
-fail calculation with a clear error rather than producing incomplete stubs —
-state income tax ships in a later wave.
+unemployment insurance. State income-tax withholding covers 49 supported
+states: 40 taxing engines plus the nine no-tax states (Alaska, Florida,
+Nevada, New Hampshire, South Dakota, Tennessee, Texas, Washington, Wyoming).
+DC and NM are refused pending official goldens rather than producing
+incomplete stubs.
 
 ## What the Canada engine covers
 

@@ -413,11 +413,9 @@ levies exist and what they are assessed on — is a country-pack declaration.
 Canada and the United States are two packs, not a default and an exception.
 
 Specific limits worth knowing before you rely on it. US state income-tax
-withholding is computed for the nine states that levy none plus California,
-New York (including NYC and Yonkers), Pennsylvania (including Philadelphia),
-Illinois, New Jersey, Ohio, Michigan (including Detroit), Massachusetts,
-Georgia, and North Carolina. Any other state is refused loudly rather than
-approximated. Statutory holiday pay is calculated only for jurisdictions whose
+withholding covers 49 supported states: 40 taxing engines plus the nine
+no-tax states (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC and NM are refused
+pending official goldens rather than approximated. Statutory holiday pay is calculated only for jurisdictions whose
 formula is transcribed; the rest are refused by name when a holiday falls in
 the period. Remittance due dates are computed only for regular remitters and
 left unset for accelerated and quarterly schedules rather than guessed.

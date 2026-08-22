@@ -3572,7 +3572,7 @@
     },
     "payroll": {
       "title": "Payroll",
-      "description": "Pay runs, pay schedules, employee profiles, statutory withholding country packs, and remittance liabilities. Canada (CRA T4127) available today; United States planned."
+      "description": "Pay runs, pay schedules, employee profiles, statutory withholding country packs, and remittance liabilities. Canada (CRA T4127) and the United States (49 supported states: 40 taxing engines + 9 no-tax; DC and NM refused pending official goldens)."
     },
     "projectScheduling": {
       "title": "Project Scheduling",
