@@ -175,6 +175,7 @@ export async function nextOpportunityNumber(orgId: string): Promise<string> {
     values (${orgId}, 'crm_opportunity', null, 'OPP-')
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
+    where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
   `));
   const row = seq.rows[0]!;
