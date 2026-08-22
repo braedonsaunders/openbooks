@@ -24,8 +24,10 @@ import {
 } from 'lucide-react'
 import type { CategoryWeekly, ForecastEntry, WeekRow } from '../../../../lib/cash/core'
 import { TxnLink } from '../../reports/TxnLink'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
+import { exportCsv } from './exportCsv'
 import { useAnalyticsMoney } from './format'
 const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const PAGE_SIZE = 25
@@ -382,6 +384,7 @@ export function CashWeekFlyout({
  * columns and pagination.
  */
 function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: number }) {
+  const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [search, setSearch] = useState('')
@@ -424,18 +427,13 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
     <ArrowUpDown size={10} className={cn('ml-1 inline', sortCol === col ? 'text-teal-500' : 'text-slate-300 dark:text-slate-600')} />
   )
 
-  // , client-side.
-  const exportCsv = () => {
-    let csv = `"Category","${cat.name.replace(/"/g, '""')}"\n"Total","${cat.total}"\n\n"Entity/Description","Date","Amount","Type"\n`
-    for (const row of cat.breakdown) {
-      csv += `"${row.name.replace(/"/g, '""')}","${row.date ?? ''}","${row.amount}","${row.type}"\n`
-    }
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `cashflow_category_${cat.name.replace(/\s+/g, '_')}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const downloadCsv = () => {
+    exportCsv(
+      `cashflow_category_${cat.name.replace(/\s+/g, '_')}`,
+      ['Entity/Description', 'Date', 'Amount', 'Type'],
+      cat.breakdown.map((row) => [row.name, row.date ?? '', row.amount, row.type]),
+      today,
+    )
   }
 
   const kpis: { label: string; value: string; cls?: string }[] = [
@@ -455,7 +453,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
             <p className={cn('truncate text-sm font-bold tabular-nums', k.cls ?? 'text-slate-800 dark:text-slate-100')}>{k.value}</p>
           </div>
         ))}
-        <button type="button" onClick={exportCsv} title="Export CSV" className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        <button type="button" onClick={downloadCsv} title="Export CSV" className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
           <Download size={13} />
           Export
         </button>
