@@ -34,6 +34,7 @@ interface DrawerPayload {
   recordType: 'customer' | 'vendor' | 'employee'
   canCustomize: boolean
   payrollEnabled?: boolean
+  multiCurrency?: boolean
 }
 
 function isRole(value: string | null): value is RelatedPartyRole {
@@ -179,6 +180,7 @@ export function GlobalPartyDrawerHost({
         canReadActivities={canReadActivities}
         canManageWages={canManageWages}
         payrollEnabled={data.payrollEnabled === true}
+        multiCurrency={data.multiCurrency === true}
         role={role}
         initialTab={initialTab}
         basePath={closeHref}

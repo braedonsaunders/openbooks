@@ -192,6 +192,7 @@ export function PartyDrawer({
   canManageWages = false,
   canManagePayroll = false,
   payrollEnabled = false,
+  multiCurrency = false,
   role,
   initialTab = 'overview',
   initialMode = 'view',
@@ -221,6 +222,9 @@ export function PartyDrawer({
   /** Company Settings → Features. Worker-comp group is Payroll
    *  configuration; hide and omit it when that switch is off. */
   payrollEnabled?: boolean
+  /** Company Settings → Features. Customer/vendor currency is
+   *  Multi-currency configuration; hide and omit it when that switch is off. */
+  multiCurrency?: boolean
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -354,7 +358,7 @@ export function PartyDrawer({
           enabled: role === 'customer' ? true : customer.enabled,
           paymentTermsId: customer.paymentTermsId || null,
           creditLimit: customer.creditLimit || null,
-          currency: customer.currency || null,
+          ...(multiCurrency ? { currency: customer.currency || null } : {}),
           arAccountId: customer.arAccountId || null,
           salesRepId: customer.salesRepId || null,
           taxCodeId: customer.taxCodeId || null,
@@ -366,7 +370,7 @@ export function PartyDrawer({
           paymentMethod: vendor.paymentMethod || null,
           eftNotificationEmail: vendor.eftNotificationEmail || null,
           paymentTermsId: vendor.paymentTermsId || null,
-          currency: vendor.currency || null,
+          ...(multiCurrency ? { currency: vendor.currency || null } : {}),
           is1099OrT4a: vendor.is1099OrT4a,
           apAccountId: vendor.apAccountId || null,
           defaultExpenseAccountId: vendor.defaultExpenseAccountId || null,
@@ -388,7 +392,7 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled, multiCurrency],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -642,6 +646,7 @@ export function PartyDrawer({
       }
       case 'credit_limit': return <><Label>{label(placement, t('creditLimit'))}</Label>{editable ? <Input inputMode="decimal" className="text-right tabular-nums" value={customer.creditLimit} onChange={(event) => setCustomer({ ...customer, creditLimit: event.target.value })} /> : partyValue(customer.creditLimit, 'text-right tabular-nums')}</>
       case 'currency': {
+        if (!multiCurrency) return null
         const value = recordType === 'vendor' ? vendor.currency : customer.currency
         const currency = ISO_CURRENCIES.find((item) => item.code === value)
         return <><Label>{label(placement, tc('labels.currency'))}</Label>{editable ? <Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })}>{!value && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select> : partyValue(currency ? `${currency.code} · ${currency.name}` : value)}</>
@@ -899,7 +904,7 @@ export function PartyDrawer({
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, customer.paymentTermsId)} />
                   <PartyReadOnlyField label={t('creditLimit')} value={customer.creditLimit} className="tabular-nums" />
-                  <PartyReadOnlyField label={tc('labels.currency')} value={customer.currency} className="font-mono" />
+                  {multiCurrency ? <PartyReadOnlyField label={tc('labels.currency')} value={customer.currency} className="font-mono" /> : null}
                   <PartyReadOnlyField label={t('receivableAccount')} value={optionName(accounts, customer.arAccountId)} />
                   <PartyReadOnlyField label={t('salesRepresentative')} value={optionName(salesReps, customer.salesRepId)} />
                   <PartyReadOnlyField label={t('taxCode')} value={optionName(taxCodes, customer.taxCodeId)} />
@@ -913,7 +918,7 @@ export function PartyDrawer({
                   <PartyReadOnlyField label={t('paymentMethod')} value={vendor.paymentMethod ? t(PAYMENT_METHOD_OPTIONS.find((option) => option.value === vendor.paymentMethod)?.labelKey ?? 'paymentMethods.other') : ''} />
                   <PartyReadOnlyField label={t('eftNotificationEmail')} value={vendor.eftNotificationEmail} />
                   <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, vendor.paymentTermsId)} />
-                  <PartyReadOnlyField label={tc('labels.currency')} value={vendor.currency} className="font-mono" />
+                  {multiCurrency ? <PartyReadOnlyField label={tc('labels.currency')} value={vendor.currency} className="font-mono" /> : null}
                   <PartyReadOnlyField label={t('t4aReportable')} value={vendor.is1099OrT4a ? tc('labels.yes') : tc('labels.no')} />
                   <PartyReadOnlyField label={t('payableAccount')} value={optionName(accounts, vendor.apAccountId)} />
                   <PartyReadOnlyField label={t('defaultExpenseAccount')} value={optionName(accounts, vendor.defaultExpenseAccountId)} />
@@ -986,7 +991,7 @@ export function PartyDrawer({
                     disabled={ro}
                   />
                 </div>
-                <div className={field}>
+                {multiCurrency ? <div className={field}>
                   <Label>{tc('labels.currency')}</Label>
                   <Input
                     maxLength={3}
@@ -996,7 +1001,7 @@ export function PartyDrawer({
                     onChange={(e) => setCustomer({ ...customer, currency: e.target.value.toUpperCase() })}
                     disabled={ro}
                   />
-                </div>
+                </div> : null}
                 <div className={field}>
                   <Label>{t('receivableAccount')}</Label>
                   <Select value={customer.arAccountId} onChange={(e) => setCustomer({ ...customer, arAccountId: e.target.value })} disabled={ro}>
@@ -1095,7 +1100,7 @@ export function PartyDrawer({
                     ))}
                   </Select>
                 </div>
-                <div className={field}>
+                {multiCurrency ? <div className={field}>
                   <Label>{tc('labels.currency')}</Label>
                   <Input
                     maxLength={3}
@@ -1105,7 +1110,7 @@ export function PartyDrawer({
                     onChange={(e) => setVendor({ ...vendor, currency: e.target.value.toUpperCase() })}
                     disabled={ro}
                   />
-                </div>
+                </div> : null}
                 <label className="flex items-center gap-2 self-end pb-2">
                   <input
                     type="checkbox"

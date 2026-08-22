@@ -44,6 +44,7 @@ export default async function EntityRole({
 
   const authz = await requirePermission('parties.read')
   const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
+  const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
 
@@ -99,6 +100,7 @@ export default async function EntityRole({
           canManageWages={can(authz, 'admin.setup.manage')}
           canManagePayroll={payrollEnabled && can(authz, 'payroll.manage')}
           payrollEnabled={payrollEnabled}
+          multiCurrency={multiCurrency}
           role={role}
           initialTab={partyTab}
           initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}

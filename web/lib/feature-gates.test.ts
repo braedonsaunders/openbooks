@@ -1297,6 +1297,51 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? <Field label=\{t\('fields\.currency'\)\}>/,
     'the opportunity form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /customer\?\.currency !== undefined[\s\S]{0,80}vendor\?\.currency !== undefined[\s\S]{0,120}multiCurrency/,
+    'customer/vendor party writes must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /customer\?\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'customer/vendor party writes must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /currency !== undefined \? currency : sql`customer_roles\.currency`/,
+    'customer party writes must keep the stored currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /currency !== undefined \? currency : sql`vendor_roles\.currency`/,
+    'vendor party writes must keep the stored currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/parties/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'the parties page must not load the currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/entities/[role]/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'entities must not load the currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/drawer/route.ts'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'the related-party drawer must not load the currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the party form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /\{multiCurrency \? <div className=\{field\}>/,
+    'the party form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

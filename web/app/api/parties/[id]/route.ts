@@ -201,6 +201,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.roles?.employee?.workerCompGroupId !== undefined && !(await isFeatureEnabled(user.orgId, 'payroll'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  // Customer/vendor currency is Multi-currency configuration living on the
+  // role. Turning that switch off must refuse a new write; the stored code
+  // stays so turning the feature back on restores the same currency.
+  if (
+    (body.roles?.customer?.currency !== undefined || body.roles?.vendor?.currency !== undefined)
+    && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
+  ) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
   const completesPlaceholder =
     body.isActive === undefined
@@ -394,14 +403,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return bad('Credit limit must be a non-negative number')
       }
       const creditLimit = creditLimitExact === null ? null : fixedDecimal(creditLimitExact, 4)
-      const currency = strOrNull(c.currency)?.toUpperCase() ?? null
+      const currency = c.currency !== undefined ? (strOrNull(c.currency)?.toUpperCase() ?? null) : undefined
       if (currency && !CURRENCY_RE.test(currency)) return bad('Customer currency must be a 3-letter code')
       await db.execute(sql`
         insert into customer_roles (org_id, party_id, payment_terms_id, credit_limit, currency,
                                     ar_account_id, sales_rep_id, tax_code_id,
                                     is_on_hold, hold_reason, held_at, held_by,
                                     created_by, updated_by)
-        values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency},
+        values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency !== undefined ? currency : null},
                 ${arAccountId}, ${salesRepId}, ${taxCodeId},
                 ${c.isOnHold === true}, ${c.isOnHold ? strOrNull(c.holdReason) : null},
                 ${c.isOnHold ? sql`now()` : null}, ${c.isOnHold ? user.id : null},
@@ -409,7 +418,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         on conflict (party_id) do update set
           payment_terms_id = excluded.payment_terms_id,
           credit_limit = excluded.credit_limit,
-          currency = excluded.currency,
+          currency = ${currency !== undefined ? currency : sql`customer_roles.currency`},
           ar_account_id = excluded.ar_account_id,
           sales_rep_id = excluded.sales_rep_id,
           tax_code_id = excluded.tax_code_id,
@@ -460,7 +469,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!await orgRefExists('payable', apAccountId, user.orgId)) return bad('Invalid payable account')
       if (!await orgRefExists('expense', defaultExpenseAccountId, user.orgId)) return bad('Invalid default expense account')
       if (!await orgRefExists('tax', taxCodeId, user.orgId)) return bad('Invalid vendor tax code')
-      const currency = strOrNull(v.currency)?.toUpperCase() ?? null
+      const currency = v.currency !== undefined ? (strOrNull(v.currency)?.toUpperCase() ?? null) : undefined
       if (currency && !CURRENCY_RE.test(currency)) return bad('Vendor currency must be a 3-letter code')
       await db.execute(sql`
         insert into vendor_roles (org_id, party_id, payment_method, eft_notification_email,
@@ -469,7 +478,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                                   is_on_hold, hold_reason, held_at, held_by,
                                   created_by, updated_by)
         values (${user.orgId}, ${id}, ${paymentMethod}, ${strOrNull(v.eftNotificationEmail)},
-                ${paymentTermsId}, ${currency}, ${v.is1099OrT4a === true}, ${apAccountId},
+                ${paymentTermsId}, ${currency !== undefined ? currency : null}, ${v.is1099OrT4a === true}, ${apAccountId},
                 ${defaultExpenseAccountId}, ${taxCodeId},
                 ${v.isOnHold === true}, ${v.isOnHold ? strOrNull(v.holdReason) : null},
                 ${v.isOnHold ? sql`now()` : null}, ${v.isOnHold ? user.id : null},
@@ -478,7 +487,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           payment_method = excluded.payment_method,
           eft_notification_email = excluded.eft_notification_email,
           payment_terms_id = excluded.payment_terms_id,
-          currency = excluded.currency,
+          currency = ${currency !== undefined ? currency : sql`vendor_roles.currency`},
           is_t4a = excluded.is_t4a,
           ap_account_id = excluded.ap_account_id,
           default_expense_account_id = excluded.default_expense_account_id,
