@@ -150,7 +150,7 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
            })}, false) as has_wage,
            exists (
              select 1 from pay_stubs s2
-               join pay_runs r2 on r2.document_id = s2.pay_run_document_id
+               join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
               where s2.org_id = prof.org_id and s2.employee_party_id = prof.employee_party_id
                 and s2.pay_run_document_id <> ${documentId}
                 and r2.run_status = 'committed'
