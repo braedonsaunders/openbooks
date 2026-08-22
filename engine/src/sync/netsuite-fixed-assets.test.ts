@@ -90,3 +90,17 @@ test("NetSuite FAM document-line insert persists amount through persistSyncLineM
   assert.match(body, /persistSyncLineMoney\(line\.amount, "amount"\)/);
   assert.doesNotMatch(body, /amount: normalizeMoney\(line\.amount\)/);
 });
+
+test("NetSuite FAM document-line insert persists taxAmount through persistSyncLineMoney", () => {
+  const helperStart = source.indexOf("function persistSyncLineMoney");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncLineMoney helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const insert = source.indexOf(".insert(schema.documentLines)");
+  const body = source.slice(insert, insert + 800);
+  assert.match(body, /persistSyncLineMoney\(line\.taxAmount, "taxAmount"\)/);
+  assert.doesNotMatch(body, /taxAmount: normalizeMoney\(line\.taxAmount\)/);
+});
