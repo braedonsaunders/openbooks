@@ -91,6 +91,7 @@ export async function nextNumber(orgId: string, kind: string, prefix: string, su
     values (${orgId}, ${kind}, ${sequenceSubsidiaryId}, ${prefix})
     on conflict on constraint sequences_org_kind_sub
     do update set next_number = number_sequences.next_number + 1
+    where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
   `));
   const s = seq.rows[0]!;
