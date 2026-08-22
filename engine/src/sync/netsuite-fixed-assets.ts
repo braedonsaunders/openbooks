@@ -580,7 +580,7 @@ export async function syncNetSuiteFixedAssets(
         lineNumber: line.lineNumber,
         accountId: line.accountId,
         itemId: line.itemId,
-        amount: normalizeMoney(line.amount),
+        amount: persistSyncLineMoney(line.amount, "amount"),
         taxCodeId: line.taxCodeId,
         taxAmount: normalizeMoney(line.taxAmount),
         taxOverridden: line.taxOverridden,
