@@ -222,7 +222,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
     total_debits: money(sum(debitAmounts)),
     total_credits: money(sum(creditAmounts)),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    printed_date: fmtDate(await businessToday(orgId), locale),
     lines: lineRows,
   }
 
