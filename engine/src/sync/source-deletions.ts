@@ -456,6 +456,7 @@ export async function resolveSourceDeletion(input: {
         document_id = excluded.document_id, action = excluded.action, note = excluded.note,
         resolved_by = excluded.resolved_by, resolved_at = now(), updated_by = excluded.updated_by,
         updated_at = now()
+      where source_deletion_resolutions.org_id = ${input.orgId}
       returning id`));
     const resolutionId = resolution.rows[0]?.id;
     if (!resolutionId) {
