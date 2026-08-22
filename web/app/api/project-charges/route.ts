@@ -1,12 +1,31 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { createProjectCharge, ChargeError, type ChargeLineInput } from '../../../lib/project-charges'
+import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
+
+function moneyOrNull(v: unknown): string | null | 'invalid' {
+  if (v === null || v === undefined || v === '') return null
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
+
+function quantityOrInvalid(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 8)
+  if (exact === null || compareDecimal(exact, '0') <= 0) return 'invalid'
+  return exact
+}
 
 /** GET ?projectId= — list project_charge documents (+ their billed status). */
 export async function GET(req: Request) {
@@ -52,11 +71,27 @@ export async function POST(req: Request) {
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  const lines: ChargeLineInput[] = []
+  for (const line of body.lines) {
+    const quantity = quantityOrInvalid(line.quantity)
+    if (quantity === 'invalid') {
+      return NextResponse.json({ error: 'Charge quantity must be a positive exact decimal' }, { status: 422 })
+    }
+    const costRate = moneyOrNull(line.costRate)
+    if (costRate === 'invalid') {
+      return NextResponse.json({ error: 'Cost rate must be an exact decimal' }, { status: 422 })
+    }
+    const billRate = moneyOrNull(line.billRate)
+    if (billRate === 'invalid') {
+      return NextResponse.json({ error: 'Bill rate must be an exact decimal' }, { status: 422 })
+    }
+    lines.push({ ...line, quantity, costRate, billRate })
+  }
   try {
     const created = await createProjectCharge(gate.user.orgId, gate.user.id, {
       projectId: body.projectId,
       referenceNumber: body.referenceNumber ?? null,
-      lines: body.lines,
+      lines,
     })
     return NextResponse.json(created)
   } catch (e) {

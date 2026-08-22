@@ -8,6 +8,7 @@ import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
 import type { RatePrice } from '@openbooks/engine/src/item-rate-pricing.ts'
+import { canonicalDecimal } from './exact-decimal'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
@@ -70,6 +71,40 @@ export interface ChargeInput {
 
 export class ChargeError extends Error {}
 
+/** Quantity columns are numeric(28,8); do not force ledger money scale. */
+function exactQuantity(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 8)
+  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`)
+  return exact
+}
+
+function exactMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`)
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new ChargeError(`${label} must be an exact decimal`)
+  }
+}
+
+function exactMoneyOrNull(value: unknown, label: string): string | null {
+  if (value == null || value === '') return null
+  return exactMoney(value, label)
+}
+
+function exactPrice(price: RatePrice, label: string): RatePrice {
+  return {
+    amount: exactMoney(price.amount, `${label} amount`),
+    components: price.components.map((component) => ({
+      ...component,
+      quantity: exactQuantity(component.quantity, `${label} component quantity`),
+      rate: exactMoney(component.rate, `${label} component rate`),
+      amount: exactMoney(component.amount, `${label} component amount`),
+    })),
+  }
+}
+
 export async function createProjectCharge(
   orgId: string,
   userId: string,
@@ -116,7 +151,18 @@ export async function createProjectCharge(
     const amounts: string[] = []
     let lineNo = 1
     for (const line of input.lines) {
-      if (cmp(String(line.quantity), '0') <= 0) throw new ChargeError('Charge quantity must be greater than zero')
+      const quantity = exactQuantity(line.quantity, 'Charge quantity')
+      if (cmp(quantity, '0') <= 0) throw new ChargeError('Charge quantity must be greater than zero')
+      const enteredCostRate = exactMoneyOrNull(line.costRate, 'Cost rate')
+      const enteredBillRate = exactMoneyOrNull(line.billRate, 'Bill rate')
+      const rateSnapshot = line.rateSnapshot == null ? null : {
+        ...line.rateSnapshot,
+        baseQuantity: line.rateSnapshot.baseQuantity == null
+          ? line.rateSnapshot.baseQuantity
+          : exactQuantity(line.rateSnapshot.baseQuantity, 'Base quantity'),
+        cost: exactPrice(line.rateSnapshot.cost, 'Cost'),
+        bill: exactPrice(line.rateSnapshot.bill, 'Bill'),
+      }
       const item = (await tx.execute<any>(sql`
         select kind, default_cost, default_rate, expense_account_id, cost_recovery_account_id, tax_code_id, name, unit
           from items where id = ${line.itemId} and org_id = ${orgId}
@@ -150,20 +196,20 @@ export async function createProjectCharge(
         }
       }
 
-      const resolved = line.rateSnapshot ?? (line.costRate == null && line.billRate == null
+      const resolved = rateSnapshot ?? (enteredCostRate == null && enteredBillRate == null
         ? await resolveItemRate({
             orgId, projectId: input.projectId, itemId: line.itemId,
-            equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: String(line.quantity),
+            equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: quantity,
           })
         : null)
-      const costAmount = resolved?.cost.amount ?? mul(String(line.quantity), String(line.costRate ?? it.default_cost ?? '0'))
-      const billAmount = resolved?.bill.amount ?? mul(String(line.quantity), String(line.billRate ?? it.default_rate ?? line.costRate ?? it.default_cost ?? '0'))
+      const costAmount = exactMoney(resolved?.cost.amount ?? mul(quantity, String(enteredCostRate ?? it.default_cost ?? '0')), 'Cost amount')
+      const billAmount = exactMoney(resolved?.bill.amount ?? mul(quantity, String(enteredBillRate ?? it.default_rate ?? enteredCostRate ?? it.default_cost ?? '0')), 'Bill amount')
       // Unit rate back out of a resolved amount. A zero-quantity line has no
       // unit rate to derive, so fall back to the entered rate rather than
       // dividing by zero — which divRate reported as an invalid FX rate.
-      const canDerive = resolved != null && !isZero(String(line.quantity))
-      const costRate = normalizeMoney(canDerive ? div(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0'))
-      const billRate = normalizeMoney(canDerive ? div(billAmount, String(line.quantity)) : String(line.billRate ?? it.default_rate ?? costRate))
+      const canDerive = resolved != null && !isZero(quantity)
+      const costRate = normalizeMoney(canDerive ? div(costAmount, quantity) : String(enteredCostRate ?? it.default_cost ?? '0'))
+      const billRate = normalizeMoney(canDerive ? div(billAmount, quantity) : String(enteredBillRate ?? it.default_rate ?? costRate))
       const accountId = line.accountId ?? it.expense_account_id
       if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
@@ -179,17 +225,17 @@ export async function createProjectCharge(
               rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
               recovery_account_id, field_ticket_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
-              ${line.quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
+              ${quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
               ${line.equipmentUnitId ?? null}, ${line.employeeId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
-              ${resolved?.baseQuantity ?? line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
+              ${resolved?.baseQuantity != null ? exactQuantity(resolved.baseQuantity, 'Base quantity') : quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
               ${input.fieldTicketId ?? null}, ${userId})
         returning id
       `)).rows as { id: string }[]
 
       const componentRows = [
-        ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity: line.quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
-        ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity: line.quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
+        ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
+        ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
       ]
       let componentSequence = 1
       for (const c of componentRows) {
@@ -197,7 +243,8 @@ export async function createProjectCharge(
           insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
                                                quantity, rate, amount, sequence, created_by)
           values (${orgId}, ${insertedLine.id}, ${c.role}, ${c.rateLineId}, ${c.unitCode}, ${c.unitName},
-                  ${c.quantity}, ${c.rate}, ${c.amount}, ${componentSequence++}, ${userId})
+                  ${exactQuantity(c.quantity, 'Component quantity')}, ${exactMoney(c.rate, 'Component rate')},
+                  ${exactMoney(c.amount, 'Component amount')}, ${componentSequence++}, ${userId})
         `)
       }
       amounts.push(costAmount)
