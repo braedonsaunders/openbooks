@@ -1,11 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
+import { canonicalDecimal } from './exact-decimal'
 import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
@@ -354,6 +355,17 @@ export interface DocumentEditContext {
   runFlows?: boolean
 }
 
+/** Exact numeric(19,4) money string, or null when the value is not canonical. */
+function exactMoney(value: unknown): string | null {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return null
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return null
+  }
+}
+
 /** A validation/period failure with the HTTP status the callers should return. */
 export class DocumentEditError extends Error {
   status: number
@@ -388,9 +400,7 @@ export function validateEditableDocumentLines(lines: DocumentLineInput[]): Docum
     if (l.amount === undefined || l.amount === null || String(l.amount).trim() === '') {
       throw new DocumentEditError(422, `Line ${n}: an amount is required`)
     }
-    try {
-      toUnits(String(l.amount))
-    } catch {
+    if (exactMoney(l.amount) === null) {
       throw new DocumentEditError(
         422,
         `Line ${n}: "${l.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places`,
@@ -540,16 +550,13 @@ export async function applyDocumentEdit(
       if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
       let unitPrice: string | null = null
       if (l.unitPrice != null && String(l.unitPrice).trim() !== '') {
-        try {
-          unitPrice = normalizeMoney(l.unitPrice)
-        } catch {
+        unitPrice = exactMoney(l.unitPrice)
+        if (unitPrice === null) {
           throw new DocumentEditError(422, `Line ${i + 1}: unit price is not a valid amount`)
         }
       }
-      let amount: string
-      try {
-        amount = normalizeMoney(l.amount)
-      } catch {
+      const amount = exactMoney(l.amount)
+      if (amount === null) {
         throw new DocumentEditError(422, `Line ${i + 1}: amount is not a valid amount`)
       }
       preparedLines.push({
