@@ -102,9 +102,9 @@ export async function requestPasswordReset(
         html: message.html,
         text: message.text,
       });
-      await markEmailSent(logId, sent.id);
+      await markEmailSent(user.org_id, logId, sent.id);
     } catch (error) {
-      await markEmailFailed(logId, error instanceof Error ? error.message : String(error));
+      await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
     }
   });
 }

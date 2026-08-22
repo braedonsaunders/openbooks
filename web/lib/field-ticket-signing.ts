@@ -98,7 +98,7 @@ export async function sendTicketForSignature(args: {
     })
     providerMessageId = sent.id
   } catch (e) {
-    await markEmailFailed(logId, e instanceof Error ? e.message : String(e))
+    await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
     await db.execute(sql`
       update field_ticket_signature_requests
          set revoked_at = coalesce(revoked_at, now())
@@ -106,7 +106,7 @@ export async function sendTicketForSignature(args: {
     `)
     throw e
   }
-  await markEmailSent(logId, providerMessageId)
+  await markEmailSent(args.orgId, logId, providerMessageId)
   await db.execute(sql`
     update field_ticket_signature_requests
        set sent_at = now()

@@ -335,7 +335,7 @@ export async function runTriggerScripts(
       durationMs: res.durationMs,
     });
     await db.execute(
-      sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+      sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${ctx.org.id}`,
     );
     if (
       res.status === "aborted" ||
@@ -387,7 +387,7 @@ export async function runScheduledScript(
     durationMs: res.durationMs,
   });
   await db.execute(
-    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+    sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
   );
 
   return outcome;
@@ -444,7 +444,7 @@ export async function runEndpointScript(
     durationMs: res.durationMs,
   });
   await db.execute(
-    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+    sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
   );
   return outcome;
 }
@@ -497,7 +497,7 @@ export async function runBulkScript(
     durationMs: res.durationMs,
   });
   await db.execute(
-    sql`update user_scripts set last_run_at = now() where id = ${s.id}`,
+    sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
   );
   return outcome;
 }
@@ -542,13 +542,13 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
     const cron = (s as any).cron as string | null;
     if (!cron) {
       await db.execute(
-        sql`update user_scripts set next_run_at = null where id = ${s.id}`,
+        sql`update user_scripts set next_run_at = null where id = ${s.id} and org_id = ${orgId}`,
       );
       continue;
     }
     const next = computeNextRunAt(cron);
     await db.execute(
-      sql`update user_scripts set next_run_at = ${next} where id = ${s.id}`,
+      sql`update user_scripts set next_run_at = ${next} where id = ${s.id} and org_id = ${orgId}`,
     );
   }
 }

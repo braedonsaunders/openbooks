@@ -66,7 +66,7 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
       if (inserted.rows[0]) runIds.push(inserted.rows[0].id);
       await tx.execute(sql`
         update report_schedules set next_run_at=${next}, updated_at=now()
-         where id=${schedule.id}
+         where id=${schedule.id} and org_id=${schedule.org_id}
       `);
     }
     return runIds;
@@ -101,7 +101,7 @@ export async function dispatchQueuedReportRuns(
     );
     await db.execute(sql`
       update report_runs set dispatch_count=dispatch_count+1, updated_at=now()
-       where id=${row.id} and dispatch_count=${row.dispatch_count} and status in ('queued','failed')
+       where id=${row.id} and org_id=${row.org_id} and dispatch_count=${row.dispatch_count} and status in ('queued','failed')
     `);
     dispatched++;
   }
@@ -155,7 +155,7 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
       }
       await tx.execute(sql`
         update report_runs set status='succeeded', finished_at=now(), locked_at=null,
-               next_attempt_at=null, updated_at=now() where id=${runId}
+               next_attempt_at=null, updated_at=now() where id=${runId} and org_id=${row.org_id}
       `);
     });
     return { deliveries: recipients.length };
@@ -165,7 +165,7 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     await db.execute(sql`
       update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=now(),
              locked_at=null, next_attempt_at=${new Date(Date.now() + delay)}, updated_at=now()
-       where id=${runId}
+       where id=${runId} and org_id=${row.org_id}
     `);
     throw error;
   }
@@ -208,7 +208,7 @@ export async function dispatchReportDeliveries(
     await db.execute(sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
              queue_job_id=${jobId}, error=null, updated_at=now()
-       where id=${row.id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
+       where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
     `);
     dispatched++;
   }

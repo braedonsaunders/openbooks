@@ -119,9 +119,9 @@ export async function sendRecordPdfEmail(args: {
       text: body.text,
       attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
     })
-    await markEmailSent(logId, id)
+    await markEmailSent(args.orgId, logId, id)
   } catch (e) {
-    await markEmailFailed(logId, e instanceof Error ? e.message : String(e))
+    await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
     throw e
   }
   return { to, subject: body.subject }
