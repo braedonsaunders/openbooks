@@ -126,12 +126,12 @@ export async function reconcileApplications(
     const pairRows = await client.query<{ pay_ref: string; app_ref: string; amt: string }>(`
       select df.custom->>$2 as pay_ref, dt.custom->>$2 as app_ref, sum(ap.amount) as amt
         from applications ap
-        join journal_lines lf on lf.id = ap.from_line_id
-        join journal_entries ef on ef.id = lf.entry_id
-        join documents df on df.id = ef.source_document_id
-        join journal_lines lt on lt.id = ap.to_line_id
-        join journal_entries et on et.id = lt.entry_id
-        join documents dt on dt.id = et.source_document_id
+        join journal_lines lf on lf.id = ap.from_line_id and lf.org_id = ap.org_id
+        join journal_entries ef on ef.id = lf.entry_id and ef.org_id = lf.org_id
+        join documents df on df.id = ef.source_document_id and df.org_id = ef.org_id
+        join journal_lines lt on lt.id = ap.to_line_id and lt.org_id = ap.org_id
+        join journal_entries et on et.id = lt.entry_id and et.org_id = lt.org_id
+        join documents dt on dt.id = et.source_document_id and dt.org_id = et.org_id
        where ap.org_id = $1 and ap.unapplied_at is null
          and df.custom->>$2 is not null and dt.custom->>$2 is not null
        group by 1, 2`, [orgId, refKey]);

@@ -130,7 +130,7 @@ export async function vendorData(
       from ew e
       join journal_lines l on l.entry_id = e.id
       join accounts a on a.id = l.account_id
-      join parties p on p.id = l.party_id
+      join parties p on p.id = l.party_id and p.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by p.id, p.display_name

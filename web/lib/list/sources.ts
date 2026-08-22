@@ -167,7 +167,7 @@ const SOURCES: Record<string, DocListSource> = {
       loadOptions: async (orgId) => {
         const result = await db.execute(sql`
           select p.id::text as value, p.display_name as label, count(*)::int as count
-            from documents d join parties p on p.id = d.party_id
+            from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'expense_report'
            group by p.id, p.display_name
            order by p.display_name`) as any

@@ -108,7 +108,7 @@ export default async function MatchBankData({
       db.execute<any>(sql`
         select jl.id, je.posting_date, je.entry_number, jl.amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-          left join parties p on p.id = jl.party_id
+          left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
          where ${glWhere} order by je.posting_date, jl.line_number
          limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`),
       db.execute<any>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`),

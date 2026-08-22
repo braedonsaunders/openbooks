@@ -191,7 +191,7 @@ async function searchTransactions(
                     similarity(coalesce(pr.display_name, ''), ${q})) as sim
       from documents d
       join cand on cand.id = d.id
-      left join parties pr on pr.id = d.party_id
+      left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id
      order by ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`)) as any
   return r.rows.map((row: any): SearchHit => {

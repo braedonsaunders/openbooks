@@ -694,8 +694,8 @@ export async function syncNetSuiteFixedAssets(
            where org_id = ${options.orgId}
              and custom->>${source.refKey} = any(${`{${fixedAssetAccountRefs.join(",")}}`}::text[])
         ) a
-        left join journal_lines jl on jl.account_id = a.id
-        left join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        left join journal_lines jl on jl.account_id = a.id and jl.org_id = ${options.orgId}
+        left join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        group by a.account_ref
     `));
     const targetLedgerBalances = new Map(targetLedgerResult.rows.map((row) => [row.account_ref, money(row.balance)]));

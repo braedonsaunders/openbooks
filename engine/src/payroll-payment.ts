@@ -47,8 +47,8 @@ export async function recordPayRunPayment(input: {
       select r.run_status, r.paid_at, r.pay_date, d.status as doc_status, d.posted_entry_id,
              d.document_number, d.subsidiary_id, d.currency, e.book_id
         from pay_runs r
-        join documents d on d.id = r.document_id
-        left join journal_entries e on e.id = d.posted_entry_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+        left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r
     `));

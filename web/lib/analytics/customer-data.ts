@@ -396,7 +396,7 @@ export async function customerData(period: { from: string; to: string; label: st
         min(d.posting_date) filter (where d.posting_date >= ${from}) as first_txn,
         max(d.posting_date) filter (where d.posting_date >= ${from}) as last_txn
       from documents d
-      join parties p on p.id = d.party_id
+      join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
         and d.posting_date >= ${pFrom} and d.posting_date <= ${to}

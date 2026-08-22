@@ -64,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
            r.computed_amounts, r.adjustments, r.tax_withheld,
            r.corrected_from_id is not null as corrected
       from information_return_recipients r
-      join parties p on p.id = r.party_id
+      join parties p on p.id = r.party_id and p.org_id = r.org_id
      where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
      order by name
   `))

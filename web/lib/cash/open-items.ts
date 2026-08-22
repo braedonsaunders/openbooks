@@ -51,7 +51,7 @@ export async function openItems(
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
-      left join parties p on p.id = oi.party_id
+      left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
      where oi.remaining > 0
   `)) as any
   return (result.rows as any[]).map((row) => ({

@@ -76,7 +76,7 @@ async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
       from flow_gates g
       left join users du on du.id = g.decided_by
       left join documents d on d.id = g.subject_id
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where g.id = ${gateId}
   `))
   return r.rows[0] ?? null

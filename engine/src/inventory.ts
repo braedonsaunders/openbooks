@@ -2821,8 +2821,8 @@ export async function queryLotRecall(
       join items i on i.id = im.item_id and i.org_id = im.org_id
       left join stock_locations sl on sl.id = im.stock_location_id
       left join document_lines dl on dl.id = im.document_line_id
-      left join documents d on d.id = dl.document_id
-      left join parties p on p.id = d.party_id
+      left join documents d on d.id = dl.document_id and d.org_id = im.org_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where im.org_id = ${orgId}
        and (${filter.lotId ?? null}::uuid is null or l.id = ${filter.lotId ?? null}::uuid)
        and (${filter.itemId ?? null}::uuid is null or l.item_id = ${filter.itemId ?? null}::uuid)

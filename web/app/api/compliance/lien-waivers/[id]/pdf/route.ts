@@ -54,7 +54,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            bill.document_number as bill_number,
            o.name as org_name
       from lien_waivers lw
-      join parties claimant on claimant.id = lw.party_id
+      join parties claimant on claimant.id = lw.party_id and claimant.org_id = lw.org_id
       join projects pj on pj.id = lw.project_id
       join orgs o on o.id = lw.org_id
       left join parties owner on owner.id = pj.customer_id and owner.org_id = lw.org_id

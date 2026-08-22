@@ -333,7 +333,7 @@ export async function loadBlockedBills(orgId: string, limit = 200): Promise<Bloc
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as project_name
       from documents d
-      join parties p on p.id = d.party_id
+      join parties p on p.id = d.party_id and p.org_id = d.org_id
       join vendor_roles vr on vr.party_id = p.id and vr.org_id = d.org_id
       left join projects pj on pj.id = d.project_id and pj.org_id = d.org_id
      where d.org_id = ${orgId} and d.kind in ('vendor_bill', 'expense_report')
@@ -422,9 +422,9 @@ export async function loadLienWaivers(args: {
            lw.rejected_reason as "rejectedReason", lw.void_reason as "voidReason",
            lw.notes, lw.requested_at as "requestedAt", lw.created_at as "createdAt"
       from lien_waivers lw
-      join parties p on p.id = lw.party_id
-      join projects pj on pj.id = lw.project_id
-      left join documents bill on bill.id = lw.bill_document_id
+      join parties p on p.id = lw.party_id and p.org_id = lw.org_id
+      join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
+      left join documents bill on bill.id = lw.bill_document_id and bill.org_id = lw.org_id
      where lw.org_id = ${args.orgId}
        and (${args.direction ?? null}::text is null or lw.direction = ${args.direction ?? null})
        and (${args.status ?? null}::text is null or lw.status = ${args.status ?? null})
@@ -542,7 +542,7 @@ export async function loadFiling(orgId: string, filingId: string): Promise<Filin
              coalesce(r.recipient_snapshot->'address', '{}'::jsonb) as address,
              r.furnished_at as "furnishedAt"
         from information_return_recipients r
-        join parties p on p.id = r.party_id
+        join parties p on p.id = r.party_id and p.org_id = r.org_id
        where r.org_id = ${orgId} and r.filing_id = ${filingId}
        order by r.status, p.display_name`),
   ])
@@ -583,7 +583,7 @@ export async function loadInformationReturnReadiness(orgId: string, taxYear: num
       join lateral (
         select coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as total
           from documents d
-          join journal_entries je on je.id = d.posted_entry_id and je.status in ('posted', 'reversed')
+          join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
           join journal_lines jl on jl.entry_id = je.id
          where d.org_id = p.org_id and d.party_id = p.id
            and d.kind = 'vendor_payment' and d.status = 'posted'

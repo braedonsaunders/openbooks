@@ -87,12 +87,12 @@ export default async function PaymentOperationsSetupPage({
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
         select m.*, p.display_name as party_name, b.bank_name, b.account_last_four
-          from payment_mandates m join parties p on p.id = m.party_id
-          join party_bank_accounts b on b.id = m.party_bank_account_id
+          from payment_mandates m join parties p on p.id = m.party_id and p.org_id = m.org_id
+          join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
          where m.org_id = ${orgId} and (m.mandate_reference ilike ${q} or p.display_name ilike ${q}) ${mandateState}
          order by m.created_at desc limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
       db.execute(sql`
-        select count(*)::int as n from payment_mandates m join parties p on p.id = m.party_id
+        select count(*)::int as n from payment_mandates m join parties p on p.id = m.party_id and p.org_id = m.org_id
          where m.org_id = ${orgId} and (m.mandate_reference ilike ${q} or p.display_name ilike ${q}) ${mandateState}`),
       db.execute(sql`select status as value, count(*)::int as count from payment_mandates where org_id = ${orgId} group by status`),
       selectedId ? db.execute(sql`select * from payment_mandates where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),

@@ -150,7 +150,7 @@ export default async function Approvals({
         join flows f on f.id = g.flow_id
         left join users u on u.id = g.assignee_user_id
         left join documents d on d.id = g.subject_id
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join close_runs cr on cr.id = g.subject_id and g.subject_kind = 'close_run'
         left join accounting_periods cp on cp.id = cr.period_id
        where g.org_id = ${orgId} and g.status = 'pending'
@@ -199,7 +199,7 @@ export default async function Approvals({
         join flows f on f.id = r.flow_id
         join flow_gates g on g.run_id = r.id and g.status = 'pending'
         left join documents d on d.id = r.subject_id
-        left join parties p on p.id = d.party_id
+        left join parties p on p.id = d.party_id and p.org_id = d.org_id
         left join close_runs cr on cr.id = r.subject_id and r.subject_kind = 'close_run'
         left join accounting_periods cp on cp.id = cr.period_id
         left join users u on u.id = g.assignee_user_id

@@ -675,7 +675,7 @@ export async function restoreOrgBackup(args: {
           ), invalid_subsidiary as (
             select line.entry_id, line.subsidiary_id
               from journal_lines line
-              join journal_entries entry on entry.id = line.entry_id
+              join journal_entries entry on entry.id = line.entry_id and entry.org_id = line.org_id
              where entry.org_id = $1 and entry.status in ('posted', 'reversed')
              group by line.entry_id, line.subsidiary_id
             having sum(line.amount) <> 0

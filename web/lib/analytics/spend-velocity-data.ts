@@ -268,7 +268,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join documents d on d.id = e.source_document_id
       join accounts a on a.id = l.account_id
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and d.voided_at is null
         and d.kind in (${spendKindsIn})
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
@@ -308,7 +308,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
         count(*) filter (where d.posting_date >= ${from}) as report_count
       from documents d
-      left join parties p on p.id = d.party_id
+      left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where d.org_id = ${orgId} and d.kind = 'expense_report' and d.voided_at is null
         and d.posting_date >= ${priorFrom} and d.posting_date <= ${to}
       group by 1, 2
