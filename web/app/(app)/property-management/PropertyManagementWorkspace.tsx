@@ -104,6 +104,7 @@ export function PropertyManagementWorkspace({
   options,
   permissions,
   customization,
+  fixedAssetsEnabled = false,
 }: {
   options: {
     subsidiaries: Option[];
@@ -130,6 +131,7 @@ export function PropertyManagementWorkspace({
     fieldDefs: CustomFieldDefClient[];
     listView: ListViewConfig;
   };
+  fixedAssetsEnabled?: boolean;
 }) {
   const { money } = useMoney();
   const [data, setData] = useState<Workspace>(empty);
@@ -394,6 +396,7 @@ export function PropertyManagementWorkspace({
         onClose={() => setCreateProperty(false)}
         options={options}
         busy={busy}
+        fixedAssetsEnabled={fixedAssetsEnabled}
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createProperty", ...payload },
@@ -414,6 +417,7 @@ export function PropertyManagementWorkspace({
         options={options}
         permissions={permissions}
         customization={customization}
+        fixedAssetsEnabled={fixedAssetsEnabled}
         data={data}
         money={money}
         act={act}
@@ -660,6 +664,7 @@ function PropertyDetailDrawer({
   options,
   permissions,
   customization,
+  fixedAssetsEnabled = false,
   data,
   money,
   act,
@@ -885,6 +890,7 @@ function PropertyDetailDrawer({
           ),
         );
       case "fixed_asset_id":
+        if (!fixedAssetsEnabled) return null;
         return field(
           placement,
           "Fixed asset",
@@ -1028,7 +1034,7 @@ function PropertyDetailDrawer({
       status,
       subsidiaryId: form.subsidiaryId,
       locationId: form.locationId || null,
-      fixedAssetId: form.fixedAssetId || null,
+      ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
       currency: form.currency,
       address: {
         street: form.street,
@@ -2310,7 +2316,7 @@ function Field({
   );
 }
 
-function PropertyDrawer({ open, onClose, options, busy, onSave }: any) {
+function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false }: any) {
   const initial = {
     code: "",
     name: "",
@@ -2336,7 +2342,7 @@ function PropertyDrawer({ open, onClose, options, busy, onSave }: any) {
     onSave({
       ...form,
       locationId: form.locationId || null,
-      fixedAssetId: form.fixedAssetId || null,
+      ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
       camIncomeAccountId: form.camIncomeAccountId || null,
       depositLiabilityAccountId: form.depositLiabilityAccountId || null,
       defaultBankAccountId: form.defaultBankAccountId || null,
@@ -2436,7 +2442,7 @@ function PropertyDrawer({ open, onClose, options, busy, onSave }: any) {
               ))}
             </Select>
           </Field>
-          <Field label="Fixed asset">
+          {fixedAssetsEnabled ? <Field label="Fixed asset">
             <Select
               value={form.fixedAssetId}
               onChange={(e) =>
@@ -2450,7 +2456,7 @@ function PropertyDrawer({ open, onClose, options, busy, onSave }: any) {
                 </option>
               ))}
             </Select>
-          </Field>
+          </Field> : null}
           <Field label="Rent income account">
             <Select
               value={form.rentIncomeAccountId}
