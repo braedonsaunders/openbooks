@@ -50,11 +50,11 @@ export async function GET(req: Request) {
     // Role membership comes exclusively from the canonical role tables.
     const roleFilter =
       kind === 'vendor'
-        ? sql` and exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.is_active)`
+        ? sql` and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
         : kind === 'customer'
-          ? sql` and exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.is_active)`
+          ? sql` and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
           : kind === 'employee'
-            ? sql` and exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active)`
+            ? sql` and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)`
             : sql``
     const r = (await db.execute<{ id: string; display_name: string; short_code: string | null }>(sql`
       select p.id, p.display_name, p.short_code from parties p
