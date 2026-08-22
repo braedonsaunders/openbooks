@@ -7,6 +7,7 @@ import { RecordListView } from '../../../components/record-list-view'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
 import { loadOrder } from '../../api/_order/lib'
 import { OrderDrawer } from '../_order/OrderDrawer'
 import { NewOrderButton } from '../_order/NewOrderButton'
@@ -35,6 +36,7 @@ export default async function PurchaseOrders({
 }) {
   const authz = await requirePermission('ap.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const canManage = can(authz, 'ap.create')
   const t = await getTranslations('purchaseOrders')
   const sp = await searchParams
@@ -53,7 +55,18 @@ export default async function PurchaseOrders({
                )
              order by p.display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+          db.execute(sql`
+            select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit
+              from items
+             where org_id = ${authz.user.orgId} and is_active
+               and (
+                 ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+                 or id in (
+                   select item_id from document_lines
+                    where org_id = ${authz.user.orgId} and document_id = ${openId} and item_id is not null
+                 )
+               )
+             order by name limit 2000`) as any,
           taxCodeOptions(authz.user.orgId),
           taxGroupOptions(authz.user.orgId),
           db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
