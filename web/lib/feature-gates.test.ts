@@ -422,6 +422,21 @@ test('the surfaces this test was written for are covered', () => {
     /status: 404/,
     'scheduled/internal render must 404 — not emit a PDF — when the feature is off',
   )
+  assert.match(
+    read('../engine/src/flows/scheduled.ts'),
+    /coalesce\(\(organization\.settings->'features'->>'flows'\)::boolean, true\)/,
+    'scheduled flows must not fire when the Flows switch is off',
+  )
+  assert.match(
+    read('../engine/src/flows/gates.ts'),
+    /coalesce\(\(organization\.settings->'features'->>'flows'\)::boolean, true\)/,
+    'gate reminder/escalation timers must not fire when the Flows switch is off',
+  )
+  assert.match(
+    read('../engine/src/continuous-close.ts'),
+    /coalesce\(\(o\.settings->'features'->>'continuousClose'\)::boolean, true\)/,
+    'scheduled continuous-close agents must not scan when Continuous Close is off',
+  )
   assert.equal(routeGateState('/analytics/true-cost'), 'gated')
   assert.equal(routeGateState('/analytics/utilization'), 'gated')
   assert.match(

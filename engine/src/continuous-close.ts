@@ -957,6 +957,7 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
      where p.enabled and p.automatic_runs and p.next_run_at <= ${now}
        and o.env_kind = 'production'
        and coalesce((o.settings->'ai'->>'enabled')::boolean, true)
+       and coalesce((o.settings->'features'->>'continuousClose')::boolean, true)
      order by p.next_run_at
   `));
   for (const policy of due.rows) {

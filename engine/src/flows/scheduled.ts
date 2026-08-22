@@ -101,6 +101,7 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
       from flows flow
       join orgs organization on organization.id = flow.org_id
      where flow.enabled and organization.env_kind = 'production'
+       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
        and flow.graph::text like '%"scheduled"%'
   `));
 
