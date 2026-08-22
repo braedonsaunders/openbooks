@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
@@ -42,15 +43,16 @@ export async function POST(req: Request) {
   const cols = selected.length > 0 ? selected : columns
 
   const title = safeName(resource.descriptor.label || resource.descriptor.key)
+  const filename = `${title}-${await businessToday(authz.user.orgId)}`
 
-  if (format === 'csv') return csvResponse(toCsv(title, cols, rows), title)
-  if (format === 'xlsx') return xlsxResponse(await toXlsx(title, cols, rows), title)
+  if (format === 'csv') return csvResponse(toCsv(title, cols, rows), filename)
+  if (format === 'xlsx') return xlsxResponse(await toXlsx(title, cols, rows), filename)
   // json
   return new NextResponse(new TextEncoder().encode(toJson(cols, rows)), {
     status: 200,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${safeName(title)}.json"`,
+      'Content-Disposition': `attachment; filename="${safeName(filename)}.json"`,
       'Cache-Control': 'no-store',
     },
   })
