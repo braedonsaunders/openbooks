@@ -48,7 +48,6 @@ test("NetSuite FAM document insert persists fxRate through canonicalDecimal then
   const body = source.slice(insert, returning > insert ? returning : undefined);
   assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
   assert.doesNotMatch(body, /normalizeDecimal\(document\.fxRate \?\? "1", 10\)/);
-  assert.match(body, /normalizeMoney\(document\.total \?\? "0"\)/);
 });
 
 test("NetSuite FAM document insert persists subtotal through canonicalDecimal then normalizeMoney", () => {
@@ -65,6 +64,15 @@ test("NetSuite FAM document insert persists subtotal through canonicalDecimal th
   const body = source.slice(insert, returning > insert ? returning : undefined);
   assert.match(body, /persistSyncLineMoney\(document\.subtotal \?\? "0", "subtotal"\)/);
   assert.doesNotMatch(body, /normalizeMoney\(document\.subtotal/);
-  assert.match(body, /normalizeMoney\(document\.total \?\? "0"\)/);
+  assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
+});
+
+test("NetSuite FAM document insert persists total through persistSyncLineMoney", () => {
+  const insert = source.indexOf(".insert(schema.documents)");
+  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
+  const body = source.slice(insert, returning > insert ? returning : undefined);
+  assert.match(body, /persistSyncLineMoney\(document\.total \?\? "0", "total"\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(document\.total/);
+  assert.match(body, /persistSyncLineMoney\(document\.subtotal \?\? "0", "subtotal"\)/);
   assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
 });
