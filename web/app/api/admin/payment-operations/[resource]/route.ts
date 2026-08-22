@@ -7,6 +7,7 @@ import {
 } from '@openbooks/engine/src/payment-operations.ts'
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
 import { guardPermission } from '../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 
@@ -67,6 +68,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   const body = await req.json().catch(() => ({})) as Record<string, any>
   try {
     if (resource === 'formats') {
+      // Format currency is Multi-currency configuration. Turning that
+      // switch off must refuse a new write; omitting currency keeps
+      // stored formats and a null restriction.
+      if (
+        body.currency !== undefined &&
+        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+      ) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       if (!body.code?.trim() || !body.name?.trim() || !body.formatterScript?.trim()) {
         return NextResponse.json({ error: 'code, name, and formatterScript are required' }, { status: 400 })
       }
@@ -79,7 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         rail: 'custom',
         direction: body.direction === 'debit' || body.direction === 'both' ? body.direction : 'credit',
         country,
-        currency: body.currency?.trim().toUpperCase() || null,
+        currency: body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null,
         fileExtension: body.fileExtension?.trim().replace(/^\./, '') || 'txt',
         contentType: body.contentType?.trim() || 'text/plain; charset=utf-8',
         formatterScript: body.formatterScript,

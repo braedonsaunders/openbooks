@@ -3,7 +3,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../../../lib/list-params'
 import { PaymentOperationsSetup, type PaymentSetupView } from './PaymentOperationsSetup'
-import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,6 +100,7 @@ export default async function PaymentOperationsSetupPage({
     rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
   }
 
+  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, parties, currencies, subsidiaryUiEnabled] = await Promise.all([
     db.execute(sql`select id, name, rail, currency from payment_formats where org_id = ${orgId} and is_active order by name`),
     db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary order by number nulls last, name`),
@@ -128,6 +129,7 @@ export default async function PaymentOperationsSetupPage({
       perPage={list.perPage}
       currentParams={sp}
       stateCounts={stateCounts}
+      multiCurrency={multiCurrency}
       options={{
         formats: formats.rows as any[], bankAccounts: bankAccounts.rows as any[], accountingAccounts: accountingAccounts.rows as any[], subsidiaries: subsidiaryUiEnabled ? subsidiaries.rows as any[] : [],
         sftpServers: sftpServers.rows as any[], profiles: profiles.rows as any[], parties: parties.rows as any[], currencies: currencies.rows as any[],

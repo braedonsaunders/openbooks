@@ -2056,6 +2056,36 @@ test('the surfaces this test was written for are covered', () => {
     /multiCurrency \? \{[\s\S]{0,80}currency/,
     'the labor-rate-card create must not send currency when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'payment-format create must refuse currency when Multi-currency is off — stored formats stay',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'payment-format create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /currency: body\.currency !== undefined \?[\s\S]{0,80}null/,
+    'payment-format create must keep a null currency when the field is omitted',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'payment operations must not load the format currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/PaymentOperationsSetup.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the payment-format form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/PaymentOperationsSetup.tsx'),
+    /\{multiCurrency \? <CurrencyField/,
+    'the payment-format form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
