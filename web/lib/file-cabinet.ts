@@ -732,13 +732,13 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
       select id from descendants`
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
-      join files fi on fi.id = fv.file_id
+      join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fi.folder_id in (${descendants}) and fv.storage_kind = 's3'
     `))
     await tx.execute(sql`
       delete from file_blobs where version_id in (
         select fv.id from file_versions fv
-        join files fi on fi.id = fv.file_id
+        join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
         where fi.folder_id in (${descendants})
       )
     `)
@@ -785,7 +785,7 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
     db.execute(sql`
       select f.id, f.name, f.updated_at as "updatedAt"
         from folders f
-        left join folders p on p.id = f.parent_folder_id
+        left join folders p on p.id = f.parent_folder_id and p.org_id = f.org_id
        where f.org_id = ${orgId} and f.is_inactive and not f.is_system
          and (p.id is null or not p.is_inactive)
          and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
@@ -793,7 +793,7 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
     db.execute(sql`
       select fi.id, fi.name, fi.file_type as "fileType", fo.name as "folderName", fi.updated_at as "updatedAt"
         from files fi
-        left join folders fo on fo.id = fi.folder_id
+        left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
        where fi.org_id = ${orgId} and fi.is_inactive
          and (fo.id is null or not fo.is_inactive)
          and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
@@ -863,7 +863,7 @@ export async function listFiles(
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
              fo.name as "folderName"
         from files fi
-        left join folders fo on fo.id = fi.folder_id
+        left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
         left join lateral (
           select count(*)::int as n from file_versions fv where fv.file_id = fi.id
         ) vc on true
@@ -988,7 +988,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
            fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
            fo.name as "folderName"
       from files fi
-      left join folders fo on fo.id = fi.folder_id
+      left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where fi.id = ${id} and fi.org_id = ${orgId}
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
   `))
@@ -1055,7 +1055,7 @@ export async function createFile(input: {
     const versionId = verIns.rows[0].id
 
     await tx.execute(sql`
-      update files set current_version_id = ${versionId} where id = ${fileId}
+      update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}
     `)
     // Object-store put happens inside the transaction: an upload failure rolls
     // the metadata back; a commit failure at worst orphans one unreferenced
@@ -1074,7 +1074,7 @@ export async function createFile(input: {
              fi.created_at as "createdAt", fi.created_by as "createdBy",
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
              fo.name as "folderName"
-        from files fi left join folders fo on fo.id = fi.folder_id where fi.id = ${fileId}
+        from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
     `))
     return meta.rows[0]
   })

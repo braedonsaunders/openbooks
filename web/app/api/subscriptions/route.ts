@@ -9,7 +9,8 @@ import {
   prorateFirstInvoice,
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
-import { add } from "@openbooks/engine/src/money.ts";
+import { add, normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { requirePermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
@@ -77,10 +78,12 @@ export async function POST(req: Request) {
       case "addPlan": {
         if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         if (!INTERVALS.includes(body.interval)) return NextResponse.json({ error: "invalid interval" }, { status: 400 });
+        const amount = canonicalDecimal(body.amount ?? "0", 4);
+        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const r = (await db.execute<{ id: string }>(sql`
           insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
                                           interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
-          values (${orgId}, ${body.name}, ${body.description ?? null}, ${String(body.amount ?? "0")},
+          values (${orgId}, ${body.name}, ${body.description ?? null}, ${normalizeMoney(amount)},
                   ${body.currency ?? null}, ${body.interval}, ${Number(body.intervalCount ?? 1)},
                   ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
           returning id
@@ -88,9 +91,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ id: r.rows[0]!.id }, { status: 201 });
       }
       case "updatePlan": {
+        const amount = canonicalDecimal(body.amount ?? "0", 4);
+        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         await db.execute(sql`
           update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
-                 amount = ${String(body.amount ?? "0")}, currency_code = ${body.currency ?? null},
+                 amount = ${normalizeMoney(amount)}, currency_code = ${body.currency ?? null},
                  interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
                  income_account_id = ${body.incomeAccountId ?? null}, item_id = ${body.itemId ?? null},
                  tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
@@ -111,11 +116,20 @@ export async function POST(req: Request) {
         // firstBillOn is when the first FULL cycle bills; if it's after the start
         // and proration is requested, we bill the partial [start, firstBillOn] now.
         const firstBillOn = body.firstBillOn || startOn;
+        const quantity = canonicalDecimal(body.quantity ?? "1", 4);
+        if (quantity === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+        const priceOverride =
+          body.priceOverride != null && body.priceOverride !== ""
+            ? canonicalDecimal(body.priceOverride, 4)
+            : null;
+        if (body.priceOverride != null && body.priceOverride !== "" && priceOverride === null) {
+          return NextResponse.json({ error: "invalid price override" }, { status: 422 });
+        }
         const r = (await db.execute<{ id: string }>(sql`
           insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
                                      next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
-          values (${orgId}, ${body.customerId}, ${body.planId}, ${String(body.quantity ?? "1")},
-                  ${body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null},
+          values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
+                  ${priceOverride != null ? normalizeMoney(priceOverride) : null},
                   ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
           returning id
         `));
@@ -129,9 +143,25 @@ export async function POST(req: Request) {
       case "changeSubscription": {
         const owned = (await db.execute(sql`select 1 from subscriptions where id = ${body.id} and org_id = ${orgId}`));
         if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
+        let quantity: string | undefined;
+        if (body.quantity != null) {
+          const exact = canonicalDecimal(body.quantity, 4);
+          if (exact === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          quantity = exact;
+        }
+        let priceOverride: string | null | undefined;
+        if ("priceOverride" in body) {
+          if (body.priceOverride != null && body.priceOverride !== "") {
+            const exact = canonicalDecimal(body.priceOverride, 4);
+            if (exact === null) return NextResponse.json({ error: "invalid price override" }, { status: 422 });
+            priceOverride = normalizeMoney(exact);
+          } else {
+            priceOverride = null;
+          }
+        }
         const result = await changeSubscription(body.id, {
-          quantity: body.quantity != null ? String(body.quantity) : undefined,
-          priceOverride: "priceOverride" in body ? (body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null) : undefined,
+          quantity,
+          priceOverride,
         });
         return NextResponse.json(result);
       }
@@ -139,8 +169,20 @@ export async function POST(req: Request) {
         const sets = [];
         if ("status" in body) sets.push(sql`status = ${body.status}`);
         if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
-        if ("quantity" in body) sets.push(sql`quantity = ${String(body.quantity)}`);
-        if ("priceOverride" in body) sets.push(sql`price_override = ${body.priceOverride != null && body.priceOverride !== "" ? String(body.priceOverride) : null}`);
+        if ("quantity" in body) {
+          const quantity = canonicalDecimal(body.quantity, 4);
+          if (quantity === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          sets.push(sql`quantity = ${quantity}`);
+        }
+        if ("priceOverride" in body) {
+          if (body.priceOverride != null && body.priceOverride !== "") {
+            const exact = canonicalDecimal(body.priceOverride, 4);
+            if (exact === null) return NextResponse.json({ error: "invalid price override" }, { status: 422 });
+            sets.push(sql`price_override = ${normalizeMoney(exact)}`);
+          } else {
+            sets.push(sql`price_override = null`);
+          }
+        }
         if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);
         if ("nextBillOn" in body) sets.push(sql`next_bill_on = ${body.nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
