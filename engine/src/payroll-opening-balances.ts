@@ -693,6 +693,7 @@ export async function saveOpeningBalances(input: {
            set ${sql.join(updates, sql`, `)},
                updated_by = ${input.actorId},
                updated_at = now()
+        where payroll_opening_balances.org_id = ${input.orgId}
         returning id
       `));
       const rowId = saved.rows[0]!.id;
