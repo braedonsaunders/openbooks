@@ -551,8 +551,8 @@ export async function getFolder(
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
            f.record_id as "recordId", f.owner_id as "ownerId",
-           (select count(*) from folders c where c.parent_folder_id = f.id) as "childCount",
-           (select count(*) from files fi where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
+           (select count(*) from folders c where c.parent_folder_id = f.id and c.org_id = ${orgId}) as "childCount",
+           (select count(*) from files fi where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
       from folders f
      where f.id = ${id} and f.org_id = ${orgId}
   `))
@@ -674,7 +674,7 @@ export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boo
     await tx.execute(sql`update folders set is_inactive = true, updated_at = now() where id in (${descendants})`)
     await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
-       where folder_id in (${descendants}) and not is_inactive
+       where folder_id in (${descendants}) and org_id = ${orgId} and not is_inactive
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
     `)
   })
@@ -688,7 +688,7 @@ export async function restoreFolder(orgId: string, id: string): Promise<boolean>
   await db.transaction(async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
     await tx.execute(sql`update folders set is_inactive = false, updated_at = now() where id in (${descendants})`)
-    await tx.execute(sql`update files set is_inactive = false, updated_at = now() where folder_id in (${descendants})`)
+    await tx.execute(sql`update files set is_inactive = false, updated_at = now() where folder_id in (${descendants}) and org_id = ${orgId}`)
   })
   return true
 }
@@ -956,9 +956,9 @@ export async function listFolderContents(
                  f.is_inactive as "isInactive", f.record_table as "recordTable",
                  f.record_id as "recordId",
                  (select count(*)::int from folders c
-                   where c.parent_folder_id = f.id and not c.is_inactive) as "childCount",
+                   where c.parent_folder_id = f.id and c.org_id = ${orgId} and not c.is_inactive) as "childCount",
                  (select count(*)::int from files fi
-                   where fi.folder_id = f.id and not fi.is_inactive) as "fileCount"
+                   where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
             from folders f
            where f.org_id = ${orgId} and not f.is_inactive and ${parentPred}
              and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
