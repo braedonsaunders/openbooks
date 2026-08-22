@@ -994,6 +994,7 @@ async function loadEquipmentCharges(
            coalesce(dl.bill_amount, 0)::text as bill_amount
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+      join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id
      where dl.org_id = ${orgId}
        and d.kind = 'project_charge'
        and d.status in ('approved', 'posted')

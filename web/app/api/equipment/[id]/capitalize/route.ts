@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
 
@@ -32,6 +33,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(unit.subsidiary_id)) {
     return NextResponse.json({ error: 'forbidden subsidiary' }, { status: 403 })
   }
+  const ownedSub = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries
+     where org_id = ${orgId} and id = ${unit.subsidiary_id}
+       and is_active and not is_elimination`))
+  if (!ownedSub.rows[0]) {
+    return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
+  }
+  const acquisitionCost = normalizeMoney(unit.purchase_price || '0')
 
   const categoryId = await ensureDefaultCategory(orgId, userId)
   const nextRes = (await db.execute<{ n: number }>(sql`
@@ -45,9 +54,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       insert into fixed_assets
         (org_id, subsidiary_id, category_id, asset_number, name, description, status,
          acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
-      values (${orgId}, ${unit.subsidiary_id}, ${categoryId}, ${assetNumber}, ${unit.name},
+      values (${orgId}, ${ownedSub.rows[0].id}, ${categoryId}, ${assetNumber}, ${unit.name},
               ${unit.description}, ${status}, ${unit.acquired_on}, ${unit.in_service_on},
-              ${unit.purchase_price || '0'}, '0', ${unit.serial_number}, ${userId}, ${userId})
+              ${acquisitionCost}, '0', ${unit.serial_number}, ${userId}, ${userId})
       returning id`))
     const newId = ins.rows[0].id
     await tx.execute(sql`
