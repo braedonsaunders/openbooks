@@ -1038,7 +1038,7 @@ async function usEmployeeYtd(
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
       + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax
     from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id
+    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
     join documents d on d.id = r.document_id and d.org_id = r.org_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}

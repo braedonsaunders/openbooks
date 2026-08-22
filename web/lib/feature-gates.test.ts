@@ -1003,6 +1003,26 @@ test('the surfaces this test was written for are covered', () => {
     'derived-rule setup must hide the equipment picker when Equipment is off',
   )
   assert.match(
+    read('lib/setup/registry.ts'),
+    /control\.key === 'showOnFieldTicket'/,
+    'time-type setup must hide showOnFieldTicket when Field Tickets is off',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /time-types[\s\S]{0,200}showOnFieldTicket[\s\S]{0,120}fieldTickets/,
+    'time-type setup must not persist showOnFieldTicket when Field Tickets is off — existing flags stay',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /entity\.key === 'time-types'[\s\S]{0,160}return 'not found'/,
+    'time-type setup must 404 — not persist — showOnFieldTicket when Field Tickets is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /showOnFieldTicket is not available/,
+    'time-type import must refuse showOnFieldTicket when Field Tickets is off — existing flags stay',
+  )
+  assert.match(
     read('app/api/equipment/[id]/route.ts'),
     /isFeatureEnabled\([^,]+, 'projects'\)/,
     'equipment PATCH must not change the rate-book link when Projects is off — existing links stay',

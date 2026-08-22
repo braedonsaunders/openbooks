@@ -127,6 +127,18 @@ test('every information-return box option is a real statutory box', () => {
   }
 })
 
+test('time-type field-ticket visibility follows the Field Tickets feature flag', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('time-types')
+  assert.ok(entity)
+  const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true, fieldTickets: true })
+  assert.ok(enabled.fields.some((field) => field.key === 'showOnFieldTicket'))
+  assert.ok(enabled.columns.some((column) => column.key === 'showOnFieldTicket'))
+
+  const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true, fieldTickets: false })
+  assert.ok(!disabled.fields.some((field) => field.key === 'showOnFieldTicket'))
+  assert.ok(!disabled.columns.some((column) => column.key === 'showOnFieldTicket'))
+})
+
 test('derived-rule equipment controls follow the Equipment feature flag', () => {
   const entity = SETUP_ENTITY_BY_KEY.get('pay-derived-rules')
   assert.ok(entity)

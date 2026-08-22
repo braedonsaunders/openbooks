@@ -86,6 +86,7 @@ const listSetupRecordsTool: AssistantToolDef = {
     const entity = setupEntityForFeatureState(base, {
       multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
       equipment: featureEnabled(features, "equipment"),
+      fieldTickets: featureEnabled(features, "fieldTickets"),
     });
     const limit = Math.min(a.limit ?? 50, 200);
     const idColumn = entity.idColumn ?? "id";

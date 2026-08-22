@@ -86,7 +86,7 @@ async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<b
  *  does not rewrite the gated value as a new persist. */
 function writableSetupEntity(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean; equipment: boolean },
+  features: { multiSubsidiary: boolean; equipment: boolean; fieldTickets: boolean },
 ): SetupEntity {
   const next = setupEntityForFeatureState(entity, features)
   if (features.equipment) return next
@@ -131,6 +131,10 @@ async function validateEntityIntegrity(
       && !(await isFeatureEnabled(orgId, 'equipment'))) {
       return 'not found'
     }
+  }
+  if (entity.key === 'time-types' && body.showOnFieldTicket !== undefined
+    && !(await isFeatureEnabled(orgId, 'fieldTickets'))) {
+    return 'not found'
   }
   if (entity.key === 'number-sequences') {
     const current = rowId
@@ -560,6 +564,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
+    fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   })
   const built = buildRow(writableEntity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
@@ -718,6 +723,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
+    fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   })
   const built = buildRow(writableEntity, body, { forCreate: false })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })

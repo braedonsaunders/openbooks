@@ -237,6 +237,7 @@ export default async function SetupEntityPage({
   const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
     equipment: featureEnabled(features, 'equipment'),
+    fieldTickets: featureEnabled(features, 'fieldTickets'),
   }))
 
   const t = await getTranslations('admin.setup')

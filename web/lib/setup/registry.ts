@@ -204,28 +204,31 @@ export interface SetupEntity {
  */
 export function setupEntityForFeatureState(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean; equipment?: boolean },
+  features: { multiSubsidiary: boolean; equipment?: boolean; fieldTickets?: boolean },
 ): SetupEntity {
   const equipmentOn = features.equipment !== false
-  if (features.multiSubsidiary && equipmentOn) return entity
+  const fieldTicketsOn = features.fieldTickets !== false
+  if (features.multiSubsidiary && equipmentOn && fieldTicketsOn) return entity
   const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
     control.ref === 'subsidiaries' || control.key === 'subsidiaryIncludeChildren'
   const isEquipmentControl = (control: SetupField | SetupColumn) =>
     control.key === 'equipmentUnitId' || control.ref === 'equipment-units'
+  const isFieldTicketControl = (control: SetupField | SetupColumn) =>
+    control.key === 'showOnFieldTicket'
   const withoutEquipmentCharge = <T extends { options?: SetupOption[] }>(control: T): T => {
     if (equipmentOn || !control.options?.some((option) => option.value === 'equipment_charge')) {
       return control
     }
     return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
   }
+  const visible = (control: SetupField | SetupColumn) =>
+    (features.multiSubsidiary || !isSubsidiaryControl(control))
+    && (equipmentOn || !isEquipmentControl(control))
+    && (fieldTicketsOn || !isFieldTicketControl(control))
   return {
     ...entity,
-    columns: entity.columns
-      .filter((column) => (features.multiSubsidiary || !isSubsidiaryControl(column)) && (equipmentOn || !isEquipmentControl(column)))
-      .map(withoutEquipmentCharge),
-    fields: entity.fields
-      .filter((field) => (features.multiSubsidiary || !isSubsidiaryControl(field)) && (equipmentOn || !isEquipmentControl(field)))
-      .map(withoutEquipmentCharge),
+    columns: entity.columns.filter(visible).map(withoutEquipmentCharge),
+    fields: entity.fields.filter(visible).map(withoutEquipmentCharge),
     filters: entity.filters?.map(withoutEquipmentCharge),
   }
 }
