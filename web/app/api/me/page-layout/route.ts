@@ -42,6 +42,7 @@ export async function PUT(req: Request) {
     values (${user.orgId}, ${user.id}, ${page}, ${JSON.stringify(layout)}::jsonb, ${user.id}, ${user.id})
     on conflict (org_id, user_id, page)
     do update set layout = excluded.layout, updated_at = now(), updated_by = excluded.updated_by
+    where user_page_layouts.org_id = ${user.orgId}
   `);
 
   return NextResponse.json({ ok: true, page, layout });
