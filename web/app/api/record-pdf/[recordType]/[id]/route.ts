@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../../lib/documents";
 import { pdfResponse, safeName } from "../../../../../lib/export";
@@ -38,7 +39,8 @@ export async function GET(
 
   try {
     const pdf = await mergeAndPrintPdf(tpl, record.values);
-    return pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}`));
+    const stamp = await businessToday(user.orgId);
+    return pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}-${stamp}`));
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
