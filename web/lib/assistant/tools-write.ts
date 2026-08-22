@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { cmp, formatMoney, isZero, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
+import { canonicalDecimal } from "../exact-decimal";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";
 
@@ -52,7 +53,11 @@ const draftJournalEntry: AssistantToolDef = {
     // Reject imbalance up front with a message the model can act on.
     let exactAmounts: string[];
     try {
-      exactAmounts = a.lines.map((line) => normalizeMoney(String(line.amount)));
+      exactAmounts = a.lines.map((line) => {
+        const exact = canonicalDecimal(line.amount, 4);
+        if (exact === null) throw new Error("invalid_amount");
+        return normalizeMoney(exact);
+      });
     } catch {
       return { ok: false, error: "line amounts must have at most four decimal places" };
     }
