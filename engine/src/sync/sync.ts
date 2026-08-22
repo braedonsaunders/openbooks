@@ -1067,6 +1067,17 @@ function persistSyncLineMoney(value: unknown, label: string): string {
   }
 }
 
+/** Persist a synced document FX rate through exact decimal at numeric(19,10). Fail closed. */
+function persistSyncFxRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 10);
+  if (exact === null) throw new Error("FX rate must be an exact decimal");
+  try {
+    return normalizeDecimal(exact, 10);
+  } catch {
+    throw new Error("FX rate must be an exact decimal");
+  }
+}
+
 /** Insert source lines and their tax evidence in the caller's transaction. */
 async function insertImportedLines(
   tx: SyncTx,
@@ -1503,7 +1514,7 @@ export async function runSync(
                 postingPeriodId: doc.postingPeriodId ?? null,
                 dueDate: doc.dueDate,
                 currency: doc.currency ?? source.baseCurrency,
-                fxRate: normalizeDecimal(doc.fxRate ?? "1", 10),
+                fxRate: persistSyncFxRate(doc.fxRate ?? "1"),
                 status: "draft",
                 subtotal: persistSyncLineMoney(doc.subtotal ?? "0", "subtotal"),
                 taxTotal: "0",

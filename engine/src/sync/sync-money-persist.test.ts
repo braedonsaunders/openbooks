@@ -44,3 +44,19 @@ test("document insert persists subtotal and total through persistSyncLineMoney",
   assert.doesNotMatch(body, /normalizeMoney\(doc\.subtotal/);
   assert.doesNotMatch(body, /normalizeMoney\(doc\.total/);
 });
+
+test("document insert persists fxRate through canonicalDecimal then normalizeDecimal at FX scale", () => {
+  const helperStart = source.indexOf("function persistSyncFxRate");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncFxRate helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 10\)/);
+  assert.match(helper, /normalizeDecimal\(exact, 10\)/);
+  assert.match(helper, /FX rate must be an exact decimal/);
+
+  const insert = source.indexOf(".insert(schema.documents)");
+  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
+  const body = source.slice(insert, returning > insert ? returning : undefined);
+  assert.match(body, /persistSyncFxRate\(doc\.fxRate \?\? "1"\)/);
+  assert.doesNotMatch(body, /normalizeDecimal\(doc\.fxRate \?\? "1", 10\)/);
+});
