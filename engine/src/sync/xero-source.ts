@@ -1,3 +1,4 @@
+import { businessToday } from "../business-date.ts";
 import { XeroClient, xeroDate } from "../xero.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
@@ -84,8 +85,10 @@ export class XeroSource implements MigrationSource {
   readonly name = "xero";
   readonly refKey = "xeroId";
   readonly baseCurrency: string;
+  private readonly orgId: string;
 
-  constructor(private client: XeroClient, opts: { baseCurrency?: string } = {}) {
+  constructor(private client: XeroClient, opts: { orgId: string; baseCurrency?: string }) {
+    this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
 
@@ -115,9 +118,9 @@ export class XeroSource implements MigrationSource {
     if (!org?.FinancialYearEndMonth || !org.FinancialYearEndDay) {
       throw new Error("Xero organisation fiscal year end is required for period migration");
     }
-    const now = new Date();
-    const fallbackStart = new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
-    const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
+    const year = Number((await businessToday(this.orgId)).slice(0, 4));
+    const fallbackStart = `${year - 7}-01-01`;
+    const horizon = `${year + 1}-12-31`;
     const periodLock = xeroDate(org.PeriodLockDate)?.slice(0, 10) ?? null;
     const yearLock = xeroDate(org.EndOfYearLockDate)?.slice(0, 10) ?? null;
     return monthlySourcePeriods(
