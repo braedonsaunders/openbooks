@@ -153,7 +153,11 @@ export async function POST(req: Request) {
         if (body.quantity != null) {
           const exact = canonicalDecimal(body.quantity, 4);
           if (exact === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          quantity = exact;
+          try {
+            quantity = normalizeMoney(exact);
+          } catch {
+            return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          }
         }
         let priceOverride: string | null | undefined;
         if ("priceOverride" in body) {
@@ -176,8 +180,14 @@ export async function POST(req: Request) {
         if ("status" in body) sets.push(sql`status = ${body.status}`);
         if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
         if ("quantity" in body) {
-          const quantity = canonicalDecimal(body.quantity, 4);
-          if (quantity === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          const quantityRaw = canonicalDecimal(body.quantity, 4);
+          if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          let quantity: string;
+          try {
+            quantity = normalizeMoney(quantityRaw);
+          } catch {
+            return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          }
           sets.push(sql`quantity = ${quantity}`);
         }
         if ("priceOverride" in body) {
