@@ -232,7 +232,8 @@ export async function convertOrder(
     `)
 
     const opportunityLink = (await tx.execute<{ opportunity_id: string }>(sql`
-      select opportunity_id from crm_opportunity_documents where document_id = ${sourceId}
+      select opportunity_id from crm_opportunity_documents
+       where document_id = ${sourceId} and org_id = ${orgId}
     `))
     if (opportunityLink.rows[0]) {
       await tx.execute(sql`
