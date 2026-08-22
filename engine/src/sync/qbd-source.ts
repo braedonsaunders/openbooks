@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday, parseIsoDate } from "../business-date.ts";
 import { db } from "../db.ts";
 import { fromUnits, toUnits } from "../money.ts";
 import { latestWebConnectorHeartbeat, prepareCapture, releaseCapture, waitForCapture, type CaptureResponse } from "../qbd/bridge.ts";
@@ -198,7 +199,7 @@ export class QbdSource implements MigrationSource {
     const preferences = (await this.parsedFamily("preferences"))[0];
     const closeDateRaw = preferences ? findDeep(preferences, "ClosingDate") : undefined;
     const closeDate = text(closeDateRaw) || null;
-    const horizon = new Date();
+    const horizon = parseIsoDate(await businessToday(this.config.orgId));
     horizon.setUTCFullYear(horizon.getUTCFullYear() + 1);
     return monthlySourcePeriods(
       "qbd-period",
