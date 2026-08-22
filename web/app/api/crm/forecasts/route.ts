@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
 
 export const runtime = 'nodejs'
@@ -14,8 +15,11 @@ export async function GET(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.forecasts.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const params = req.nextUrl.searchParams
-  const periodStart = params.get('periodStart') ?? new Date().toISOString().slice(0, 8) + '01'
-  const periodEnd = params.get('periodEnd') ?? new Date(new Date(periodStart).getFullYear(), new Date(periodStart).getMonth() + 3, 0).toISOString().slice(0, 10)
+  const today = await businessToday(gate.user.orgId)
+  const defaultStart = startOfMonth(today)
+  const defaultEnd = addCalendarDays(addCalendarMonthsStart(defaultStart, 3), -1)
+  const periodStart = params.get('periodStart') ?? defaultStart
+  const periodEnd = params.get('periodEnd') ?? defaultEnd
   const ownerUserId = params.get('ownerUserId')
   const salesTeamId = params.get('salesTeamId')
   if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })

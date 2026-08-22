@@ -95,6 +95,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
     'app/api/construction',
     'app/api/billing-requests',
     'app/api/project-charges',
+    'app/api/rate-book-assignments',
   ],
   timeTracking: ['app/api/timesheets'],
   payroll: ['app/api/payroll', 'app/api/work-schedules'],

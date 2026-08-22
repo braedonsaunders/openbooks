@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { currentUser } from "../../../../../lib/auth";
+import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,9 @@ export const runtime = "nodejs";
  * Feeds the native Drawer flyouts on the Employees / Items / Titles tabs.
  */
 export async function GET(req: Request) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await guardPermission("reports.read");
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
 
   const url = new URL(req.url);
   const employee = url.searchParams.get("employee");
@@ -37,10 +38,10 @@ export async function GET(req: Request) {
       cust.display_name as customer_name,
       t.memo
     from time_entries t
-    left join items i on i.id = t.item_id
-    left join parties emp on emp.id = t.employee_party_id
-    left join projects pr on pr.id = t.project_id
-    left join parties cust on cust.id = pr.customer_id
+    left join items i on i.id = t.item_id and i.org_id = t.org_id
+    left join parties emp on emp.id = t.employee_party_id and emp.org_id = t.org_id
+    left join projects pr on pr.id = t.project_id and pr.org_id = t.org_id
+    left join parties cust on cust.id = pr.customer_id and cust.org_id = t.org_id
     where t.org_id = ${user.orgId} and ${filter}
       and t.worked_on >= ${from} and t.worked_on <= ${to}
       and (t.memo_is_private is not true)

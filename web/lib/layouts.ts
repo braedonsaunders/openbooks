@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { resolveOrgId } from "./org-scope";
 import type { DimFilter } from "./reports";
 
 /**
@@ -46,10 +47,11 @@ const CREDIT_NORMAL = new Set([
 ]);
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"];
 
-export async function layoutsFor(statement: "pnl" | "balance_sheet") {
+export async function layoutsFor(statement: "pnl" | "balance_sheet", orgId?: string) {
+  const resolvedOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select id, name, is_default from statement_layouts
-     where statement = ${statement} order by is_default desc, name`)) as any;
+     where org_id = ${resolvedOrgId} and statement = ${statement} order by is_default desc, name`)) as any;
   return r.rows as { id: string; name: string; is_default: boolean }[];
 }
 
@@ -58,8 +60,10 @@ export async function renderLayout(
   from: string,
   to: string,
   dims?: DimFilter,
+  orgId?: string,
 ): Promise<{ name: string; lines: RenderedLine[] } | null> {
-  const lay = (await db.execute(sql`select name, statement, rows from statement_layouts where id = ${layoutId}`)) as any;
+  const resolvedOrgId = await resolveOrgId(orgId);
+  const lay = (await db.execute(sql`select name, statement, rows from statement_layouts where id = ${layoutId} and org_id = ${resolvedOrgId}`)) as any;
   if (!lay.rows[0]) return null;
   const rows = lay.rows[0].rows as LayoutRow[];
 
@@ -70,9 +74,11 @@ export async function renderLayout(
   const balances = (await db.execute(sql`
     select a.id, a.number, a.name, a.type, sum(l.amount) as raw
       from journal_lines l
-      join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
-     where a.type in ${PNL_TYPES}
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+     where l.org_id = ${resolvedOrgId}
+       and a.org_id = ${resolvedOrgId}
+       and a.type in ${PNL_TYPES}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimSql}
      group by a.id having abs(sum(l.amount)) > 0
