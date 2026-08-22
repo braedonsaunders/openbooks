@@ -67,7 +67,7 @@ export async function tick(): Promise<void> {
       const claimed = await withBypassContext(() =>
         db.execute(sql`
         update user_scripts set next_run_at = ${next}
-         where id = ${s.id} and next_run_at = ${s.nextRunAt}
+         where id = ${s.id} and org_id = ${s.orgId} and next_run_at = ${s.nextRunAt}
       `));
       if (!claimed.rowCount) continue; // someone else claimed it (or it changed)
 
