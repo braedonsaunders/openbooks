@@ -520,7 +520,7 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
       left join lateral (
         select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
           from applications a
-         where a.to_line_id = jl.id and a.unapplied_at is null
+         where a.to_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
       ) ap on true
      where jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
      order by jl.due_date nulls last, je.posting_date, je.entry_number
@@ -1164,7 +1164,7 @@ export async function createPaymentRun(opts: {
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
       left join lateral (
         select sum(a.amount) as applied from applications a
-         where a.to_line_id = jl.id and a.unapplied_at is null
+         where a.to_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null
       ) ap on true
      where d.id in ${opts.billDocumentIds}
        and d.org_id = ${opts.orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
@@ -1278,7 +1278,7 @@ export async function createPaymentRun(opts: {
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
         left join lateral (
           select sum(a.amount) as applied from applications a
-           where a.from_line_id = jl.id and a.unapplied_at is null
+           where a.from_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null
         ) ap on true
        where d.org_id = ${opts.orgId} and d.party_id = ${partyId}
          and d.kind = 'vendor_credit' and d.status = 'posted'
