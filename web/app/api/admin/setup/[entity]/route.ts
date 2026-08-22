@@ -759,12 +759,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   })
-  const built = buildRow(writableEntity, body, { forCreate: false })
+  // Rate-book currency is Multi-currency configuration. When that switch is
+  // off the update descriptor must not require the field, so omitting it
+  // keeps the stored book instead of a 400.
+  const patchEntity = entity.key === 'item-rate-books' && !multiCurrency
+    ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
+    : writableEntity
+  const built = buildRow(patchEntity, body, { forCreate: false })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
@@ -818,6 +825,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   }
 
   if (entity.key === 'item-rate-books') {
+    // Rate-book currency is Multi-currency configuration. Turning that
+    // switch off must refuse a write; omitting currency keeps the
+    // stored book.
+    if (body.currency !== undefined && !multiCurrency) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     try {
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
@@ -838,7 +851,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
           }
         }
         const updated = (await tx.execute(sql`
-          update item_rate_books set name = ${String(body.name)}, currency = ${String(body.currency)},
+          update item_rate_books set name = ${String(body.name)},
+                 currency = case when ${body.currency === undefined} then currency else ${String(body.currency)} end,
                  is_default = ${isDefault}, is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} returning id
         `)) as any
