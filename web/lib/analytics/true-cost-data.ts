@@ -97,8 +97,8 @@ export interface CustomCategory {
   allocationBase: AllocationBase;
   rateFormat: RateFormat;
   includeInComposite: boolean;
-  manualConfig?: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number; byDeptAmounts?: Record<string, number>; unitType?: AllocationBase; perUnitRate?: number };
-  derivedConfig?: { sourceCategory?: string; percentage?: number; allocationBase?: AllocationBase | "same" };
+  manualConfig?: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number | string; byDeptAmounts?: Record<string, number | string>; unitType?: AllocationBase; perUnitRate?: number | string };
+  derivedConfig?: { sourceCategory?: string; percentage?: number | string; allocationBase?: AllocationBase | "same" };
   formulaConfig?: { formula?: string };
 }
 
@@ -109,7 +109,7 @@ export interface CategorySettings {
   rateFormat?: RateFormat;
   includeInComposite?: boolean;
   allocationWeights?: Record<string, number>;
-  allocationTiers?: { min?: number; max?: number; rate?: number }[];
+  allocationTiers?: { min?: number; max?: number; rate?: number | string }[];
 }
 
 /** A named engine profile with all tunables in one bundle. */
@@ -118,8 +118,8 @@ export interface TrueCostProfile {
   name: string;
   color?: string | null;
   compositeMethod: CompositeMethod;
-  baseLaborRate: number; // cascading base
-  fringeRate: number; // scenario fringe (0..1)
+  baseLaborRate: number | string; // cascading base
+  fringeRate: number | string; // scenario fringe (0..1)
   categorySettings: Record<string, CategorySettings>;
   customCategories: CustomCategory[];
   baseOverrides: { squareFeet?: Record<string, number>; units?: Record<string, number>; custom?: Record<string, number> };
@@ -180,8 +180,8 @@ export interface TrueCostData {
   config: {
     activeProfileId: string;
     compositeMethod: CompositeMethod;
-    baseLaborRate: number;
-    fringeRate: number;
+    baseLaborRate: number | string;
+    fringeRate: number | string;
     categorySettings: Record<string, CategorySettings>;
     profiles: { id: string; name: string; color?: string | null }[];
     customCategories: CustomCategory[];

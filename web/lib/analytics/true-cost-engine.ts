@@ -119,7 +119,7 @@ export interface CategoryRateConfig {
   rateFormat?: RateFormat;
   includeInComposite?: boolean;
   allocationWeights?: Record<string, number>;
-  allocationTiers?: { min?: number; max?: number; rate?: number }[];
+  allocationTiers?: { min?: number; max?: number; rate?: number | string }[];
 }
 
 /**
@@ -168,7 +168,7 @@ export function calculateRate(
           const t = sorted[i]!;
           const tMin = Number(t.min) || 0;
           const tMax = Number(t.max) || 999999;
-          if (baseVal >= tMin && baseVal <= tMax && t.rate && t.rate > 0) return Number(t.rate);
+          if (baseVal >= tMin && baseVal <= tMax && Number(t.rate) > 0) return Number(t.rate);
         }
       }
       return safeDiv(sumVals(expenses), baseVal);
@@ -255,7 +255,7 @@ export interface CompositeConfig {
   includeCategories?: string[];
   excludeCategories?: string[];
   cascadeOrder?: string[];
-  baseLaborRate?: number;
+  baseLaborRate?: number | string;
 }
 
 /** Calculate a composite rate using sum, weighted, or cascading behavior. */
@@ -290,7 +290,7 @@ export function calculateCompositeRate(
     }
 
     case "cascading": {
-      const baseLabor = periodData.avgLaborRate || compositeConfig.baseLaborRate || 50;
+      const baseLabor = Number(periodData.avgLaborRate || compositeConfig.baseLaborRate || 50);
       let running = baseLabor;
       const order = compositeConfig.cascadeOrder || includeCategories;
       for (const catId of order) {
@@ -315,7 +315,7 @@ export function calculateCompositeRate(
 
 /** Calculate manual category values in fixed-total, department, or per-unit mode. */
 export function calculateManualCategoryData(
-  manualConfig: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number; byDeptAmounts?: Record<string, number>; unitType?: AllocationBase; perUnitRate?: number },
+  manualConfig: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number | string; byDeptAmounts?: Record<string, number | string>; unitType?: AllocationBase; perUnitRate?: number | string },
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
@@ -358,7 +358,7 @@ export function calculateManualCategoryData(
 
 /** Calculate a category as a percentage of another category. */
 export function calculateDerivedCategoryData(
-  derivedConfig: { sourceCategory?: string; percentage?: number; allocationBase?: AllocationBase | "same" },
+  derivedConfig: { sourceCategory?: string; percentage?: number | string; allocationBase?: AllocationBase | "same" },
   categoryTotals: Record<string, { expenseOverall: number }>,
   allocationBase: AllocationBase,
   deptIds: string[],
@@ -368,7 +368,7 @@ export function calculateDerivedCategoryData(
   for (const id of deptIds) expense[id] = 0;
 
   const sourceId = derivedConfig.sourceCategory;
-  const percentage = derivedConfig.percentage ?? 100;
+  const percentage = Number(derivedConfig.percentage ?? 100);
   if (!sourceId || !categoryTotals[sourceId]) return { expense, totalExpense: 0 };
 
   const totalDerived = (categoryTotals[sourceId]!.expenseOverall || 0) * (percentage / 100);
