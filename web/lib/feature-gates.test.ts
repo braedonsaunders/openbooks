@@ -374,6 +374,21 @@ test('the surfaces this test was written for are covered', () => {
     'quote/SO/PO PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
   )
   assert.match(
+    read('app/api/timesheets/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'timesheet line writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/timesheets/route.ts'),
+    /storedIds\.has\(p\.itemId\)/,
+    'timesheet save must keep stored inventory items when Inventory is off',
+  )
+  assert.match(
+    read('app/api/timesheets/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'timesheet save must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
+  )
+  assert.match(
     read('lib/order-cycle.ts'),
     /\['inventory', 'assembly', 'kit'\]/,
     'order conversion must name the inventory kinds the Features switch refuses',
