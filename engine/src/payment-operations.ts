@@ -339,7 +339,7 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
       left join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
         and b.is_active and b.approved_at is not null
       left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-      left join payment_mandates m on m.id = i.mandate_id and m.status = 'active'
+      left join payment_mandates m on m.id = i.mandate_id and m.org_id = i.org_id and m.status = 'active'
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
      order by p.display_name, i.id
   `));
