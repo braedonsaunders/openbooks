@@ -564,7 +564,7 @@ export async function syncNetSuiteFixedAssets(
         status: "approved",
         subtotal: persistSyncLineMoney(document.subtotal ?? "0", "subtotal"),
         taxTotal: "0",
-        total: normalizeMoney(document.total ?? "0"),
+        total: persistSyncLineMoney(document.total ?? "0", "total"),
         memo: document.memo,
         referenceNumber: document.referenceNumber,
         custom: document.controlAccountId
