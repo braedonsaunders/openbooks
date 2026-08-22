@@ -8,6 +8,7 @@ import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { can, requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { REPORT_ENTITIES } from '@openbooks/reports'
 import { loadViews } from '../../../../lib/views'
 import { NewViewButton } from './NewViewButton'
@@ -38,9 +39,10 @@ export default async function ViewsPage({
   const params = parseListParams(sp, { sort: 'updated', dir: 'desc', perPage: PER_PAGE, allowedSorts: ['updated', 'name'] as const })
   const scopeFilter = pickString(sp.scope) ?? 'all'
 
-  const [all, branding] = await Promise.all([
+  const [all, branding, inventoryEnabled] = await Promise.all([
     loadViews(authz.user.orgId, authz.user.id, authz.permissions),
     orgBranding(authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'inventory'),
   ])
   const q = params.q?.toLowerCase()
   const filtered = all.filter((s) => {
@@ -153,6 +155,7 @@ export default async function ViewsPage({
           canCreate={canCreate}
           canAdmin={authz.permissions.has('*') || openView.owner_id === authz.user.id}
           company={branding.orgName}
+          inventoryEnabled={inventoryEnabled}
           hiddenEntityKeys={REPORT_ENTITIES.filter(
             (e) => e.requiredPermission && !can(authz, e.requiredPermission),
           ).map((e) => e.key)}

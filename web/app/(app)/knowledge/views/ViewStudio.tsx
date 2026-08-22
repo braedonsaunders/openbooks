@@ -36,6 +36,7 @@ export function ViewStudio({
   canAdmin,
   company,
   hiddenEntityKeys = [],
+  inventoryEnabled,
 }: {
   view: ViewRow
   canCreate: boolean
@@ -44,6 +45,7 @@ export function ViewStudio({
   /** Catalog entities this user may not query (payroll wages) — hidden from
    *  the source picker, exactly as the report builder hides them. */
   hiddenEntityKeys?: string[]
+  inventoryEnabled: boolean
 }) {
   const t = useTranslations('knowledge.views.studio')
   const tb = useTranslations('reports.custom.builder')
@@ -257,6 +259,7 @@ export function ViewStudio({
               <Label>{tc('labels.filters')}</Label>
               <FilterTree
                 entity={entity}
+                inventoryEnabled={inventoryEnabled}
                 group={query.filters ?? { combinator: 'and', rules: [] }}
                 onChange={(g) => patch({ filters: g.rules.length ? g : null })}
               />

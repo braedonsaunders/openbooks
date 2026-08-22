@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { requirePermission } from '../../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { orgBranding } from '../../../../../../lib/report-pdf'
@@ -17,7 +18,11 @@ export default async function ReportBuilderPage({
   const authz = await requirePermission('reports.create')
   const { id } = await params
   if (!isUuid(id)) notFound()
-  const [definition, branding] = await Promise.all([loadReportDefinition(authz.user.orgId, id), orgBranding()])
+  const [definition, branding, inventoryEnabled] = await Promise.all([
+    loadReportDefinition(authz.user.orgId, id),
+    orgBranding(),
+    isFeatureEnabled(authz.user.orgId, 'inventory'),
+  ])
   if (!definition) notFound()
   // Standard statement reports keep their rich drill-through pages — the entity
   // query-builder edits `query` definitions only.
@@ -27,6 +32,7 @@ export default async function ReportBuilderPage({
   return (
     <ReportBuilder
       hiddenEntityKeys={await hiddenReportEntityKeys(authz)}
+      inventoryEnabled={inventoryEnabled}
       company={branding.orgName}
       definition={{
         id: definition.id,
