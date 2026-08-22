@@ -20,6 +20,7 @@ import { orgToday, rangeInputFields, resolveToolRange, type RangeArgs } from "./
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
+import { isDocKindEnabled } from "../documents";
 import { isFeatureEnabled } from "../features";
 
 /**
@@ -289,14 +290,20 @@ const KIND_PERM: Record<string, string> = {
   customer_invoice: "ar.read",
   customer_credit: "ar.read",
   sales_order: "ar.read",
-  estimate: "ar.read",
+  quote: "ar.read",
   expense_report: "expenses.read",
   journal: "gl.read",
   transfer: "gl.read",
 };
 
-function allowedKinds(authz: Authz): string[] {
-  return Object.keys(KIND_PERM).filter((k) => can(authz, KIND_PERM[k]!));
+async function allowedKinds(authz: Authz): Promise<string[]> {
+  const kinds: string[] = []
+  for (const kind of Object.keys(KIND_PERM)) {
+    if (!can(authz, KIND_PERM[kind]!)) continue
+    if (!(await isDocKindEnabled(authz.user.orgId, kind))) continue
+    kinds.push(kind)
+  }
+  return kinds
 }
 
 const findDocuments: AssistantToolDef = {
@@ -328,7 +335,7 @@ const findDocuments: AssistantToolDef = {
       toDate?: string;
       limit?: number;
     };
-    const kinds = allowedKinds(authz);
+    const kinds = await allowedKinds(authz);
     if (a.kind && !kinds.includes(a.kind)) {
       return {
         ok: false,
@@ -410,6 +417,7 @@ const getDocument: AssistantToolDef = {
     `));
     const d = doc.rows[0];
     if (!d) return { ok: false, error: "document_not_found" };
+    if (!(await isDocKindEnabled(authz.user.orgId, d.kind))) return { ok: false, error: "document_not_found" };
     const perm = KIND_PERM[d.kind];
     if (!perm || !can(authz, perm)) return { ok: false, error: "forbidden" };
     const lines = (await db.execute<any>(sql`
