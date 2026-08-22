@@ -6,8 +6,16 @@ import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
 import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
+import { inventoryFeatureEnabled } from "./inventory.ts";
 
-export class PropertyManagementError extends Error {}
+export class PropertyManagementError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message);
+    this.name = "PropertyManagementError";
+  }
+}
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 function exactMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
@@ -636,6 +644,15 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
     const chargeResult = (await tx.execute<any>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
     const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
     if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
+    // Stored charges and the scheduled escalation stay. Copying an inventory /
+    // assembly / kit item onto a new charge is Inventory configuration.
+    if (charge.item_id && !(await inventoryFeatureEnabled(tx, orgId))) {
+      const item = (await tx.execute<{ kind: string }>(sql`
+        select kind from items where id = ${charge.item_id} and org_id = ${orgId}`));
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        throw new PropertyManagementError("Inventory is disabled", 404);
+      }
+    }
     const alreadyBilled = (await tx.execute(sql`select 1 from lease_schedule_lines where org_id=${orgId} and charge_id=${charge.id}
       and status in ('invoiced','credited') and period_ends_on>=${e.effective_on} limit 1`));
     if (alreadyBilled.rows.length) throw new PropertyManagementError("Affected rent is already billed; credit or void it before applying this escalation");

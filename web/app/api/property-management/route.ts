@@ -553,8 +553,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof PropertyManagementError)
       return NextResponse.json(
-        { error: (error as Error).message },
-        { status: 422 },
+        { error: error.message },
+        { status: error.status },
       );
     const code = (error as { code?: string }).code;
     if (code === "23505")

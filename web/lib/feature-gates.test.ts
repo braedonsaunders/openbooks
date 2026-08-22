@@ -1582,6 +1582,26 @@ test('the surfaces this test was written for are covered', () => {
     'lease-charge import must hide item when Inventory is off',
   )
   assert.match(
+    read('../engine/src/property-management.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'lease escalation must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'applyLeaseEscalation must not persist inventory/assembly/kit items when Inventory is off — stored charges and scheduled escalations stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /PropertyManagementError\("Inventory is disabled", 404\)/,
+    'applyLeaseEscalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /error instanceof PropertyManagementError[\s\S]{0,120}status: error\.status/,
+    'lease apply-escalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
     read('app/api/admin/settings/route.ts'),
     /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
     'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',
