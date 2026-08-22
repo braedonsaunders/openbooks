@@ -6,7 +6,7 @@ import { isUuid } from '../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
-import { isIsoDate, loadWeek, weekStart, weekWindow } from './_lib'
+import { isIsoDate, loadWeek, pinTimesheetEmployee, pinTimesheetLineRefs, weekStart, weekWindow } from './_lib'
 
 export const runtime = 'nodejs'
 
@@ -57,7 +57,10 @@ export async function GET(req: Request) {
   if (!employee || !isUuid(employee)) return bad('Invalid employee')
   if (!weekParam || !isIsoDate(weekParam)) return bad('Invalid week')
 
-  const payload = await loadWeek(orgId, employee, weekStart(weekParam))
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employee)
+  if (!ownedEmployee) return bad('Employee not found')
+
+  const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam))
   return NextResponse.json(payload)
 }
 
@@ -82,11 +85,8 @@ async function save(req: Request) {
   const days = weekWindow(week)
   if (!Array.isArray(body.rows)) return bad('Rows must be a list')
 
-  // Confirm the employee exists in this org (belongs-to-org guard).
-  const emp = (await db.execute(sql`
-    select 1 from parties where id = ${employee} and org_id = ${orgId}
-  `))
-  if (!emp.rows[0]) return bad('Employee not found')
+  const ownedEmployee = await pinTimesheetEmployee(orgId, employee)
+  if (!ownedEmployee) return bad('Employee not found')
 
   // Normalize each grid row × day into a flat list of entries to persist.
   interface Persist {
@@ -123,6 +123,7 @@ async function save(req: Request) {
     if (!validated.ok) return bad(Object.values(validated.errors)[0] ?? 'Invalid custom field')
     const custom = validated.cleaned
     const cells = Array.isArray(r.hours) ? r.hours : []
+    let ownedRefs: Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined
 
     for (let i = 0; i < 7; i++) {
       const h = hoursOrNull(cells[i])
@@ -130,13 +131,24 @@ async function save(req: Request) {
       if (h === null) continue
       // A row that carries hours must at least name a project (the job).
       if (projectId === null) return bad('Each line with hours needs a project')
+      if (ownedRefs === undefined) {
+        ownedRefs = await pinTimesheetLineRefs(orgId, {
+          projectId,
+          itemId,
+          timeTypeId,
+          departmentId,
+        })
+      }
+      if (!ownedRefs || ownedRefs.projectId == null) {
+        return bad('Invalid project, item, time type, or department')
+      }
       toPersist.push({
         workedOn: days[i],
         hours: h,
-        projectId,
-        itemId,
-        timeTypeId,
-        departmentId,
+        projectId: ownedRefs.projectId,
+        itemId: ownedRefs.itemId,
+        timeTypeId: ownedRefs.timeTypeId,
+        departmentId: ownedRefs.departmentId,
         isBillable,
         memo,
         custom,
@@ -157,7 +169,7 @@ async function save(req: Request) {
     await tx.execute(sql`
       delete from time_entries
        where org_id = ${orgId}
-         and employee_party_id = ${employee}
+         and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
          and amends_entry_id is null
          and (
@@ -176,7 +188,7 @@ async function save(req: Request) {
            project_id, department_id, memo, is_billable, status, custom,
            created_by, updated_by)
         values
-          (${orgId}, ${employee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
+          (${orgId}, ${ownedEmployee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
            ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.memo},
            ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
            ${user.id}, ${user.id})
@@ -184,7 +196,7 @@ async function save(req: Request) {
     }
   })
 
-  const payload = await loadWeek(orgId, employee, week)
+  const payload = await loadWeek(orgId, ownedEmployee, week)
   return NextResponse.json(payload)
 }
 

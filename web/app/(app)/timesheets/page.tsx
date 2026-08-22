@@ -15,6 +15,7 @@ import {
   isIsoDate,
   loadPickers,
   loadWeek,
+  pinTimesheetEmployee,
   userEmployeeId,
   weekStart,
 } from '../../api/timesheets/_lib'
@@ -54,7 +55,10 @@ export default async function Timesheets({
   // Flyout: ?timesheet=<employeeId>:<weekStart>, the id the list emits.
   const openParam = pickString(sp.timesheet)
   const [openEmployee, openWeekRaw] = openParam ? openParam.split(':') : []
-  const openEmployeeId = openEmployee && isUuid(openEmployee) ? openEmployee : null
+  const requestedEmployeeId = openEmployee && isUuid(openEmployee) ? openEmployee : null
+  const openEmployeeId = requestedEmployeeId
+    ? await pinTimesheetEmployee(orgId, requestedEmployeeId)
+    : null
   const openWeek = openWeekRaw && isIsoDate(openWeekRaw) ? weekStart(openWeekRaw) : null
   const [pickers, weekPayload, lineFieldDefs] = openEmployeeId && openWeek
     ? await Promise.all([

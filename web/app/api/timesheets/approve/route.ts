@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
-import { isIsoDate, loadWeek, setTimesheetWeekStatus, weekStart, weekWindow } from '../_lib'
+import { isIsoDate, loadWeek, pinTimesheetEmployee, setTimesheetWeekStatus, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -29,6 +29,8 @@ export async function POST(req: Request) {
   const body = (await req.json()) as Body
   if (!body.employee || !isUuid(body.employee)) return bad('Invalid employee')
   if (!body.week || !isIsoDate(body.week)) return bad('Invalid week')
+  const ownedEmployee = await pinTimesheetEmployee(orgId, body.employee)
+  if (!ownedEmployee) return bad('Employee not found')
   const week = weekStart(body.week)
   const days = weekWindow(week)
 
@@ -36,13 +38,13 @@ export async function POST(req: Request) {
     await approveSubmittedTimeEntries({
       orgId,
       actorId: user.id,
-      employeePartyId: body.employee,
+      employeePartyId: ownedEmployee,
       from: days[0],
       to: days[6],
     })
     // The header follows the entries, never leads them: if the financial
     // effects above roll back, the week must not be left reading approved.
-    await setTimesheetWeekStatus(orgId, body.employee, week, 'approved', user.id, null)
+    await setTimesheetWeekStatus(orgId, ownedEmployee, week, 'approved', user.id, null)
   } catch (error) {
     console.error('[timesheets/approve] approval transaction rolled back:', error)
     return NextResponse.json(
@@ -51,6 +53,6 @@ export async function POST(req: Request) {
     )
   }
 
-  const payload = await loadWeek(orgId, body.employee, week)
+  const payload = await loadWeek(orgId, ownedEmployee, week)
   return NextResponse.json(payload)
 }

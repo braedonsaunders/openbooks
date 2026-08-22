@@ -4,7 +4,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canReopenWeek, type EntryProvenance } from '../../../../lib/time-lifecycle'
-import { isIsoDate, loadWeek, setTimesheetWeekStatus, weekStart, weekWindow } from '../_lib'
+import { isIsoDate, loadWeek, pinTimesheetEmployee, setTimesheetWeekStatus, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -38,7 +38,8 @@ export async function POST(req: Request) {
   const body = (await req.json()) as Body
   if (!body.employee || !isUuid(body.employee)) return bad('Invalid employee')
   if (!body.week || !isIsoDate(body.week)) return bad('Invalid week')
-  const employee = body.employee
+  const employee = await pinTimesheetEmployee(orgId, body.employee)
+  if (!employee) return bad('Employee not found')
   const week = weekStart(body.week)
   const days = weekWindow(week)
   const weekFrom = days[0]!
