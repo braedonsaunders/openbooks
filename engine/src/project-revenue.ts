@@ -78,6 +78,7 @@ async function ensureProjectPocRule(orgId: string, actorId: string | null): Prom
     insert into recognition_rules (org_id, code, name, method, is_active, created_by, updated_by)
     values (${orgId}, ${PROJECT_POC_RULE_CODE}, 'Project percent complete', 'percent_complete', true, ${actorId}, ${actorId})
     on conflict (org_id, code) do update set updated_at = now()
+    where recognition_rules.org_id = ${orgId}
     returning id`));
   return ins.rows[0].id;
 }
