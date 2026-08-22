@@ -101,13 +101,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       return NextResponse.json(row, { status: 201 })
     }
     if (resource === 'profiles') {
+      // Profile currency is Multi-currency configuration. Turning that
+      // switch off must refuse a new write; omitting currency keeps the
+      // format / subsidiary / org fallback so a profile can still be created.
+      if (
+        body.currency !== undefined &&
+        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+      ) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       const country = optionalCountry(body.country)
       if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
       body.country = country
-      const input = body as unknown as PaymentBankProfileInput
-      if (!input.name || !isUuid(input.bankAccountId) || !isUuid(input.paymentFormatId) || !input.currency) {
+      if (!body.name || !isUuid(body.bankAccountId) || !isUuid(body.paymentFormatId)) {
+        return NextResponse.json({ error: 'name, bankAccountId, and paymentFormatId are required' }, { status: 400 })
+      }
+      let currency =
+        body.currency !== undefined ? String(body.currency).trim().toUpperCase() : ''
+      if (body.currency === undefined) {
+        const fallback = (await db.execute<{ currency: string | null }>(sql`
+          select coalesce(nullif(f.currency, ''), s.base_currency, o.base_currency) as currency
+            from orgs o
+            left join payment_formats f on f.id = ${body.paymentFormatId} and f.org_id = o.id
+            left join subsidiaries s on s.id = ${body.subsidiaryId ?? null} and s.org_id = o.id
+           where o.id = ${gate.user.orgId}`))
+        currency = fallback.rows[0]?.currency ?? ''
+      }
+      if (!/^[A-Z]{3}$/.test(currency)) {
         return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
       }
+      const input = { ...body, currency } as unknown as PaymentBankProfileInput
       const row = await createPaymentBankProfile(gate.user.orgId, gate.user.id, input)
       return NextResponse.json(row, { status: 201 })
     }

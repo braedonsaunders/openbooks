@@ -2086,6 +2086,36 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? <CurrencyField/,
     'the payment-format form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /resource === 'profiles'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'payment-profile create must refuse currency when Multi-currency is off — stored profiles stay',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /resource === 'profiles'[\s\S]{0,500}body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'payment-profile create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/route.ts'),
+    /body\.currency === undefined[\s\S]{0,250}coalesce\(nullif\(f\.currency/,
+    'payment-profile create must keep the format / subsidiary / org fallback when currency is omitted',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'payment operations must not load the profile currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/PaymentOperationsSetup.tsx'),
+    /paymentFormatId:[\s\S]{0,80}multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the payment-profile form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/payment-operations/PaymentOperationsSetup.tsx'),
+    /\{multiCurrency \? <CurrencyField[\s\S]{0,120}format\?\.currency/,
+    'the payment-profile form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
