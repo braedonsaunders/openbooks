@@ -4,13 +4,13 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { encryptSecret } from '@openbooks/engine/src/sftp/manager.ts'
 import { appStorageKind, appBucket } from '@openbooks/engine/src/sftp/backend.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
 /** List the org's SFTP servers (never returns secrets). */
 export async function GET() {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute(sql`
     select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at, created_at
@@ -23,7 +23,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 
 /** Create an SFTP server; returns the generated password ONCE (never stored in clear). */
 export async function POST(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json().catch(() => ({}))) as { name?: string; rootPrefix?: string; authorizedKeys?: string }

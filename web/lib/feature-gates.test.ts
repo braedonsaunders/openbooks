@@ -112,8 +112,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   subcontracts: ['app/api/subcontracts'],
   bankFeeds: [
     'app/api/banking/bank-feeds',
-    'app/api/banking/sftp/schedules',
-    'app/api/banking/sftp/daemon',
+    'app/api/banking/sftp',
   ],
   crm: ['app/api/crm'],
   subcontractorCompliance: ['app/api/compliance'],
@@ -672,6 +671,26 @@ test('the surfaces this test was written for are covered', () => {
     read('app/api/banking/sftp/schedules/route.ts'),
     /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
     'SFTP import-schedule writes must refuse when Bank Feeds is off',
+  )
+  assert.match(
+    read('app/api/banking/sftp/route.ts'),
+    /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
+    'SFTP server create must refuse when Bank Feeds is off',
+  )
+  assert.match(
+    read('app/api/banking/sftp/[id]/route.ts'),
+    /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
+    'SFTP server rotate/delete must refuse when Bank Feeds is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /setupEntityEnabled\(/,
+    'setup import/export must hide optional-module entities when the feature is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /isDocKindEnabled\(/,
+    'transaction import must refuse optional-module kinds when the feature is off',
   )
   assert.match(
     read('../engine/src/fx-providers.ts'),
