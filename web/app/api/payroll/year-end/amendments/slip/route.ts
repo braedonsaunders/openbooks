@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
 import { filingCorrectionSlip } from '@openbooks/engine/src/payroll-yearend-amendments.ts'
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
           { orgName: branding.orgName, primaryColor: branding.primaryColor },
           layout,
         ),
-        `${safeName(slip.formCode)}-${year}-${safeName(row)}`,
+        `${safeName(slip.formCode)}-${year}-${safeName(row)}-${await businessToday(gate.user.orgId)}`,
       )
     }
     return NextResponse.json({ slip, orgName: branding.orgName })
