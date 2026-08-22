@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
 import { add, mul, normalizeMoney, toUnits } from "./money.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
@@ -107,24 +108,26 @@ function validDate(value: string | null | undefined, label: string): string | nu
   return value;
 }
 
-function positiveMoney(value: string | undefined, label: string): string {
-  let normalized: string;
-  try {
-    normalized = normalizeMoney(value ?? "");
-  } catch {
-    throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
+function exactMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new AdvancedSubscriptionError(`${label} must be an exact decimal`);
   }
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new AdvancedSubscriptionError(`${label} must be an exact decimal`);
+  }
+}
+
+function positiveMoney(value: string | undefined, label: string): string {
+  const normalized = exactMoney(value, label);
   if (toUnits(normalized) <= 0n) throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
   return normalized;
 }
 
 function nonNegativeMoney(value: string | undefined, label: string): string {
-  let normalized: string;
-  try {
-    normalized = normalizeMoney(value ?? "");
-  } catch {
-    throw new AdvancedSubscriptionError(`${label} cannot be negative`);
-  }
+  const normalized = exactMoney(value, label);
   if (toUnits(normalized) < 0n) throw new AdvancedSubscriptionError(`${label} cannot be negative`);
   return normalized;
 }
