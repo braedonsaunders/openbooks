@@ -572,12 +572,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     entity.key,
     (await req.json().catch(() => ({}))) as Record<string, unknown>,
   )
+  const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
     equipment: await isFeatureEnabled(orgId, 'equipment'),
     fieldTickets: await isFeatureEnabled(orgId, 'fieldTickets'),
   })
-  const built = buildRow(writableEntity, body, { forCreate: true })
+  // Rate-book currency is Multi-currency configuration. When that switch is
+  // off the create descriptor must not require the field, so omitting it
+  // can fall through to the org base instead of a 400.
+  const createEntity = entity.key === 'item-rate-books' && !multiCurrency
+    ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
+    : writableEntity
+  const built = buildRow(createEntity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
@@ -628,6 +635,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   }
 
   if (entity.key === 'item-rate-books') {
+    // Rate-book currency is Multi-currency configuration. Turning that
+    // switch off must refuse a new write; omitting currency keeps the
+    // org base so a book can still be created and stored books stay.
+    if (body.currency !== undefined && !multiCurrency) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     try {
       const id = await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
@@ -645,9 +658,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
             await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
           }
         }
+        const org = (await tx.execute(sql`
+          select base_currency from orgs where id = ${orgId}
+        `)) as any
+        const currency = body.currency !== undefined
+          ? String(body.currency)
+          : String(org.rows[0]?.base_currency ?? '')
         const inserted = (await tx.execute(sql`
           insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
-          values (${orgId}, ${String(body.code)}, ${String(body.name)}, ${String(body.currency)},
+          values (${orgId}, ${String(body.code)}, ${String(body.name)}, ${currency},
                   ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning id
         `)) as any
         const id = String(inserted.rows[0].id)
