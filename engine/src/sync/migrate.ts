@@ -555,7 +555,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const netDays = Number(f.netDays ?? 30);
     if (id) {
       await db.execute(sql`update payment_terms set name=${name}, net_days=${netDays}, discount_days=${(f.discountDays as number) ?? null},
-        discount_percent=${moneyOrNull(f.discountPercent)},
+        discount_percent=${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)},
         custom=(${custom}::jsonb || payment_terms.custom)
           || jsonb_build_object(${refKey}, ${rec.sourceRef})
         where id=${id} and org_id=${orgId}`);
