@@ -372,7 +372,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
                last_result = ${JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates })}::jsonb,
                last_error = ${outcome.error ?? null},
                status = ${outcome.error ? "error" : "connected"}
-         where id = ${row.id}
+         where id = ${row.id} and org_id = ${row.orgId}
       `);
     });
     outcomes.push(outcome);
@@ -415,7 +415,7 @@ export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOut
              last_result = ${JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates })}::jsonb,
              last_error = ${outcome.error ?? null},
              status = ${outcome.error ? "error" : "connected"}
-       where id = ${connectionId}
+       where id = ${connectionId} and org_id = ${conn.orgId}
     `);
   });
   return outcome;
