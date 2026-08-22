@@ -61,11 +61,12 @@ export async function registerNodeInstrumentation() {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')
     const meta = PDF_RECORD_TYPE_BY_KEY[subjectKind]
     if (!meta) return null
-    const [{ resolvePdfTemplate }, { loadPdfRecordValues }, { mergeAndPrintPdf }] =
+    const [{ resolvePdfTemplate }, { loadPdfRecordValues }, { mergeAndPrintPdf }, { businessToday }] =
       await Promise.all([
         import('./lib/pdf-templates/store'),
         import('./lib/pdf-templates/values'),
         import('./lib/pdf-templates/render'),
+        import('@openbooks/engine/src/business-date.ts'),
       ])
     const [tpl, record] = await Promise.all([
       resolvePdfTemplate(orgId, subjectKind, null),
@@ -73,8 +74,9 @@ export async function registerNodeInstrumentation() {
     ])
     if (!tpl || !record) return null
     const pdf = await mergeAndPrintPdf(tpl, record.values)
+    const stamp = await businessToday(orgId)
     return {
-      filename: `${meta.docTitle} ${record.reference}.pdf`.replace(/[\\/:*?"<>|]/g, '-'),
+      filename: `${meta.docTitle} ${record.reference}-${stamp}.pdf`.replace(/[\\/:*?"<>|]/g, '-'),
       content: pdf,
       contentType: 'application/pdf' as const,
     }
