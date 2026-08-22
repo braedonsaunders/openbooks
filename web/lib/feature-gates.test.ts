@@ -828,6 +828,26 @@ test('the surfaces this test was written for are covered', () => {
     'REST/MCP item writes must refuse revenue-recognition columns when the feature is off',
   )
   assert.match(
+    read('lib/api/registry-data.ts'),
+    /ITEM_TIME_TRACKING_COLUMNS/,
+    'REST/MCP items catalog must name the time-tracking columns the Features switch hides',
+  )
+  assert.match(
+    read('lib/api/schema-registry.ts'),
+    /timeTrackingOn[\s\S]{0,200}ITEM_TIME_TRACKING_COLUMNS/,
+    'REST/MCP items catalog must hide show-on-timesheet when Time Tracking is off',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /refuseDisabledItemTimeTracking\(/,
+    'REST/MCP item writes must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /async function refuseDisabledItemTimeTracking[\s\S]{0,350}err\(404/,
+    'REST/MCP item writes must 404 — not persist — show-on-timesheet when Time Tracking is off',
+  )
+  assert.match(
     read('app/api/items/[id]/route.ts'),
     /isFeatureEnabled\(user\.orgId, 'revenueRecognition'\)/,
     'item catalog PATCH must refuse revenue-recognition fields when the feature is off',

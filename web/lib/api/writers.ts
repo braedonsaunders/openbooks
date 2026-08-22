@@ -36,7 +36,7 @@ import {
 } from "../documents";
 import { isFeatureEnabled } from "../features";
 import { validateEntityBody } from "./validate";
-import { ITEM_REVENUE_RECOGNITION_COLUMNS, type ApiField, type ResolvedApiType } from "./schema-registry";
+import { ITEM_REVENUE_RECOGNITION_COLUMNS, ITEM_TIME_TRACKING_COLUMNS, type ApiField, type ResolvedApiType } from "./schema-registry";
 
 /**
  * The generic write engine behind /api/v1/records. Every writer reuses the
@@ -247,6 +247,28 @@ async function refuseDisabledItemRevenueRecognition(
   return err(404, "not found");
 }
 
+async function refuseDisabledItemTimeTracking(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+): Promise<WriteResult | null> {
+  if (table !== "items") return null;
+  if (!Object.keys(columns).some((col) => ITEM_TIME_TRACKING_COLUMNS.has(col))) return null;
+  if (await isFeatureEnabled(orgId, "timeTracking")) return null;
+  return err(404, "not found");
+}
+
+async function refuseDisabledItemFeatureColumns(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+): Promise<WriteResult | null> {
+  return (
+    (await refuseDisabledItemRevenueRecognition(orgId, table, columns)) ??
+    (await refuseDisabledItemTimeTracking(orgId, table, columns))
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Flat entity tables (items, projects, parties, fixed_assets): typed columns +
 // a `custom` jsonb bag validated against custom_field_defs.
@@ -258,10 +280,10 @@ async function createEntity(
   fields: ApiField[],
   body: Record<string, unknown>,
 ): Promise<WriteResult> {
+  const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body);
+  if (gated) return gated;
   const v = validateEntityBody(fields, body, { stage: "create" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
-  const gated = await refuseDisabledItemRevenueRecognition(user.orgId, table, v.columns);
-  if (gated) return gated;
   const defs = await loadFieldDefs(table);
   const cv = validateCustomValues(defs, v.customValues);
   if (!cv.ok) return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
@@ -303,10 +325,10 @@ async function updateEntity(
     select custom from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`)) as any;
   if (!existing.rows[0]) return err(404, "not found");
 
+  const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body);
+  if (gated) return gated;
   const v = validateEntityBody(fields, body, { stage: "update" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
-  const gated = await refuseDisabledItemRevenueRecognition(user.orgId, table, v.columns);
-  if (gated) return gated;
 
   const sets: ReturnType<typeof sql>[] = [];
   for (const [col, value] of Object.entries(v.columns)) {
