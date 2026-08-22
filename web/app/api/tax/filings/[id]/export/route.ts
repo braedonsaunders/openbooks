@@ -50,7 +50,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const stamp = await businessToday(gate.user.orgId)
   const filename = safeName(`${row.form_code}-${row.period_from}-${row.period_to}-v${row.version}-${stamp}`)
   if (format === 'csv') return csvResponse(exportDataToCsv(data, { sectionHeader: data.title }), filename)
-  if (format === 'xlsx') return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel }), filename)
+  if (format === 'xlsx') return xlsxResponse(await exportDataToXlsx(data, {
+    reportName: data.title,
+    dateRangeLabel: data.dateRangeLabel,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  }), filename)
   const branding = await orgBranding(gate.user.orgId)
   const { page, showSummary } = resolveLayout(null)
   return pdfResponse(await exportDataToPdf(data, branding, page, {
