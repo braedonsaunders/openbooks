@@ -1920,7 +1920,8 @@ async function upsertLock(args: {
     on conflict (org_id, period_id, book_id, subsidiary_id, module) do update set
       state = excluded.state, locked_at = excluded.locked_at, locked_by = excluded.locked_by,
       reason = excluded.reason, reopen_expires_at = excluded.reopen_expires_at,
-      version = period_locks.version + 1, updated_at = now(), updated_by = excluded.updated_by`);
+      version = period_locks.version + 1, updated_at = now(), updated_by = excluded.updated_by
+    where period_locks.org_id = ${args.orgId}`);
 }
 
 /** Administrative lock control used by Setup. A closed scope can only be
