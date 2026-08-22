@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { cmp, isZero, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
@@ -326,8 +327,10 @@ export async function savePriorStub(
 
   const money = (value: string | null, field: string): string | null => {
     if (value === null || String(value).trim() === "") return null;
+    const exact = canonicalDecimal(String(value).replace(/[$,\s]/g, ""), 4);
+    if (exact === null) throw new ParallelRunStoreError(`${field} is not an amount: "${value}"`);
     try {
-      return normalizeMoney(String(value).replace(/[$,\s]/g, ""));
+      return normalizeMoney(exact);
     } catch {
       throw new ParallelRunStoreError(`${field} is not an amount: "${value}"`);
     }
