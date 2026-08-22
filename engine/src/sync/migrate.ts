@@ -317,6 +317,7 @@ async function loadAccountingPeriods(
         ends_on = excluded.ends_on, is_adjustment = excluded.is_adjustment,
         custom = accounting_periods.custom || excluded.custom,
         updated_at = now()
+      where accounting_periods.org_id = ${orgId}
       returning id
     `)) as { rows: { id: string }[] };
     const periodId = period.rows[0]?.id;
