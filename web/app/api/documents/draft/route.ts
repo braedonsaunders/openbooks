@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { createDocumentDraft, DOC_KINDS, createPermission } from '../../../../lib/documents'
+import { createDocumentDraft, DOC_KINDS, createPermission, isDocKindEnabled } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
 
@@ -13,6 +13,9 @@ export async function POST(req: Request) {
   const gate = await guardPermission(createPermission(body.kind))
   if (gate instanceof NextResponse) return gate
   const user = gate.user
+  if (!(await isDocKindEnabled(user.orgId, body.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const doc = await createDocumentDraft(user.orgId, user.id, body.kind)
   return NextResponse.json(doc)

@@ -10,6 +10,7 @@ import {
   loadDocument,
   DOC_KINDS,
   createPermission,
+  isDocKindEnabled,
   readPermission,
   type DocumentEditCurrent,
   type DocumentEditInput,
@@ -28,6 +29,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   if (!DOC_KINDS[row.kind]) {
     return NextResponse.json({ error: `kind "${row.kind}" is not served here` }, { status: 422 })
   }
@@ -64,6 +68,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(user.orgId, row.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
@@ -119,6 +126,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)

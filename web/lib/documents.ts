@@ -6,7 +6,8 @@ import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
-import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
+import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
+import { isFeatureEnabled } from './features'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
@@ -32,6 +33,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 export { computeBillTotals, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
 export {
   DOC_KINDS,
+  DOC_KIND_FEATURE,
   AP_KINDS,
   AR_KINDS,
   BANK_KINDS,
@@ -43,6 +45,13 @@ export {
   type DocFamily,
   type PermNamespace,
 } from './document-kinds'
+
+/** False when this kind belongs to a Features switch that is off. */
+export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {
+  const feature = DOC_KIND_FEATURE[kind]
+  if (!feature) return true
+  return isFeatureEnabled(orgId, feature)
+}
 
 // ---------------------------------------------------------------------------
 // Draft creation + loading
