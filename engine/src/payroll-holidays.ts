@@ -1344,7 +1344,7 @@ async function loadHolidayDayEvidence(
                               and c.system_key = 'stat_holiday' then l.amount end), 0)::text
              as holiday_pay
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       left join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
