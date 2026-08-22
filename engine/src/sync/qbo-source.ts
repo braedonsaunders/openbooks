@@ -1,3 +1,4 @@
+import { businessToday, parseIsoDate } from "../business-date.ts";
 import { QboClient } from "../qbo.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromQbo, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
@@ -67,8 +68,10 @@ export class QboSource implements MigrationSource {
   readonly name = "qbo";
   readonly refKey = "qboId";
   readonly baseCurrency: string;
+  private readonly orgId: string;
 
-  constructor(private client: QboClient, opts: { baseCurrency?: string } = {}) {
+  constructor(private client: QboClient, opts: { orgId: string; baseCurrency?: string }) {
+    this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
 
@@ -110,7 +113,7 @@ export class QboSource implements MigrationSource {
       throw new Error(`QBO fiscal year start month is invalid: ${firstMonth}`);
     }
     const closeDate = preferences?.AccountingInfoPrefs?.BookCloseDate ?? null;
-    const horizon = new Date();
+    const horizon = parseIsoDate(await businessToday(this.orgId));
     horizon.setUTCFullYear(horizon.getUTCFullYear() + 1);
     const end = horizon.toISOString().slice(0, 10);
     return monthlySourcePeriods(

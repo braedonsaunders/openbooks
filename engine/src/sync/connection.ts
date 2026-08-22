@@ -442,7 +442,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       const merged: QboSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
       await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
     };
-    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { baseCurrency: cfg.baseCurrency });
+    return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
   }
 
   if (conn.source === "xero") {
