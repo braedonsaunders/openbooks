@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * Feeds the native Drawer flyouts on the Employees / Items / Titles tabs.
  */
 export async function GET(req: Request) {
-  const gate = await guardPermission("reports.read");
+  const gate = await guardFeaturePermission("reports.read", "timeTracking");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;
 

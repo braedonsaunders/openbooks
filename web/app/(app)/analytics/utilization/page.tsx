@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { utilizationData } from '../../../../lib/analytics/utilization-data'
@@ -22,6 +23,7 @@ export default async function UtilizationPage({
 }) {
   const t = await getTranslations('analytics.utilization')
   const authz = await requirePermission('reports.read')
+  await requireFeatureEnabled(authz.user.orgId, 'timeTracking')
 
   const sp = await searchParams
   const q = parseReportQuery(sp)

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
 import { analyticsConfig } from "./config";
+import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 
 /**
@@ -481,6 +482,9 @@ export async function healthData(period: { from: string; to: string; label: stri
     gpPerEmployee: cfg.gpPerEmployee,
   };
 
+  const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } });
+  const budgetsOn = await isFeatureEnabled(orgId, "budgets");
+
   const [base, priorBase, monthly, dept, cls, loc, drv, items, budget] = await Promise.all([
     financialHealth(period, benchmarks, orgId),
     financialHealth({ from: pFrom, to: pTo, label: "prior" }, benchmarks, orgId),
@@ -490,7 +494,9 @@ export async function healthData(period: { from: string; to: string; label: stri
     segmentsBy(orgId, "location_id", "locations", from, to).catch(() => []),
     drivers(orgId, from, to),
     itemAnalysis(orgId, from, to),
-    budgetVariance(orgId, from, to).catch((): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } })),
+    budgetsOn
+      ? budgetVariance(orgId, from, to).catch(emptyBudget)
+      : Promise.resolve(emptyBudget()),
   ]);
 
   return {

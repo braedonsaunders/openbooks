@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { trueCostData } from '../../../../lib/analytics/true-cost-data'
@@ -22,6 +23,7 @@ export default async function TrueCostPage({
 }) {
   const t = await getTranslations('analytics.trueCost')
   const authz = await requirePermission('reports.read')
+  await requireFeatureEnabled(authz.user.orgId, 'projects')
 
   const sp = await searchParams
   const q = parseReportQuery(sp)

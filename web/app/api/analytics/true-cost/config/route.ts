@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { loadTrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
 import { ALLOCATION_BASES, ALLOCATION_METHODS, RATE_FORMATS, COMPOSITE_METHODS, type AllocationBase, type AllocationMethod, type RateFormat, type CompositeMethod } from "../../../../../lib/analytics/true-cost-engine";
 
@@ -95,14 +95,14 @@ function cleanProfile(raw: unknown): TrueCostProfile | null {
 }
 
 export async function GET() {
-  const gate = await guardPermission("reports.read");
+  const gate = await guardFeaturePermission("reports.read", "projects");
   if (gate instanceof NextResponse) return gate;
   const cfg = await loadTrueCostConfig(gate.user.orgId);
   return NextResponse.json({ activeProfileId: cfg.activeProfileId, profiles: cfg.profiles });
 }
 
 export async function PUT(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
+  const gate = await guardFeaturePermission("admin.setup.manage", "projects");
   if (gate instanceof NextResponse) return gate;
   const body = (await req.json().catch(() => null)) as { activeProfileId?: string; profiles?: unknown[] } | null;
   if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });

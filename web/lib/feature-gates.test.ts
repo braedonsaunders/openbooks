@@ -303,6 +303,78 @@ test('the surfaces this test was written for are covered', () => {
     'financial health must omit budget variance when Budgets is off',
   )
   assert.match(
+    read('lib/custom-reports.ts'),
+    /reportEntityFeatureKey\(query\)/,
+    'executeReport must refuse optional-module entities when the Features switch is off',
+  )
+  assert.match(
+    read('lib/custom-reports.ts'),
+    /isFeatureEnabled\(orgId, featureKey\)/,
+    'executeReport must consult Features, not only a stored plan',
+  )
+  assert.match(
+    read('app/api/internal/reports/render/route.ts'),
+    /feature is disabled/,
+    'scheduled/internal render must refuse optional-module output when the feature is off',
+  )
+  assert.match(
+    read('app/api/internal/reports/render/route.ts'),
+    /status: 404/,
+    'scheduled/internal render must 404 — not emit a PDF — when the feature is off',
+  )
+  assert.equal(routeGateState('/analytics/true-cost'), 'gated')
+  assert.equal(routeGateState('/analytics/utilization'), 'gated')
+  assert.match(
+    read('app/(app)/analytics/page.tsx'),
+    /isFeatureEnabled\(authz\.user\.orgId, 'projects'\)/,
+    'analytics hub must hide true-cost when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/page.tsx'),
+    /isFeatureEnabled\(authz\.user\.orgId, 'timeTracking'\)/,
+    'analytics hub must hide utilization when Time Tracking is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/true-cost/page.tsx'),
+    /requireFeatureEnabled\([^,]+, 'projects'\)/,
+    'true-cost page must 404 when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/utilization/page.tsx'),
+    /requireFeatureEnabled\([^,]+, 'timeTracking'\)/,
+    'utilization page must 404 when Time Tracking is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/financial-health/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'budgets'\)/,
+    'financial-health must hide the budget section when Budgets is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/financial-health/FinancialHealthView.tsx'),
+    /budgetsEnabled/,
+    'financial-health budget tab must not render when Budgets is off',
+  )
+  assert.match(
+    read('lib/analytics/health-data.ts'),
+    /isFeatureEnabled\(orgId, "budgets"\)/,
+    'financial-health must not load budget variance when Budgets is off',
+  )
+  assert.match(
+    read('app/api/analytics/true-cost/config/route.ts'),
+    /guardFeaturePermission\("reports\.read", "projects"\)/,
+    'true-cost config must 404 when Projects is off',
+  )
+  assert.match(
+    read('app/api/analytics/utilization/entries/route.ts'),
+    /guardFeaturePermission\("reports\.read", "timeTracking"\)/,
+    'utilization entries must 404 when Time Tracking is off',
+  )
+  assert.match(
+    read('app/api/analytics/config/[dashboard]/route.ts'),
+    /utilization: "timeTracking"/,
+    'utilization dashboard config must follow the Time Tracking switch',
+  )
+  assert.match(
     read('lib/setup/number-sequence-kinds.ts'),
     /SEQUENCE_KIND_FEATURE/,
     'number-sequence writers must not offer optional-module kinds when the parent feature is off',
