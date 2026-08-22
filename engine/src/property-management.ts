@@ -423,7 +423,7 @@ export async function createPropertyLease(input: {
   lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean;
 }): Promise<{ id: string }> {
   const leaseNumber = input.leaseNumber.trim(); const startsOn = validDate(input.startsOn, "Lease start")!;
-  const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = normalizeMoney(input.baseRent);
+  const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = exactMoney(input.baseRent, "Base rent");
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
   if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
@@ -465,7 +465,7 @@ export async function updatePropertyLease(input: {
   const leaseNumber = input.leaseNumber.trim();
   const startsOn = validDate(input.startsOn, "Lease start")!;
   const endsOn = validDate(input.endsOn, "Lease end");
-  const baseRent = normalizeMoney(input.baseRent);
+  const baseRent = exactMoney(input.baseRent, "Base rent");
   const deposit = normalizeMoney(input.securityDepositRequired);
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
   const lateFeeValue = input.lateFeeType === "none" ? "0.0000" : normalizeMoney(input.lateFeeValue);
