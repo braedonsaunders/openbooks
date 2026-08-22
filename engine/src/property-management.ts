@@ -938,7 +938,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
 export async function recordSecurityDeposit(input: { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
   const shape = depositPostingShape(input.kind);
   const occurredOn = validDate(input.occurredOn, "Deposit date")!;
-  const amount = normalizeMoney(input.amount);
+  const amount = exactMoney(input.amount, "Deposit amount");
   if (cmp(amount, "0") <= 0) throw new PropertyManagementError("Deposit amount must be positive");
   if ((input.kind === "applied") !== Boolean(input.appliedDocumentId)) {
     throw new PropertyManagementError("An applied deposit must identify exactly one tenant invoice");
