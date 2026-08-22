@@ -762,7 +762,7 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
     await tx.execute(sql`
       delete from files where folder_id in (${descendants}) and org_id = ${orgId}
     `)
-    await tx.execute(sql`delete from folders where id in (${descendants})`)
+    await tx.execute(sql`delete from folders where id in (${descendants}) and org_id = ${orgId}`)
     return s3Versions.rows.map((v) => v.id)
   })
   await deleteS3Blobs(s3VersionIds)
