@@ -192,6 +192,7 @@ export async function saveBudgetCells(input: {
              ${input.actorId}, ${input.actorId})
           on conflict on constraint budget_lines_cell do update set
             amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
+          where budget_lines.org_id = ${input.orgId}
         `)
         evidence.push({ ...cell, before: old, after: { amount: cell.amount, note: cell.note } })
       }
