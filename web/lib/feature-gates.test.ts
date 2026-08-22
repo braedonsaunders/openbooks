@@ -1432,6 +1432,11 @@ test('the surfaces this test was written for are covered', () => {
     'field-ticket item-rate preview must 404 inventory/assembly/kit when Inventory is off — stored tickets stay',
   )
   assert.match(
+    read('app/api/field-tickets/item-rate/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}isFeatureEnabled\([^,]+, 'equipment'\)[\s\S]{0,160}status: 404/,
+    'field-ticket item-rate preview must 404 equipment_charge when Equipment is off — stored tickets stay',
+  )
+  assert.match(
     read('app/(app)/items/page.tsx'),
     /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
     'the items page must not load recognition rules when Revenue Recognition is off',

@@ -46,6 +46,12 @@ export async function GET(req: Request) {
   if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  // The picker and add-line already refuse this kind. Turning Equipment off
+  // must also 404 a crafted preview so a live price cannot be quoted for an
+  // equipment_charge item. Stored ticket lines stay as they are.
+  if (item.rows[0].kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>
   try {
