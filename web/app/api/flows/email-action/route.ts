@@ -7,6 +7,7 @@ import {
   GateError,
   type EmailActionClaims,
 } from '@openbooks/engine/src/flows/index.ts'
+import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
@@ -67,7 +68,7 @@ type GateSummary = {
   party_name: string | null
 };
 
-async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
+async function loadGateSummary(gateId: string, orgId?: string): Promise<GateSummary | null> {
   const r = (await db.execute<GateSummary>(sql`
     select g.id, g.org_id as "orgId", g.title, g.status, g.subject_kind,
            du.name as decided_by_name,
@@ -77,9 +78,17 @@ async function loadGateSummary(gateId: string): Promise<GateSummary | null> {
       left join users du on du.id = g.decided_by
       left join documents d on d.id = g.subject_id and d.org_id = g.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-     where g.id = ${gateId}
+     where g.id = ${gateId} ${orgId ? sql`and g.org_id = ${orgId}` : sql``}
   `))
   return r.rows[0] ?? null
+}
+
+/** Token bootstrap, then refuse when the org's Flows feature is off. */
+async function loadEnabledGate(gateId: string): Promise<GateSummary | null> {
+  const gate = await withBypassContext(() => loadGateSummary(gateId))
+  if (!gate) return null
+  if (!(await isFeatureEnabled(gate.orgId, 'flows'))) return null
+  return gate
 }
 
 function documentSummaryHtml(g: GateSummary): string {
@@ -120,7 +129,7 @@ export async function GET(req: Request) {
   const claims = verifyEmailActionToken(token)
   if (!claims) return invalidTokenPage()
 
-  const gate = await withBypassContext(() => loadGateSummary(claims.gateId))
+  const gate = await loadEnabledGate(claims.gateId)
   if (!gate) return invalidTokenPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
@@ -155,7 +164,7 @@ export async function POST(req: Request) {
   const claims = verifyEmailActionToken(token)
   if (!claims) return invalidTokenPage()
 
-  const gate = await withBypassContext(() => loadGateSummary(claims.gateId))
+  const gate = await loadEnabledGate(claims.gateId)
   if (!gate) return invalidTokenPage()
   if (gate.status !== 'pending') return alreadyHandledPage(gate)
 
@@ -172,7 +181,7 @@ export async function POST(req: Request) {
     if (e instanceof GateError) {
       // Race: someone decided between the check and the update — idempotent.
       if (/already resolved/.test(e.message)) {
-        const fresh = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId))
+        const fresh = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId, gate.orgId))
         return fresh ? alreadyHandledPage(fresh) : invalidTokenPage()
       }
       return page('Could not record your decision', `<p style="color:#52525b">${esc(e.message)}</p>`, 409)
@@ -182,7 +191,7 @@ export async function POST(req: Request) {
   }
 
   const approved = claims.decision === 'approved'
-  const updatedGate = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId))
+  const updatedGate = await withOrgContext(gate.orgId, () => loadGateSummary(claims.gateId, gate.orgId))
   return page(
     approved ? 'Approved' : 'Rejected',
     `<p style="color:#52525b">Your decision was recorded${approved ? '' : reason ? ' with your reason' : ''}. You can close this page.</p>

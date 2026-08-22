@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { GateError } from '@openbooks/engine/src/flows/index.ts'
+import { getAuthz, type Authz } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
+
+/** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
+export async function requireFlowsSession(): Promise<Authz | NextResponse> {
+  const authz = await getAuthz()
+  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!(await isFeatureEnabled(authz.user.orgId, 'flows'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  return authz
+}
 
 /** Shared helpers for the /api/flows/* gate endpoints. */
 

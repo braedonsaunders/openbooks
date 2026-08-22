@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +10,7 @@ export const runtime = 'nodejs'
  * every inspector select in the builder.
  */
 export async function GET() {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   return NextResponse.json({ profiles: listFlowSubjectProfiles() })
 }

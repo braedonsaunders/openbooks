@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { automationGraphSchema } from '@openbooks/forms-core'
 import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -32,7 +32,7 @@ async function loadFlow(orgId: string, id: string) {
 }
 
 export async function GET(_req: Request, { params }: Params) {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const flow = await loadFlow(gate.user.orgId, id)
@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 export async function PATCH(req: Request, { params }: Params) {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
@@ -113,7 +113,7 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 export async function DELETE(_req: Request, { params }: Params) {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const { id } = await params

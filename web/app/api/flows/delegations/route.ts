@@ -5,7 +5,7 @@ import {
   revokeDelegation,
   DelegationError,
 } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz } from '../../../../lib/authz'
+import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -35,15 +35,15 @@ function delegationErrorResponse(e: unknown): NextResponse {
 }
 
 export async function GET() {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
   const delegations = await listUserDelegations(authz.user.orgId, authz.user.id)
   return NextResponse.json({ delegations })
 }
 
 export async function POST(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const body = (await req.json().catch(() => ({}))) as {
     toUserId?: string
@@ -78,8 +78,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
   const body = (await req.json().catch(() => ({}))) as { id?: string; revoke?: boolean }
   if (!body.id || !isUuid(body.id) || body.revoke !== true) {
     return NextResponse.json({ error: 'id and revoke:true required' }, { status: 400 })
@@ -93,8 +93,8 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
   const id = new URL(req.url).searchParams.get('id')
   if (!id || !isUuid(id)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   try {

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { gateErrorResponse, loadGateHeader } from '../../_lib'
+import { gateErrorResponse, loadGateHeader, requireFlowsSession } from '../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -14,8 +13,8 @@ export const runtime = 'nodejs'
  * place so the route and engine can't drift.
  */
 export async function POST(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const body = (await req.json().catch(() => ({}))) as {
     gateId?: string
