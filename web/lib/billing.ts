@@ -417,9 +417,9 @@ export async function generateInvoiceFromBillingRequest(
         // A markup recorded ON THE LINE is the deal struck for that line and
         // wins outright — including an explicit zero, which bills at cost. Only
         // a line that says nothing falls back to the project type's markup.
-        const base = String(cl.amount ?? '0')
+        const base = persistInvoiceDecimal(cl.amount ?? '0', 'A cost line amount is invalid')
         const amount = isProjectCharge
-          ? String(cl.bill_amount ?? '0')
+          ? persistInvoiceDecimal(cl.bill_amount ?? '0', 'A cost line billed amount is invalid')
           : cl.markup_percent != null
             ? add(base, mulPercent(base, String(cl.markup_percent), 4))
             : mulDecimal(base, markup)
@@ -431,9 +431,9 @@ export async function generateInvoiceFromBillingRequest(
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
-            quantity: String(component.quantity),
-            unitPrice: String(component.rate),
-            amount: String(component.amount),
+            quantity: persistInvoiceDecimal(component.quantity ?? '0', 'A cost line quantity is invalid'),
+            unitPrice: persistInvoiceDecimal(component.rate ?? '0', 'A cost line rate is invalid'),
+            amount: persistInvoiceDecimal(component.amount ?? '0', 'A cost line amount is invalid'),
             taxCodeId: cl.tax_code_id,
             employeeId: null,
             timeEntryId: null,
@@ -448,8 +448,8 @@ export async function generateInvoiceFromBillingRequest(
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: cl.description || cl.item_name || null,
-            quantity: isProjectCharge ? String(cl.quantity ?? '1') : '1',
-            unitPrice: isProjectCharge ? String(cl.bill_rate ?? amount) : amount,
+            quantity: isProjectCharge ? persistInvoiceDecimal(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1',
+            unitPrice: isProjectCharge ? persistInvoiceDecimal(cl.bill_rate ?? amount, 'A cost line rate is invalid') : amount,
             amount,
             taxCodeId: cl.tax_code_id,
             employeeId: null,
@@ -466,7 +466,7 @@ export async function generateInvoiceFromBillingRequest(
             equipmentUnitId: cl.equipment_unit_id,
             rateVersionId: cl.rate_version_id,
             // Pre-markup base (cost documents only; project charges carry their own price).
-            baseAmount: isProjectCharge ? amount : String(cl.amount ?? '0'),
+            baseAmount: isProjectCharge ? amount : base,
           })
         }
       }
