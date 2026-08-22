@@ -1158,6 +1158,7 @@ export async function saveAcceptanceConfig(
       settings = excluded.settings,
       secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
       updated_at = now(), updated_by = ${actorId}
+    where psp_provider_configs.org_id = ${orgId}
   `);
   const saved = await loadProviderConfig(orgId, input.provider);
   if (!saved) throw new PaymentAcceptanceError("provider config failed to persist");
