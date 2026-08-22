@@ -39,6 +39,7 @@ export async function PUT(req: Request) {
     insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
     values (${user.orgId}, ${user.id}, ${body.recordType}, ${viewId}, ${user.id}, ${user.id})
     on conflict (org_id, user_id, record_type) do update
-      set view_id = excluded.view_id, updated_at = now(), updated_by = ${user.id}`);
+      set view_id = excluded.view_id, updated_at = now(), updated_by = ${user.id}
+    where user_list_preferences.org_id = ${user.orgId}`);
   return NextResponse.json({ ok: true, viewId });
 }
