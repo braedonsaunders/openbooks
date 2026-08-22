@@ -583,6 +583,7 @@ export async function createRemittanceBill(
       values (${orgId}, 'vendor_bill', ${chosen?.subsidiaryId ?? null}, ${chosen?.prefix ?? "BILL-"})
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
     `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
