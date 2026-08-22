@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const r = (await db.execute<{ result_csv: string | null; status: string; slug: string; query: unknown }>(sql`
     select run.result_csv, run.status, def.slug, def.query
       from report_runs run
-      join report_definitions def on def.id = run.definition_id
+      join report_definitions def on def.id = run.definition_id and def.org_id = run.org_id
      where run.id = ${id} and run.org_id = ${user.orgId}
   `))
   const row = r.rows[0]

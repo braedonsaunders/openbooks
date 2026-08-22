@@ -793,6 +793,9 @@ const budgetVsActualTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["budgets.read", "reports.read"] },
   inputSchema: z.object({ scenarioId: uuidInput.optional() }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
+      return { ok: false, error: "budgets_feature_disabled" };
+    }
     const scenarioId = (raw as { scenarioId?: string }).scenarioId;
     if (!scenarioId) {
       return { ok: true, data: { scenarios: await budgetScenarioOptions(authz.user.orgId), href: "/budgets" } };
@@ -923,6 +926,9 @@ const continuousCloseFindings: AssistantToolDef = {
     limit: z.number().int().min(1).max(50).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "continuousClose"))) {
+      return { ok: false, error: "continuous_close_feature_disabled" };
+    }
     const a = raw as {
       agent?: "accounting" | "finance";
       status?: "open" | "in_review" | "resolved" | "dismissed";
@@ -984,6 +990,9 @@ const getContinuousCloseFinding: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["banking.read", "gl.read", "close.read", "reports.read", "budgets.read"] },
   inputSchema: z.object({ findingId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "continuousClose"))) {
+      return { ok: false, error: "continuous_close_feature_disabled" };
+    }
     const findingId = (raw as { findingId: string }).findingId;
     const item = (await db.execute<Record<string, unknown>>(sql`
       select id, agent_key, finding_type, detector_version, severity, status,

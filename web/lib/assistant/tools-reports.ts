@@ -17,6 +17,7 @@ import { parseReportQuery } from "../report-filters";
 import { resolvePeriod } from "../periods";
 import { budgetScenarioOptions } from "../budget-report";
 import { loadBudgetScenario } from "../budgets";
+import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";
 import {
   dateInput,
@@ -378,6 +379,9 @@ const listBudgetScenarios: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["budgets.read"] },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
+      return { ok: false, error: "budgets_feature_disabled" };
+    }
     const scenarios = await budgetScenarioOptions(authz.user.orgId);
     return { ok: true, data: { scenarios, href: "/budgets" } };
   },
@@ -391,6 +395,9 @@ const getBudgetScenario: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["budgets.read"] },
   inputSchema: z.object({ scenarioId: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "budgets"))) {
+      return { ok: false, error: "budgets_feature_disabled" };
+    }
     const a = raw as { scenarioId: string };
     const scenario = await loadBudgetScenario(a.scenarioId, authz.user.orgId);
     if (!scenario) return { ok: false, error: "budget_scenario_not_found" };

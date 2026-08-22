@@ -70,8 +70,8 @@ export async function GET(req: Request) {
            t.shipped_on as "shippedOn", t.received_on as "receivedOn", t.memo,
            sf.code as "fromCode", st.code as "toCode"
       from transfer_orders t
-      left join stock_locations sf on sf.id = t.from_stock_location_id
-      left join stock_locations st on st.id = t.to_stock_location_id
+      left join stock_locations sf on sf.id = t.from_stock_location_id and sf.org_id = t.org_id
+      left join stock_locations st on st.id = t.to_stock_location_id and st.org_id = t.org_id
      where t.org_id = ${orgId}
      order by t.ordered_on desc, t.created_at desc
      limit 50

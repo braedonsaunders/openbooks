@@ -29,7 +29,7 @@ export async function GET(req: Request) {
            pp.opening_balance::text, pp.additions::text, pp.dispositions::text,
            pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
       from tax_pool_periods pp
-      join tax_depreciation_pools tp on tp.id = pp.pool_id
+      join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
      where pp.org_id = ${gate.user.orgId} and pp.tax_year = ${taxYear}
      order by tp.class_code`))
   return NextResponse.json({ rows: r.rows })

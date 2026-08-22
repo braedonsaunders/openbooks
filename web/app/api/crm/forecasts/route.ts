@@ -29,14 +29,14 @@ export async function GET(req: NextRequest) {
     calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId }),
     db.execute(sql`
       select q.*, u.name as owner_name, t.name as sales_team_name from crm_sales_quotas q
-      left join users u on u.id = q.owner_user_id left join crm_sales_teams t on t.id = q.sales_team_id
+      left join users u on u.id = q.owner_user_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
       where q.org_id = ${gate.user.orgId} and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
         ${ownerUserId ? sql`and q.owner_user_id = ${ownerUserId}` : sql``}
         ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
       order by q.period_start, coalesce(u.name, t.name)`),
     db.execute(sql`
       select s.*, u.name as owner_name, t.name as sales_team_name from crm_forecast_snapshots s
-      left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id
+      left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id and t.org_id = s.org_id
       where s.org_id = ${gate.user.orgId} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
         ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
         ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}

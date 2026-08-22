@@ -47,7 +47,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const existing = (await db.execute<any>(sql`
     select o.*, s.is_closed, s.is_won from crm_opportunities o
-    join crm_opportunity_statuses s on s.id = o.status_id
+    join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
     where o.id = ${id} and o.org_id = ${user.orgId}`))
   const current = existing.rows[0]
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
