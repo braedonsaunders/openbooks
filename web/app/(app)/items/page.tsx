@@ -31,11 +31,12 @@ export default async function Items({
   // as a tab; managing them keeps the admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
-  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled] = await Promise.all([
+  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled, timeTrackingEnabled, equipmentEnabled] = await Promise.all([
     isFeatureEnabled(orgId, 'projects'),
     isFeatureEnabled(orgId, 'inventory'),
     isFeatureEnabled(orgId, 'revenueRecognition'),
     isFeatureEnabled(orgId, 'timeTracking'),
+    isFeatureEnabled(orgId, 'equipment'),
   ])
 
   const sp = await searchParams
@@ -109,6 +110,7 @@ export default async function Items({
           inventoryCosting={inventoryEnabled}
           fairValuePrices={revenueRecognitionEnabled}
           timeTracking={timeTrackingEnabled}
+          equipmentEnabled={equipmentEnabled}
         />
       ) : null}
     </>
