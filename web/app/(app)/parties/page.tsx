@@ -29,9 +29,9 @@ const SORT_COLUMNS = {
 
 // A party is classified only by its active canonical role row.
 const ROLE_CONDITIONS = {
-  customer: sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active)`,
-  vendor: sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active)`,
-  employee: sql`exists (select 1 from employee_roles r where r.party_id = p.id and r.is_active)`,
+  customer: sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
+  vendor: sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
+  employee: sql`exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
 } as const
 
 export default async function Parties({
