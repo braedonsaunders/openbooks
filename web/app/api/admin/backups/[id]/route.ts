@@ -58,7 +58,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   await db.execute(sql`
     update backup_runs
        set purged_at = now(), purge_reason = 'deleted', updated_at = now()
-     where id = ${run.id}`);
+     where id = ${run.id} and org_id = ${orgId}`);
 
   await auditBackupEvent({
     orgId,
