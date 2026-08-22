@@ -9,6 +9,8 @@ import { resolveItemRate } from '../../../../lib/item-rates'
 
 export const runtime = 'nodejs'
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 /** Live item-price preview using the same assignment and tier engine as charges. */
 export async function GET(req: Request) {
   const gate = await guardPermission('time.read')
@@ -33,11 +35,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'invalid rate unit' }, { status: 422 })
   }
 
-  const item = (await db.execute<{ default_rate: string | null; default_cost: string | null; unit: string | null }>(sql`
-    select default_rate, default_cost, unit from items
+  const item = (await db.execute<{ default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
+    select default_rate, default_cost, unit, kind from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
   `))
   if (!item.rows[0]) return NextResponse.json({ error: 'item not found' }, { status: 404 })
+  // The picker and add-line already refuse these kinds. Turning Inventory off
+  // must also 404 a crafted preview so a live price cannot be quoted for an
+  // inventory / assembly / kit item. Stored ticket lines stay as they are.
+  if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>
   try {

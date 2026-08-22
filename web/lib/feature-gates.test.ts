@@ -1063,6 +1063,16 @@ test('the surfaces this test was written for are covered', () => {
     'field-ticket add-line must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('app/api/field-tickets/item-rate/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'field-ticket item-rate preview must name the inventory kinds the Features switch 404s',
+  )
+  assert.match(
+    read('app/api/field-tickets/item-rate/route.ts'),
+    /INVENTORY_ITEM_KINDS[\s\S]{0,200}isFeatureEnabled\([^,]+, 'inventory'\)[\s\S]{0,160}status: 404/,
+    'field-ticket item-rate preview must 404 inventory/assembly/kit when Inventory is off — stored tickets stay',
+  )
+  assert.match(
     read('app/(app)/items/page.tsx'),
     /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
     'the items page must not load recognition rules when Revenue Recognition is off',
