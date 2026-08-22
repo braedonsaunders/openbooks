@@ -922,7 +922,7 @@ export async function loadFieldTicket(
                'rateLineId', c.rate_line_id, 'unitCode', c.unit_code, 'unitName', c.unit_name,
                'quantity', c.quantity, 'rate', c.rate, 'amount', c.amount
              ) order by c.sequence) from charge_rate_components c
-               where c.document_line_id = dl.id and c.role = 'bill'), '[]'::jsonb) as rate_components
+               where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'), '[]'::jsonb) as rate_components
         from document_lines dl
         left join items i on i.id = dl.item_id and i.org_id = dl.org_id
         left join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id

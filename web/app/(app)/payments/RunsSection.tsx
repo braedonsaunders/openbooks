@@ -111,7 +111,7 @@ export async function RunsSection({
   const openBillsCte = collections ? sql`
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
-           abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.unapplied_at is null), 0) as open,
+           abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.org_id = ${orgId} and a.unapplied_at is null), 0) as open,
            exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= ${today}) and (m.expires_on is null or m.expires_on >= ${today})) as has_bank
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -122,7 +122,7 @@ export async function RunsSection({
            p.display_name as vendor,
            abs(jl.amount) - coalesce((
              select sum(a.amount) from applications a
-              where a.to_line_id = jl.id and a.unapplied_at is null), 0) as open,
+              where a.to_line_id = jl.id and a.org_id = ${orgId} and a.unapplied_at is null), 0) as open,
            exists (
              select 1 from party_bank_accounts b
               where b.party_id = d.party_id and b.org_id = d.org_id and b.is_active and b.approved_at is not null
