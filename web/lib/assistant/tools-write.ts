@@ -72,7 +72,7 @@ const draftJournalEntry: AssistantToolDef = {
       const key = l.account.trim();
       const r = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
         select id, number, name from accounts
-         where is_active and not is_summary
+         where org_id = ${authz.user.orgId} and is_active and not is_summary
            and (number = ${key} or lower(name) = lower(${key}))
          order by (number = ${key}) desc
          limit 2

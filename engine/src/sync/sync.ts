@@ -1514,7 +1514,7 @@ export async function runSync(
             await db.execute(sql`
               update documents
                  set status = ${lifecycleStatus}, updated_at = now()
-               where id = ${row!.id}
+               where id = ${row!.id} and org_id = ${org.id}
             `);
             if (doc.posting) {
               await postDocument(row!.id, deps, {

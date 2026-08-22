@@ -680,8 +680,8 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   // tenant. A scheduler tick holds no request store, so without these the
   // connection layer denies by default and no reminder ever fires.
   const dueReminders = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`
-    select gate.id from flow_gates gate
+    db.execute<{ id: string; orgId: string }>(sql`
+    select gate.id, gate.org_id as "orgId" from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
        and gate.reminded_at is null and organization.env_kind = 'production'
@@ -689,12 +689,12 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
      limit 200
   `));
 
-  for (const { id } of dueReminders.rows) {
+  for (const { id, orgId } of dueReminders.rows) {
     // Claim via the reminded_at stamp so concurrent ticks fire once.
     const claimed = await withBypassContext(() =>
       db.execute(sql`
       update flow_gates set reminded_at = ${now}
-       where id = ${id} and status = 'pending' and reminded_at is null
+       where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at is null
     `));
     if (!claimed.rowCount) continue;
     const gate = await withBypassContext(() => loadGate(id));
@@ -704,7 +704,7 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       await withBypassContext(() =>
         db.execute(sql`
         update flow_gates set reminded_at = null
-         where id = ${id} and status = 'pending' and reminded_at = ${now}
+         where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at = ${now}
       `));
       continue;
     }
@@ -720,7 +720,7 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       await withBypassContext(() =>
         db.execute(sql`
         update flow_gates set reminded_at = null
-         where id = ${id} and status = 'pending' and reminded_at = ${now}
+         where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at = ${now}
       `));
     }
   }
@@ -867,7 +867,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   // Claim: pending → escalated (concurrent ticks race on this update).
   const claimed = (await db.execute(sql`
     update flow_gates set status = 'escalated', updated_at = now()
-     where id = ${gateId} and status = 'pending'
+     where id = ${gateId} and org_id = ${gate.orgId} and status = 'pending'
   `));
   if (!claimed.rowCount) return false;
 
