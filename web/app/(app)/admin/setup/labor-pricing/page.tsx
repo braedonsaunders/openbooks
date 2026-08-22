@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, requirePermission } from "../../../../../lib/authz";
-import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 import { requireProjectsFeature } from "../../../../../lib/projects-gate";
 import {
   isUuid,
@@ -33,6 +33,7 @@ export default async function LaborPricingPage({
   const orgId = authz.user.orgId;
   const today = await businessToday(orgId);
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId);
+  const multiCurrency = await isFeatureEnabled(orgId, "multiCurrency");
   const sp = await searchParams;
   const t = await getTranslations("laborPricing");
   const list = parseListParams(sp, {
@@ -295,6 +296,7 @@ export default async function LaborPricingPage({
           ).rows.map((x) => ({ id: x.value, name: x.value })),
         }}
         currencies={currencies}
+        multiCurrency={multiCurrency}
         layout={resolvedForm?.layout}
         forms={resolvedForm?.available ?? []}
         currentFormId={resolvedForm?.row?.id ?? null}
