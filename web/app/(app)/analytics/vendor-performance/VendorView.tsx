@@ -9,6 +9,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 
@@ -291,6 +292,7 @@ function matrixOption(rows: VendorRow[], money: (value: number) => string): Reco
 
 /* ------------------------------------------------------------ Vendors table */
 function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
+  const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<keyof Pick<VendorRow, 'spend' | 'bills' | 'avgBill' | 'recencyDays' | 'score'>>('spend')
@@ -312,7 +314,7 @@ function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
       actions={
         <button
           type="button"
-          onClick={() => exportCsv('vendors', ['Vendor', 'Spend', 'Share %', 'Bills', 'Avg Bill', 'On-Time %', 'Score', 'Tier'], rows.map((r) => [r.name, Math.round(r.spend), (r.sharePct * 100).toFixed(1), r.bills, Math.round(r.avgBill), r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), TIER_LABEL[r.tier]]))}
+          onClick={() => exportCsv('vendors', ['Vendor', 'Spend', 'Share %', 'Bills', 'Avg Bill', 'On-Time %', 'Score', 'Tier'], rows.map((r) => [r.name, Math.round(r.spend), (r.sharePct * 100).toFixed(1), r.bills, Math.round(r.avgBill), r.onTimePct === null ? '' : (r.onTimePct * 100).toFixed(0), Math.round(r.score), TIER_LABEL[r.tier]]), today)}
           className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           <Download size={11} /> CSV

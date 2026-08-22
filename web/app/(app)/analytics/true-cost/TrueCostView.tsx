@@ -14,6 +14,7 @@ import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney } from '../_ui/format'
 import { useMoney } from '@/components/money-provider'
@@ -710,6 +711,7 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
 /* ------------------------------------------------------------------ Matrix */
 
 function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef) => void }) {
+  const today = useBusinessToday()
   const rate = useRate()
   const { currency } = useMoney()
   const rates = data.categories.map((c) => c.rate).filter((r) => r > 0)
@@ -734,7 +736,7 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
             onClick={() => exportCsv('burden-rate-matrix', ['Category', 'Base', ...data.departments.map((d) => `${d.name} (${currency}/hr)`), `Overall (${currency}/hr)`], [
               ...data.categories.map((c) => [c.name, 'Hours', ...data.departments.map((d) => (c.byDept[d.id]?.rate ?? 0).toFixed(2)), c.rate.toFixed(2)]),
               ['Total Burden', 'Hours', ...data.departments.map((d) => d.composite.toFixed(2)), data.kpis.compositeRate.toFixed(2)],
-            ])}
+            ], today)}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <Download size={11} /> CSV
