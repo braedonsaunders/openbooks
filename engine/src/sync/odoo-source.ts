@@ -1,3 +1,4 @@
+import { businessToday } from "../business-date.ts";
 import { OdooClient, m2oId, type OdooCreds } from "../odoo.ts";
 import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromOdoo, type OdooMove, type OdooMoveLine } from "./odoo-native.ts";
@@ -59,10 +60,12 @@ export class OdooSource implements MigrationSource {
   readonly name = "odoo";
   readonly refKey = "odooId";
   readonly baseCurrency: string;
+  private readonly orgId: string;
   private readonly client: OdooClient;
 
-  constructor(creds: OdooCreds, opts: { baseCurrency?: string } = {}) {
+  constructor(creds: OdooCreds, opts: { orgId: string; baseCurrency?: string }) {
     this.client = new OdooClient(creds);
+    this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
 
@@ -101,9 +104,9 @@ export class OdooSource implements MigrationSource {
     const company = companies[0];
     if (!company) throw new Error("Odoo company fiscal settings are required for period migration");
     const dates = moves.map((move) => move.date).filter(Boolean).sort();
-    const now = new Date();
-    const start = dates[0] ?? new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
-    const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
+    const year = Number((await businessToday(this.orgId)).slice(0, 4));
+    const start = dates[0] ?? `${year - 7}-01-01`;
+    const horizon = `${year + 1}-12-31`;
     const fullLock = company.fiscalyear_lock_date || null;
     const periodLock = company.period_lock_date || null;
     const taxLock = company.tax_lock_date || null;

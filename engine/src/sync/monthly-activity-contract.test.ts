@@ -79,7 +79,7 @@ test("NetSuite item import carries simple cost and base price", async () => {
 });
 
 test("Odoo exposes posted account-month home-currency activity", async () => {
-  const source = new OdooSource({ url: "https://example.invalid", database: "test", username: "test", apiKey: "test" });
+  const source = new OdooSource({ url: "https://example.invalid", database: "test", username: "test", apiKey: "test" }, { orgId: "00000000-0000-0000-0000-000000000000" });
   (source as unknown as { client: { searchReadAll: (...args: unknown[]) => Promise<unknown[]> } }).client = {
     searchReadAll: async () => [
       { account_id: [10, "Cash"], date: "2026-01-10", balance: 12.3456 },
