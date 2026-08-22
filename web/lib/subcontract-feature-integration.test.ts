@@ -31,3 +31,13 @@ test("subcontract API applies AP permission tiers", () => {
   assert.match(route, /guardSubcontractsFeature/);
 });
 
+test("subcontract API persists money through canonicalDecimal and normalizeMoney", () => {
+  const route = source("app/api/subcontracts/route.ts");
+  assert.match(route, /canonicalDecimal/);
+  assert.match(route, /normalizeMoney/);
+  assert.match(route, /originalCommitment/);
+  assert.match(route, /scheduledValue/);
+  assert.match(route, /Draw amount/);
+  assert.doesNotMatch(route, /createSubcontract\(\{ \.\.\.body, orgId, userId \}/);
+});
+

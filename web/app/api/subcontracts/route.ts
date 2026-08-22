@@ -23,11 +23,28 @@ import {
   voidSubcontractChangeOrder,
   voidVendorPayApplication,
 } from "@openbooks/engine/src/subcontracts.ts";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission, requirePermission } from "../../../lib/authz";
+import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/** Exact numeric(19,4) money string, or null when the request value is not canonical. */
+function exactMoney(value: unknown): string | null {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return null;
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    return null;
+  }
+}
+
+function invalidDecimal(label: string) {
+  return NextResponse.json({ error: `${label} must be an exact decimal` }, { status: 422 });
+}
 
 export async function GET(request: Request) {
   const authz = await requirePermission("ap.read");
@@ -162,15 +179,42 @@ export async function POST(request: Request) {
   try {
     let result: unknown = { ok: true };
     switch (action) {
-      case "createSubcontract":
-        result = await createSubcontract({ ...body, orgId, userId } as any);
+      case "createSubcontract": {
+        const originalCommitment = exactMoney(body.originalCommitment);
+        if (originalCommitment === null) return invalidDecimal("Original commitment");
+        const retainageInput = body.defaultRetainagePercent;
+        const defaultRetainagePercent = retainageInput == null || retainageInput === ""
+          ? undefined
+          : exactMoney(retainageInput);
+        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
+        result = await createSubcontract({
+          ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
+        } as any);
         break;
-      case "updateSubcontract":
-        await updateDraftSubcontract({ ...body, orgId, userId } as any);
+      }
+      case "updateSubcontract": {
+        const originalCommitment = exactMoney(body.originalCommitment);
+        if (originalCommitment === null) return invalidDecimal("Original commitment");
+        const defaultRetainagePercent = exactMoney(body.defaultRetainagePercent);
+        if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
+        await updateDraftSubcontract({
+          ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
+        } as any);
         break;
-      case "addSovLine":
-        result = await addSubcontractSovLine({ ...body, orgId, userId } as any);
+      }
+      case "addSovLine": {
+        const scheduledValue = exactMoney(body.scheduledValue);
+        if (scheduledValue === null) return invalidDecimal("Scheduled value");
+        let retainagePercent: string | null = null;
+        if (body.retainagePercent != null && body.retainagePercent !== "") {
+          retainagePercent = exactMoney(body.retainagePercent);
+          if (retainagePercent === null) return invalidDecimal("Retainage percent");
+        }
+        result = await addSubcontractSovLine({
+          ...body, orgId, userId, scheduledValue, retainagePercent,
+        } as any);
         break;
+      }
       case "removeSovLine":
         await removeSubcontractSovLine(orgId, userId, String(body.id));
         break;
@@ -183,9 +227,12 @@ export async function POST(request: Request) {
       case "transitionSubcontract":
         await transitionSubcontract({ orgId, userId, id: String(body.id), action: body.transition });
         break;
-      case "addChangeOrder":
-        result = await createSubcontractChangeOrder({ ...body, orgId, userId } as any);
+      case "addChangeOrder": {
+        const amount = exactMoney(body.amount);
+        if (amount === null) return invalidDecimal("Amount");
+        result = await createSubcontractChangeOrder({ ...body, orgId, userId, amount } as any);
         break;
+      }
       case "approveChangeOrder":
         await approveSubcontractChangeOrder(orgId, userId, String(body.id), String(body.approvedOn));
         break;
@@ -195,9 +242,27 @@ export async function POST(request: Request) {
       case "createPayApplication":
         result = await createVendorPayApplication({ ...body, orgId, userId } as any);
         break;
-      case "updatePayApplication":
-        result = await updateVendorPayApplicationLines({ ...body, orgId, userId } as any);
+      case "updatePayApplication": {
+        if (!Array.isArray(body.lines)) {
+          result = await updateVendorPayApplicationLines({ ...body, orgId, userId } as any);
+          break;
+        }
+        const lines = [];
+        for (const line of body.lines as Array<Record<string, unknown>>) {
+          const workCompletedThisPeriod = exactMoney(line.workCompletedThisPeriod ?? "0");
+          const materialsStoredCurrent = exactMoney(line.materialsStoredCurrent ?? "0");
+          if (workCompletedThisPeriod === null || materialsStoredCurrent === null) {
+            return invalidDecimal("Draw amount");
+          }
+          lines.push({
+            sovLineId: String(line.sovLineId ?? ""),
+            workCompletedThisPeriod,
+            materialsStoredCurrent,
+          });
+        }
+        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as any);
         break;
+      }
       case "submitPayApplication":
         result = await submitVendorPayApplication(orgId, userId, String(body.id));
         break;
@@ -210,12 +275,21 @@ export async function POST(request: Request) {
       case "createVendorBill":
         result = await generateVendorPayApplicationBill(orgId, userId, String(body.id));
         break;
-      case "releaseRetainage":
-        result = await releaseVendorRetainage({ ...body, orgId, userId } as any);
+      case "releaseRetainage": {
+        const amount = exactMoney(body.amount);
+        if (amount === null) return invalidDecimal("Amount");
+        result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as any);
         break;
-      case "addPaymentControl":
-        result = await createSubcontractPaymentControl({ ...body, orgId, userId } as any);
+      }
+      case "addPaymentControl": {
+        let amountLimit: string | null = null;
+        if (body.amountLimit != null && body.amountLimit !== "") {
+          amountLimit = exactMoney(body.amountLimit);
+          if (amountLimit === null) return invalidDecimal("Amount limit");
+        }
+        result = await createSubcontractPaymentControl({ ...body, orgId, userId, amountLimit } as any);
         break;
+      }
       case "releasePaymentControl":
         await releaseSubcontractPaymentControl(orgId, userId, String(body.id), String(body.releaseReason ?? ""));
         break;
