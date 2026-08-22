@@ -2031,6 +2031,31 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? <Field label="Currency">/,
     'the subcontract form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/labor-rate-cards/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'labor-rate-card create must refuse currency when Multi-currency is off — stored books stay',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'labor-rate-card create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/route.ts'),
+    /body\.currency !== undefined\s*\?\s*String\(body\.currency\)[\s\S]{0,80}base_currency/,
+    'labor-rate-card create must fall back to the org base currency when currency is omitted',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/labor-pricing/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'labor pricing must not load the create-card currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the labor-rate-card create must not send currency when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

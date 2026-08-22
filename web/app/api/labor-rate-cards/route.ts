@@ -13,7 +13,22 @@ export async function POST(req: Request) {
   if (!(await isFeatureEnabled(gate.user.orgId, "projects")))
     return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
   const body = (await req.json()) as { name?: string; currency?: string };
-  if (!body.name?.trim() || !/^[A-Z]{3}$/.test(body.currency ?? ""))
+  // Rate-book currency is Multi-currency configuration. Turning that
+  // switch off must refuse a new write; omitting currency keeps the
+  // org / subsidiary base so a card can still be created and stored books stay.
+  if (
+    body.currency !== undefined &&
+    !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
+  ) {
+    return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
+  }
+  const org = (await db.execute<{ base_currency: string }>(sql`
+    select base_currency from orgs where id = ${gate.user.orgId}`));
+  const currency =
+    body.currency !== undefined
+      ? String(body.currency).trim().toUpperCase()
+      : (org.rows[0]?.base_currency ?? "");
+  if (!body.name?.trim() || !/^[A-Z]{3}$/.test(currency))
     return NextResponse.json({ errorCode: "save" }, { status: 422 });
   const name = body.name.trim();
   const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
@@ -22,7 +37,7 @@ export async function POST(req: Request) {
     const id = await db.transaction(async (tx) => {
       const book = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
-        values (${gate.user.orgId}, ${code}, ${name}, ${body.currency}, false, true, ${gate.user.id}, ${gate.user.id})
+        values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})
         returning id`));
       const version = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, status, custom, created_by, updated_by)
@@ -34,7 +49,7 @@ export async function POST(req: Request) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'item_rate_versions', ${version.rows[0].id}, 'insert',
-                ${JSON.stringify({ rateBookId: book.rows[0].id, code, currency: body.currency, effectiveFrom: today })}::jsonb,
+                ${JSON.stringify({ rateBookId: book.rows[0].id, code, currency, effectiveFrom: today })}::jsonb,
                 ${gate.user.id})`);
       return version.rows[0].id;
     });

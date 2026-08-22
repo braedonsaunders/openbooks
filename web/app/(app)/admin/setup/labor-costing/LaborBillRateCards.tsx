@@ -156,6 +156,7 @@ export function LaborBillRateCards(props: {
   timeTypes: { id: string; name: string; bill_multiplier: string }[];
   options: OptionMap;
   currencies: string[];
+  multiCurrency?: boolean;
   layout?: FormLayoutConfig;
   forms: FormOption[];
   currentFormId: string | null;
@@ -180,7 +181,7 @@ export function LaborBillRateCards(props: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: t("newTitle"),
-          currency: props.currencies[0] ?? "CAD",
+          ...(props.multiCurrency ? { currency: props.currencies[0] ?? "CAD" } : {}),
         }),
       });
       const result = (await response.json()) as {
