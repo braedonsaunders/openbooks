@@ -475,7 +475,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     if (id) {
       await db.execute(sql`update accounts set name=${vals.name}, type=${vals.type}::text,
         is_summary=${vals.isSummary}, is_active=${vals.isActive}, eliminate=${vals.eliminate}, reconcilable=${vals.reconcilable}
-        where id=${id}`);
+        where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, custom)
@@ -487,7 +487,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
   if (resource === "departments") {
     const name = String(f.name ?? `Department ${rec.sourceRef}`);
     const id = await findByRef("departments", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update departments set name=${name} where id=${id}`); s.updated++; return id; }
+    if (id) { await db.execute(sql`update departments set name=${name} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into departments (org_id, name, custom) values (${orgId}, ${name}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
@@ -506,7 +506,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         discount_percent=${(f.discountPercent as string) ?? null},
         custom=(${custom}::jsonb || payment_terms.custom)
           || jsonb_build_object(${refKey}, ${rec.sourceRef})
-        where id=${id}`);
+        where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
@@ -518,7 +518,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const name = String(f.name ?? `Time type ${rec.sourceRef}`);
     const mult = String(f.costMultiplier ?? "1");
     const id = await findByRef("time_types", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id}`); s.updated++; return id; }
+    if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
       values (${orgId}, ${name}, ${mult}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
@@ -558,8 +558,8 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         paid_account_id=coalesce(${paid}, paid_account_id),
         custom=(${taxCustom}::jsonb || tax_codes.custom)
           || jsonb_build_object(${refKey}, ${rec.sourceRef})
-        where id=${id}`);
-      await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id}`);
+        where id=${id} and org_id=${orgId}`);
+      await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
@@ -580,7 +580,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
       default_cost=coalesce(${defaultCost}, default_cost), default_rate=coalesce(${defaultRate}, default_rate),
-      unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id}`); s.updated++; return id; }
+      unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
       values (${orgId}, ${String(f.kind ?? "service")}::text, ${(f.code as string) ?? null}, ${name}, ${str(f.category)},
               ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
@@ -602,7 +602,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         project_type_id=coalesce((select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), project_type_id),
         customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
         customer_po_number=${vals.po}, contract_value=coalesce(${contractValue}, contract_value),
-        starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id}`);
+        starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
@@ -622,7 +622,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     if (id) {
       await db.execute(sql`update addresses set party_id=${pid}, label=${v.label}, line1=${v.line1}, line2=${v.line2},
         city=${v.city}, region=${v.region}, postal_code=${v.postal}, country=${v.country},
-        is_default_billing=${v.db}, is_default_shipping=${v.ds} where id=${id}`);
+        is_default_billing=${v.db}, is_default_shipping=${v.ds} where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping, custom)
@@ -641,7 +641,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     if (id) {
       await db.execute(sql`update contacts set party_id=${pid}, name=${v.name}, first_name=${v.first}, last_name=${v.last},
         title=${v.title}, role=${v.role}, email=${v.email}, phone=${v.phone}, mobile_phone=${v.mobile}, fax=${v.fax},
-        is_primary=${v.primary}, is_active=${v.isActive} where id=${id}`);
+        is_primary=${v.primary}, is_active=${v.isActive} where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into contacts (org_id, party_id, name, first_name, last_name, title, role, email, phone, mobile_phone, fax, is_primary, is_active, custom)
@@ -664,7 +664,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       tax_ids=${taxIds}::jsonb,
       custom=(${custom}::jsonb || parties.custom)
         || jsonb_build_object(${refKey}, ${rec.sourceRef})
-      where id=${pid}`);
+      where id=${pid} and org_id=${orgId}`);
     s.updated++;
   } else {
     const ins = (await db.execute(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
@@ -677,7 +677,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
   // short code — set only if it's free in the org (unique constraint).
   const shortCode = str(f.shortCode);
   if (shortCode) {
-    await db.execute(sql`update parties set short_code=${shortCode} where id=${pid}
+    await db.execute(sql`update parties set short_code=${shortCode} where id=${pid} and org_id=${orgId}
       and not exists (select 1 from parties p2 where p2.org_id=${orgId} and p2.short_code=${shortCode} and p2.id<>${pid})`);
   }
 
@@ -909,7 +909,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
               ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
               : {}),
           })}::jsonb
-          where id=${id}`);
+          where id=${id} and org_id=${orgId}`);
       if (billingChanged || costingChanged) {
         await db.transaction(async (tx) => {
           await update(tx);

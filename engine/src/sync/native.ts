@@ -233,7 +233,7 @@ export async function buildNativeContext(
   for (const r of (
     (await db.execute<{ id: string; rate: string | null; ref: string | null }>(sql`
       select tc.id, tr.rate_percent as rate, tc.custom->>${refKey} as ref from tax_codes tc
-        left join tax_rates tr on tr.tax_code_id = tc.id
+        left join tax_rates tr on tr.tax_code_id = tc.id and tr.org_id = tc.org_id
        where tc.org_id = ${orgId}
        order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`))
   ).rows) {
