@@ -61,6 +61,17 @@ function persistSyncFxRate(value: unknown): string {
   }
 }
 
+/** Persist a NetSuite FAM document amount through exact decimal then ledger money. Fail closed. */
+function persistSyncLineMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error(`${label} must be an exact decimal`);
+  }
+}
+
 const truthy = (value: unknown): boolean => value === true || value === "T";
 
 /** NetSuite's RESTlet returns dates as MM/DD/YYYY; keep date-only values date-only. */
@@ -551,7 +562,7 @@ export async function syncNetSuiteFixedAssets(
         currency: document.currency ?? source.baseCurrency,
         fxRate: persistSyncFxRate(document.fxRate ?? "1"),
         status: "approved",
-        subtotal: normalizeMoney(document.subtotal ?? "0"),
+        subtotal: persistSyncLineMoney(document.subtotal ?? "0", "subtotal"),
         taxTotal: "0",
         total: normalizeMoney(document.total ?? "0"),
         memo: document.memo,
