@@ -6,6 +6,7 @@ import { normalizeSectionsInput } from "../record-schema";
 import {
   API_RECORD_TYPES,
   RECORD_TYPE_BY_KEY,
+  ITEM_REVENUE_RECOGNITION_COLUMNS,
   READONLY_COLUMNS,
   RW,
   fieldTypeToApi,
@@ -101,16 +102,19 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
     return out;
   }
 
+  const revenueRecognitionOn = await isFeatureEnabled(orgId, "revenueRecognition");
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
-    const physical = (byTable.get(t.table!) ?? []).map((c): ApiField => ({
-      name: c.column_name,
-      type: pgTypeToOpenApi(c.data_type),
-      required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
-      writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom",
-      description: null,
-      custom: false,
-    }));
+    const physical = (byTable.get(t.table!) ?? [])
+      .filter((c) => t.key !== "items" || revenueRecognitionOn || !ITEM_REVENUE_RECOGNITION_COLUMNS.has(c.column_name))
+      .map((c): ApiField => ({
+        name: c.column_name,
+        type: pgTypeToOpenApi(c.data_type),
+        required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
+        writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom",
+        description: null,
+        custom: false,
+      }));
     return {
       ...t,
       path: `/api/v1/records/${t.key}`,

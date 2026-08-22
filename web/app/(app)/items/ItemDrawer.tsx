@@ -156,14 +156,18 @@ export function ItemDrawer({
       costRecoveryAccountId: costRecoveryAccountId || null,
       taxCodeId: taxCodeId || null,
       showOnTimesheet,
-      recognitionRuleId: recognitionRuleId || null,
-      deferredAccountId: deferredAccountId || null,
-      createPlansOn,
-      revenueAllocation,
-      standaloneSellingPrice: standaloneSellingPrice || null,
+      ...(fairValuePrices
+        ? {
+            recognitionRuleId: recognitionRuleId || null,
+            deferredAccountId: deferredAccountId || null,
+            createPlansOn,
+            revenueAllocation,
+            standaloneSellingPrice: standaloneSellingPrice || null,
+          }
+        : {}),
       custom: customValues,
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -471,7 +475,7 @@ export function ItemDrawer({
         </section>
 
         {/* -- revenue recognition (ASC 606) --------------------------- */}
-        <section className="space-y-4">
+        {fairValuePrices ? <section className="space-y-4">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{t('revrec.title')}</h3>
             <span className="text-xs text-slate-500 dark:text-slate-400">{t('revrec.hint')}</span>
@@ -555,7 +559,7 @@ export function ItemDrawer({
               )}
             </div>
           </div>
-        </section>
+        </section> : null}
 
         {fairValuePrices ? (
           <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />

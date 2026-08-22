@@ -185,6 +185,20 @@ export interface ApiRecordTypeSchema extends ApiRecordType {
 }
 
 /**
+ * Item columns that belong to Revenue Recognition. The items catalog itself
+ * stays available when Inventory is off; these fields must still disappear
+ * from REST/MCP and refuse writes when the Revenue Recognition switch is off.
+ * Existing values stay on the row.
+ */
+export const ITEM_REVENUE_RECOGNITION_COLUMNS = new Set<string>([
+  "recognition_rule_id",
+  "deferred_account_id",
+  "create_plans_on",
+  "revenue_allocation",
+  "standalone_selling_price",
+]);
+
+/**
  * Columns that are never writable through the API — identity, tenant scope,
  * and audit stamps are set by the server, not the caller.
  */

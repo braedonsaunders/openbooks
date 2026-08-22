@@ -34,8 +34,9 @@ import {
   type DocumentEditCurrent,
   type DocumentEditInput,
 } from "../documents";
+import { isFeatureEnabled } from "../features";
 import { validateEntityBody } from "./validate";
-import type { ApiField, ResolvedApiType } from "./schema-registry";
+import { ITEM_REVENUE_RECOGNITION_COLUMNS, type ApiField, type ResolvedApiType } from "./schema-registry";
 
 /**
  * The generic write engine behind /api/v1/records. Every writer reuses the
@@ -235,6 +236,17 @@ async function deleteCustomRecord(user: SessionUser, typeKey: string, id: string
   return { status: 200, body: { ok: true } };
 }
 
+async function refuseDisabledItemRevenueRecognition(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+): Promise<WriteResult | null> {
+  if (table !== "items") return null;
+  if (!Object.keys(columns).some((col) => ITEM_REVENUE_RECOGNITION_COLUMNS.has(col))) return null;
+  if (await isFeatureEnabled(orgId, "revenueRecognition")) return null;
+  return err(404, "not found");
+}
+
 // ---------------------------------------------------------------------------
 // Flat entity tables (items, projects, parties, fixed_assets): typed columns +
 // a `custom` jsonb bag validated against custom_field_defs.
@@ -248,6 +260,8 @@ async function createEntity(
 ): Promise<WriteResult> {
   const v = validateEntityBody(fields, body, { stage: "create" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
+  const gated = await refuseDisabledItemRevenueRecognition(user.orgId, table, v.columns);
+  if (gated) return gated;
   const defs = await loadFieldDefs(table);
   const cv = validateCustomValues(defs, v.customValues);
   if (!cv.ok) return err(422, Object.values(cv.errors)[0]!, { fieldErrors: cv.errors });
@@ -291,6 +305,8 @@ async function updateEntity(
 
   const v = validateEntityBody(fields, body, { stage: "update" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
+  const gated = await refuseDisabledItemRevenueRecognition(user.orgId, table, v.columns);
+  if (gated) return gated;
 
   const sets: ReturnType<typeof sql>[] = [];
   for (const [col, value] of Object.entries(v.columns)) {

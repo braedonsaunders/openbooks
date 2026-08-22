@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
@@ -65,6 +66,17 @@ interface PatchBody {
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
 const REVENUE_ALLOCATION = ['normal', 'exclude', 'software'] as const
+const REVENUE_RECOGNITION_BODY_KEYS = [
+  'recognitionRuleId',
+  'deferredAccountId',
+  'createPlansOn',
+  'revenueAllocation',
+  'standaloneSellingPrice',
+] as const
+
+function bodyTouchesRevenueRecognition(body: PatchBody): boolean {
+  return REVENUE_RECOGNITION_BODY_KEYS.some((key) => body[key] !== undefined)
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.read')
@@ -94,6 +106,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+  if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
