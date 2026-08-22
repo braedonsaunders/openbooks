@@ -115,6 +115,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
         granted_permissions = excluded.granted_permissions,
         status = 'installed', updated_at = now(), updated_by = ${userId}
+      where apps.org_id = ${orgId}
       returning id`))
     const appId = appRes.rows[0]!.id
 
