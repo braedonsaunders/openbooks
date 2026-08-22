@@ -668,6 +668,21 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
         throw new PropertyManagementError("Inventory is disabled", 404);
       }
     }
+    // Stored charges and the scheduled escalation stay. Turning Equipment
+    // off must refuse an apply that would persist equipment_charge.
+    if (charge.item_id) {
+      const equipmentOn = (await tx.execute<{ enabled: boolean }>(sql`
+        select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
+          from orgs where id = ${orgId}
+      `)).rows[0]?.enabled === true;
+      if (!equipmentOn) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${charge.item_id} and org_id = ${orgId}`));
+        if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+          throw new PropertyManagementError("Equipment is disabled", 404);
+        }
+      }
+    }
     const alreadyBilled = (await tx.execute(sql`select 1 from lease_schedule_lines where org_id=${orgId} and charge_id=${charge.id}
       and status in ('invoiced','credited') and period_ends_on>=${e.effective_on} limit 1`));
     if (alreadyBilled.rows.length) throw new PropertyManagementError("Affected rent is already billed; credit or void it before applying this escalation");
