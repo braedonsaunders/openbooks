@@ -2277,6 +2277,7 @@ export async function regenerateGlImpactTx(
       .where(
         and(
           eq(schema.applications.id, application.id),
+          eq(schema.applications.orgId, doc.orgId),
           sql`${schema.applications.unappliedAt} is null`,
         ),
       )
