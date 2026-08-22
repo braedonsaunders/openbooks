@@ -1152,6 +1152,46 @@ test('the surfaces this test was written for are covered', () => {
     /isFeatureEnabled\([^,]+, 'multiCurrency'\)/,
     'the accounts page must not load currency pickers when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /workerCompGroupId !== undefined[\s\S]{0,200}payroll/,
+    'employee party writes must refuse workerCompGroupId when Payroll is off — existing links stay',
+  )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /workerCompGroupId !== undefined[\s\S]{0,280}status: 404/,
+    'employee party writes must 404 — not persist — workerCompGroupId when Payroll is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/route.ts'),
+    /employee_roles\.worker_comp_group_id/,
+    'employee party writes must keep the stored worker-comp link when Payroll is off',
+  )
+  assert.match(
+    read('app/(app)/parties/page.tsx'),
+    /isFeatureEnabled\([^,]+, ["']payroll["']\)/,
+    'the parties page must not load the worker-comp picker when Payroll is off',
+  )
+  assert.match(
+    read('app/(app)/entities/[role]/page.tsx'),
+    /payrollEnabled[\s\S]{0,80}worker_comp_groups/,
+    'entities must not load the worker-comp picker when Payroll is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/drawer/route.ts'),
+    /isFeatureEnabled\([^,]+, ["']payroll["']\)/,
+    'the related-party drawer must not load the worker-comp picker when Payroll is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /payrollEnabled \? \{[\s\S]{0,80}workerCompGroupId/,
+    'the party form must not send workerCompGroupId when Payroll is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /\{payrollEnabled \? <div className=\{field\}>/,
+    'the party form must hide the worker-comp picker when Payroll is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { loadFieldDefs } from '../../../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../../../lib/customization/resolve'
 import { isUuid } from '../../../../../lib/list-params'
@@ -17,19 +18,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps] = await Promise.all([
+  const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled] = await Promise.all([
     loadParty(id, gate.user.orgId),
     db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`) as any,
     db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`) as any,
     db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`) as any,
-    db.execute(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`) as any,
+    isFeatureEnabled(gate.user.orgId, 'payroll').then((enabled) => enabled
+      ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`) as any
+      : Promise.resolve({ rows: [] })),
     loadFieldDefs('parties'),
     subsidiaryUiOptions(gate.user.orgId).then((options) => gate.allowedSubsidiaryIds
       ? options.filter((option) => gate.allowedSubsidiaryIds!.has(option.id))
       : options),
     db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`) as any,
     db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`) as any,
-    db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`) as any,
+    db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`) as any,
+    isFeatureEnabled(gate.user.orgId, 'payroll'),
   ])
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const requestedRole = new URL(request.url).searchParams.get('role')
@@ -53,6 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     departments: departments.rows,
     trades: trades.rows,
     workerCompGroups: workerCompGroups.rows,
+    payrollEnabled,
     fieldDefs,
     subsidiaries,
     accounts: accounts.rows,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
@@ -49,7 +50,7 @@ async function orgRefExists(
           : kind === 'tax'
             ? sql`select 1 from tax_codes where id = ${id} and org_id = ${orgId} and is_active`
             : kind === 'salesRep'
-              ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.is_active where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
+              ? sql`select 1 from parties p join employee_roles r on r.party_id = p.id and r.org_id = p.org_id and r.is_active where p.id = ${id} and p.org_id = ${orgId} and p.is_active`
               : kind === 'department'
                 ? sql`select 1 from departments where id = ${id} and org_id = ${orgId} and is_active`
                 : kind === 'workerComp'
@@ -194,6 +195,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+  // Worker-comp group is Payroll configuration living on the employee role.
+  // Turning that switch off must refuse a new write; the stored link stays so
+  // turning the feature back on restores the same assignment.
+  if (body.roles?.employee?.workerCompGroupId !== undefined && !(await isFeatureEnabled(user.orgId, 'payroll'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
   const completesPlaceholder =
     body.isActive === undefined
@@ -506,24 +513,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (departmentId === 'invalid') return bad('Invalid department')
       const tradeId = uuidOrNull(e.tradeId)
       if (tradeId === 'invalid') return bad('Invalid trade')
-      const workerCompGroupId = uuidOrNull(e.workerCompGroupId)
+      const workerCompGroupId = e.workerCompGroupId !== undefined ? uuidOrNull(e.workerCompGroupId) : undefined
       if (workerCompGroupId === 'invalid') return bad('Invalid worker-comp group')
       if (!await orgRefExists('department', departmentId, user.orgId)) return bad('Invalid department')
       if (!await orgRefExists('trade', tradeId, user.orgId)) return bad('Invalid trade')
-      if (!await orgRefExists('workerComp', workerCompGroupId, user.orgId)) return bad('Invalid worker-comp group')
+      if (workerCompGroupId !== undefined && !await orgRefExists('workerComp', workerCompGroupId, user.orgId)) {
+        return bad('Invalid worker-comp group')
+      }
       const hiredOn = strOrNull(e.hiredOn)
       if (hiredOn && !DATE_RE.test(hiredOn)) return bad('Hired-on must be a date (YYYY-MM-DD)')
       await db.execute(sql`
         insert into employee_roles (org_id, party_id, employee_number, job_title, department_id, trade_id,
                                     worker_comp_group_id, hired_on, created_by, updated_by)
         values (${user.orgId}, ${id}, ${strOrNull(e.employeeNumber)}, ${strOrNull(e.jobTitle)?.slice(0, 160) ?? null}, ${departmentId}, ${tradeId},
-                ${workerCompGroupId}, ${hiredOn}, ${user.id}, ${user.id})
+                ${workerCompGroupId !== undefined ? workerCompGroupId : null}, ${hiredOn}, ${user.id}, ${user.id})
         on conflict (party_id) do update set
           employee_number = excluded.employee_number,
           job_title = excluded.job_title,
           department_id = excluded.department_id,
           trade_id = excluded.trade_id,
-          worker_comp_group_id = excluded.worker_comp_group_id,
+          worker_comp_group_id = ${workerCompGroupId !== undefined ? workerCompGroupId : sql`employee_roles.worker_comp_group_id`},
           hired_on = excluded.hired_on,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}

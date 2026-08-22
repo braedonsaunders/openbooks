@@ -69,7 +69,9 @@ export default async function EntityRole({
           db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`) as any,
           db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`) as any,
           db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`) as any,
-          db.execute(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`) as any,
+          payrollEnabled
+            ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`) as any
+            : Promise.resolve({ rows: [] }),
         ])
       : null,
   ])
@@ -96,6 +98,7 @@ export default async function EntityRole({
           canReadActivities={can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           canManagePayroll={payrollEnabled && can(authz, 'payroll.manage')}
+          payrollEnabled={payrollEnabled}
           role={role}
           initialTab={partyTab}
           initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}

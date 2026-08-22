@@ -33,6 +33,7 @@ interface DrawerPayload {
   currentFormId: string | null
   recordType: 'customer' | 'vendor' | 'employee'
   canCustomize: boolean
+  payrollEnabled?: boolean
 }
 
 function isRole(value: string | null): value is RelatedPartyRole {
@@ -177,6 +178,7 @@ export function GlobalPartyDrawerHost({
         canManage={canManage}
         canReadActivities={canReadActivities}
         canManageWages={canManageWages}
+        payrollEnabled={data.payrollEnabled === true}
         role={role}
         initialTab={initialTab}
         basePath={closeHref}

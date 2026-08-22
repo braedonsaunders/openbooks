@@ -191,6 +191,7 @@ export function PartyDrawer({
   canReadActivities = false,
   canManageWages = false,
   canManagePayroll = false,
+  payrollEnabled = false,
   role,
   initialTab = 'overview',
   initialMode = 'view',
@@ -217,6 +218,9 @@ export function PartyDrawer({
   canManageWages?: boolean
   /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
   canManagePayroll?: boolean
+  /** Company Settings → Features. Worker-comp group is Payroll
+   *  configuration; hide and omit it when that switch is off. */
+  payrollEnabled?: boolean
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -376,7 +380,7 @@ export function PartyDrawer({
           jobTitle: employee.jobTitle || null,
           departmentId: employee.departmentId || null,
           tradeId: employee.tradeId || null,
-          workerCompGroupId: employee.workerCompGroupId || null,
+          ...(payrollEnabled ? { workerCompGroupId: employee.workerCompGroupId || null } : {}),
           hiredOn: employee.hiredOn || null,
         },
       },
@@ -384,7 +388,7 @@ export function PartyDrawer({
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
-    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role],
+    [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role, payrollEnabled],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -664,7 +668,7 @@ export function PartyDrawer({
       case 'job_title': return <><Label>{label(placement, t('jobTitle'))}</Label>{editable ? <Input value={employee.jobTitle} onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })} /> : partyValue(employee.jobTitle)}</>
       case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label>{editable ? <Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(departments, employee.departmentId))}</>
       case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label>{editable ? <Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(trades, employee.tradeId))}</>
-      case 'worker_comp_group_id': return <><Label>{label(placement, t('workerCompGroup'))}</Label>{editable ? <Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(workerCompGroups, employee.workerCompGroupId))}</>
+      case 'worker_comp_group_id': if (!payrollEnabled) return null; return <><Label>{label(placement, t('workerCompGroup'))}</Label>{editable ? <Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(workerCompGroups, employee.workerCompGroupId))}</>
       case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} /> : partyValue(employee.hiredOn)}</>
       default: return null
     }
@@ -925,7 +929,7 @@ export function PartyDrawer({
                   <PartyReadOnlyField label={t('jobTitle')} value={employee.jobTitle} />
                   <PartyReadOnlyField label={tc('labels.department')} value={optionName(departments, employee.departmentId)} />
                   <PartyReadOnlyField label={t('trade')} value={optionName(trades, employee.tradeId)} />
-                  <PartyReadOnlyField label={t('workerCompGroup')} value={optionName(workerCompGroups, employee.workerCompGroupId)} />
+                  {payrollEnabled ? <PartyReadOnlyField label={t('workerCompGroup')} value={optionName(workerCompGroups, employee.workerCompGroupId)} /> : null}
                   <PartyReadOnlyField label={t('hiredOn')} value={employee.hiredOn} />
                 </div>
               </div>
@@ -1218,7 +1222,7 @@ export function PartyDrawer({
                     ))}
                   </Select>
                 </div>
-                <div className={field}>
+                {payrollEnabled ? <div className={field}>
                   <Label>{t('workerCompGroup')}</Label>
                   <Select
                     value={employee.workerCompGroupId}
@@ -1232,7 +1236,7 @@ export function PartyDrawer({
                       </option>
                     ))}
                   </Select>
-                </div>
+                </div> : null}
                 <div className={field}>
                   <Label>{t('hiredOn')}</Label>
                   <Input
