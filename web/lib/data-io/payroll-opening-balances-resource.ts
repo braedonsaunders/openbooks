@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from '../exact-decimal'
 import {
   assertTaxYear,
   isEmptyOpeningBalance,
@@ -424,7 +425,15 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           // only counts rows lets an operator approve a load that then fails
           // halfway, and the sign is the error that matters here (an 'owe'
           // balance entered positive is a credit on a real cheque).
-          const amount = normalizeMoney(String(src.amount ?? '').trim().replace(/[,$]/g, '') || '0')
+          const cleaned = String(src.amount ?? '').trim().replace(/[,$]/g, '') || '0'
+          const exact = canonicalDecimal(cleaned, 4)
+          if (exact === null) throw new Error('amount must be an exact decimal')
+          let amount: string
+          try {
+            amount = normalizeMoney(exact)
+          } catch {
+            throw new Error('amount must be an exact decimal')
+          }
           if (plan.direction === 'accrue' && cmp(amount, '0') < 0) {
             throw new Error(`${plan.code} is a bank the employer owes, so its carry-in cannot be negative`)
           }
@@ -440,7 +449,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             movementDate: asOf,
-            rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: src.amount } }],
+            rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: amount } }],
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
