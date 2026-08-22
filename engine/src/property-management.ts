@@ -369,7 +369,7 @@ export async function updatePropertyUnit(input: {
   unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string;
 }): Promise<{ id: string }> {
   const code = input.code.trim();
-  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : normalizeMoney(input.rentableArea);
+  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : exactMoney(input.rentableArea, "Rentable area");
   if (!code) throw new PropertyManagementError("Unit code is required");
   if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
   if (input.bedrooms != null && (!Number.isInteger(input.bedrooms) || input.bedrooms < 0)) {
