@@ -1861,7 +1861,7 @@ export async function finalizeCloseFlowApproval(args: {
     await db.execute(sql`
       update close_run_tasks set status = 'changes_requested', completed_at = null, completed_by = null,
              reviewed_at = now(), reviewed_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
-       where run_id = ${args.runId} and task_type = 'approval' and status <> 'waived'
+       where run_id = ${args.runId} and org_id = ${args.orgId} and task_type = 'approval' and status <> 'waived'
     `);
     await db.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
@@ -1880,7 +1880,7 @@ export async function finalizeCloseFlowApproval(args: {
     update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${args.actorId},
            reviewed_at = now(), reviewed_by = ${args.actorId}, data_fingerprint = ${row.data_fingerprint},
            updated_at = now(), updated_by = ${args.actorId}
-     where run_id = ${args.runId} and task_type = 'approval' and status <> 'waived'
+     where run_id = ${args.runId} and org_id = ${args.orgId} and task_type = 'approval' and status <> 'waived'
   `);
   await db.execute(sql`
     insert into close_signoffs (org_id, run_id, signoff_type, decision, data_fingerprint, signed_by)
