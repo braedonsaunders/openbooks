@@ -2106,8 +2106,8 @@ export async function publishCloseRun(
         tx.execute(
           sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`,
         ),
-        tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId})
-        and book_id = (select book_id from close_runs where id = ${runId}) order by subsidiary_id nulls first, module`),
+        tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId})
+        and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`),
       ])) as any[];
     const snapshot = {
       format: "openbooks.close-binder.v1",
