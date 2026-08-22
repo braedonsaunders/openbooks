@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { updatePaymentBankProfile } from '@openbooks/engine/src/payment-operations.ts'
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
 import { guardPermission } from '../../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
 
@@ -26,6 +27,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     if (resource === 'profiles') {
       await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body)
     } else if (resource === 'formats') {
+      // Format currency is Multi-currency configuration. Turning that
+      // switch off must refuse a write; omitting currency keeps the
+      // stored format.
+      if (
+        body.currency !== undefined &&
+        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+      ) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       const updated = (await db.execute(sql`
         update payment_formats set
           name = coalesce(${body.name?.trim() ?? null}, name),

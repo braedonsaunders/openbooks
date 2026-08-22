@@ -2072,6 +2072,21 @@ test('the surfaces this test was written for are covered', () => {
     'payment-format create must keep a null currency when the field is omitted',
   )
   assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /resource === 'formats'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'payment-format PATCH must refuse currency when Multi-currency is off — stored formats stay',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /resource === 'formats'[\s\S]{0,500}body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'payment-format PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /currency = case when \$\{body\.currency === undefined\} then currency/,
+    'payment-format PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
     read('app/(app)/admin/setup/payment-operations/page.tsx'),
     /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
     'payment operations must not load the format currency control when Multi-currency is off',
