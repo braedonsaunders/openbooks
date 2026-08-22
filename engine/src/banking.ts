@@ -880,12 +880,13 @@ async function reconciliationTotalsUsing(
            and je.posting_date <= ${recon.through_date}
            and (jl.reconciled_at is not null
                 or jl.id in (select journal_line_id from reconciliation_matches
-                              where reconciliation_id = ${recon.id}))
+                              where reconciliation_id = ${recon.id}
+                                and org_id = ${ctx.orgId}))
       ), 0) as cleared,
       (select count(distinct m.journal_line_id) from reconciliation_matches m
-        where m.reconciliation_id = ${recon.id}) as matched_journal,
+        where m.reconciliation_id = ${recon.id} and m.org_id = ${ctx.orgId}) as matched_journal,
       (select count(distinct m.statement_line_id) from reconciliation_matches m
-        where m.reconciliation_id = ${recon.id}) as matched_stmt,
+        where m.reconciliation_id = ${recon.id} and m.org_id = ${ctx.orgId}) as matched_stmt,
       (select count(*)
          from bank_statement_lines l
         where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
@@ -1409,8 +1410,9 @@ export async function markReconciled(
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
          and (jl.reconciled_at is not null
-              or jl.id in (select journal_line_id from reconciliation_matches
-                            where reconciliation_id = ${recon.id}))
+              or jl.id in (select journal_line_id from reconciliation_matches rm
+                            where rm.reconciliation_id = ${recon.id}
+                              and rm.org_id = ${ctx.orgId}))
     `));
     const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0].cleared));
     if (!isZero(difference)) {
