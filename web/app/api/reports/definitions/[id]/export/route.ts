@@ -75,6 +75,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   const { page, showSummary } = resolveLayout(def.layout as Record<string, unknown> | null)
   const branding = await orgBranding()
-  const pdf = await exportDataToPdf(data, branding, page, { showSummary })
+  const pdf = await exportDataToPdf(data, branding, page, {
+    showSummary,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  })
   return pdfResponse(pdf, filename)
 }
