@@ -137,7 +137,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
              coalesce(sum(st.net_pay), 0) as net,
              coalesce(sum(st.employer_cost), 0) as employer_cost
         from pay_stubs st
-        join pay_runs r on r.document_id = st.pay_run_document_id and r.run_status = 'committed'
+        join pay_runs r on r.document_id = st.pay_run_document_id and r.org_id = st.org_id and r.run_status = 'committed'
        where st.org_id = ${orgId} and st.tax_year = ${taxYear}
     `),
     // Active employees with no active payroll profile.
