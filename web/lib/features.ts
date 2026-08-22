@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
@@ -447,6 +448,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
   // return that has not been filed yet. That is a statutory obligation in
   // flight: file it or void it before the module goes dark.
   subcontractorCompliance: async (orgId) => {
+    const today = await businessToday(orgId)
     const [trackedVendors, activeRecords, blockingPolicies, openWaiverRequests, pendingFilings, unfiledFinalized] =
       await Promise.all([
         countRows(sql`
@@ -455,7 +457,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
         countRows(sql`
           select count(*)::int as n from compliance_records
            where org_id = ${orgId} and status = 'active'
-             and (expires_on is null or expires_on >= current_date)`),
+             and (expires_on is null or expires_on >= ${today})`),
         countRows(sql`
           select count(*)::int as n from compliance_requirements
            where org_id = ${orgId} and is_active
