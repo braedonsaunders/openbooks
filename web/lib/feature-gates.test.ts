@@ -858,6 +858,16 @@ test('the surfaces this test was written for are covered', () => {
     'item catalog PATCH must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /orgFeatureEnabled\([^,]+, 'timeTracking'\)/,
+    'items import must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /showOnTimesheet !== undefined/,
+    'items import must refuse — not persist — show-on-timesheet when Time Tracking is off',
+  )
+  assert.match(
     read('app/api/items/[id]/route.ts'),
     /status: 404/,
     'item catalog PATCH must 404 — not persist — revenue-recognition fields when the feature is off',
