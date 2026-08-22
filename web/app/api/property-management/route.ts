@@ -292,6 +292,21 @@ async function refuseDisabledPropertyFixedAsset(
   return NextResponse.json({ error: "not found" }, { status: 404 });
 }
 
+async function refuseDisabledPropertyCurrency(
+  orgId: string,
+  action: string,
+  body: Record<string, any>,
+): Promise<NextResponse | null> {
+  if (action !== "createProperty" && action !== "updateProperty") return null;
+  if (
+    body.currency !== undefined &&
+    !(await isFeatureEnabled(orgId, "multiCurrency"))
+  ) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  return null;
+}
+
 /** Stored charges stay when item_id is omitted. A new inventory / assembly / kit
  *  item is Inventory configuration — refuse it when that switch is off. */
 async function refuseDisabledLeaseChargeInventory(
@@ -333,6 +348,12 @@ export async function POST(request: Request) {
     body,
   );
   if (assetGate) return assetGate;
+  const currencyGate = await refuseDisabledPropertyCurrency(
+    authz.user.orgId,
+    action,
+    body,
+  );
+  if (currencyGate) return currencyGate;
   const inventoryGate = await refuseDisabledLeaseChargeInventory(
     authz.user.orgId,
     action,

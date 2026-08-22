@@ -105,6 +105,7 @@ export function PropertyManagementWorkspace({
   permissions,
   customization,
   fixedAssetsEnabled = false,
+  multiCurrency = false,
 }: {
   options: {
     subsidiaries: Option[];
@@ -132,6 +133,7 @@ export function PropertyManagementWorkspace({
     listView: ListViewConfig;
   };
   fixedAssetsEnabled?: boolean;
+  multiCurrency?: boolean;
 }) {
   const { money } = useMoney();
   const [data, setData] = useState<Workspace>(empty);
@@ -397,6 +399,7 @@ export function PropertyManagementWorkspace({
         options={options}
         busy={busy}
         fixedAssetsEnabled={fixedAssetsEnabled}
+        multiCurrency={multiCurrency}
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createProperty", ...payload },
@@ -418,6 +421,7 @@ export function PropertyManagementWorkspace({
         permissions={permissions}
         customization={customization}
         fixedAssetsEnabled={fixedAssetsEnabled}
+        multiCurrency={multiCurrency}
         data={data}
         money={money}
         act={act}
@@ -665,6 +669,7 @@ function PropertyDetailDrawer({
   permissions,
   customization,
   fixedAssetsEnabled = false,
+  multiCurrency = false,
   data,
   money,
   act,
@@ -901,6 +906,7 @@ function PropertyDetailDrawer({
           ),
         );
       case "currency":
+        if (!multiCurrency) return null;
         return field(
           placement,
           "Currency",
@@ -1035,7 +1041,7 @@ function PropertyDetailDrawer({
       subsidiaryId: form.subsidiaryId,
       locationId: form.locationId || null,
       ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
-      currency: form.currency,
+      ...(multiCurrency ? { currency: form.currency } : {}),
       address: {
         street: form.street,
         city: form.city,
@@ -2316,7 +2322,7 @@ function Field({
   );
 }
 
-function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false }: any) {
+function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabled = false, multiCurrency = false }: any) {
   const initial = {
     code: "",
     name: "",
@@ -2338,9 +2344,11 @@ function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabl
   useEffect(() => {
     if (open) setForm(initial);
   }, [open]);
-  const submit = () =>
+  const submit = () => {
+    const { currency, ...fields } = form;
     onSave({
-      ...form,
+      ...fields,
+      ...(multiCurrency ? { currency } : {}),
       locationId: form.locationId || null,
       ...(fixedAssetsEnabled ? { fixedAssetId: form.fixedAssetId || null } : {}),
       camIncomeAccountId: form.camIncomeAccountId || null,
@@ -2353,6 +2361,7 @@ function PropertyDrawer({ open, onClose, options, busy, onSave, fixedAssetsEnabl
         postalCode: form.postalCode,
       },
     });
+  };
   return (
     <Drawer
       open={open}
