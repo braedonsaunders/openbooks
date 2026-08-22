@@ -302,3 +302,37 @@ test('tab lint rejects unknown tabs, product-panel groups, and shared groups', (
   assert.ok(messages.includes('unknown field group: ghost'))
   assert.ok(messages.includes('field group primary is on more than one tab'))
 })
+
+test('optional-module record types declare a Features switch', () => {
+  const expected: Record<string, string> = {
+    quote: 'orders',
+    sales_order: 'orders',
+    purchase_order: 'orders',
+    expense_report: 'expenses',
+    project_charge: 'projects',
+    project: 'projects',
+    labor_rate_card: 'projects',
+    field_ticket: 'fieldTickets',
+    opportunity: 'crm',
+    lead: 'crm',
+    prospect: 'crm',
+    activity: 'crm',
+    inventory_onhand: 'inventory',
+    inventory_movement: 'inventory',
+    budget_scenario: 'budgets',
+    revenue_contract: 'revenueRecognition',
+    equipment_unit: 'equipment',
+    timesheet_week: 'timeTracking',
+    fixed_asset: 'fixedAssets',
+    property: 'propertyManagement',
+    pay_run: 'payroll',
+  }
+  for (const [key, feature] of Object.entries(expected)) {
+    assert.equal(getRecordType(key)?.featureKey, feature, key)
+  }
+  // Core catalog and intentional exceptions: items without inventory,
+  // banking vs bankFeeds.
+  for (const key of ['item', 'vendor_bill', 'customer', 'bank_transaction', 'bank_reconciliation', 'bank_statement', 'bank_rule', 'journal', 'account']) {
+    assert.equal(getRecordType(key)?.featureKey, undefined, key)
+  }
+})

@@ -278,6 +278,7 @@ const PROJECT_CHARGE: RecordTypeMeta = {
   key: "project_charge",
   labelKey: "customization.recordTypes.project_charge",
   category: "transaction",
+  featureKey: "projects",
   headerFields: [
     { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", required: true, locked: true },
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
@@ -331,6 +332,7 @@ const EXPENSE_REPORT: RecordTypeMeta = {
   key: "expense_report",
   labelKey: "customization.recordTypes.expense_report",
   category: "transaction",
+  featureKey: "expenses",
   headerFields: [
     { key: "party_id", labelKey: "common.labels.employee", level: "header", kind: "entity_ref", required: true, locked: true },
     { key: "document_date", labelKey: "expenses.drawer.reportDate", level: "header", kind: "date" },
@@ -475,6 +477,7 @@ function orderRecordType(key: string, partyLabelKey: string, entitySource: strin
     key,
     labelKey: `customization.recordTypes.${key}`,
     category: "transaction",
+    featureKey: "orders",
     headerFields: [
       { key: "party_id", labelKey: partyLabelKey, level: "header", kind: "entity_ref", required: true, locked: true },
       { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
@@ -584,6 +587,7 @@ const OPPORTUNITY: RecordTypeMeta = {
   key: "opportunity",
   labelKey: "customization.recordTypes.opportunity",
   category: "entity",
+  featureKey: "crm",
   supportsForms: false,
   customFieldTable: "crm_opportunities",
   customFieldLineTable: null,
@@ -626,6 +630,7 @@ function crmAccountRecordType(key: "lead" | "prospect"): RecordTypeMeta {
     key,
     labelKey: `customization.recordTypes.${key}`,
     category: "entity",
+    featureKey: "crm",
     supportsForms: false,
     customFieldTable: "parties",
     customFieldLineTable: null,
@@ -657,6 +662,7 @@ const ACTIVITY: RecordTypeMeta = {
   key: "activity",
   labelKey: "customization.recordTypes.activity",
   category: "entity",
+  featureKey: "crm",
   supportsForms: false,
   customFieldTable: "crm_activities",
   customFieldLineTable: null,
@@ -847,6 +853,7 @@ const INVENTORY_ONHAND: RecordTypeMeta = {
   key: "inventory_onhand",
   labelKey: "customization.recordTypes.inventory_onhand",
   category: "entity",
+  featureKey: "inventory",
   supportsForms: false,
   customFieldTable: "items",
   customFieldLineTable: null,
@@ -871,6 +878,7 @@ const INVENTORY_MOVEMENT: RecordTypeMeta = {
   key: "inventory_movement",
   labelKey: "customization.recordTypes.inventory_movement",
   category: "entity",
+  featureKey: "inventory",
   supportsForms: false,
   customFieldTable: "items",
   customFieldLineTable: null,
@@ -902,6 +910,7 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
   key: "budget_scenario",
   labelKey: "customization.recordTypes.budget_scenario",
   category: "entity",
+  featureKey: "budgets",
   supportsForms: false,
   customFieldTable: "budget_scenarios",
   customFieldLineTable: null,
@@ -935,6 +944,7 @@ const REVENUE_CONTRACT: RecordTypeMeta = {
   key: "revenue_contract",
   labelKey: "customization.recordTypes.revenue_contract",
   category: "entity",
+  featureKey: "revenueRecognition",
   supportsForms: false,
   customFieldTable: "revenue_contracts",
   customFieldLineTable: null,
@@ -966,6 +976,7 @@ const EQUIPMENT_UNIT: RecordTypeMeta = {
   key: "equipment_unit",
   labelKey: "customization.recordTypes.equipment_unit",
   category: "entity",
+  featureKey: "equipment",
   supportsForms: false,
   customFieldTable: "equipment_units",
   customFieldLineTable: null,
@@ -996,6 +1007,7 @@ const TIMESHEET_WEEK: RecordTypeMeta = {
   key: "timesheet_week",
   labelKey: "customization.recordTypes.timesheet_week",
   category: "entity",
+  featureKey: "timeTracking",
   supportsForms: false,
   // A week is an aggregate over time_entries, not a record, so it has no header
   // of its own to extend; tenant fields belong on the LINE and render as grid
@@ -1167,6 +1179,7 @@ const PROJECT: RecordTypeMeta = {
   key: "project",
   labelKey: "customization.recordTypes.project",
   category: "entity",
+  featureKey: "projects",
   supportsForms: true,
   customFieldTable: "projects",
   customFieldLineTable: null,
@@ -1240,6 +1253,7 @@ const FIXED_ASSET: RecordTypeMeta = {
   key: "fixed_asset",
   labelKey: "customization.recordTypes.fixed_asset",
   category: "entity",
+  featureKey: "fixedAssets",
   supportsForms: true,
   customFieldTable: "fixed_assets",
   customFieldLineTable: null,
@@ -1301,6 +1315,7 @@ const PROPERTY: RecordTypeMeta = {
   key: "property",
   labelKey: "customization.recordTypes.property",
   category: "entity",
+  featureKey: "propertyManagement",
   supportsForms: true,
   customFieldTable: "managed_properties",
   customFieldLineTable: null,
@@ -1504,6 +1519,7 @@ const LABOR_RATE_CARD: RecordTypeMeta = {
   key: "labor_rate_card",
   labelKey: "laborPricing.recordType",
   category: "entity",
+  featureKey: "projects",
   supportsForms: true,
   customFieldTable: "item_rate_versions",
   customFieldLineTable: null,
@@ -1535,6 +1551,7 @@ const FIELD_TICKET: RecordTypeMeta = {
   key: "field_ticket",
   labelKey: "customization.recordTypes.field_ticket",
   category: "transaction",
+  featureKey: "fieldTickets",
   headerFields: [
     { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", required: true },
     { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
@@ -1587,6 +1604,7 @@ const PAY_RUN: RecordTypeMeta = {
   key: "pay_run",
   labelKey: "customization.recordTypes.pay_run",
   category: "transaction",
+  featureKey: "payroll",
   supportsForms: false,
   customFieldTable: "documents",
   customFieldLineTable: null,
@@ -1672,6 +1690,11 @@ export const RECORD_TYPE_BY_KEY: Record<string, RecordTypeMeta> = Object.fromEnt
 
 export function getRecordType(key: string): RecordTypeMeta | undefined {
   return RECORD_TYPE_BY_KEY[key];
+}
+
+/** Features switch this record type follows, if any. Core types return null. */
+export function recordTypeFeatureKey(recordType: string): string | null {
+  return RECORD_TYPE_BY_KEY[recordType]?.featureKey ?? null;
 }
 
 /** A field key is built-in for this record type (header or line). */

@@ -519,6 +519,131 @@ test('the surfaces this test was written for are covered', () => {
     /requiredPermission: 'payroll.read',\s*featureKey: 'payroll'/,
     'payroll wage entities must follow the Payroll switch, not only payroll.read',
   )
+  assert.match(
+    read('../packages/customization/src/types.ts'),
+    /featureKey\?: string/,
+    'the record-type catalog must declare an optional-module featureKey',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /function orderRecordType[\s\S]{0,400}featureKey: "orders"/,
+    'quote / sales order / purchase order customization must follow the Orders switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /function crmAccountRecordType[\s\S]{0,300}featureKey: "crm"/,
+    'lead / prospect list views must follow the CRM switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /const PROJECT: RecordTypeMeta = \{[\s\S]{0,250}featureKey: "projects"/,
+    'project customization must follow the Projects switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "expense_report"[\s\S]{0,200}featureKey: "expenses"/,
+    'expense-report customization must follow the Expenses switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "inventory_onhand"[\s\S]{0,200}featureKey: "inventory"/,
+    'inventory list views must follow the Inventory switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "budget_scenario"[\s\S]{0,200}featureKey: "budgets"/,
+    'budget-scenario list views must follow the Budgets switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "revenue_contract"[\s\S]{0,200}featureKey: "revenueRecognition"/,
+    'revenue-contract list views must follow the Revenue Recognition switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "equipment_unit"[\s\S]{0,200}featureKey: "equipment"/,
+    'equipment list views must follow the Equipment switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "timesheet_week"[\s\S]{0,200}featureKey: "timeTracking"/,
+    'timesheet list views must follow the Time Tracking switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "fixed_asset"[\s\S]{0,200}featureKey: "fixedAssets"/,
+    'fixed-asset customization must follow the Fixed Assets switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "property"[\s\S]{0,200}featureKey: "propertyManagement"/,
+    'property customization must follow the Property Management switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "labor_rate_card"[\s\S]{0,200}featureKey: "projects"/,
+    'labor-rate-card customization must follow the Projects parent gate',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "field_ticket"[\s\S]{0,200}featureKey: "fieldTickets"/,
+    'field-ticket customization must follow the Field Tickets switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "pay_run"[\s\S]{0,200}featureKey: "payroll"/,
+    'pay-run list views must follow the Payroll switch',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /key: "opportunity"[\s\S]{0,200}featureKey: "crm"/,
+    'opportunity list views must follow the CRM switch',
+  )
+  assert.match(
+    read('lib/customization/gates.ts'),
+    /recordTypeFeatureKey\(recordType\)/,
+    'customization gates must consult the catalog featureKey',
+  )
+  assert.match(
+    read('lib/customization/gates.ts'),
+    /status: 404/,
+    'disabled record types must 404 — not write — when the feature is off',
+  )
+  assert.match(
+    read('app/(app)/admin/customization/page.tsx'),
+    /disabledRecordTypes\(/,
+    'the customization catalog must hide optional-module kinds when the feature is off',
+  )
+  assert.match(
+    read('app/(app)/admin/customization/page.tsx'),
+    /notFound\(\)/,
+    'a disabled record type must 404 — not open the designer',
+  )
+  for (const file of [
+    'app/api/customization/list-views/route.ts',
+    'app/api/customization/list-views/[id]/route.ts',
+    'app/api/customization/form-layouts/route.ts',
+    'app/api/customization/form-layouts/[id]/route.ts',
+    'app/api/customization/list-preferences/route.ts',
+    'app/api/customization/form-preferences/route.ts',
+  ]) {
+    assert.match(read(file), /refuseDisabledRecordType\(/, `${file} must refuse optional-module kinds when the feature is off`)
+  }
+  assert.match(
+    read('app/api/admin/custom-fields/route.ts'),
+    /isCustomFieldTargetEnabled\(/,
+    'custom-field writes must refuse optional-module targets when the feature is off',
+  )
+  assert.match(
+    read('app/api/admin/custom-fields/route.ts'),
+    /status: 404/,
+    'custom-field writes must 404 — not persist — when the feature is off',
+  )
+  assert.match(
+    read('app/(app)/admin/custom-fields/page.tsx'),
+    /disabledCustomFieldTargets\(/,
+    'the custom-fields list must hide optional-module targets when the feature is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

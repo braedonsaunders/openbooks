@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { BookOpen } from 'lucide-react'
@@ -15,6 +15,7 @@ import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayo
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
+import { disabledRecordTypes } from '../../../../lib/customization/gates'
 import { subsidiaryFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -39,8 +40,14 @@ export default async function CustomizationPage({
   const tRoot = await getTranslations()
   const sp = await searchParams
   // Whitelist the record type — an unknown key must not reach the designer.
+  // Optional-module kinds 404 when their Features switch is off; stored
+  // layouts stay in the database and reappear when the switch comes back.
   const requestedType = pickString(sp.recordType)
-  const recordType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : null
+  const catalogType = requestedType && requestedType in RECORD_TYPE_BY_KEY ? requestedType : null
+  const hiddenKinds = new Set(await disabledRecordTypes(authz.user.orgId))
+  if (catalogType && hiddenKinds.has(catalogType)) notFound()
+  const recordType = catalogType
+  const visibleTypes = RECORD_TYPES.filter((rt) => !hiddenKinds.has(rt.key))
   // The registry may eventually include list-only entities; every built-in
   // transaction kind currently exposes a configurable form.
   const supportsForms = canManageOrg && (!recordType || RECORD_TYPE_BY_KEY[recordType]?.supportsForms !== false)
@@ -49,7 +56,11 @@ export default async function CustomizationPage({
   const viewId = pickString(sp.view)
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
 
-  const typeFilter = recordType ? sql`record_type = ${recordType}` : sql`true`
+  const hiddenList = [...hiddenKinds]
+  const hiddenFilter = hiddenList.length === 0
+    ? sql`true`
+    : sql`record_type not in (${sql.join(hiddenList.map((k) => sql`${k}`), sql`, `)})`
+  const typeFilter = recordType ? sql`record_type = ${recordType}` : hiddenFilter
   const searchFilter = params.q ? sql`name ilike ${`%${params.q}%`}` : sql`true`
   const [forms, views, formCount, viewCount] = await Promise.all([
     canManageOrg ? db.execute(sql`
@@ -87,6 +98,8 @@ export default async function CustomizationPage({
     viewId && viewId !== 'new'
       ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as any).rows[0] ?? null
       : null
+  if (openForm && hiddenKinds.has(openForm.recordType)) notFound()
+  if (openView && hiddenKinds.has(openView.recordType)) notFound()
 
   // Copy source when creating a new form from an existing/standard baseline.
   const fromParam = pickString(sp.from)
@@ -228,7 +241,7 @@ export default async function CustomizationPage({
               label={t('designer.recordTypeFilter')}
               allLabel={t('designer.allRecordTypes')}
               resetParamKeys={['form', 'view']}
-              options={RECORD_TYPES.map((rt) => ({
+              options={visibleTypes.map((rt) => ({
                 value: rt.key,
                 label: recordTypeLabel(rt.key),
               }))}

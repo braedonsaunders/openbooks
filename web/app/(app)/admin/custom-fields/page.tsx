@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -9,6 +10,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
+import { disabledCustomFieldTargets } from '../../../../lib/customization/gates'
 import { FieldDrawer, NewFieldButton } from './FieldDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -40,8 +42,17 @@ export default async function CustomFields({
   const target = pickString(sp.target)
   const fieldId = pickString(sp.field)
   const orgId = authz.user.orgId
+  const hidden = await disabledCustomFieldTargets(orgId)
+  if (target && hidden.tables.includes(target)) notFound()
 
-  const where = sql`org_id = ${orgId}
+  const kindHide = hidden.kinds.length === 0
+    ? sql`true`
+    : sql`(target_kind is null or target_kind not in (${sql.join(hidden.kinds.map((k) => sql`${k}`), sql`, `)}))`
+  const tableHide = hidden.tables.length === 0
+    ? sql`true`
+    : sql`not (target_kind is null and target_table in (${sql.join(hidden.tables.map((t) => sql`${t}`), sql`, `)}))`
+
+  const where = sql`org_id = ${orgId} and ${kindHide} and ${tableHide}
     ${target ? sql` and target_table = ${target}` : sql``}
     ${params.q ? sql` and (label ilike ${'%' + params.q + '%'} or key ilike ${'%' + params.q + '%'})` : sql``}`
 
@@ -52,12 +63,18 @@ export default async function CustomFields({
        order by target_table, target_kind nulls first, sort_order, label
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
-    db.execute(sql`select target_table, count(*) as n from custom_field_defs where org_id = ${orgId} group by 1`) as any,
+    db.execute(sql`select target_table, count(*) as n from custom_field_defs where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`) as any,
     db.execute(sql`select count(*) as n from custom_field_defs where ${where}`) as any,
     fieldId && fieldId !== 'new'
       ? (db.execute(sql`select * from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`) as any)
       : null,
   ])
+
+  const openRow = open?.rows[0] ?? null
+  if (openRow && (
+    hidden.kinds.includes(openRow.target_kind)
+    || (openRow.target_kind == null && hidden.tables.includes(openRow.target_table))
+  )) notFound()
 
   return (
     <ListPageLayout
@@ -132,7 +149,7 @@ export default async function CustomFields({
         <Pagination basePath="/admin/custom-fields" currentParams={sp} total={Number(totalRow.rows[0].n)} page={params.page} perPage={params.perPage} />
       </div>
 
-      {fieldId ? <FieldDrawer def={open?.rows[0] ?? null} /> : null}
+      {fieldId ? <FieldDrawer def={openRow} hiddenKinds={hidden.kinds} hiddenTables={hidden.tables} /> : null}
     </ListPageLayout>
   )
 }

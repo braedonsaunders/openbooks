@@ -7,6 +7,7 @@ import {
   RECORD_TYPE_BY_KEY,
   type FormLayoutConfig,
 } from "@openbooks/customization";
+import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,8 @@ export async function GET(req: Request) {
   const recordType = new URL(req.url).searchParams.get("recordType") ?? "";
   if (!RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const refused = await refuseDisabledRecordType(user.orgId, recordType);
+  if (refused) return refused;
   const r = (await db.execute(sql`
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
@@ -44,6 +47,8 @@ export async function POST(req: Request) {
   };
   if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
+  if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
   const parsed = parseFormLayout(body.layout ?? { schemaVersion: 1, recordType: body.recordType });
   if (!parsed.success)

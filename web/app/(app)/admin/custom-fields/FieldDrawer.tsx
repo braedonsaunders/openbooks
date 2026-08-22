@@ -93,7 +93,21 @@ export function NewFieldButton() {
   )
 }
 
-export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
+export function FieldDrawer({
+  def,
+  hiddenKinds = [],
+  hiddenTables = [],
+}: {
+  def: Record<string, any> | null
+  hiddenKinds?: string[]
+  hiddenTables?: string[]
+}) {
+  const targets = TARGETS
+    .filter((item) => !hiddenTables.includes(item.table))
+    .map((item) => ({
+      ...item,
+      kinds: item.kinds.filter((kind) => !hiddenKinds.includes(kind.value)),
+    }))
   const t = useTranslations('admin.customFields')
   const tCommon = useTranslations('common')
   const creating = !def
@@ -119,7 +133,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
   const [isActive, setIsActive] = useState<boolean>(def?.is_active ?? true)
   const [busy, setBusy] = useState(false)
 
-  const target = TARGETS.find((x) => x.table === targetTable)
+  const target = targets.find((x) => x.table === targetTable)
   const needsOptions = fieldType === 'select' || fieldType === 'multi_select'
   const isNumeric = fieldType === 'number' || fieldType === 'currency'
   const slug = (s: string) =>
@@ -225,7 +239,7 @@ export function FieldDrawer({ def }: { def: Record<string, any> | null }) {
                     setTargetKind('')
                   }}
                 >
-                  {TARGETS.map((tgt) => (
+                  {targets.map((tgt) => (
                     <option key={tgt.table} value={tgt.table}>
                       {t(tgt.labelKey)}
                     </option>

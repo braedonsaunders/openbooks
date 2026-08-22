@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz } from "../../../../lib/authz";
 import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
+import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,8 @@ export async function PUT(req: Request) {
   };
   if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
+  if (refused) return refused;
   const viewId = body.viewId ?? null;
   if (viewId) {
     // Must be a view this user can actually use: in-org, right record type,

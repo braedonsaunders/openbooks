@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 // actually exposes at flow runtime.
 import { RESERVED_DOCUMENT_FIELD_KEYS } from '@openbooks/engine/src/flows/documents-adapter.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isCustomFieldTargetEnabled } from '../../../../lib/customization/gates'
 
 export const runtime = 'nodejs'
 
@@ -84,6 +85,9 @@ export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>
   const err = validateDef(body)
   if (err) return NextResponse.json({ error: err }, { status: 400 })
+  if (!(await isCustomFieldTargetEnabled(user.orgId, String(body.targetTable), body.targetKind ? String(body.targetKind) : null))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const dup = (await db.execute(sql`
     select 1 from custom_field_defs
@@ -108,6 +112,14 @@ export async function PATCH(req: Request) {
   const user = gate.user
   const body = (await req.json()) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const existing = (await db.execute<{ target_table: string; target_kind: string | null }>(sql`
+    select target_table, target_kind from custom_field_defs
+     where id = ${body.id} and org_id = ${user.orgId}`)).rows[0]
+  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isCustomFieldTargetEnabled(user.orgId, existing.target_table, existing.target_kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   if (!body.label || !FIELD_TYPES.includes(String(body.fieldType))) {
     return NextResponse.json({ error: 'label and valid field type required' }, { status: 400 })

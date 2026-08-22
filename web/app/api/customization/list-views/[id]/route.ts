@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { getAuthz, can } from "../../../../../lib/authz";
 import { parseListView } from "@openbooks/customization";
+import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const row = await loadOwn(authz.user.orgId, authz.user.id, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
+  if (refused) return refused;
   return NextResponse.json(row);
 }
 
@@ -37,6 +40,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
+  if (refused) return refused;
   const adminGated = can(authz, "admin.customization.manage");
   if (existing.scope === "org" && !adminGated)
     return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
@@ -114,6 +119,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const existing = await loadOwn(user.orgId, user.id, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
+  if (refused) return refused;
   const adminGated = can(authz, "admin.customization.manage");
   if (existing.scope === "org" && !adminGated)
     return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
