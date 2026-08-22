@@ -1153,6 +1153,46 @@ test('the surfaces this test was written for are covered', () => {
     'the accounts page must not load currency pickers when Multi-currency is off',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /src\.currency !== undefined/,
+    'transaction import must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /f\.key !== 'currency'/,
+    'transaction import must hide currency when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/documents.ts'),
+    /isFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'document PATCH must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('lib/documents.ts'),
+    /currency !== undefined[\s\S]{0,200}DocumentEditError\(404/,
+    'document PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/documents.ts'),
+    /currency !== undefined \? currency : sql`currency`/,
+    'document PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /isFeatureEnabled\([^,]+, ["']multiCurrency["']\)/,
+    'document create/PATCH must refuse currency when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /currency !== undefined[\s\S]{0,200}err\(404/,
+    'document create/PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/api/schema-registry.ts'),
+    /multiCurrencyOn \|\| t\.table !== "documents" \|\| c\.column_name !== "currency"/,
+    'REST/MCP documents catalog must not advertise currency as writable when Multi-currency is off',
+  )
+  assert.match(
     read('app/api/parties/[id]/route.ts'),
     /workerCompGroupId !== undefined[\s\S]{0,200}payroll/,
     'employee party writes must refuse workerCompGroupId when Payroll is off — existing links stay',

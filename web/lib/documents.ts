@@ -331,6 +331,7 @@ export interface DocumentEditInput {
   internalNotes?: string | null
   billingMethod?: string | null
   isFinalInvoice?: boolean
+  currency?: string
   custom?: Record<string, unknown>
   lines?: DocumentLineInput[]
 }
@@ -475,6 +476,17 @@ export async function applyDocumentEdit(
        where id = ${body.subsidiaryId} and org_id = ${orgId}
          and is_active and not is_elimination`)) as any
     if (!subsidiary.rows.length) throw new DocumentEditError(422, 'invalid subsidiary')
+  }
+  if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
+    throw new DocumentEditError(404, 'not found')
+  }
+  let currency: string | undefined
+  if (body.currency !== undefined) {
+    const code = String(body.currency).trim().toUpperCase()
+    if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
+    const found = (await db.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
+    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    currency = code
   }
 
   // custom-field validation (header + line) against the live definitions
@@ -643,6 +655,7 @@ export async function applyDocumentEdit(
           internal_notes = ${body.internalNotes !== undefined ? body.internalNotes : sql`internal_notes`},
           billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
           is_final_invoice = ${body.isFinalInvoice !== undefined ? body.isFinalInvoice : sql`is_final_invoice`},
+          currency = ${currency !== undefined ? currency : sql`currency`},
           custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
