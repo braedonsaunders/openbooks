@@ -131,7 +131,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
         left join lateral (
           select count(*) as n
             from crm_opportunities o
-            join crm_opportunity_statuses s on s.id = o.status_id
+            join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
            where o.org_id = ${orgId} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true
        where oi.remaining > 0
@@ -152,7 +152,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     // Directory badges — cheap counts for the workspace's other pages.
     db.execute<any>(sql`
       select
-        (select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id
+        (select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
           where o.org_id = ${orgId} and o.is_active and not s.is_closed) as open_opps,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_quotes,

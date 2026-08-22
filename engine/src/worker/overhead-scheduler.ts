@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "../business-date.ts";
 import { db, pool, withBypassContext, withOrgContext } from "../db.ts";
 import { appBaseUrl } from "./render-client.ts";
 
@@ -56,7 +57,9 @@ export async function tick(): Promise<void> {
        where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'`));
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
-      await publishForOrg(org.id, periodStartFor(cadence));
+      const today = await businessToday(org.id);
+      const [year, month, day] = today.split("-").map(Number);
+      await publishForOrg(org.id, periodStartFor(cadence, new Date(Date.UTC(year!, month! - 1, day!))));
     }
   } catch (e) {
     console.error("[overhead-scheduler] tick failed:", (e as Error).message);

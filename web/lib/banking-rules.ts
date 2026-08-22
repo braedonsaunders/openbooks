@@ -96,7 +96,7 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
   const res = (await db.execute<BankLine>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source
       from bank_statement_lines l
-      join bank_statements s on s.id = l.statement_id
+      join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
      where s.account_id = ${accountId} and s.org_id = ${orgId}${statusClause}${windowClause}
      order by l.posted_on desc, l.line_number
   `))
@@ -172,7 +172,7 @@ export async function applyRuleToLine(
   const lineRes = (await db.execute<(BankLine & { account_id: string })>(sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id
       from bank_statement_lines l
-      join bank_statements s on s.id = l.statement_id
+      join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]
@@ -435,7 +435,7 @@ export async function addJournalMatchFromLine(
   const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string }>(sql`
     select l.posted_on, l.amount, l.description, l.currency, s.account_id
       from bank_statement_lines l
-      join bank_statements s on s.id = l.statement_id
+      join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]

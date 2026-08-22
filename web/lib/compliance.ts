@@ -262,7 +262,7 @@ export async function loadVendorCertificates(orgId: string, partyId: string): Pr
              where fa.org_id = cr.org_id and fa.target_table = 'compliance_records'
                and fa.target_id = cr.id) as "fileCount"
       from compliance_records cr
-      join compliance_requirements req on req.id = cr.requirement_id
+      join compliance_requirements req on req.id = cr.requirement_id and req.org_id = cr.org_id
       left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
       left join users vu on vu.id = cr.verified_by
       left join users cu on cu.id = cr.created_by
@@ -292,7 +292,7 @@ export async function loadVendorWaivers(orgId: string, partyId: string): Promise
            w.reason, w.effective_from as "effectiveFrom", w.expires_on as "expiresOn",
            u.name as "approvedByName", w.approved_at as "approvedAt"
       from compliance_waivers w
-      join compliance_requirements req on req.id = w.requirement_id
+      join compliance_requirements req on req.id = w.requirement_id and req.org_id = w.org_id
       left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
       left join users u on u.id = w.approved_by
      where w.org_id = ${orgId} and w.party_id = ${partyId} and w.revoked_at is null

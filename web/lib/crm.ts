@@ -7,10 +7,10 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
     select cp.*, s.name as status_name, s.is_qualified, u.name as owner_name,
            t.name as territory_name, ls.name as lead_source_name
       from crm_account_profiles cp
-      left join crm_account_statuses s on s.id = cp.status_id
+      left join crm_account_statuses s on s.id = cp.status_id and s.org_id = cp.org_id
       left join users u on u.id = cp.owner_user_id
-      left join crm_sales_territories t on t.id = cp.territory_id
-      left join crm_lead_sources ls on ls.id = cp.lead_source_id
+      left join crm_sales_territories t on t.id = cp.territory_id and t.org_id = cp.org_id
+      left join crm_lead_sources ls on ls.id = cp.lead_source_id and ls.org_id = cp.org_id
      where cp.party_id = ${partyId} and cp.org_id = ${orgId}
   `))
   if (!profile.rows[0]) return null
@@ -19,7 +19,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
       select a.id, a.kind, a.status, a.subject, a.priority, a.starts_at, a.due_at,
              a.completed_at, u.name as assigned_name
         from crm_activities a
-        join crm_activity_links l on l.activity_id = a.id
+        join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
         left join users u on u.id = a.assigned_user_id
        where l.org_id = ${orgId} and l.subject_kind = 'account' and l.subject_id = ${partyId}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc limit 50`),
@@ -28,14 +28,14 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
              o.probability, o.currency, o.projected_amount, o.weighted_amount,
              s.name as status_name, s.is_closed, s.is_won, u.name as owner_name
         from crm_opportunities o
-        join crm_opportunity_statuses s on s.id = o.status_id
+        join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
         left join users u on u.id = o.owner_user_id
        where o.org_id = ${orgId} and o.party_id = ${partyId}
        order by s.is_closed, o.expected_close_date nulls last, o.created_at desc limit 50`),
     db.execute(sql`
       select e.*, u.name as actor_name from crm_account_stage_events e
       left join users u on u.id = e.created_by
-      where e.account_profile_id = ${profile.rows[0].id}
+      where e.account_profile_id = ${profile.rows[0].id} and e.org_id = ${orgId}
       order by e.occurred_at desc`),
     db.execute(sql`
       select e.*, fu.name as from_owner_name, tu.name as to_owner_name,
@@ -43,9 +43,9 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
         from crm_account_assignment_events e
         left join users fu on fu.id = e.from_owner_user_id
         left join users tu on tu.id = e.to_owner_user_id
-        left join crm_sales_territories ft on ft.id = e.from_territory_id
-        left join crm_sales_territories tt on tt.id = e.to_territory_id
-       where e.account_profile_id = ${profile.rows[0].id}
+        left join crm_sales_territories ft on ft.id = e.from_territory_id and ft.org_id = e.org_id
+        left join crm_sales_territories tt on tt.id = e.to_territory_id and tt.org_id = e.org_id
+       where e.account_profile_id = ${profile.rows[0].id} and e.org_id = ${orgId}
        order by e.occurred_at desc`),
   ]) as any[]
   return {
@@ -63,12 +63,12 @@ export async function loadOpportunity(id: string, orgId: string) {
            s.name as status_name, s.is_closed, s.is_won,
            u.name as owner_name, st.name as sales_team_name, ls.name as lead_source_name
       from crm_opportunities o
-      join crm_opportunity_statuses s on s.id = o.status_id
+      join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
       left join parties p on p.id = o.party_id and p.org_id = o.org_id
-      left join contacts c on c.id = o.primary_contact_id
+      left join contacts c on c.id = o.primary_contact_id and c.org_id = o.org_id
       left join users u on u.id = o.owner_user_id
-      left join crm_sales_teams st on st.id = o.sales_team_id
-      left join crm_lead_sources ls on ls.id = o.lead_source_id
+      left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
+      left join crm_lead_sources ls on ls.id = o.lead_source_id and ls.org_id = o.org_id
      where o.id = ${id} and o.org_id = ${orgId}
   `))
   if (!opportunity.rows[0]) return null
@@ -85,14 +85,14 @@ export async function loadOpportunity(id: string, orgId: string) {
        order by d.document_date desc, d.created_at desc`),
     db.execute(sql`
       select a.id, a.kind, a.status, a.subject, a.starts_at, a.due_at, a.completed_at
-        from crm_activities a join crm_activity_links l on l.activity_id = a.id
+        from crm_activities a join crm_activity_links l on l.activity_id = a.id and l.org_id = a.org_id
        where l.subject_kind = 'opportunity' and l.subject_id = ${id} and l.org_id = ${orgId}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc`),
     db.execute(sql`
       select e.*, fs.name as from_status_name, ts.name as to_status_name, u.name as actor_name
         from crm_opportunity_stage_events e
-        left join crm_opportunity_statuses fs on fs.id = e.from_status_id
-        join crm_opportunity_statuses ts on ts.id = e.to_status_id
+        left join crm_opportunity_statuses fs on fs.id = e.from_status_id and fs.org_id = e.org_id
+        join crm_opportunity_statuses ts on ts.id = e.to_status_id and ts.org_id = e.org_id
         left join users u on u.id = e.created_by
        where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`),
   ]) as any[]
@@ -113,7 +113,7 @@ export async function loadActivity(id: string, orgId: string) {
       select p.*, u.name as user_name, c.name as contact_name
         from crm_activity_participants p
         left join users u on u.id = p.user_id
-        left join contacts c on c.id = p.contact_id
+        left join contacts c on c.id = p.contact_id and c.org_id = p.org_id
        where p.activity_id = ${id} and p.org_id = ${orgId} order by p.created_at`),
   ]) as any[]
   return { activity: activity.rows[0], links: links.rows, participants: participants.rows }
@@ -134,7 +134,7 @@ export async function calculateForecast(scope: ForecastScope) {
   const rows = (await db.execute<Record<string, string>>(sql`
     with opportunity_base as (
       select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
-        from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id
+        from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
        where o.org_id = ${scope.orgId} and o.is_active
          and o.expected_close_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${ownerFilter} ${teamFilter}
