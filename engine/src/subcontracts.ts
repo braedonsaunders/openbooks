@@ -28,6 +28,17 @@ function persistSubcontractDefaultRetainage(value: unknown): string {
   }
 }
 
+/** Persist leftover SOV-line scheduled value through exact decimal then ledger money. Fail closed. */
+function persistSubcontractSovScheduledValue(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("scheduled value must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("scheduled value must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -281,7 +292,7 @@ export async function addSubcontractSovLine(input: {
   sortOrder?: number;
 }): Promise<{ id: string }> {
   const description = input.description.trim();
-  const value = normalizeMoney(input.scheduledValue);
+  const value = persistSubcontractSovScheduledValue(input.scheduledValue);
   const retainage = input.retainagePercent == null || input.retainagePercent === ""
     ? null
     : normalizeMoney(input.retainagePercent);
