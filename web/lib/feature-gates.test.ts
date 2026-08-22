@@ -612,6 +612,16 @@ test('the surfaces this test was written for are covered', () => {
     /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'item rate save must 404 — not persist inventory/assembly/kit rate lines — when Inventory is off — stored rate lines stay',
   )
+  assert.match(
+    read('app/api/items/[id]/rates/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'item rate save must refuse equipment_charge when Equipment is off — stored rate lines stay',
+  )
+  assert.match(
+    read('app/api/items/[id]/rates/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'item rate save must 404 — not persist — equipment_charge rate lines when Equipment is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
