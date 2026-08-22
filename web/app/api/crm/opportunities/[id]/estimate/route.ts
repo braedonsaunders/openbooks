@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isDocKindEnabled } from '../../../../../../lib/documents'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 
@@ -11,6 +12,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardFeaturePermission('ar.create', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  if (!(await isDocKindEnabled(user.orgId, 'quote'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const today = await businessToday(user.orgId)

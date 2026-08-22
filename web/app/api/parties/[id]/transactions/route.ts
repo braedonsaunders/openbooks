@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
+import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
+import { isDocKindEnabled } from '../../../../../lib/documents'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -22,10 +24,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const requestedPage = Number(url.searchParams.get('page') ?? '1')
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
 
+  if (kind && !(await isDocKindEnabled(gate.user.orgId, kind))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  const hiddenKinds: string[] = []
+  for (const optionalKind of Object.keys(DOC_KIND_FEATURE)) {
+    if (!(await isDocKindEnabled(gate.user.orgId, optionalKind))) hiddenKinds.push(optionalKind)
+  }
+  const hiddenKindFilter = hiddenKinds.length
+    ? sql`and d.kind not in (${sql.join(hiddenKinds.map((value) => sql`${value}`), sql`, `)})`
+    : sql``
+
   const where = sql`d.org_id = ${gate.user.orgId} and d.party_id = ${id}
     ${q ? sql`and (d.document_number ilike ${`%${q}%`} or coalesce(d.reference_number, '') ilike ${`%${q}%`} or coalesce(d.memo, '') ilike ${`%${q}%`})` : sql``}
     ${kind ? sql`and d.kind = ${kind}` : sql``}
-    ${status ? sql`and d.status = ${status}` : sql``}`
+    ${status ? sql`and d.status = ${status}` : sql``}
+    ${hiddenKindFilter}`
 
   const [rows, total, filters] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
@@ -36,9 +50,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
        limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
     db.execute<Record<string, unknown>>(sql`select count(*)::int as count from documents d where ${where}`),
     db.execute<Record<string, unknown>>(sql`
-      select array_remove(array_agg(distinct kind order by kind), null) as kinds,
-             array_remove(array_agg(distinct status order by status), null) as statuses
-        from documents where org_id = ${gate.user.orgId} and party_id = ${id}`),
+      select array_remove(array_agg(distinct d.kind order by d.kind), null) as kinds,
+             array_remove(array_agg(distinct d.status order by d.status), null) as statuses
+        from documents d
+       where d.org_id = ${gate.user.orgId} and d.party_id = ${id} ${hiddenKindFilter}`),
   ]))
 
   return NextResponse.json({
