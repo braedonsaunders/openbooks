@@ -86,7 +86,8 @@ export async function PUT(req: Request) {
       max_keep = excluded.max_keep,
       next_run_at = excluded.next_run_at,
       updated_at = now(),
-      updated_by = excluded.updated_by`);
+      updated_by = excluded.updated_by
+    where backup_policies.org_id = ${orgId}`);
 
   const after = { enabled, frequency, hour_utc: hourUtc, day_of_week: dayOfWeek, day_of_month: dayOfMonth, max_keep: maxKeep };
   const changes: Record<string, unknown> = { event: "backup_policy_updated" };
