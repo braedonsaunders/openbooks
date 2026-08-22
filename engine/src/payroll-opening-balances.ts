@@ -712,7 +712,8 @@ export async function saveOpeningBalances(input: {
             on conflict (opening_balance_id, component_id) do update
                set ytd_amount = excluded.ytd_amount,
                    updated_by = ${input.actorId},
-                   updated_at = now()`);
+                   updated_at = now()
+             where payroll_opening_balance_components.org_id = ${input.orgId}`);
         }
       }
 
