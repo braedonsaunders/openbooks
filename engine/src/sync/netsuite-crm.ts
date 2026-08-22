@@ -199,7 +199,8 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
       on conflict(id) do update set
         kind=excluded.kind,status='completed',subject=excluded.subject,body=excluded.body,
         starts_at=excluded.starts_at,completed_at=excluded.completed_at,
-        custom=crm_activities.custom||excluded.custom,updated_at=now(),updated_by=${actorId}`)
+        custom=crm_activities.custom||excluded.custom,updated_at=now(),updated_by=${actorId}
+      where crm_activities.org_id=${orgId}`)
   }
   for (const batch of batches(links, 1000)) {
     await db.execute(sql`
