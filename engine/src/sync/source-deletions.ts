@@ -67,7 +67,7 @@ export async function mirrorSourceDeletion(input: {
       if (document.status === "voided") {
         return { documentId: document.id, deleted: false };
       }
-      const before = await captureTransactionAuditSnapshot(tx, document.id);
+      const before = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
       if (!before) {
         throw new SourceDeletionResolutionError(
           "source-deleted document disappeared while being corrected",
@@ -82,8 +82,8 @@ export async function mirrorSourceDeletion(input: {
              set status = 'voided', voided_at = now(), open_balance = null,
                  voided_by = ${SYSTEM_ACTOR_ID}, void_reason = ${voidReason},
                  updated_at = now(), updated_by = ${SYSTEM_ACTOR_ID}
-           where id = ${document.id}`);
-        const after = await captureTransactionAuditSnapshot(tx, document.id);
+           where id = ${document.id} and org_id = ${input.orgId}`);
+        const after = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
         if (!after) {
           throw new SourceDeletionResolutionError(
             "source-deleted unposted document disappeared after correction",
@@ -198,8 +198,8 @@ export async function mirrorSourceDeletion(input: {
                voided_by = ${SYSTEM_ACTOR_ID}, void_reason = ${voidReason},
                reversal_entry_id = ${reversal.id},
                updated_at = now(), updated_by = ${SYSTEM_ACTOR_ID}
-         where id = ${document.id}`);
-      const after = await captureTransactionAuditSnapshot(tx, document.id);
+         where id = ${document.id} and org_id = ${input.orgId}`);
+      const after = await captureTransactionAuditSnapshot(tx, document.id, input.orgId);
       if (!after) {
         throw new SourceDeletionResolutionError(
           "source-deleted document disappeared after correction",
@@ -323,7 +323,7 @@ export async function resolveSourceDeletion(input: {
           modules: [closeModuleForDocument(document.kind)],
         });
 
-        const before = await captureTransactionAuditSnapshot(db, document.id);
+        const before = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
         if (!before)
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
@@ -385,11 +385,11 @@ export async function resolveSourceDeletion(input: {
                  voided_by = ${input.actorId}, void_reason = ${voidReason},
                  reversal_entry_id = ${reversal.id},
                  updated_at = now(), updated_by = ${input.actorId}
-           where id = ${document.id}`);
+           where id = ${document.id} and org_id = ${input.orgId}`);
         await db.execute(
           sql`select recompute_document_open_balance(${document.id})`,
         );
-        const after = await captureTransactionAuditSnapshot(db, document.id);
+        const after = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
         if (!after)
           throw new SourceDeletionResolutionError(
             "document disappeared after resolving deletion",
@@ -409,7 +409,7 @@ export async function resolveSourceDeletion(input: {
         const voidReason = boundedVoidReason(
           `${source}:${input.sourceRef} deleted at source${input.note ? ` — ${input.note}` : ""}`,
         );
-        const before = await captureTransactionAuditSnapshot(db, document.id);
+        const before = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
         if (!before)
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
@@ -419,8 +419,8 @@ export async function resolveSourceDeletion(input: {
              set status = 'voided', voided_at = now(), open_balance = null,
                  voided_by = ${input.actorId}, void_reason = ${voidReason},
                  updated_at = now(), updated_by = ${input.actorId}
-           where id = ${document.id}`);
-        const after = await captureTransactionAuditSnapshot(db, document.id);
+           where id = ${document.id} and org_id = ${input.orgId}`);
+        const after = await captureTransactionAuditSnapshot(db, document.id, input.orgId);
         if (!after)
           throw new SourceDeletionResolutionError(
             "document disappeared after resolving deletion",

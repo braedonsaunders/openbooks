@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -16,13 +16,14 @@ export class DeleteError extends Error {}
 export async function deleteDocument(
   documentId: string,
   userId: string | null,
+  orgId: string,
   audit: { source?: string; reason?: string } = {},
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {
     const [doc] = await tx
       .select()
       .from(schema.documents)
-      .where(eq(schema.documents.id, documentId));
+      .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)));
     if (!doc) throw new DeleteError("document not found");
     if (doc.status !== "draft") {
       throw new DeleteError(
@@ -46,7 +47,7 @@ export async function deleteDocument(
       );
     }
 
-    const before = await captureTransactionAuditSnapshot(tx, documentId);
+    const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
     if (!before) throw new DeleteError("document not found");
 
     if (doc.kind === "customer_invoice") {

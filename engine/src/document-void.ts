@@ -186,7 +186,7 @@ export async function completeRequestedDocumentVoid(
         throw new DocumentVoidError(`a ${String(doc.status)} document cannot be voided`);
       }
 
-      const before = await captureTransactionAuditSnapshot(tx, documentId);
+      const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
       if (!before) throw new DocumentVoidError("document not found");
       const entryId = doc.posted_entry_id ? String(doc.posted_entry_id) : null;
       let reversalEntryId: string | null = null;
@@ -426,7 +426,7 @@ export async function completeRequestedDocumentVoid(
                updated_by = ${String(doc.void_requested_by)}
          where id = ${documentId} and org_id = ${orgId}
       `);
-      const after = await captureTransactionAuditSnapshot(tx, documentId);
+      const after = await captureTransactionAuditSnapshot(tx, documentId, orgId);
       if (!after) throw new DocumentVoidError("document disappeared while voiding");
       await recordTransactionAudit(tx, {
         orgId,

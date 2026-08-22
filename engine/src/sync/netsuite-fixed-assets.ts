@@ -574,14 +574,14 @@ export async function syncNetSuiteFixedAssets(
       await db.execute(sql`
         update documents d set
           total = coalesce((select sum(jl.amount) from journal_lines jl
-                             where jl.entry_id = d.posted_entry_id and jl.amount > 0), 0),
+                             where jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.amount > 0), 0),
           tax_total = coalesce(abs((select sum(dl.tax_amount) from document_lines dl
-                                    where dl.document_id = d.id)), 0),
+                                    where dl.document_id = d.id and dl.org_id = d.org_id)), 0),
           subtotal = coalesce((select sum(jl.amount) from journal_lines jl
-                                where jl.entry_id = d.posted_entry_id and jl.amount > 0), 0)
+                                where jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.amount > 0), 0)
                      - coalesce(abs((select sum(dl.tax_amount) from document_lines dl
-                                     where dl.document_id = d.id)), 0)
-        where d.id = ${documentId}
+                                     where dl.document_id = d.id and dl.org_id = d.org_id)), 0)
+        where d.id = ${documentId} and d.org_id = ${options.orgId}
       `);
       importedLedgerTransactions += 1;
     }

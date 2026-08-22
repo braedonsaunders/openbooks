@@ -450,7 +450,7 @@ async function deleteDocumentWriter(user: SessionUser, docKind: string, id: stri
     select 1 from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as any;
   if (!owned.rows[0]) return err(404, "not found");
   try {
-    await deleteDocument(id, user.id);
+    await deleteDocument(id, user.id, user.orgId);
     return { status: 200, body: { ok: true } };
   } catch (e) {
     if (e instanceof DeleteError) return err(422, (e as Error).message);
