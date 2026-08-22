@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-return.ts'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -43,7 +44,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   try {
     const t = (await getTranslations('tax')) as unknown as Translator
     const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p))
-    const filename = `${safeName(code)}-${from}-${to}`
+    const stamp = await businessToday(gate.user.orgId)
+    const filename = `${safeName(code)}-${from}-${to}-${stamp}`
 
     // Official overlay: fill the tenant-uploaded government AcroForm and flatten.
     if (format === 'official') {
