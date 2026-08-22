@@ -52,6 +52,7 @@ export function AccountDrawer({
   closeHref,
   createMode = false,
   multiCurrency = false,
+  multiSubsidiary = false,
 }: {
   payload: AccountPayload
   parents: Option[]
@@ -63,6 +64,9 @@ export function AccountDrawer({
   closeHref: string
   createMode?: boolean
   multiCurrency?: boolean
+  /** Company Settings → Features. Elimination is Multi-subsidiary
+   *  consolidation configuration; hide and omit it when that switch is off. */
+  multiSubsidiary?: boolean
 }) {
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
@@ -112,7 +116,7 @@ export function AccountDrawer({
     }
     setBusy(true)
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    const { currencyRestriction, ...formRest } = form
+    const { currencyRestriction, eliminate, ...formRest } = form
     const response = await fetch(createMode ? '/api/accounts' : `/api/accounts/${account.id}`, {
       method: createMode ? 'POST' : 'PATCH',
       headers: {
@@ -127,6 +131,7 @@ export function AccountDrawer({
         subsidiaryId: form.subsidiaryId || null,
         monetary: form.monetary === '' ? null : form.monetary === 'true',
         ...(multiCurrency ? { currencyRestriction: currencyRestriction || null } : {}),
+        ...(multiSubsidiary ? { eliminate } : {}),
       }),
     })
     const data = await response.json().catch(() => ({}))
@@ -284,10 +289,10 @@ export function AccountDrawer({
             <input type="checkbox" checked={form.reconcilable} disabled={form.isSummary} onChange={(e) => set('reconcilable', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.reconcilable')}</span>
           </label>
-          <label className="flex items-center gap-2">
+          {multiSubsidiary ? <label className="flex items-center gap-2">
             <input type="checkbox" checked={form.eliminate} onChange={(e) => set('eliminate', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.eliminate')}</span>
-          </label>
+          </label> : null}
           {subsidiaries.length > 0 ? <label className="flex items-center gap-2">
             <input type="checkbox" checked={form.subsidiaryIncludeChildren} disabled={!form.subsidiaryId} onChange={(e) => set('subsidiaryIncludeChildren', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.includeSubsidiaries')}</span>
@@ -297,7 +302,7 @@ export function AccountDrawer({
             <div className={fieldClass}><Label>{tc('labels.active')}</Label><ReadOnlyValue value={form.isActive ? tc('labels.yes') : tc('labels.no')} /></div>
             <div className={fieldClass}><Label>{t('drawer.summary')}</Label><ReadOnlyValue value={form.isSummary ? tc('labels.yes') : tc('labels.no')} /></div>
             <div className={fieldClass}><Label>{t('drawer.reconcilable')}</Label><ReadOnlyValue value={form.reconcilable ? tc('labels.yes') : tc('labels.no')} /></div>
-            <div className={fieldClass}><Label>{t('drawer.eliminate')}</Label><ReadOnlyValue value={form.eliminate ? tc('labels.yes') : tc('labels.no')} /></div>
+            {multiSubsidiary ? <div className={fieldClass}><Label>{t('drawer.eliminate')}</Label><ReadOnlyValue value={form.eliminate ? tc('labels.yes') : tc('labels.no')} /></div> : null}
             {subsidiaries.length > 0 ? <div className={fieldClass}><Label>{t('drawer.includeSubsidiaries')}</Label><ReadOnlyValue value={form.subsidiaryIncludeChildren ? tc('labels.yes') : tc('labels.no')} /></div> : null}
           </section>
         )}
