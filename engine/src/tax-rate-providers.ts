@@ -4,6 +4,7 @@ import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnit
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { businessToday } from "./business-date.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 
 /**
  * External sales-tax rate providers. Quotes are persisted as immutable evidence;
@@ -15,6 +16,16 @@ import { businessToday } from "./business-date.ts";
 export type TaxRateProviderKey = "avalara" | "taxjar" | "custom_http" | "manual";
 
 export class TaxRateProviderError extends Error {}
+
+function persistRatePercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new TaxRateProviderError("rate percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new TaxRateProviderError("rate percent must be an exact decimal");
+  }
+}
 
 export interface Address {
   line1?: string | null;
@@ -547,6 +558,7 @@ export async function provisionLocaleDepth(
   const bands = LOCALE_RATE_BANDS[packCode] ?? [];
   let bandsCreated = 0;
   for (const b of bands) {
+    const ratePercent = persistRatePercent(b.ratePercent);
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into tax_codes (org_id, code, name, country, applies_to, is_active, created_by, updated_by)
       select ${orgId}, ${b.code}, ${b.name}, ${country}, 'both', true, ${actorId}, ${actorId}
@@ -558,7 +570,7 @@ export async function provisionLocaleDepth(
       bandsCreated++;
       await db.execute(sql`
         insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${codeId}, ${normalizeMoney(b.ratePercent)}, '2000-01-01', ${actorId}, ${actorId})
+        values (${orgId}, ${codeId}, ${ratePercent}, '2000-01-01', ${actorId}, ${actorId})
       `);
     } else {
       const existing = (await db.execute<{ id: string }>(sql`
@@ -572,7 +584,7 @@ export async function provisionLocaleDepth(
         if (!has.rows.length) {
           await db.execute(sql`
             insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-            values (${orgId}, ${id}, ${normalizeMoney(b.ratePercent)}, '2000-01-01', ${actorId}, ${actorId})
+            values (${orgId}, ${id}, ${ratePercent}, '2000-01-01', ${actorId}, ${actorId})
           `);
         }
       }
