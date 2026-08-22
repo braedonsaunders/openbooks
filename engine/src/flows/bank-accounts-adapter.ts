@@ -82,11 +82,15 @@ export const bankAccountSubjectProfile: FlowSubjectProfile = {
 
 type BankRow = typeof schema.partyBankAccounts.$inferSelect;
 
-async function loadRow(subjectId: string): Promise<BankRow | null> {
+async function loadRow(subjectId: string, orgId?: string): Promise<BankRow | null> {
   const [row] = await db
     .select()
     .from(schema.partyBankAccounts)
-    .where(eq(schema.partyBankAccounts.id, subjectId));
+    .where(
+      orgId
+        ? and(eq(schema.partyBankAccounts.id, subjectId), eq(schema.partyBankAccounts.orgId, orgId))
+        : eq(schema.partyBankAccounts.id, subjectId),
+    );
   return row ?? null;
 }
 
@@ -102,7 +106,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
     if (!row) return null;
     let partyName: string | null = null;
     const r = (await db.execute<{ display_name: string }>(
-      sql`select display_name from parties where id = ${row.partyId}`,
+      sql`select display_name from parties where id = ${row.partyId} and org_id = ${row.orgId}`,
     ));
     partyName = r.rows[0]?.display_name ?? null;
     const routing = (row.routing ?? {}) as Record<string, string>;
@@ -146,7 +150,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   },
 
   async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
-    const row = await loadRow(subjectId);
+    const row = await loadRow(subjectId, ctx.orgId);
     if (!row) throw new Error(`bank account ${subjectId} not found`);
     const legalFrom = STATUS_TRANSITIONS[to];
     if (!legalFrom) throw new Error(`unknown bank-detail status "${to}"`);
@@ -185,7 +189,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   },
 
   async releaseApproval(subjectId, outcome, ctx): Promise<void> {
-    const row = await loadRow(subjectId);
+    const row = await loadRow(subjectId, ctx.orgId);
     if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
     const today = await businessToday(ctx.orgId);
     await db

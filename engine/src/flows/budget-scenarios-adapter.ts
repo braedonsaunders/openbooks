@@ -63,6 +63,7 @@ export const budgetScenarioSubjectProfile: FlowSubjectProfile = {
 
 type BudgetRow = {
   id: string;
+  org_id: string;
   name: string;
   description: string | null;
   book_id: string;
@@ -76,7 +77,7 @@ type BudgetRow = {
 
 async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
   const result = (await db.execute<BudgetRow>(sql`
-    select bs.id, bs.name, bs.description, bs.book_id, b.name as book_name,
+    select bs.id, bs.org_id, bs.name, bs.description, bs.book_id, b.name as book_name,
            bs.fiscal_year, bs.kind, bs.status, bs.revision, bs.created_by
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
@@ -99,14 +100,14 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
              bl.location_id as "locationId", bl.class_id as "classId",
              bl.amount::text as amount, bl.note
         from budget_lines bl
-       where bl.scenario_id = ${subjectId}
+       where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
        order by bl.created_at, bl.id
     `));
     const total = (await db.execute<{ total: string }>(sql`
       select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
         join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
-       where bl.scenario_id = ${subjectId}
+       where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
     `));
     return {
       values: {
