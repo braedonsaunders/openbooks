@@ -1,4 +1,5 @@
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from './exact-decimal'
 
 const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const
 type TaskStatus = (typeof TASK_STATUSES)[number]
@@ -36,9 +37,13 @@ function nonnegativeDecimal(value: unknown, label: string): string | null {
   if (typeof value !== 'string' && typeof value !== 'number') {
     throw new ProjectWorkBreakdownError(`${label} must be a number`)
   }
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) {
+    throw new ProjectWorkBreakdownError(`${label} must be a number`)
+  }
   let normalized: string
   try {
-    normalized = normalizeMoney(String(value))
+    normalized = normalizeMoney(exact)
   } catch {
     throw new ProjectWorkBreakdownError(`${label} must be a number`)
   }
