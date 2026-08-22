@@ -39,7 +39,7 @@ export async function loadProjectCockpit(
              coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
              count(dl.*) as lines,
              bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
-        from documents d left join document_lines dl on dl.document_id = d.id
+        from documents d left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
        group by d.id order by d.document_date desc, d.document_number desc`),
     db.execute(sql`
@@ -64,12 +64,12 @@ export async function loadProjectCockpit(
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
              coalesce((select sum(l.recognized_amount)
                          from recognition_schedules s
-                         join accounting_books bk on bk.id = s.book_id and bk.is_primary
-                         join recognition_schedule_lines l on l.schedule_id = s.id
-                        where s.obligation_id = o.id and l.journal_entry_id is not null), 0)::numeric(19,4) as recognized
+                         join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
+                         join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+                        where s.obligation_id = o.id and s.org_id = o.org_id and l.journal_entry_id is not null), 0)::numeric(19,4) as recognized
         from projects p
         left join revenue_contracts c on c.org_id = p.org_id and c.project_id = p.id
-       left join performance_obligations o on o.contract_id = c.id
+       left join performance_obligations o on o.contract_id = c.id and o.org_id = c.org_id
        where p.id = ${projectId} and p.org_id = ${orgId}`),
     db.execute(sql`
       select coalesce(min(e.posting_date), ${today})::text as "from",

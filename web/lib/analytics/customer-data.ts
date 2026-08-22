@@ -264,7 +264,7 @@ export async function customerProfitability(period: { from: string; to: string }
   // the tenant before the date filter narrows anything.
   const r = (await db.execute(sql`
     with ew as materialized (
-      select id from journal_entries
+      select id, org_id from journal_entries
        where posting_date >= ${from} and posting_date <= ${to}
          ${orgId ? sql`and org_id = ${orgId}` : sql``}
     )
@@ -276,7 +276,7 @@ export async function customerProfitability(period: { from: string; to: string }
       sum(case when a.type in ('cogs','expense','expense_deferred') then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
     from ew e
-    join journal_lines l on l.entry_id = e.id
+    join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
     join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
     join parties cp on cp.id = pr.customer_id and cp.org_id = pr.org_id

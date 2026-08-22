@@ -152,7 +152,7 @@ export async function runOwnershipConsolidation(
             const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
               select l.account_id,coalesce(sum(l.amount),0)::text as amount
                 from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-                join accounts a on a.id=l.account_id and a.type='equity'
+                join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
                where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
                  and e.posting_date <= ${interest.acquisition_date}
                group by l.account_id having sum(l.amount)<>0
