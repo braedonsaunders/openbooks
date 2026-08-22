@@ -42,7 +42,7 @@ export default async function Expenses({
         db.execute(sql`
           select p.id, p.display_name from parties p
            where p.is_active and p.org_id = ${authz.user.orgId}
-             and exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active)
+             and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
            order by p.display_name limit 2000`) as any,
         db.execute(sql`select id, number, name from accounts where type in ('expense','expense_other','cogs') and is_active and not is_summary and org_id = ${authz.user.orgId} order by number nulls last`) as any,
         taxCodeOptions(authz.user.orgId),
