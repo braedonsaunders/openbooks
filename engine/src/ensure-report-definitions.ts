@@ -46,7 +46,8 @@ export async function ensureReportDefinitions(orgId: string): Promise<void> {
         description = excluded.description,
         query = excluded.query,
         updated_at = now()
-      where report_definitions.kind = 'built_in' and report_definitions.updated_by is null`);
+      where report_definitions.kind = 'built_in' and report_definitions.updated_by is null
+        and report_definitions.org_id = ${orgId}`);
   }
   for (const def of STANDARD_STATEMENT_DEFINITIONS) {
     const statement = { kind: def.statementKind, params: def.params ?? {} };
