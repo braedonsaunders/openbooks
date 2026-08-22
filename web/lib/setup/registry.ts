@@ -196,21 +196,37 @@ export interface SetupEntity {
 }
 
 /**
- * Subsidiary scope is an optional product feature, not merely a nullable
- * database column. Keep the registry as the source of truth, then derive the
- * UI descriptor so every generic setup list and drawer applies the same guard.
+ * Optional-module columns are not merely nullable database fields. Keep the
+ * registry as the source of truth, then derive the UI/write descriptor so
+ * every generic setup list, drawer, and CRUD write applies the same guard.
+ * Turning a feature off hides the control and refuses a new write; existing
+ * values stay on the row.
  */
 export function setupEntityForFeatureState(
   entity: SetupEntity,
-  features: { multiSubsidiary: boolean },
+  features: { multiSubsidiary: boolean; equipment?: boolean },
 ): SetupEntity {
-  if (features.multiSubsidiary) return entity
+  const equipmentOn = features.equipment !== false
+  if (features.multiSubsidiary && equipmentOn) return entity
   const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
     control.ref === 'subsidiaries' || control.key === 'subsidiaryIncludeChildren'
+  const isEquipmentControl = (control: SetupField | SetupColumn) =>
+    control.key === 'equipmentUnitId' || control.ref === 'equipment-units'
+  const withoutEquipmentCharge = <T extends { options?: SetupOption[] }>(control: T): T => {
+    if (equipmentOn || !control.options?.some((option) => option.value === 'equipment_charge')) {
+      return control
+    }
+    return { ...control, options: control.options.filter((option) => option.value !== 'equipment_charge') }
+  }
   return {
     ...entity,
-    columns: entity.columns.filter((column) => !isSubsidiaryControl(column)),
-    fields: entity.fields.filter((field) => !isSubsidiaryControl(field)),
+    columns: entity.columns
+      .filter((column) => (features.multiSubsidiary || !isSubsidiaryControl(column)) && (equipmentOn || !isEquipmentControl(column)))
+      .map(withoutEquipmentCharge),
+    fields: entity.fields
+      .filter((field) => (features.multiSubsidiary || !isSubsidiaryControl(field)) && (equipmentOn || !isEquipmentControl(field)))
+      .map(withoutEquipmentCharge),
+    filters: entity.filters?.map(withoutEquipmentCharge),
   }
 }
 
