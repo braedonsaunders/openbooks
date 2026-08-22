@@ -1332,6 +1332,16 @@ test('the surfaces this test was written for are covered', () => {
     'REST/MCP item writes must 404 — not persist — inventory kinds when Inventory is off',
   )
   assert.match(
+    read('lib/api/writers.ts'),
+    /refuseDisabledItemEquipmentKind\(/,
+    'REST/MCP item writes must refuse equipment_charge when Equipment is off — existing kinds stay',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /async function refuseDisabledItemEquipmentKind[\s\S]{0,500}err\(404/,
+    'REST/MCP item writes must 404 — not persist — equipment_charge when Equipment is off',
+  )
+  assert.match(
     read('lib/data-io/resources.ts'),
     /orgFeatureEnabled\([^,]+, 'inventory'\)/,
     'items import must refuse inventory kinds when Inventory is off — existing kinds stay',

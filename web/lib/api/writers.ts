@@ -36,6 +36,7 @@ import {
 } from "../documents";
 import { isFeatureEnabled } from "../features";
 import { validateEntityBody } from "./validate";
+import { ITEM_EQUIPMENT_KINDS } from "./registry-data";
 import { ITEM_REVENUE_RECOGNITION_COLUMNS, ITEM_TIME_TRACKING_COLUMNS, type ApiField, type ResolvedApiType } from "./schema-registry";
 
 /**
@@ -281,6 +282,27 @@ async function refuseDisabledItemInventoryKind(
   return null;
 }
 
+async function refuseDisabledItemEquipmentKind(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+  itemId?: string,
+): Promise<WriteResult | null> {
+  if (table !== "items" || columns.kind === undefined) return null;
+  if (await isFeatureEnabled(orgId, "equipment")) return null;
+  const nextKind = String(columns.kind);
+  if (ITEM_EQUIPMENT_KINDS.has(nextKind)) return err(404, "not found");
+  if (!itemId) return null;
+  const existing = (await db.execute<{ kind: string }>(sql`
+    select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
+  `)) as { rows: Array<{ kind: string }> };
+  const storedKind = existing.rows[0]?.kind;
+  if (storedKind && ITEM_EQUIPMENT_KINDS.has(storedKind) && nextKind !== storedKind) {
+    return err(404, "not found");
+  }
+  return null;
+}
+
 async function refuseDisabledItemFeatureColumns(
   orgId: string,
   table: string,
@@ -290,7 +312,8 @@ async function refuseDisabledItemFeatureColumns(
   return (
     (await refuseDisabledItemRevenueRecognition(orgId, table, columns)) ??
     (await refuseDisabledItemTimeTracking(orgId, table, columns)) ??
-    (await refuseDisabledItemInventoryKind(orgId, table, columns, itemId))
+    (await refuseDisabledItemInventoryKind(orgId, table, columns, itemId)) ??
+    (await refuseDisabledItemEquipmentKind(orgId, table, columns, itemId))
   );
 }
 
