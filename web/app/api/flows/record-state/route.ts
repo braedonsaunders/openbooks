@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
 import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz } from '../../../../lib/authz'
+import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -76,8 +76,8 @@ const iso = (v: unknown): string =>
 
 /** `[delegated YYYY-MM-DD by <userId> → <name>]` markers written by delegateGate. */
 export async function GET(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const url = new URL(req.url)
   const subjectKind = url.searchParams.get('subjectKind') ?? ''

@@ -5,7 +5,7 @@ import {
   runAutoElimination,
   runOwnershipConsolidation,
 } from '@openbooks/engine/src/consolidation.ts'
-import { guardPermission } from '../../../lib/authz'
+import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -15,10 +15,11 @@ export const runtime = 'nodejs'
  * only): derive the period's consolidated exchange rates from daily fx_rates,
  * or (re-)post the period's auto-elimination entry into the elimination
  * subsidiary. Both are idempotent per period. Gated by close.run — these are
- * period-close controller actions.
+ * period-close controller actions, and by the multiSubsidiary feature so a
+ * disabled consolidation module cannot be driven through this API.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('close.run')
+  const gate = await guardFeaturePermission('close.run', 'multiSubsidiary')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 

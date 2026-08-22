@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -13,17 +13,17 @@ export const runtime = 'nodejs'
  */
 
 export async function GET() {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute<Record<string, unknown>>(sql`
     select f.id, f.name, f.description, f.subject_kind, f.enabled, f.updated_at,
            jsonb_array_length(f.graph->'nodes') as node_count,
-           (select count(*) from flow_runs r where r.flow_id = f.id) as run_count,
+           (select count(*) from flow_runs r where r.flow_id = f.id and r.org_id = f.org_id) as run_count,
            lr.status as last_run_status, lr.started_at as last_run_at
       from flows f
       left join lateral (
         select status, started_at from flow_runs r
-         where r.flow_id = f.id order by r.started_at desc limit 1
+         where r.flow_id = f.id and r.org_id = f.org_id order by r.started_at desc limit 1
       ) lr on true
      where f.org_id = ${gate.user.orgId}
      order by f.name
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission('flows.manage')
+  const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>

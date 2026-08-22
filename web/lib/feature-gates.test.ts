@@ -24,7 +24,7 @@ import test from 'node:test'
 const WEB = new URL('../', import.meta.url)
 const APP_SEGMENT = 'app/(app)'
 
-const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(/
+const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(/
 
 const read = (path: string) => readFileSync(new URL(path, WEB), 'utf8')
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -115,6 +115,8 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   scripts: ['app/api/scripts'],
   onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers'],
   queryConsole: ['app/api/query'],
+  flows: ['app/api/flows', 'app/api/admin/flows'],
+  multiSubsidiary: ['app/api/consolidation'],
 }
 
 function routeFilesUnder(dir: string): string[] {

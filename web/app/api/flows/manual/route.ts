@@ -7,7 +7,8 @@ import {
   parseFlowGraph,
   runRecordFlows,
 } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz, can, type Authz } from '../../../../lib/authz'
+import { can, type Authz } from '../../../../lib/authz'
+import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -98,8 +99,8 @@ async function availableButtons(
 }
 
 export async function GET(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const url = new URL(req.url)
   const subjectKind = url.searchParams.get('subjectKind') ?? ''
@@ -116,8 +117,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const body = (await req.json().catch(() => ({}))) as {
     subjectKind?: string

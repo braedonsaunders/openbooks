@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz } from '../../../../lib/authz'
+import { requireFlowsSession } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -11,8 +11,8 @@ export const runtime = 'nodejs'
  * list what is waiting on them.
  */
 export async function GET() {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
   const gates = await worklistGates(authz.user.orgId, authz.user.id)
   return NextResponse.json({ gates })
 }

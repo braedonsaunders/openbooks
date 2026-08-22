@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { delegateGate } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { gateErrorResponse, loadGateHeader } from '../../_lib'
+import { gateErrorResponse, loadGateHeader, requireFlowsSession } from '../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -13,8 +12,8 @@ export const runtime = 'nodejs'
  * the route only session-guards, org-scopes, and maps errors.
  */
 export async function POST(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const authz = await requireFlowsSession()
+  if (authz instanceof NextResponse) return authz
 
   const body = (await req.json().catch(() => ({}))) as { gateId?: string; toUserId?: string }
   if (!body.gateId || !isUuid(body.gateId) || !body.toUserId || !isUuid(body.toUserId)) {
