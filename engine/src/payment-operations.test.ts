@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nachaOriginator, sepaOriginator } from "./payment-operations.ts";
 import { PaymentError } from "./payments.ts";
+
+const paymentOperationsSource = readFileSync(new URL("./payment-operations.ts", import.meta.url), "utf8");
+
+test("settlement upserts pin the known tenant on the payment_instruction_id conflict write", () => {
+  assert.match(
+    paymentOperationsSource,
+    /insert into payment_settlements[\s\S]*?on conflict \(payment_instruction_id\) do update set[\s\S]*?where payment_settlements\.org_id = \$\{opts\.orgId\}/,
+  );
+});
 
 /**
  * A debit profile's originator settings arrive as decrypted tenant JSON, so the

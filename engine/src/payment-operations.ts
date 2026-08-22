@@ -834,6 +834,7 @@ export async function recordPaymentSettlement(opts: {
         return_code = excluded.return_code, return_reason = excluded.return_reason,
         reversal_entry_id = coalesce(excluded.reversal_entry_id, payment_settlements.reversal_entry_id),
         updated_at = now(), updated_by = excluded.updated_by
+      where payment_settlements.org_id = ${opts.orgId}
     `);
     await tx.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`);
     if (opts.status === "returned") {
