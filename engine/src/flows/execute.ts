@@ -287,7 +287,11 @@ export async function executeFlowPlan(
       }
 
       case "unlock_record": {
-        await unlockRecord(flow.subjectKind, subjectId);
+        await unlockRecord({
+          orgId: ctx.orgId,
+          subjectKind: flow.subjectKind,
+          subjectId,
+        });
         return "unlock_record";
       }
     }
