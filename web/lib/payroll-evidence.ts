@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { getTranslations } from 'next-intl/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
 import { PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
@@ -110,6 +111,8 @@ export async function assemblePayRunEvidence(
   const ctx = { orgId, t, period, query: parseReportQuery(params) }
   const branding = await orgBranding(orgId)
   const { page, showSummary } = resolveLayout(null)
+  const stamp = await businessToday(orgId)
+  const generatedAt = new Date(`${stamp}T00:00:00Z`)
 
   const definitions = (await db.execute<{ slug: string; id: string; name: string }>(sql`
     select slug, id, name from report_definitions
@@ -129,13 +132,13 @@ export async function assemblePayRunEvidence(
         rules: [{ field: 'run_number', op: 'eq', value: run.document_number }],
       },
     })
-    pdfs.push(await exportDataToPdf(data, branding, page, { showSummary }))
+    pdfs.push(await exportDataToPdf(data, branding, page, { showSummary, generatedAt }))
     parts.push(definition.name)
   }
 
   const glTitle = `GL preview ${run.document_number}`
   pdfs.push(await exportDataToPdf(
-    await glPreviewExportData(orgId, documentId, run, glTitle), branding, page, { showSummary: true },
+    await glPreviewExportData(orgId, documentId, run, glTitle), branding, page, { showSummary: true, generatedAt },
   ))
   parts.push(glTitle)
 
