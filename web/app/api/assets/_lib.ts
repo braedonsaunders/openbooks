@@ -130,15 +130,15 @@ export async function loadAsset(
              s.method, s.depreciation_method_id, m.name as method_name
         from accounting_books b
         left join depreciation_schedules s on s.book_id=b.id and s.asset_id=${id} and s.org_id=b.org_id
-        left join depreciation_methods m on m.id=s.depreciation_method_id
+        left join depreciation_methods m on m.id=s.depreciation_method_id and m.org_id=s.org_id
        where b.org_id=${orgId} and b.is_active
        order by b.is_primary desc, b.code`),
     db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-        join accounting_books b on b.id=s.book_id
-        join accounting_periods p on p.id=l.period_id
+        join accounting_books b on b.id=s.book_id and b.org_id=s.org_id
+        join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id
        where s.asset_id=${id} and l.org_id=${orgId}
          ${bookId ? sql`and s.book_id=${bookId}` : sql``}
          ${query ? sql`and (p.name ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`),
@@ -152,7 +152,7 @@ export async function loadAsset(
                  and (el.posted_amount is not null or el.input_id is not null or el.source='imported')
              ) as has_evidence
         from depreciation_schedules s
-        join accounting_books b on b.id=s.book_id and b.is_primary
+        join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary
         left join depreciation_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id
        where s.asset_id=${id} and s.org_id=${orgId}`),
   ])
@@ -169,10 +169,10 @@ export async function loadAsset(
              )::text as accumulated
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-        join accounting_books b on b.id=s.book_id
-        join accounting_periods p on p.id=l.period_id
+        join accounting_books b on b.id=s.book_id and b.org_id=s.org_id
+        join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id
         left join depreciation_inputs i on i.id=l.input_id and i.org_id=l.org_id
-        left join files ef on ef.id=i.evidence_file_id
+        left join files ef on ef.id=i.evidence_file_id and ef.org_id=i.org_id
        where s.asset_id=${id} and l.org_id=${orgId}
     )
     select * from schedule_rows
