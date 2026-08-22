@@ -1,3 +1,4 @@
+import { businessToday } from "../business-date.ts";
 import { DynamicsClient } from "../dynamics.ts";
 import { formatMoney, fromUnits, toUnits } from "../money.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
@@ -54,8 +55,10 @@ export class DynamicsSource implements MigrationSource {
   readonly name = "dynamics";
   readonly refKey = "bcId";
   readonly baseCurrency: string;
+  private readonly orgId: string;
 
-  constructor(private client: DynamicsClient, opts: { baseCurrency?: string } = {}) {
+  constructor(private client: DynamicsClient, opts: { orgId: string; baseCurrency?: string }) {
+    this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
 
@@ -143,9 +146,9 @@ export class DynamicsSource implements MigrationSource {
   async accountingPeriods(): Promise<SourceEntity[]> {
     // BC exposes fiscal periods via `accountingPeriods`; fall back to a
     // calendar-year rule (Jan–Dec) when the list is empty.
-    const now = new Date();
-    const fallbackStart = new Date(Date.UTC(now.getUTCFullYear() - 7, 0, 1)).toISOString().slice(0, 10);
-    const horizon = new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31)).toISOString().slice(0, 10);
+    const year = Number((await businessToday(this.orgId)).slice(0, 4));
+    const fallbackStart = `${year - 7}-01-01`;
+    const horizon = `${year + 1}-12-31`;
     return monthlySourcePeriods(
       "bc-period",
       fiscalYearsForEndingRule(fallbackStart, horizon, 12, 31),
