@@ -2202,6 +2202,21 @@ test('the surfaces this test was written for are covered', () => {
     'party bank-account create must keep a null currency when the field is omitted',
   )
   assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /export async function PATCH[\s\S]{0,1500}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'party bank-account PATCH must refuse currency when Multi-currency is off — stored accounts stay',
+  )
+  assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /export async function PATCH[\s\S]{0,1500}body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'party bank-account PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /currency = \$\{body\.currency !== undefined \? body\.currency\?\.trim\(\)\.toUpperCase\(\) \|\| null : sql`currency`\}/,
+    'party bank-account PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
     read('app/(app)/parties/page.tsx'),
     /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
     'the parties page must not load the bank-account currency control when Multi-currency is off',
