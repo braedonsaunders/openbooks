@@ -60,9 +60,10 @@ const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&a
 /** Read a stored file's bytes (db blob or S3), by file id. */
 async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
   const r = (await db.execute<{ content_type: string; version_id: string | null; bytes: Buffer | null }>(sql`
-    select fi.content_type, fi.current_version_id as version_id, fb.bytes
+    select fi.content_type, fv.id as version_id, fb.bytes
       from files fi
-      left join file_blobs fb on fb.version_id = fi.current_version_id
+      join file_versions fv on fv.id = fi.current_version_id and fv.file_id = fi.id
+      left join file_blobs fb on fb.version_id = fv.id
      where fi.id = ${fileId} and fi.org_id = ${orgId}
   `))
   const row = r.rows[0]
@@ -261,9 +262,22 @@ export async function assembleInvoiceBackup(
           component_manifest = excluded.component_manifest, generated_at = now(), updated_by = ${userId}
   `)
   if (prior.rows[0]?.file_id && prior.rows[0].file_id !== stored.id) {
-    await db.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${prior.rows[0].file_id}`)
-    await db.execute(sql`delete from file_blobs where version_id in (select current_version_id from files where id = ${prior.rows[0].file_id} and org_id = ${orgId})`)
-    await db.execute(sql`delete from files where id = ${prior.rows[0].file_id} and org_id = ${orgId}`)
+    const priorFileId = prior.rows[0].file_id
+    await db.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`)
+    await db.execute(sql`
+      delete from file_blobs where version_id in (
+        select fv.id from file_versions fv
+        join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+        where fv.file_id = ${priorFileId}
+      )
+    `)
+    await db.execute(sql`update files set current_version_id = null where id = ${priorFileId} and org_id = ${orgId}`)
+    await db.execute(sql`
+      delete from file_versions fv
+      using files fi
+      where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${priorFileId}
+    `)
+    await db.execute(sql`delete from files where id = ${priorFileId} and org_id = ${orgId}`)
   }
 
   return { fileId: stored.id, pageCount, manifest }

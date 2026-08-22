@@ -20,7 +20,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const result = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
       select pf.id, pf.filename, pf.content_type, fb.bytes
-        from payment_files pf join file_blobs fb on fb.version_id = pf.file_version_id
+        from payment_files pf
+        join files fi on fi.id = pf.file_id and fi.org_id = ${gate.user.orgId}
+        join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
+        join file_blobs fb on fb.version_id = fv.id
        where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
          and pf.status in ('approved', 'delivered')
        order by pf.sequence_number desc limit 1
