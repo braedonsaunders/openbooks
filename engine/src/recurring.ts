@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
@@ -29,6 +30,15 @@ export type Cadence =
   | "quarterly"
   | "annually"
   | "custom_cron";
+
+export class RecurringError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message);
+    this.name = "RecurringError";
+  }
+}
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /**
  * Optional-module kinds the runner must not mint when the Features switch is
@@ -369,6 +379,25 @@ async function generateFromTemplate(
     throw new Error("template document kind is disabled");
   }
 
+  const lineRes = (await db.execute<Record<string, any>>(sql`
+    select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
+     order by line_number
+  `));
+  // Stored templates and existing generated documents stay. Turning Inventory
+  // off must refuse a generate that would persist inventory / assembly / kit.
+  if (!(await inventoryFeatureEnabled(db, orgId))) {
+    const itemIds = [...new Set(
+      lineRes.rows.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+    )];
+    for (const itemId of itemIds) {
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${itemId} and org_id = ${orgId}`));
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        throw new RecurringError("Inventory is disabled", 404);
+      }
+    }
+  }
+
   const termDays =
     tpl.document_date && tpl.due_date ? dayDiff(tpl.document_date, tpl.due_date) : null;
   const dueDate = termDays != null ? addDays(documentDate, termDays) : null;
@@ -385,11 +414,6 @@ async function generateFromTemplate(
     returning id
   `));
   const newId = created.rows[0]!.id;
-
-  const lineRes = (await db.execute<Record<string, any>>(sql`
-    select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
-     order by line_number
-  `));
 
   const amounts: string[] = [];
   const taxes: string[] = [];

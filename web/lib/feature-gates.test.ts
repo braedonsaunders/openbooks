@@ -910,6 +910,26 @@ test('the surfaces this test was written for are covered', () => {
     'recurring generate-now must refuse optional-module kinds when the feature is off',
   )
   assert.match(
+    read('../engine/src/recurring.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'recurring generate must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'generateFromTemplate must not persist inventory/assembly/kit lines when Inventory is off — stored templates and existing documents stay',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /RecurringError\("Inventory is disabled", 404\)/,
+    'generateFromTemplate must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
+    read('app/api/recurring/[id]/route.ts'),
+    /e instanceof RecurringError[\s\S]{0,120}status: e\.status/,
+    'recurring run-now must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
     read('app/api/recurring/route.ts'),
     /isDocKindEnabled\(/,
     'recurring schedule create must refuse optional-module templates when the feature is off',
