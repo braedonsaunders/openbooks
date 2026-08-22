@@ -45,14 +45,14 @@ export async function openItems(
         join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and ${signFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
-         and d.open_balance > 0.005${subScope(sql`jl.subsidiary_id`, subIds)}
+         and d.open_balance > 0${subScope(sql`jl.subsidiary_id`, subIds)}
     )
     select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
       left join parties p on p.id = oi.party_id
-     where oi.remaining > 0.005
+     where oi.remaining > 0
   `)) as any
   return (result.rows as any[]).map((row) => ({
     id: row.id,

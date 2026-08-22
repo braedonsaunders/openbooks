@@ -73,14 +73,14 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
-           and d.open_balance > 0.005
+           and d.open_balance > 0
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
              coalesce(sum(remaining) filter (where due_date >= ${today} and due_date < ${in7}), 0) as due_7,
-             count(*) filter (where remaining > 0.005) as open_count
-        from oi where remaining > 0.005
+             count(*) filter (where remaining > 0) as open_count
+        from oi where remaining > 0
     `),
     // Hero roster — vendor commitments: open POs and open bills side by side.
     db.execute<any>(sql`
@@ -98,14 +98,14 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
-           and d.open_balance > 0.005
+           and d.open_balance > 0
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
         select party_id, sum(remaining) as billed_open,
                sum(remaining) filter (where due_date < ${today}) as overdue,
-               count(*) filter (where remaining > 0.005) as open_bills,
+               count(*) filter (where remaining > 0) as open_bills,
                min(due_date) as oldest_due
-          from oi where remaining > 0.005 group by party_id
+          from oi where remaining > 0 group by party_id
       ), pos as (
         select d.party_id, coalesce(sum(abs(d.total)), 0) as po_value, count(*) as n
           from documents d

@@ -77,14 +77,14 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
-           and d.open_balance > 0.005
+           and d.open_balance > 0
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
-             count(*) filter (where remaining > 0.005) as open_count,
-             count(*) filter (where remaining > 0.005 and due_date < ${today}) as overdue_count
-        from oi where remaining > 0.005
+             count(*) filter (where remaining > 0) as open_count,
+             count(*) filter (where remaining > 0 and due_date < ${today}) as overdue_count
+        from oi where remaining > 0
     `),
     // Days-sales-outstanding is its own query so it runs BESIDE the open-item
     // aggregate instead of after it — as a scalar subquery the two costs added
@@ -117,7 +117,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
-           and d.open_balance > 0.005
+           and d.open_balance > 0
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select oi.party_id, coalesce(p.display_name, 'Unspecified') as name,
@@ -134,7 +134,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
             join crm_opportunity_statuses s on s.id = o.status_id
            where o.org_id = ${orgId} and o.is_active and not s.is_closed
              and o.party_id = oi.party_id) opp on true
-       where oi.remaining > 0.005
+       where oi.remaining > 0
        group by oi.party_id, p.display_name, opp.n
        order by sum(oi.remaining) desc
        limit 10
