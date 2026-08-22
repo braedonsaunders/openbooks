@@ -31,13 +31,13 @@ export async function POST(
     if (source.ping) {
       const r = await source.ping();
       await db.execute(
-        sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id}`,
+        sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
       );
       return NextResponse.json({ ok: r.ok, detail: r.detail });
     }
     const tb = await source.trialBalance();
     await db.execute(
-      sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id}`,
+      sql`update connections set status = 'active', last_error = null, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
     );
     return NextResponse.json({
       ok: true,
@@ -46,7 +46,7 @@ export async function POST(
   } catch (e) {
     const message = (e as Error).message;
     await db.execute(
-      sql`update connections set status = 'error', last_error = ${message}, updated_at = now() where id = ${id}`,
+      sql`update connections set status = 'error', last_error = ${message}, updated_at = now() where id = ${id} and org_id = ${gate.user.orgId}`,
     );
     return NextResponse.json({ ok: false, error: message }, { status: 200 });
   }

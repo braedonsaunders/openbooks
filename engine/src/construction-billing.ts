@@ -251,11 +251,11 @@ export async function createPayApplication(
         select
           coalesce((select sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored)
               from pay_application_lines pal
-              join pay_applications pa on pa.id = pal.pay_application_id
+              join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
              where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')), 0) as prev,
           coalesce((select pal.materials_stored
               from pay_application_lines pal
-              join pay_applications pa on pa.id = pal.pay_application_id
+              join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
              where pal.org_id = ${orgId} and pal.sov_line_id = ${line.id} and pa.status in ('invoiced', 'posted')
              order by pa.application_number desc limit 1), 0) as prev_stored
       `));
@@ -442,7 +442,7 @@ export async function generatePayApplicationInvoice(
              pal.this_period_completed, pal.materials_stored,
              sl.description, sl.scheduled_value, sl.income_account_id, sl.retainage_percent
         from pay_application_lines pal
-        join sov_lines sl on sl.id = pal.sov_line_id
+        join sov_lines sl on sl.id = pal.sov_line_id and sl.org_id = pal.org_id
        where pal.pay_application_id = ${payAppId} and pal.org_id = ${orgId}
        order by sl.sort_order
     `));

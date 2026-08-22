@@ -320,13 +320,13 @@ export async function snapshotLaborCostRates(
            coalesce(project.subsidiary_id, employee.subsidiary_id) as target_subsidiary_id,
            wcg.rate_percent as worker_comp_percent
       from time_entries te
-      left join time_types tt on tt.id = te.time_type_id
+      left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
       left join employee_roles er on er.org_id = te.org_id and er.party_id = te.employee_party_id
       left join parties employee on employee.id = te.employee_party_id and employee.org_id = te.org_id
       left join subsidiaries employee_sub on employee_sub.id = employee.subsidiary_id and employee_sub.org_id = te.org_id
       left join projects project on project.id = te.project_id and project.org_id = te.org_id
       left join subsidiaries project_sub on project_sub.id = project.subsidiary_id and project_sub.org_id = te.org_id
-      left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id
+      left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id and wcg.org_id = te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`));
   const org = (await db.execute<{ base_currency: string; root_subsidiary_id: string | null }>(sql`
       select o.base_currency,

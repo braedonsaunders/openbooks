@@ -374,7 +374,7 @@ export async function reverseAssetLifecycleEvent(
                else null
              end as restored_status
         from asset_events event
-        join fixed_assets asset on asset.id = event.asset_id
+        join fixed_assets asset on asset.id = event.asset_id and asset.org_id = event.org_id
        where event.org_id = ${orgId}
          and event.reverses_event_id = ${source.id}
        limit 1

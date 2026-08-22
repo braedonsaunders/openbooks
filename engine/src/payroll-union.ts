@@ -94,7 +94,7 @@ export async function fringesForEmployee(
     select f.id, f.code, f.name, f.calc, f.value, f.paid_by, f.job_costed,
            f.component_id, f.sequence
       from union_fringes f
-      join union_agreements a on a.id = f.agreement_id and a.is_active
+      join union_agreements a on a.id = f.agreement_id and a.org_id = f.org_id and a.is_active
      where f.org_id = ${orgId} and f.agreement_id = ${agreementId} and f.is_active
        and (f.classification_id is null or f.classification_id = ${classificationId})
      order by f.sequence, f.code

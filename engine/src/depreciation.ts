@@ -592,7 +592,7 @@ export async function recordDepreciationInput(
       select coalesce(sum(l.planned_amount), 0)::text as planned,
              coalesce(sum(i.production_units) filter (where i.voided_at is null), 0)::text as used_units
         from depreciation_schedule_lines l
-        left join depreciation_inputs i on i.id = l.input_id
+        left join depreciation_inputs i on i.id = l.input_id and i.org_id = l.org_id
        where l.org_id = ${args.orgId} and l.schedule_id = ${row.id}
          ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`));
     const basis = toUnits(row.acquisition_cost) - toUnits(row.salvage_value);

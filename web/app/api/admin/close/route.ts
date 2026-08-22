@@ -251,7 +251,7 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
       if (!source.rows[0]) throw new CloseError("blueprint not found");
       version = Number(source.rows[0].version) + 1;
       await tx.execute(
-        sql`update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId} where id = ${sourceId}`,
+        sql`update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId} where id = ${sourceId} and org_id = ${orgId}`,
       );
     }
     if (isDefault)

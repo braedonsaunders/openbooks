@@ -1700,7 +1700,7 @@ async function calculateStub(
              coalesce(tt.classification, 'regular') as classification,
              coalesce(tt.cost_multiplier, 1) as multiplier, coalesce(tt.name, 'Regular') as type_name
         from time_entries te
-        left join time_types tt on tt.id = te.time_type_id
+        left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
        where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
          and te.status = 'approved'
          and te.worked_on between ${run.period_start} and ${run.period_end}
@@ -2427,7 +2427,7 @@ async function calculateStub(
     const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
       select g.rate_percent, g.max_assessable
         from employee_roles er
-        join worker_comp_groups g on g.id = er.worker_comp_group_id and g.is_active
+        join worker_comp_groups g on g.id = er.worker_comp_group_id and g.org_id = er.org_id and g.is_active
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId} and er.is_active
        limit 1
     `));

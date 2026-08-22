@@ -1251,7 +1251,7 @@ export async function previewDerivedRule(
       select te.employee_party_id,
              coalesce(sum(round(te.hours * coalesce(tt.cost_multiplier, 1) * lcr.rate, 4)), 0)::text as gross
         from time_entries te
-        left join time_types tt on tt.id = te.time_type_id
+        left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
         join lateral (
           select rate from labor_cost_rates lcr
            where lcr.org_id = te.org_id and lcr.employee_party_id = te.employee_party_id
