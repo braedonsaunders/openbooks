@@ -38,6 +38,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
   }
+  if (body.rateBookId !== undefined) {
+    const currentId = current.rows[0].rate_book_id ? String(current.rows[0].rate_book_id) : null
+    const nextId = text(body.rateBookId)
+    if (currentId !== nextId && !(await isFeatureEnabled(gate.user.orgId, 'projects'))) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
   const status = body.status ?? current.rows[0].status
   if (!['draft','active','inactive','retired'].includes(status)) return bad('invalid_status')
   const name = body.name !== undefined ? text(body.name) : current.rows[0].name

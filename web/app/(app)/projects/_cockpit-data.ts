@@ -21,9 +21,10 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean } = {},
 ): Promise<ProjectCockpitData> {
-  const [projectType, fieldTicketsEnabled, today] = await Promise.all([
+  const [projectType, fieldTicketsEnabled, equipmentEnabled, today] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
+    isFeatureEnabled(orgId, 'equipment'),
     businessToday(orgId),
   ])
   const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
@@ -45,20 +46,24 @@ export async function loadProjectCockpit(
     db.execute(sql`
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active order by name limit 2000`),
-    db.execute(sql`
+    equipmentEnabled
+      ? db.execute(sql`
       select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
         from equipment_units where org_id = ${orgId} and status = 'active'
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
-       order by unit_number limit 2000`),
+       order by unit_number limit 2000`)
+      : Promise.resolve({ rows: [] }),
     // Operators an equipment charge can be attributed to. Active, non-terminated
     // employees — the same population payroll pays, because that is who an
     // equipment incentive can actually reach.
-    db.execute(sql`
+    equipmentEnabled
+      ? db.execute(sql`
       select p.id, p.display_name as "displayName"
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
        where p.org_id = ${orgId} and er.is_active and er.terminated_on is null
-       order by p.display_name limit 2000`),
+       order by p.display_name limit 2000`)
+      : Promise.resolve({ rows: [] }),
     db.execute(sql`
       select c.id as contract_id, o.percent_complete, o.allocated_price,
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
@@ -151,6 +156,7 @@ export async function loadProjectCockpit(
     items: items as ProjectCockpitData['items'],
     equipment: equipment as ProjectCockpitData['equipment'],
     operators: operators as ProjectCockpitData['operators'],
+    equipmentEnabled,
     absorption: {
       recovered: formatMoney(sum(charges.filter((c) => c.status === 'posted').map((c) => String(c.cost))), 2),
       billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),
