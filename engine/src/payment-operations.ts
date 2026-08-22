@@ -313,8 +313,8 @@ async function loadFormatContext(runId: string, orgId: string): Promise<FormatCo
            p.originator_secrets_encrypted, f.id as format_id, f.code as format_code,
            f.rail, f.file_extension, f.content_type, f.formatter_script
       from payment_runs r
-      join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.is_active
-      join payment_formats f on f.id = p.payment_format_id and f.is_active
+      join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id and p.is_active
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
   `));
   const row = rows.rows[0];
@@ -866,7 +866,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
     select s.id, s.org_id, s.payment_bank_profile_id, s.cron, s.timezone, s.selection_criteria,
            s.action, s.created_by, p.currency, p.subsidiary_id
       from payment_schedules s
-      join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.is_active
+      join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.org_id = s.org_id and p.is_active
       join orgs o on o.id = s.org_id and o.env_kind = 'production'
      where s.is_active and s.next_run_at <= ${now}
      order by s.next_run_at

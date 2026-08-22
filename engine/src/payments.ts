@@ -1056,8 +1056,8 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
   const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.rail = 'cpa005_credit'
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
@@ -1567,8 +1567,8 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
   const runInfo = (await db.execute<{ method: string; rail: string | null }>(sql`
     select r.method, f.rail
       from payment_runs r
-      left join payment_bank_profiles p on p.id = r.payment_bank_profile_id
-      left join payment_formats f on f.id = p.payment_format_id
+      left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
+      left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where r.id = ${runId} and r.org_id = ${orgId}
   `));
   const method = runInfo.rows[0]?.method;
@@ -2179,8 +2179,8 @@ export async function loadNachaSettings(orgId: string, runId?: string) {
   const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.rail in ('nacha_credit', 'nacha_debit')
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
@@ -2337,8 +2337,8 @@ export async function loadSepaSettings(orgId: string, runId?: string) {
   const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
     select p.originator_secrets_encrypted
       from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
+      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.rail in ('sepa_credit', 'sepa_debit')
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
