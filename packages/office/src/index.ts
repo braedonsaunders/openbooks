@@ -211,10 +211,13 @@ const RULE = 'ffb0b6be'
  * that are bold with a rule above (and a double rule below the grand total).
  * Numbers use an accounting format (negatives in parentheses).
  */
-export async function statementSheetToXlsx(sheet: StatementSheet): Promise<Buffer> {
+export async function statementSheetToXlsx(
+  sheet: StatementSheet,
+  opts: { generatedAt?: Date } = {},
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'openbooks'
-  const now = new Date()
+  const now = opts.generatedAt ?? new Date()
   wb.created = now
   wb.modified = now
 
