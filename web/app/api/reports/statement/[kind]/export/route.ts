@@ -49,7 +49,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   }
 
   const t = (await getTranslations('reports')) as unknown as Translator
-  const filename = `${safeName(kind)}-${await businessToday(gate.user.orgId)}`
+  const stamp = await businessToday(gate.user.orgId)
+  const filename = `${safeName(kind)}-${stamp}`
   const branding = await orgBranding()
 
   const emitData = async (data: ExportData) => {
@@ -61,7 +62,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel }), filename)
     }
     const { page, showSummary } = resolveLayout(null)
-    return pdfResponse(await exportDataToPdf(data, branding, page, { showSummary }), filename)
+    return pdfResponse(await exportDataToPdf(data, branding, page, {
+      showSummary,
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    }), filename)
   }
 
   try {
