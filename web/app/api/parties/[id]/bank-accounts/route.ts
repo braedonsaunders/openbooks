@@ -123,6 +123,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json().catch(() => ({}))) as Body
+  // Party bank-account currency is Multi-currency configuration. Turning that
+  // switch off must refuse a currency write; omitting currency keeps the
+  // stored account.
+  if (
+    body.currency !== undefined &&
+    !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
+  ) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const validationError = validateBody(body, false)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
   const changedFields = MATERIAL_COLUMNS.filter((k) => body[k as keyof Body] !== undefined)
