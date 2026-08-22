@@ -20,6 +20,7 @@ import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
 
@@ -35,6 +36,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   if (kind === 'project-profitability') {
     const feature = await guardProjectsFeature(gate.user.orgId)
     if (feature) return feature
+  }
+  if (kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
   const url = new URL(req.url)

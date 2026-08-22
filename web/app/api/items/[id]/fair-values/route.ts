@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
 
@@ -11,7 +11,8 @@ export const runtime = 'nodejs'
  * Fair-value / standalone selling prices (fair_value_prices) for one item —
  * dated, per-currency SSPs used to allocate bundle revenue across obligations
  * (relative-SSP, ASC 606). Re-homed from the Setup workspace onto the item
- * record, so it is gated by the item permissions. GET lists; POST/PATCH/DELETE
+ * record, so it is gated by the item permissions and the Revenue Recognition
+ * Features switch (same key as the setup entity). GET lists; POST/PATCH/DELETE
  * mutate a single dated row.
  */
 
@@ -31,7 +32,7 @@ function dateOrNull(value: unknown): string | null {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.read')
+  const gate = await guardFeaturePermission('items.read', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id) || !(await itemExists(id, gate.user.orgId))) {
@@ -66,7 +67,7 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
+  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
   const { id } = await params
@@ -86,7 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
+  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
   const { id } = await params
@@ -108,7 +109,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
+  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
   const { orgId } = gate.user
   const { id } = await params

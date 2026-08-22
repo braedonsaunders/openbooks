@@ -14,7 +14,7 @@ export default async function Reports() {
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
-  const [saved, custom, projectsEnabled, payrollEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled] = await Promise.all([
     db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
@@ -25,6 +25,7 @@ export default async function Reports() {
     }>,
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),
   ])
 
     // Hide definitions over permission-gated entities (payroll wages) from
@@ -99,12 +100,12 @@ const card = (key: string, href: string, icon: string) => ({
       accent: 'teal',
       cards: [card('orders', '/reports/orders', 'ClipboardList')],
     },
-    {
+    ...(budgetsEnabled ? [{
       key: 'budgeting',
       label: t('hub.groups.budgeting'),
       accent: 'amber',
       cards: [card('budget', '/reports/budget', 'Target')],
-    },
+    } satisfies HubGroup] : []),
     ...(projectsEnabled ? [{
       key: 'projects',
       label: t('hub.groups.projects'),
@@ -134,7 +135,10 @@ const card = (key: string, href: string, icon: string) => ({
           desc: c.kind === 'built_in' ? t('custom.kind.builtIn') : t('custom.kind.custom'),
           icon: 'Coins',
         })),
-        ...saved.rows.filter((s) => projectsEnabled || !s.path.startsWith('/reports/project-profitability')).map((s) => {
+        ...saved.rows.filter((s) =>
+          (projectsEnabled || !s.path.startsWith('/reports/project-profitability'))
+          && (budgetsEnabled || !s.path.startsWith('/reports/budget'))
+        ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
           return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark' }
         }),

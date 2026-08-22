@@ -10,6 +10,7 @@ import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
 import { ReportPaper } from '../ReportPaper'
 
@@ -23,6 +24,7 @@ export default async function BudgetPage({
   const t = await getTranslations('reports')
   const tb = await getTranslations('budgets')
   const authz = await requirePermission('reports.read')
+  await requireFeatureEnabled(authz.user.orgId, 'budgets')
   const sp = await searchParams
   const q = parseReportQuery(sp)
   const [scenarios, dimensions, org] = await Promise.all([

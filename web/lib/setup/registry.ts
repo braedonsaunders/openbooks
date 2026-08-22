@@ -1199,6 +1199,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     rehomed: true, // lives as a tab on the Items catalog module
     actorCols: true,
     groupKey: 'billing',
+    featureKey: 'projects',
     iconKey: 'tag',
     orgScoped: true,
     naturalKey: 'code',
@@ -1225,6 +1226,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     rehomed: true, // lives on the customer & project records as an override section
     actorCols: true,
     groupKey: 'billing',
+    featureKey: 'projects',
     iconKey: 'tag',
     orgScoped: true,
     orderBy: 'project_id nulls last, customer_id nulls last, effective_from desc nulls last',

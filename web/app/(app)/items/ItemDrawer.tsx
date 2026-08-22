@@ -61,6 +61,9 @@ export function ItemDrawer({
   recognitionRules = [],
   canManage,
   basePath = '/items',
+  laborPricing = false,
+  inventoryCosting = false,
+  fairValuePrices = false,
 }: {
   payload: ItemPayload
   accounts: AccountOpt[]
@@ -69,6 +72,12 @@ export function ItemDrawer({
   recognitionRules?: RuleOpt[]
   canManage: boolean
   basePath?: string
+  /** Labor rate books — subordinate Projects capability. */
+  laborPricing?: boolean
+  /** Inventory costing profile — Inventory Features switch. */
+  inventoryCosting?: boolean
+  /** Standalone selling prices — Revenue Recognition Features switch. */
+  fairValuePrices?: boolean
 }) {
   const t = useTranslations('items')
   const tCommon = useTranslations('common')
@@ -385,14 +394,18 @@ export function ItemDrawer({
           </div>
         </section>
 
-        <ItemRatesEditor
-          itemId={String(it.id)}
-          itemPrice={defaultRate}
-          itemCost={defaultCost}
-          canManage={editable}
-        />
+        {laborPricing ? (
+          <ItemRatesEditor
+            itemId={String(it.id)}
+            itemPrice={defaultRate}
+            itemCost={defaultCost}
+            canManage={editable}
+          />
+        ) : null}
 
-        <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
+        {inventoryCosting ? (
+          <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
+        ) : null}
 
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -544,7 +557,9 @@ export function ItemDrawer({
           </div>
         </section>
 
-        <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />
+        {fairValuePrices ? (
+          <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />
+        ) : null}
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
 

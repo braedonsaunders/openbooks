@@ -96,15 +96,16 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
     'app/api/billing-requests',
     'app/api/project-charges',
     'app/api/rate-book-assignments',
+    'app/api/items/[id]/rates',
   ],
   timeTracking: ['app/api/timesheets'],
   payroll: ['app/api/payroll', 'app/api/work-schedules'],
   fixedAssets: ['app/api/assets'],
-  inventory: ['app/api/inventory'],
+  inventory: ['app/api/inventory', 'app/api/items/[id]/costing'],
   fieldTickets: ['app/api/field-tickets'],
   subscriptionBilling: ['app/api/subscriptions'],
   advancedSubscriptions: ['app/api/subscriptions/advanced'],
-  revenueRecognition: ['app/api/revenue'],
+  revenueRecognition: ['app/api/revenue', 'app/api/items/[id]/fair-values'],
   wipBilling: ['app/api/wip-billing'],
   propertyManagement: ['app/api/property-management'],
   projectScheduling: ['app/api/project-schedule'],
@@ -194,6 +195,27 @@ test('the surfaces this test was written for are covered', () => {
     read('app/api/revenue/run-recognition/route.ts'),
     /isFeatureEnabled\(user\.orgId, 'revenueRecognition'\)/,
     'recognition posting must refuse when the revenue recognition gate is off',
+  )
+  assert.equal(routeGateState('/reports/budget'), 'gated')
+  assert.match(
+    read('lib/report-run.ts'),
+    /kind === 'budget' && !\(await isFeatureEnabled\(orgId, 'budgets'\)\)/,
+    'budget vs actual must refuse when the Budgets switch is off',
+  )
+  assert.match(
+    read('app/api/reports/drill/route.ts'),
+    /target\.kind === 'budget' && !\(await isFeatureEnabled/,
+    'budget drill must refuse when the Budgets switch is off',
+  )
+  assert.match(
+    read('lib/setup/registry.ts'),
+    /key: 'item-rate-books'[\s\S]{0,400}featureKey: 'projects'/,
+    'item rate books are labor pricing and must follow the Projects parent gate',
+  )
+  assert.match(
+    read('lib/setup/registry.ts'),
+    /key: 'item-rate-book-assignments'[\s\S]{0,400}featureKey: 'projects'/,
+    'item rate-book assignments are labor pricing and must follow the Projects parent gate',
   )
   for (const file of [
     'app/api/documents/[id]/route.ts',
