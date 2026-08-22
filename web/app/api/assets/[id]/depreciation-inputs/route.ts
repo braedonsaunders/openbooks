@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { buildAllSchedules, recordDepreciationInput } from '@openbooks/engine/src/depreciation.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -24,16 +26,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const body = (await req.json().catch(() => ({}))) as Body
   const effectiveDate = typeof body.effectiveDate === 'string' ? body.effectiveDate : ''
   const kind = body.kind === 'manual' || body.kind === 'production_usage' ? body.kind : null
-  const value = typeof body.value === 'string' || typeof body.value === 'number' ? String(body.value) : ''
+  const valueRaw = canonicalDecimal(body.value, 4)
   const memo = typeof body.memo === 'string' ? body.memo : ''
   const evidenceFileId = typeof body.evidenceFileId === 'string' ? body.evidenceFileId : ''
   if (body.bookId !== undefined && (typeof body.bookId !== 'string' || !isUuid(body.bookId))) {
     return NextResponse.json({ error: 'book id is invalid' }, { status: 422 })
   }
   const bookId = typeof body.bookId === 'string' ? body.bookId : undefined
-  if (!kind || !effectiveDate || !value || !isUuid(evidenceFileId)) {
+  if (!kind || !effectiveDate || !isUuid(evidenceFileId)) {
     return NextResponse.json({ error: 'method, effective date, value, and attached evidence file are required' }, { status: 422 })
   }
+  if (valueRaw === null) {
+    return NextResponse.json({ error: 'value must be an exact amount with no more than four decimal places' }, { status: 422 })
+  }
+  const value = normalizeMoney(valueRaw)
 
   const visible = (await db.execute(sql`
     select 1 from fixed_assets where id = ${id} and org_id = ${gate.user.orgId}
