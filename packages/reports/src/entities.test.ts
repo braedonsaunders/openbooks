@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { REPORT_ENTITY_MAP, reportEntityForFeatureState } from './entities'
+import { REPORT_AS_OF, REPORT_ENTITY_MAP, reportEntityForFeatureState } from './entities'
 
 test('items report kind options drop inventory kinds when Inventory is off', () => {
   const items = REPORT_ENTITY_MAP.items
@@ -20,4 +20,10 @@ test('items report kind options drop inventory kinds when Inventory is off', () 
     items.columns.find((column) => column.key === 'kind')?.options?.includes('inventory'),
     'the static catalog keeps inventory kinds for existing rows and saved filters',
   )
+})
+
+test('entitlement_balances limit as-of is the catalog sentinel, not CURRENT_DATE', () => {
+  const from = REPORT_ENTITY_MAP.entitlement_balances!.from
+  assert.match(from, new RegExp(REPORT_AS_OF))
+  assert.doesNotMatch(from, /CURRENT_DATE/)
 })

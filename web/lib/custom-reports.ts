@@ -20,6 +20,7 @@ import { fiscalStartMonth } from './fiscal'
 import { isFeatureEnabled } from './features'
 import { reportEntityFeatureKey } from './report-authz'
 import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -203,6 +204,7 @@ export async function executeReport(
     entityMap: REPORT_ENTITY_MAP,
     maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
     fiscalStartMonth: await fiscalStartMonth(),
+    asOf: await businessToday(orgId),
     labels: labels ?? (await reportRunLabels()),
   })
 }

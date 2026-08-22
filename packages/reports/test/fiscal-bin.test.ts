@@ -21,3 +21,14 @@ test('fiscal_period bin buckets by calendar month', () => {
   const c = compileCustomQuery(entity, q, 'org1', { fiscalStartMonth: 4 })
   assert.match(c.text, /date_trunc\('month'/)
 })
+
+test('entitlement_balances as-of binds the org calendar date, never CURRENT_DATE', () => {
+  const entity = REPORT_ENTITY_MAP['entitlement_balances']!
+  const q = { entity: 'entitlement_balances', mode: 'rows', columns: ['employee', 'balance'] }
+  const c = compileCustomQuery(entity, q, 'org1', { asOf: '2026-08-22' })
+  assert.doesNotMatch(c.text, /CURRENT_DATE/)
+  assert.doesNotMatch(c.text, /__report_as_of__/)
+  assert.ok(c.values.includes('2026-08-22'))
+  assert.match(c.text, /effective_from <= \$2/)
+  assert.match(c.text, /effective_to >= \$2/)
+})
