@@ -818,7 +818,7 @@ async function processWebhookEvent(
              external_ref = ${event.externalRef},
              event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify(merge)}::jsonb,
              updated_at = now()
-       where id = ${found.id}
+       where id = ${found.id} and org_id = ${orgId}
          and status in (${sql.join(CLAIMABLE_FROM[event.status].map((s) => sql`${s}`), sql`, `)})
        returning id
     `));
@@ -839,7 +839,7 @@ async function processWebhookEvent(
       // exact draft rather than minting another one per retry.
       await db.execute(sql`
         update payment_attempts set status = 'initiated', updated_at = now()
-         where id = ${found.id} and status = 'succeeded' and journal_entry_id is null
+         where id = ${found.id} and org_id = ${orgId} and status = 'succeeded' and journal_entry_id is null
       `);
       throw err;
     }
@@ -1033,7 +1033,7 @@ export async function finalizePaymentAcceptanceForDocument(
        set status = 'succeeded',
            journal_entry_id = ${row.posted_entry_id},
            updated_at = now()
-     where id = ${row.attempt_id} and journal_entry_id is null
+     where id = ${row.attempt_id} and org_id = ${row.org_id} and journal_entry_id is null
      returning id
   `));
   if (!closed.rows[0]) return;
@@ -1044,7 +1044,7 @@ export async function finalizePaymentAcceptanceForDocument(
              paid_payment_document_id = ${paymentDocumentId},
              paid_at = now(),
              updated_at = now()
-       where id = ${row.link_id} and status = 'active'
+       where id = ${row.link_id} and org_id = ${row.org_id} and status = 'active'
     `);
   }
   await db.execute(sql`
