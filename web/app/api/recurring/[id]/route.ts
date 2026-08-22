@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { runScheduleNow } from "@openbooks/engine/src/recurring.ts";
+import { RecurringError, runScheduleNow } from "@openbooks/engine/src/recurring.ts";
 import { requirePermission } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
 
@@ -61,6 +61,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const gen = await runScheduleNow(id);
     return NextResponse.json(gen);
   } catch (e) {
+    if (e instanceof RecurringError) return NextResponse.json({ error: e.message }, { status: e.status });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "generation failed" },
       { status: 422 },
