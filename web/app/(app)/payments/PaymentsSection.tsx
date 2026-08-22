@@ -43,8 +43,8 @@ export async function PaymentsSection({
 
   // -- flyout ---------------------------------------------------------------
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
-  const loaded = paymentId ? await loadPaymentDocument(paymentId, kind) : null
-  const openPayment = loaded && loaded.doc.org_id === orgId ? loaded : null
+  const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId) : null
+  const openPayment = loaded ?? null
   let drawer: React.ReactNode = null
   if (openPayment) {
     const partyFilter =

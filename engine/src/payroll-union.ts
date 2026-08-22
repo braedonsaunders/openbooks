@@ -124,8 +124,8 @@ export async function unionRemittanceReport(
       from union_fringes f
       join pay_components c on c.id = f.component_id and c.org_id = f.org_id
       join pay_stub_lines l on l.component_id = c.id and l.org_id = f.org_id
-      join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where f.org_id = ${orgId} and f.agreement_id = ${agreementId}
        and s.pay_date between ${from} and ${to}
      group by f.code, f.name, f.paid_by, f.sequence

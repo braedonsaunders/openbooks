@@ -2654,7 +2654,7 @@ export async function runCloseAutomations(
           );
         await db.transaction(async (tx) => {
           const task = (await tx.execute<{ evidence_required: boolean; evidence_count: string }>(sql`select evidence_required,
-            (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
+            (select count(*) from close_task_evidence e where e.task_id = t.id and e.org_id = t.org_id) as evidence_count
             from close_run_tasks t where t.id = ${context.taskId} and t.run_id = ${context.runId}
               and t.org_id = ${context.orgId} for update`));
           if (!task.rows[0]) throw new CloseError("automation task not found");

@@ -99,7 +99,7 @@ export async function createPayment(
           currency: input.currency,
           fxRate: input.fxRate,
         });
-        return await loadPaymentDocument(created.id, input.kind);
+        return await loadPaymentDocument(created.id, input.kind, context.authz.user.orgId);
       } catch (error) {
         paymentFailure(error);
       }
@@ -125,7 +125,7 @@ export async function updatePayment(
     execute: async () => {
       try {
         await updateDraftPayment(input.documentId, input.patch, context.authz.user.id);
-        return await loadPaymentDocument(input.documentId, header.kind);
+        return await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId);
       } catch (error) {
         paymentFailure(error);
       }
@@ -167,7 +167,7 @@ export async function postPayment(
             return {
               status: "pending_approval",
               requestId: submission.runId,
-              payment: await loadPaymentDocument(input.documentId, header.kind),
+              payment: await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId),
             };
           }
         } else if (header.status !== "approved") {
@@ -184,7 +184,7 @@ export async function postPayment(
         return {
           status: "posted",
           ...posted,
-          payment: await loadPaymentDocument(input.documentId, header.kind),
+          payment: await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId),
         };
       } catch (error) {
         paymentFailure(error);

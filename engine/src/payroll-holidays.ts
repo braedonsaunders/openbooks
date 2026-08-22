@@ -1141,8 +1141,8 @@ async function lookbackEarnings(
            sum(l.amount) as amount,
            r.period_start, r.period_end
       from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and l.kind = 'earning'

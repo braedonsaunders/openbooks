@@ -314,7 +314,7 @@ export async function computeTaxReturn(
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          join tax_codes tc on tc.id = l.tax_code_id
+          join tax_codes tc on tc.id = l.tax_code_id and tc.org_id = l.org_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
            and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
            and l.account_id = coalesce(${acctCol}, ${orgFallback})`));

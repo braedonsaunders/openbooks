@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
-  const payment = await loadPaymentDocument(id, gate.kind)
+  const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
   if (!payment) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(payment)
 }
@@ -62,7 +62,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     await updateDraftPayment(id, body, gate.authz.user.id)
-    const payment = await loadPaymentDocument(id, gate.kind)
+    const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
     return NextResponse.json(payment)
   } catch (e) {
     return paymentErrorResponse(e)

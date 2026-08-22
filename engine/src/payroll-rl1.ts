@@ -250,7 +250,7 @@ export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1Sum
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_qpp,
       sum(case when pc.system_key = 'qpip' then l.amount else 0 end) as employer_qpip
       from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
