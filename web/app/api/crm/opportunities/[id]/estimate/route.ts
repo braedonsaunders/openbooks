@@ -35,6 +35,17 @@ function persistEstimateLineAmount(value: unknown): string {
   }
 }
 
+/** Persist leftover estimate line quantity through exact decimal then ledger money. Fail closed. */
+function persistEstimateLineQuantity(value: unknown): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new Error('line quantity must be an exact decimal')
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new Error('line quantity must be an exact decimal')
+  }
+}
+
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('ar.create', 'crm')
   if (gate instanceof NextResponse) return gate
@@ -86,7 +97,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,
          amount, tax_amount, created_by, updated_by)
       select ${user.orgId}, ${docId}, ${line.line_number}, ${line.item_id}, i.income_account_id,
-             ${line.description}, ${normalizeMoney(line.quantity)}, ${line.unit}, ${normalizeMoney(line.unit_price)},
+             ${line.description}, ${persistEstimateLineQuantity(line.quantity)}, ${line.unit}, ${normalizeMoney(line.unit_price)},
              ${persistEstimateLineAmount(line.amount)}, 0, ${user.id}, ${user.id}
         from items i where i.id = ${line.item_id} and i.org_id = ${user.orgId}`)
     await tx.execute(sql`
