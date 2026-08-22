@@ -121,6 +121,7 @@ const knownActions = new Set([
 ]);
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 function persistMoney(value: unknown): string | null {
   if (value == null || value === "") return null;
@@ -291,6 +292,25 @@ async function refuseDisabledPropertyFixedAsset(
   return NextResponse.json({ error: "not found" }, { status: 404 });
 }
 
+/** Stored charges stay when item_id is omitted. A new inventory / assembly / kit
+ *  item is Inventory configuration — refuse it when that switch is off. */
+async function refuseDisabledLeaseChargeInventory(
+  orgId: string,
+  action: string,
+  body: Record<string, any>,
+): Promise<NextResponse | null> {
+  if (action !== "addCharge") return null;
+  const itemId = body.itemId;
+  if (itemId === undefined || itemId === null || itemId === "") return null;
+  if (await isFeatureEnabled(orgId, "inventory")) return null;
+  const item = (await db.execute<{ kind: string }>(sql`
+    select kind from items where id = ${String(itemId)} and org_id = ${orgId}`));
+  if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Record<string, any>;
   const action = String(body.action ?? "");
@@ -313,6 +333,12 @@ export async function POST(request: Request) {
     body,
   );
   if (assetGate) return assetGate;
+  const inventoryGate = await refuseDisabledLeaseChargeInventory(
+    authz.user.orgId,
+    action,
+    body,
+  );
+  if (inventoryGate) return inventoryGate;
   const common = { orgId: authz.user.orgId, actorId: authz.user.id };
   try {
     let result: unknown;

@@ -1505,6 +1505,21 @@ test('the surfaces this test was written for are covered', () => {
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
   assert.match(
+    read('app/api/property-management/route.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'lease-charge writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'lease-charge addCharge must 404 — not persist inventory/assembly/kit items — when Inventory is off — stored charges stay',
+  )
+  assert.match(
+    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    /incomeAccountId: "",\s*taxCodeId: "",/,
+    'the lease-charge form must not send itemId — stored charges stay',
+  )
+  assert.match(
     read('app/api/admin/settings/route.ts'),
     /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
     'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',
