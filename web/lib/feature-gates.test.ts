@@ -1373,6 +1373,16 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/field-ticket-drawer-data.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'field-ticket catalog picker must read the Equipment switch before offering equipment_charge',
+  )
+  assert.match(
+    read('lib/field-ticket-drawer-data.ts'),
+    /equipmentEnabled \? \['equipment_charge'\]/,
+    'field-ticket catalog picker must drop equipment_charge when Equipment is off — stored tickets stay',
+  )
+  assert.match(
+    read('lib/field-ticket-drawer-data.ts'),
     /isFeatureEnabled\([^,]+, 'inventory'\)/,
     'field-ticket catalog picker must read the Inventory switch before offering inventory items',
   )

@@ -42,10 +42,11 @@ export async function loadFieldTicketDrawerData({
     isFeatureEnabled(orgId, 'inventory'),
     businessToday(orgId),
   ])
-  // Inventory stays on stored ticket lines. The picker only omits the kind
-  // once the Features switch is off so a draft cannot add a new one.
+  // Inventory and Equipment stay on stored ticket lines. The picker only
+  // omits the kind once the Features switch is off so a draft cannot add
+  // a new one.
   const catalogItemKinds = [
-    'equipment_charge',
+    ...(equipmentEnabled ? ['equipment_charge'] : []),
     'non_inventory',
     'other_charge',
     ...(inventoryEnabled ? ['inventory'] : []),
