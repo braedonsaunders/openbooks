@@ -35,6 +35,8 @@ export default async function Journal({
       ? sql`and exists (
           select 1 from journal_lines visible
            where visible.entry_id = e.id
+             and visible.org_id = e.org_id
+             and visible.org_id = ${authz.user.orgId}
              and visible.subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])
         )`
       : sql`and false`

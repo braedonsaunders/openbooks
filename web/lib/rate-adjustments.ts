@@ -83,7 +83,7 @@ export async function resolveRateAdjustments(input: {
            or (s.rate_version_id is null and v.effective_from <= ${input.onDate}::date
                and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)))
         join item_rate_books b on b.id = s.rate_book_id and b.org_id = ${input.orgId} and b.is_active
-       where exists (select 1 from labor_rate_adjustments a where a.version_id = v.id and a.is_active)
+       where exists (select 1 from labor_rate_adjustments a where a.version_id = v.id and a.org_id = v.org_id and a.is_active)
          -- A PROJECT-scoped assignment names this exact card for this job, which
          -- is the most specific statement of intent there is; its own dimension
          -- scopes cannot then disqualify it.
@@ -111,7 +111,7 @@ export async function resolveRateAdjustments(input: {
            coalesce((select jsonb_agg(jsonb_build_object(
                        'targetType', t.target_type, 'targetValueId', t.target_value_id,
                        'targetValueText', t.target_value_text))
-                       from labor_rate_adjustment_targets t where t.adjustment_id = a.id), '[]'::jsonb) as targets
+                       from labor_rate_adjustment_targets t where t.adjustment_id = a.id and t.org_id = a.org_id), '[]'::jsonb) as targets
       from labor_rate_adjustments a
       join ranked r on r.version_id = a.version_id and r.rn = 1
      where a.org_id = ${input.orgId} and a.is_active
@@ -188,7 +188,7 @@ export async function findLapsedRateCard(input: {
        where exists (
          select 1
            from item_rate_versions v
-           join labor_rate_adjustments x on x.version_id = v.id
+           join labor_rate_adjustments x on x.version_id = v.id and x.org_id = v.org_id
             and x.is_active and x.presentation = 'separate' and x.value > 0
           where v.rate_book_id = s.rate_book_id and v.org_id = ${input.orgId} and v.status = 'active'
             and (s.rate_version_id is null or v.id = s.rate_version_id)
@@ -224,7 +224,7 @@ export async function findLapsedRateCard(input: {
          and (s.rate_version_id is null or v.id = s.rate_version_id)
        where exists (
          select 1 from labor_rate_adjustments x
-          where x.version_id = v.id and x.is_active
+          where x.version_id = v.id and x.org_id = v.org_id and x.is_active
             and x.presentation = 'separate' and x.value > 0
        )
          and (s.priority = 1

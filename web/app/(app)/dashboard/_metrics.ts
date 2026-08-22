@@ -95,7 +95,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
         join lateral (
           select count(l.id) as line_count,
                  sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
-            from journal_lines l where l.entry_id = e.id
+            from journal_lines l where l.entry_id = e.id and l.org_id = ${orgId}
         ) lt on true
        order by e.created_at desc, e.entry_number desc
     `),
