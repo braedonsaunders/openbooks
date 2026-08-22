@@ -238,9 +238,12 @@ export async function createDocumentCorrectionDraft(input: {
           .select()
           .from(schema.documentLineTaxComponents)
           .where(
-            eq(
-              schema.documentLineTaxComponents.documentLineId,
-              sourceLineId,
+            and(
+              eq(
+                schema.documentLineTaxComponents.documentLineId,
+                sourceLineId,
+              ),
+              eq(schema.documentLineTaxComponents.orgId, input.orgId),
             ),
           );
         if (components.length) {
