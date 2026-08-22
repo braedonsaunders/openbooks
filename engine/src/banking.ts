@@ -1427,7 +1427,8 @@ export async function markReconciled(
          set reconciled_at = now(), reconciliation_id = ${recon.id}
        where jl.org_id = ${ctx.orgId} and jl.reconciled_at is null
          and jl.id in (select journal_line_id from reconciliation_matches
-                        where reconciliation_id = ${recon.id})
+                        where reconciliation_id = ${recon.id}
+                          and org_id = ${ctx.orgId})
       returning jl.id
     `));
 
