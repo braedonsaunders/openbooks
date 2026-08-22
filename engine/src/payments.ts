@@ -1370,7 +1370,7 @@ export async function createPaymentRun(opts: {
     // file export blocks on it with a clear error, never silently).
     const payeeBank = (await db.execute<{ id: string }>(sql`
       select id from party_bank_accounts
-       where party_id = ${partyId} and is_active and approved_at is not null
+       where party_id = ${partyId} and org_id = ${opts.orgId} and is_active and approved_at is not null
        order by approved_at desc, created_at desc limit 1
     `));
 

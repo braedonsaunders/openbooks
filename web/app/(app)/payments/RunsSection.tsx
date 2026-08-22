@@ -125,7 +125,7 @@ export async function RunsSection({
               where a.to_line_id = jl.id and a.unapplied_at is null), 0) as open,
            exists (
              select 1 from party_bank_accounts b
-              where b.party_id = d.party_id and b.is_active and b.approved_at is not null
+              where b.party_id = d.party_id and b.org_id = d.org_id and b.is_active and b.approved_at is not null
            ) as has_bank
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id

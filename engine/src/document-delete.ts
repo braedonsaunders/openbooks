@@ -56,18 +56,19 @@ export async function deleteDocument(
       await releaseVendorBillProvenance(tx, doc.orgId, documentId);
     }
     await tx.execute(
-      sql`delete from document_links where from_document_id = ${documentId} or to_document_id = ${documentId}`,
+      sql`delete from document_links where org_id = ${doc.orgId} and (from_document_id = ${documentId} or to_document_id = ${documentId})`,
     );
     await tx.execute(
       sql`delete from document_line_tax_components
-           where document_line_id in (
-             select id from document_lines where document_id = ${documentId}
+           where org_id = ${doc.orgId}
+             and document_line_id in (
+             select id from document_lines where document_id = ${documentId} and org_id = ${doc.orgId}
            )`,
     );
     await tx.execute(
-      sql`delete from document_lines where document_id = ${documentId}`,
+      sql`delete from document_lines where document_id = ${documentId} and org_id = ${doc.orgId}`,
     );
-    await tx.execute(sql`delete from documents where id = ${documentId}`);
+    await tx.execute(sql`delete from documents where id = ${documentId} and org_id = ${doc.orgId}`);
 
     await recordTransactionAudit(tx, {
       orgId: doc.orgId,
