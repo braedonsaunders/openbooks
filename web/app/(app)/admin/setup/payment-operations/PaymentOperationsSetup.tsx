@@ -251,7 +251,7 @@ function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = 
       <div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t('cancel')}</Button><Button disabled={busy} onClick={save}>{busy ? t('saving') : t('save')}</Button></div>
     }>
       <div className="space-y-5 p-1">
-        {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
+        {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'schedules' ? <ScheduleFields form={form} set={set} options={options} t={t} /> : null}
         {view === 'mandates' ? <MandateFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
@@ -266,7 +266,7 @@ function normalizePayload(view: PaymentSetupView, form: Record<string, any>, cre
     return {
       name: form.name, bankAccountId: form.bank_account_id ?? form.bankAccountId,
       subsidiaryId: form.subsidiary_id ?? form.subsidiaryId ?? null,
-      paymentFormatId: form.payment_format_id ?? form.paymentFormatId, currency: String(form.currency ?? '').toUpperCase(),
+      paymentFormatId: form.payment_format_id ?? form.paymentFormatId, ...(multiCurrency ? { currency: String(form.currency ?? '').toUpperCase() } : {}),
       country: form.country || null, ...(Object.keys(originatorSecrets).length ? { originatorSecrets } : {}),
       settings: form.settings ?? {}, sftpServerId: form.sftp_server_id ?? form.sftpServerId ?? null,
       sftpFolder: form.sftp_folder ?? form.sftpFolder ?? null,
@@ -281,7 +281,7 @@ function normalizePayload(view: PaymentSetupView, form: Record<string, any>, cre
   return { partyId: form.party_id ?? form.partyId, partyBankAccountId: form.party_bank_account_id ?? form.partyBankAccountId, scheme: form.scheme, mandateReference: form.mandate_reference ?? form.mandateReference, status: form.status, signedOn: form.signed_on ?? form.signedOn, validFrom: form.valid_from ?? form.validFrom, expiresOn: form.expires_on ?? form.expiresOn, ...(creating ? {} : { id: form.id }) }
 }
 
-function ProfileFields({ form, set, options, t, creating }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean }) {
+function ProfileFields({ form, set, options, t, creating, multiCurrency = false }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean; multiCurrency?: boolean }) {
   const formatId = form.payment_format_id ?? form.paymentFormatId ?? ''
   const format = options.formats.find((f) => f.id === formatId)
   const secretFields = SECRET_FIELDS[format?.rail ?? ''] ?? []
@@ -291,7 +291,7 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
   const settingSet = (key: string, value: unknown) => set('settings', { ...settings, [key]: value })
   return <>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
-      <CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? format?.currency ?? ''} onChange={(v) => set('currency', v)} /></div>
+      {multiCurrency ? <CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? format?.currency ?? ''} onChange={(v) => set('currency', v)} /> : null}</div>
     <Field label={t('fields.bankAccount')}><Select value={form.bank_account_id ?? form.bankAccountId ?? ''} onChange={(e) => set('bankAccountId', e.target.value)}><option value="">{t('select')}</option>{options.bankAccounts.map((a) => <option key={a.id} value={a.id}>{[a.number, a.name].filter(Boolean).join(' · ')}</option>)}</Select></Field>
     <Field label={t('fields.format')}><Select value={formatId} onChange={(e) => set('paymentFormatId', e.target.value)}><option value="">{t('select')}</option>{options.formats.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</Select></Field>
     <div className="grid gap-4 sm:grid-cols-2">{options.subsidiaries.length > 0 ? <Field label={t('fields.subsidiary')}><Select value={form.subsidiary_id ?? form.subsidiaryId ?? ''} onChange={(e) => set('subsidiaryId', e.target.value || null)}><option value="">{t('allSubsidiaries')}</option>{options.subsidiaries.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</Select></Field> : null}
