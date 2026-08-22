@@ -59,7 +59,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
     }
     if (format === 'xlsx') {
-      return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel }), filename)
+      return xlsxResponse(await exportDataToXlsx(data, {
+        reportName: data.title,
+        dateRangeLabel: data.dateRangeLabel,
+        generatedAt: new Date(`${stamp}T00:00:00Z`),
+      }), filename)
     }
     const { page, showSummary } = resolveLayout(null)
     return pdfResponse(await exportDataToPdf(data, branding, page, {
