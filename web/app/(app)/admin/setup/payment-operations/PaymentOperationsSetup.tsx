@@ -106,6 +106,7 @@ export function PaymentOperationsSetup({
   currentParams,
   stateCounts,
   options,
+  multiCurrency = false,
 }: {
   view: PaymentSetupView
   rows: Record<string, any>[]
@@ -117,6 +118,7 @@ export function PaymentOperationsSetup({
   currentParams: Record<string, string | string[] | undefined>
   stateCounts: Array<{ value: string; count: number }>
   options: Options
+  multiCurrency?: boolean
 }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const basePath = '/admin/setup/payment-operations'
@@ -167,7 +169,7 @@ export function PaymentOperationsSetup({
       <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
 
       {(creating || selected) ? (
-        <SetupEditor view={view} row={selected} creating={creating} options={options} closeHref={closeHref} />
+        <SetupEditor view={view} row={selected} creating={creating} options={options} closeHref={closeHref} multiCurrency={multiCurrency} />
       ) : null}
     </div>
   )
@@ -217,7 +219,7 @@ function Active({ active, t }: { active: boolean; t: any }) {
   return <Badge variant={active ? 'success' : 'outline'}>{t(`states.${active ? 'active' : 'archived'}`)}</Badge>
 }
 
-function SetupEditor({ view, row, creating, options, closeHref }: { view: PaymentSetupView; row: Record<string, any> | null; creating: boolean; options: Options; closeHref: string }) {
+function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, any> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -230,7 +232,7 @@ function SetupEditor({ view, row, creating, options, closeHref }: { view: Paymen
     setBusy(true)
     try {
       const resource = view
-      const payload = normalizePayload(view, form, creating)
+      const payload = normalizePayload(view, form, creating, multiCurrency)
       const res = await fetch(`/api/admin/payment-operations/${resource}${creating ? '' : `/${row!.id}`}`, {
         method: creating ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -250,7 +252,7 @@ function SetupEditor({ view, row, creating, options, closeHref }: { view: Paymen
     }>
       <div className="space-y-5 p-1">
         {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
-        {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
+        {view === 'formats' ? <FormatFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
         {view === 'schedules' ? <ScheduleFields form={form} set={set} options={options} t={t} /> : null}
         {view === 'mandates' ? <MandateFields form={form} set={set} options={options} t={t} creating={creating} /> : null}
       </div>
@@ -258,7 +260,7 @@ function SetupEditor({ view, row, creating, options, closeHref }: { view: Paymen
   )
 }
 
-function normalizePayload(view: PaymentSetupView, form: Record<string, any>, creating: boolean) {
+function normalizePayload(view: PaymentSetupView, form: Record<string, any>, creating: boolean, multiCurrency = false) {
   if (view === 'profiles') {
     const originatorSecrets = Object.fromEntries(Object.entries(form.originatorSecrets ?? {}).filter(([, value]) => String(value ?? '').trim()))
     return {
@@ -274,7 +276,7 @@ function normalizePayload(view: PaymentSetupView, form: Record<string, any>, cre
       isActive: form.is_active ?? form.isActive ?? true,
     }
   }
-  if (view === 'formats') return { code: form.code, name: form.name, direction: form.direction, country: form.country, currency: form.currency, fileExtension: form.file_extension ?? form.fileExtension, contentType: form.content_type ?? form.contentType, formatterScript: form.formatter_script ?? form.formatterScript, isActive: form.is_active ?? form.isActive ?? true }
+  if (view === 'formats') return { code: form.code, name: form.name, direction: form.direction, country: form.country, ...(multiCurrency ? { currency: form.currency } : {}), fileExtension: form.file_extension ?? form.fileExtension, contentType: form.content_type ?? form.contentType, formatterScript: form.formatter_script ?? form.formatterScript, isActive: form.is_active ?? form.isActive ?? true }
   if (view === 'schedules') return { name: form.name, paymentBankProfileId: form.payment_bank_profile_id ?? form.paymentBankProfileId, cron: form.cron, timezone: form.timezone, action: form.action, selectionCriteria: form.selection_criteria ?? form.selectionCriteria ?? {}, isActive: form.is_active ?? form.isActive ?? true }
   return { partyId: form.party_id ?? form.partyId, partyBankAccountId: form.party_bank_account_id ?? form.partyBankAccountId, scheme: form.scheme, mandateReference: form.mandate_reference ?? form.mandateReference, status: form.status, signedOn: form.signed_on ?? form.signedOn, validFrom: form.valid_from ?? form.validFrom, expiresOn: form.expires_on ?? form.expiresOn, ...(creating ? {} : { id: form.id }) }
 }
@@ -301,10 +303,10 @@ function ProfileFields({ form, set, options, t, creating }: { form: Record<strin
   </>
 }
 
-function FormatFields({ form, set, options, t, creating }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean }) {
+function FormatFields({ form, set, options, t, creating, multiCurrency = false }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean; multiCurrency?: boolean }) {
   const custom = creating || form.rail === 'custom'
   return <><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.code')}><Input disabled={!creating} value={form.code ?? ''} onChange={(e) => set('code', e.target.value.toUpperCase())} /></Field><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field></div>
-    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field><CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? ''} onChange={(v) => set('currency', v)} allowInherit /></div>
+    <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field>{multiCurrency ? <CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? ''} onChange={(v) => set('currency', v)} allowInherit /> : null}</div>
     <div className="grid gap-4 sm:grid-cols-3"><CountryField label={t('fields.country')} placeholder={t('select')} value={form.country ?? ''} onChange={(value) => set('country', value)} /><Field label={t('fields.extension')}><Input value={form.file_extension ?? form.fileExtension ?? 'txt'} onChange={(e) => set('fileExtension', e.target.value)} /></Field><Field label={t('fields.contentType')}><Input value={form.content_type ?? form.contentType ?? 'text/plain; charset=utf-8'} onChange={(e) => set('contentType', e.target.value)} /></Field></div>
     {custom ? <Field label={t('fields.formatterScript')}><Textarea rows={16} className="font-mono text-xs" spellCheck={false} value={form.formatter_script ?? form.formatterScript ?? 'function main(ctx) {\n  return {\n    filename: `PAY-${ctx.request.run.run_number}.txt`,\n    content: "",\n    contentType: "text/plain"\n  };\n}'} onChange={(e) => set('formatterScript', e.target.value)} /></Field> : <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t('builtInFormatHint')}</p>}
     <Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>
