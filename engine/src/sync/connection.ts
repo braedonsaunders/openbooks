@@ -465,7 +465,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       const merged: XeroSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
       await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
     };
-    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { baseCurrency: cfg.baseCurrency });
+    return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
   }
 
   if (conn.source === "dynamics") {
