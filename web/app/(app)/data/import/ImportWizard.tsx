@@ -7,7 +7,9 @@ import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, CheckCircle2, Database, Sparkles, Upload } from 'lucide-react'
 import { Badge, Button, PageHeader, Select, cn } from '@openbooks/ui'
 import { WizardLayout } from '../../../../components/page-layout'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { enterOrg } from '../../../../lib/sandbox-session'
+import { exportCsv } from '../../analytics/_ui/exportCsv'
 
 interface ResourceDescriptor {
   key: string
@@ -44,6 +46,7 @@ type Format = (typeof FORMATS)[number]
 export function ImportWizard() {
   const t = useTranslations('data')
   const router = useRouter()
+  const today = useBusinessToday()
 
   const [step, setStep] = useState<Step>('source')
   const [resources, setResources] = useState<ResourceDescriptor[]>([])
@@ -233,15 +236,12 @@ export function ImportWizard() {
   }
 
   const downloadErrors = (outcome: Outcome) => {
-    const lines = [['row', 'field', 'message'], ...outcome.errors.map((e) => [String(e.row), e.field ?? '', e.message])]
-    const csv = lines.map((l) => l.map((c) => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([`﻿${csv}`], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `import-errors.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    exportCsv(
+      'import-errors',
+      ['row', 'field', 'message'],
+      outcome.errors.map((e) => [e.row, e.field ?? '', e.message]),
+      today,
+    )
   }
 
   const stepIndex = { source: 1, mapping: 2, preview: 3, result: 4 }[step]
