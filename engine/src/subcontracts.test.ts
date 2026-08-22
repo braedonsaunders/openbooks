@@ -68,7 +68,25 @@ test("createSubcontract persists originalCommitment through canonicalDecimal the
   const body = source.slice(start, next);
   assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
   assert.doesNotMatch(body, /normalizeMoney\(input\.originalCommitment\)/);
-  assert.match(body, /normalizeMoney\(input\.defaultRetainagePercent \?\? "10"\)/);
+  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent \?\? "10"\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent/);
+});
+
+test("createSubcontract persists defaultRetainagePercent through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistSubcontractDefaultRetainage");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractDefaultRetainage helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export async function createSubcontract");
+  const next = source.indexOf("export async function updateDraftSubcontract");
+  const body = source.slice(start, next);
+  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent \?\? "10"\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent/);
 });
 
 test("updateDraftSubcontract persists originalCommitment through canonicalDecimal then normalizeMoney", () => {
