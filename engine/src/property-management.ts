@@ -424,7 +424,7 @@ export async function createPropertyLease(input: {
 }): Promise<{ id: string }> {
   const leaseNumber = input.leaseNumber.trim(); const startsOn = validDate(input.startsOn, "Lease start")!;
   const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = exactMoney(input.baseRent, "Base rent");
-  const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
+  const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : exactMoney(input.camSharePercent, "CAM share");
   if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
   if (camShare != null && (cmp(camShare, "0") < 0 || cmp(camShare, "100") > 0)) throw new PropertyManagementError("CAM share must be between 0 and 100");
