@@ -86,7 +86,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     }
     const branding = await orgBranding()
     const { page, showSummary } = resolveLayout(null)
-    return pdfResponse(await exportDataToPdf(data, branding, page, { showSummary }), filename)
+    return pdfResponse(await exportDataToPdf(data, branding, page, {
+      showSummary,
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    }), filename)
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'export failed' }, { status: 422 })
   }
