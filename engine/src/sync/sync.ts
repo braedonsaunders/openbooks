@@ -1168,7 +1168,7 @@ export async function runSync(
       .where(
         sql`${schema.syncRuns.status} = 'ok' and ${schema.syncRuns.syncedThrough} is not null and ${
           sql`${schema.syncRuns.connectionId} = ${connectionId}`
-        }`,
+        } and ${schema.syncRuns.orgId} = ${org.id}`,
       )
       .orderBy(desc(schema.syncRuns.syncedThrough))
       .limit(1);
