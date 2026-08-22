@@ -1827,6 +1827,16 @@ test('the surfaces this test was written for are covered', () => {
     'applyLeaseEscalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/property-management.ts'),
+    /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
+    'applyLeaseEscalation must not persist equipment_charge items when Equipment is off — stored charges and scheduled escalations stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /PropertyManagementError\("Equipment is disabled", 404\)/,
+    'applyLeaseEscalation must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('app/api/property-management/route.ts'),
     /error instanceof PropertyManagementError[\s\S]{0,120}status: error\.status/,
     'lease apply-escalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
