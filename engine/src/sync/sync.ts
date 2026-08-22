@@ -1,4 +1,5 @@
 import { desc, sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../../web/lib/exact-decimal.ts";
 import { db, schema, withOrg } from "../db.ts";
 import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money.ts";
 import {
@@ -1055,6 +1056,17 @@ async function importedTaxEvidence(
   return evidence;
 }
 
+/** Persist a synced document-line quantity or unit price through exact decimal then ledger money. Fail closed. */
+function persistSyncLineMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error(`${label} must be an exact decimal`);
+  }
+}
+
 /** Insert source lines and their tax evidence in the caller's transaction. */
 async function insertImportedLines(
   tx: SyncTx,
@@ -1072,9 +1084,9 @@ async function insertImportedLines(
         lineNumber: line.lineNumber,
         accountId: line.accountId,
         itemId: line.itemId,
-        quantity: line.quantity ?? "1",
+        quantity: persistSyncLineMoney(line.quantity ?? "1", "quantity"),
         unit: line.unit ?? null,
-        unitPrice: normalizeDecimal(line.unitPrice ?? line.amount, 8),
+        unitPrice: persistSyncLineMoney(line.unitPrice ?? line.amount, "unit price"),
         amount: normalizeMoney(line.amount),
         taxCodeId: effectiveTaxCodeId(line.taxAmount, line.taxCodeId),
         taxAmount: normalizeMoney(line.taxAmount),
