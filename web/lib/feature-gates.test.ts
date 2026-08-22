@@ -1237,6 +1237,21 @@ test('the surfaces this test was written for are covered', () => {
     'properties import must refuse — not persist — fixedAsset when Fixed Assets is off',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /propertyFields\([\s\S]{0,80}orgFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'properties import must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /!multiCurrencyOn && src\.currency !== undefined/,
+    'properties import must refuse — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /multiCurrencyOn \|\| field\.key !== 'currency'/,
+    'properties import must hide currency when Multi-currency is off',
+  )
+  assert.match(
     read('app/api/items/[id]/route.ts'),
     /status: 404/,
     'item catalog PATCH must 404 — not persist — revenue-recognition fields when the feature is off',
