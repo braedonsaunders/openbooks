@@ -17,6 +17,15 @@ export type AmendmentType =
 
 export class AdvancedSubscriptionError extends Error {}
 
+async function assertEnabled(orgId: string): Promise<void> {
+  const result = await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'subscriptionBilling')::boolean, false)
+           and coalesce((settings->'features'->>'advancedSubscriptions')::boolean, false) as enabled
+      from orgs where id = ${orgId}
+  `);
+  if (!result.rows[0]?.enabled) throw new AdvancedSubscriptionError("Advanced subscriptions feature is disabled");
+}
+
 function pad(n: number): string { return String(n).padStart(2, "0"); }
 
 export function advanceLifecycleDate(isoDate: string, interval: Interval, intervalCount = 1): string {
@@ -361,6 +370,7 @@ async function snapshot(orgId: string, subscriptionId: string) {
 
 export async function applyAmendment(orgId: string, actorId: string, request: AmendmentRequest): Promise<{ id: string; replayed: boolean }> {
   return withOrg(orgId, async () => {
+    await assertEnabled(orgId);
     if (!request.idempotencyKey.trim()) throw new AdvancedSubscriptionError("idempotency key is required");
     const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
@@ -507,6 +517,7 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
     `));
     const row = result.rows[0];
     if (!row?.billingTiming) return true;
+    await assertEnabled(orgId);
     const action = renewalAction({ billingTiming: row.billingTiming, dueOn, termEndsOn: row.termEndsOn, policy: row.renewalPolicy });
     if (action === "bill") return true;
     if (action === "stop") return false;

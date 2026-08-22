@@ -768,6 +768,36 @@ test('the surfaces this test was written for are covered', () => {
     'CAM finalize must refuse when Property Management is off — existing pools stay',
   )
   assert.match(
+    read('../engine/src/revenue-recognition.ts'),
+    /export async function createObligationsFromInvoice[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
+    'invoice posting must not mint obligations when Revenue Recognition is off — existing schedules stay',
+  )
+  assert.match(
+    read('../engine/src/revenue-recognition.ts'),
+    /export async function runRevenueRecognition[\s\S]{0,400}await assertEnabled\(db, orgId\)/,
+    'recognition posting must refuse when Revenue Recognition is off — existing journals stay',
+  )
+  assert.match(
+    read('../engine/src/project-revenue.ts'),
+    /export async function syncProjectRevenueContracts[\s\S]{0,400}revenueRecognitionFeatureEnabled\(db, orgId\)/,
+    'percent-complete sync must not write revenue contracts when Revenue Recognition is off',
+  )
+  assert.match(
+    read('../engine/src/posting.ts'),
+    /async function resolveDeferralAccounts[\s\S]{0,350}revenueRecognitionFeatureEnabled\(runner, orgId\)/,
+    'invoice posting must credit income, not deferred, when Revenue Recognition is off',
+  )
+  assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /export async function applyAmendment[\s\S]{0,200}await assertEnabled\(orgId\)/,
+    'amendments and scheduled auto-renew must refuse when Advanced subscriptions is off — existing terms stay',
+  )
+  assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /if \(!row\?\.billingTiming\) return true;\s*await assertEnabled\(orgId\)/,
+    'scheduled billing may continue without a lifecycle; a lifecycle must not renew when Advanced subscriptions is off',
+  )
+  assert.match(
     read('lib/api/registry-data.ts'),
     /ITEM_REVENUE_RECOGNITION_COLUMNS/,
     'REST/MCP items catalog must name the revenue-recognition columns the Features switch hides',
