@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
 import { can } from '../../../../../lib/authz'
@@ -51,7 +52,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     summary: [],
     rowCount: lines.rows.length,
   }
-  const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}`
+  const stamp = await businessToday(gate.user.orgId)
+  const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}-${stamp}`
   if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
   return xlsxResponse(await reportResultToXlsx(result, { reportName: scenario.rows[0].name }), filename)
 }
