@@ -1357,6 +1357,21 @@ test('the surfaces this test was written for are covered', () => {
     'items import must hide inventory/assembly/kit kind values when Inventory is off',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /orgFeatureEnabled\([^,]+, 'equipment'\)/,
+    'items import must refuse equipment_charge when Equipment is off — existing kinds stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /ITEM_EQUIPMENT_KINDS\.has\(nextKind\)[\s\S]{0,400}kind is not available/,
+    'items import must refuse — not persist — new equipment_charge kinds when Equipment is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /c\.key === 'kind' && !equipmentOn[\s\S]{0,80}ITEM_EQUIPMENT_KINDS\.has\(o\.value\)/,
+    'items import must hide equipment_charge kind values when Equipment is off',
+  )
+  assert.match(
     read('app/api/equipment/[id]/capitalize/route.ts'),
     /isFeatureEnabled\([^,]+, 'fixedAssets'\)/,
     'equipment capitalize must not write fixed-asset rows when Fixed Assets is off — existing units stay',
