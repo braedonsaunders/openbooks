@@ -121,9 +121,9 @@ async function empty(): Promise<SearchHit[]> {
 async function searchContacts(orgId: string, q: string, like: string): Promise<SearchHit[]> {
   const r = (await db.execute(sql`
     select p.id, p.display_name, p.email, p.legal_name,
-           exists (select 1 from customer_roles cr where cr.party_id = p.id) as is_customer,
-           exists (select 1 from vendor_roles vr where vr.party_id = p.id) as is_vendor,
-           exists (select 1 from employee_roles er where er.party_id = p.id) as is_employee,
+           exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
+           exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id) as is_vendor,
+           exists (select 1 from employee_roles er where er.party_id = p.id and er.org_id = p.org_id) as is_employee,
            greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q})) as sim
       from parties p
      where p.org_id = ${orgId}
