@@ -72,6 +72,17 @@ function persistSubcontractRetainageReleaseAmount(value: unknown): string {
   }
 }
 
+/** Persist leftover payment-control amount limit through exact decimal then ledger money. Fail closed. */
+function persistSubcontractPaymentControlAmountLimit(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("amount limit must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("amount limit must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -790,7 +801,7 @@ export async function createSubcontractPaymentControl(input: {
   expiresOn?: string | null;
 }): Promise<{ id: string }> {
   const reason = input.reason.trim();
-  const amountLimit = input.amountLimit ? normalizeMoney(input.amountLimit) : null;
+  const amountLimit = input.amountLimit ? persistSubcontractPaymentControlAmountLimit(input.amountLimit) : null;
   if (!reason) throw new SubcontractError("A payment-control reason is required");
   if (input.controlType === "joint_check" && !input.jointPayeePartyId) throw new SubcontractError("Joint checks require a joint payee");
   if (input.controlType === "payment_hold" && input.jointPayeePartyId) throw new SubcontractError("Payment holds do not have a joint payee");
