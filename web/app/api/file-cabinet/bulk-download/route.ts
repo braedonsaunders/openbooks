@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { buildZip, filesZipManifest, MAX_ZIP_FILES } from '../../../../lib/file-zip'
 import { fileViewer } from '../lib'
@@ -23,12 +24,13 @@ export async function POST(req: Request) {
   const { bytes, included } = await buildZip(gate.user.orgId, fileViewer(gate), entries)
   if (included === 0) return NextResponse.json({ error: 'nothing to download' }, { status: 404 })
 
+  const stamp = await businessToday(gate.user.orgId)
   return new NextResponse(new Uint8Array(bytes), {
     status: 200,
     headers: {
       'Content-Type': 'application/zip',
       'Content-Length': String(bytes.byteLength),
-      'Content-Disposition': `attachment; filename="files.zip"`,
+      'Content-Disposition': `attachment; filename="files-${stamp}.zip"`,
       'Cache-Control': 'private, no-store',
     },
   })
