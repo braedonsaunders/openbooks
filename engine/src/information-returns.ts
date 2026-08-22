@@ -507,7 +507,7 @@ export async function loadPaymentTraces(args: {
            coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as cash
       from documents d
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
-      join journal_lines jl on jl.entry_id = je.id
+      join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
      where d.org_id = ${args.orgId} and d.kind = 'vendor_payment' and d.status = 'posted'
        and d.document_date between ${from} and ${to}
        and d.party_id is not null
@@ -526,7 +526,7 @@ export async function loadPaymentTraces(args: {
       select d.id as payment_id, jl.id as line_id
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
-        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item
+        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item
        where d.org_id = ${args.orgId} and d.id = any(${`{${paymentIds.join(',')}}`}::uuid[])
     )
     select paid.payment_id, bill.id as bill_id, sum(a.amount) as applied

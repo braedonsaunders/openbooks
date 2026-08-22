@@ -851,7 +851,7 @@ async function periodFingerprint(
         where d.org_id = ${orgId}
           and d.status in ('draft','pending_approval','approved','posted')
           and d.posting_period_id is null) as unassigned_document_changed,
-      (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId}
+      (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId} and p.org_id = r.org_id
         where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations
   `));
   return createHash("sha256")

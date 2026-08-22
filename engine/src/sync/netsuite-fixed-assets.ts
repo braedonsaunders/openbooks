@@ -602,8 +602,8 @@ export async function syncNetSuiteFixedAssets(
            where a.org_id = ${options.orgId}
              and a.custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
         ) a
-        left join depreciation_schedules s on s.asset_id = a.id and s.book_id = ${bookId}
-        left join depreciation_schedule_lines l on l.schedule_id = s.id and l.posted_amount is not null
+        left join depreciation_schedules s on s.asset_id = a.id and s.org_id = a.org_id and s.book_id = ${bookId}
+        left join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id and l.posted_amount is not null
     `));
     const target = targetResult.rows[0]!;
     // The aggregate above repeats assets across schedule lines. Recompute cost
@@ -634,8 +634,8 @@ export async function syncNetSuiteFixedAssets(
              a.acquisition_cost::text as cost,
              coalesce((select sum(l.posted_amount)
                          from depreciation_schedules s
-                         join depreciation_schedule_lines l on l.schedule_id = s.id
-                        where s.asset_id = a.id and s.book_id = ${bookId}
+                         join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+                        where s.asset_id = a.id and s.org_id = a.org_id and s.book_id = ${bookId}
                           and l.posted_amount is not null), 0)::text as accumulated,
              a.custom->'netsuiteFam'->'asset'->>'id' as raw_asset_id,
              a.custom->'netsuiteFam'->'assetValue'->>'id' as raw_value_id,

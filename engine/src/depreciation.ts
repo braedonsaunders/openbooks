@@ -891,7 +891,7 @@ export async function runDepreciation(
        and exists (
          select 1 from depreciation_schedules s
            join accounting_books b on b.id = s.book_id and b.org_id = s.org_id and b.posts_gl and b.is_active and b.is_primary
-           join depreciation_schedule_lines l on l.schedule_id = s.id
+           join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
           where s.asset_id = a.id
           group by s.id
           having coalesce(sum(l.posted_amount), 0) >= a.acquisition_cost - a.salvage_value)`);
