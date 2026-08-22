@@ -354,6 +354,7 @@ export async function savePriorStub(
       employer_cost = excluded.employer_cost,
       updated_at = now(),
       updated_by = excluded.updated_by
+    where payroll_prior_stubs.org_id = ${input.orgId}
     returning id`));
   const stubId = upserted.rows[0]!.id;
 
