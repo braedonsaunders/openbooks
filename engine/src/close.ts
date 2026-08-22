@@ -967,6 +967,7 @@ export async function startCloseRun(args: {
       on conflict (org_id, period_id, book_id) do update set
         status = case when close_runs.status = 'cancelled' then 'in_progress' else close_runs.status end,
         updated_at = now(), updated_by = ${args.actorId}
+      where close_runs.org_id = ${args.orgId}
       returning id`));
       const runId = inserted.rows[0].id;
       const steps = (await tx.execute<any>(sql`
