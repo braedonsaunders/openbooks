@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { requirePermission } from "../../../lib/authz";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,7 @@ const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "cus
  */
 export async function GET() {
   const authz = await requirePermission("documents.manage");
+  const hidden = new Set(await disabledDocKinds(authz.user.orgId));
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
            rs.auto_post as "autoPost", rs.is_active as "isActive", rs.run_count as "runCount",
@@ -28,7 +30,9 @@ export async function GET() {
      where rs.org_id = ${authz.user.orgId}
      order by rs.is_active desc, rs.next_run_on
   `));
-  return NextResponse.json({ schedules: rows.rows });
+  return NextResponse.json({
+    schedules: rows.rows.filter((row) => !hidden.has(String(row.templateKind))),
+  });
 }
 
 export async function POST(req: Request) {
@@ -55,13 +59,16 @@ export async function POST(req: Request) {
   }
 
   // Resolve by id or by the human document number (the UI hands a number).
-  const tpl = (await db.execute<{ id: string }>(
+  const tpl = (await db.execute<{ id: string; kind: string }>(
     body.templateDocumentId
-      ? sql`select id from documents where id = ${body.templateDocumentId} and org_id = ${authz.user.orgId}`
-      : sql`select id from documents where document_number = ${body.templateDocumentNumber} and org_id = ${authz.user.orgId} limit 1`,
+      ? sql`select id, kind from documents where id = ${body.templateDocumentId} and org_id = ${authz.user.orgId}`
+      : sql`select id, kind from documents where document_number = ${body.templateDocumentNumber} and org_id = ${authz.user.orgId} limit 1`,
   ));
   if (!tpl.rows.length) {
     return NextResponse.json({ error: "template document not found" }, { status: 404 });
+  }
+  if (!(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const templateDocumentId = tpl.rows[0]!.id;
 

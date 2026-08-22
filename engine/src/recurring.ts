@@ -30,6 +30,30 @@ export type Cadence =
   | "annually"
   | "custom_cron";
 
+/**
+ * Optional-module kinds the runner must not mint when the Features switch is
+ * off. Mirrors web/lib/document-kinds.ts DOC_KIND_FEATURE + registry defaults.
+ * Core invoices/bills/journals are not listed — recurring works without a gate.
+ */
+const OPTIONAL_KIND_FEATURE: Record<string, { key: string; defaultEnabled: boolean }> = {
+  quote: { key: "orders", defaultEnabled: true },
+  sales_order: { key: "orders", defaultEnabled: true },
+  purchase_order: { key: "orders", defaultEnabled: true },
+  expense_report: { key: "expenses", defaultEnabled: true },
+  pay_run: { key: "payroll", defaultEnabled: false },
+  project_charge: { key: "projects", defaultEnabled: true },
+};
+
+export async function isRecurringKindEnabled(orgId: string, kind: string): Promise<boolean> {
+  const feature = OPTIONAL_KIND_FEATURE[kind];
+  if (!feature) return true;
+  const r = (await db.execute<{ enabled: boolean | null }>(sql`
+    select (settings->'features'->>${feature.key})::boolean as enabled from orgs where id = ${orgId}
+  `));
+  const stored = r.rows[0]?.enabled;
+  return typeof stored === "boolean" ? stored : feature.defaultEnabled;
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
@@ -222,7 +246,17 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
              rs.auto_post as "autoPost", rs.last_run_at as "lastRunAt"
         from recurring_schedules rs
         join orgs o on o.id = rs.org_id and o.env_kind = 'production'
+        join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
        where rs.is_active and rs.next_run_on <= ${scanCutoff}
+         and case d.kind
+           when 'quote' then coalesce((o.settings->'features'->>'orders')::boolean, true)
+           when 'sales_order' then coalesce((o.settings->'features'->>'orders')::boolean, true)
+           when 'purchase_order' then coalesce((o.settings->'features'->>'orders')::boolean, true)
+           when 'expense_report' then coalesce((o.settings->'features'->>'expenses')::boolean, true)
+           when 'pay_run' then coalesce((o.settings->'features'->>'payroll')::boolean, false)
+           when 'project_charge' then coalesce((o.settings->'features'->>'projects')::boolean, true)
+           else true
+         end
        order by rs.next_run_on
     `));
   });
@@ -331,6 +365,9 @@ async function generateFromTemplate(
   `));
   const tpl = tplRes.rows[0];
   if (!tpl) throw new Error("recurring template document not found");
+  if (!(await isRecurringKindEnabled(orgId, String(tpl.kind)))) {
+    throw new Error("template document kind is disabled");
+  }
 
   const termDays =
     tpl.document_date && tpl.due_date ? dayDiff(tpl.document_date, tpl.due_date) : null;

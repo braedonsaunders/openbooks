@@ -3,21 +3,27 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { runScheduleNow } from "@openbooks/engine/src/recurring.ts";
 import { requirePermission } from "../../../../lib/authz";
+import { isDocKindEnabled } from "../../../../lib/documents";
 
 export const runtime = "nodejs";
 
-async function owned(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute(
-    sql`select 1 from recurring_schedules where id = ${id} and org_id = ${orgId}`,
-  ));
-  return r.rows.length > 0;
+async function ownedEnabled(orgId: string, id: string): Promise<boolean> {
+  const r = (await db.execute<{ kind: string }>(sql`
+    select d.kind
+      from recurring_schedules rs
+      join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
+     where rs.id = ${id} and rs.org_id = ${orgId}
+  `));
+  const kind = r.rows[0]?.kind;
+  if (!kind) return false;
+  return isDocKindEnabled(orgId, kind);
 }
 
 /** Toggle active, edit cadence/dates, or rename a schedule. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
-  if (!(await owned(authz.user.orgId, id))) {
+  if (!(await ownedEnabled(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -48,7 +54,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
-  if (!(await owned(authz.user.orgId, id))) {
+  if (!(await ownedEnabled(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   try {
