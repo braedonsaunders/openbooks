@@ -530,6 +530,21 @@ test('the surfaces this test was written for are covered', () => {
     /error instanceof CaptureMaterializationError[\s\S]{0,160}status: error\.status/,
     'AP capture materialize must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'AP capture PATCH must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /storedIds\.has\(line\.itemId\)/,
+    'AP capture PATCH must keep stored item_id when omitted',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'AP capture PATCH must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(

@@ -6,10 +6,12 @@ import { normalizeCapturedDecimal, type CaptureLine, type NormalizedCapture } fr
 import { resolveAndValidateCapture } from '@openbooks/engine/src/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isDocKindEnabled } from '../../../../lib/documents'
+import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function optionalText(value: unknown, max = 500): string | null {
   const text = String(value ?? '').trim()
@@ -107,6 +109,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
     return NextResponse.json({ error: 'not_editable' }, { status: 409 })
+  }
+  // Stored captures stay when itemId is omitted. Re-sending the stored item
+  // is allowed. A new inventory / assembly / kit item is Inventory configuration.
+  if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+    const storedIds = new Set(
+      (current.rows[0].normalized.lines ?? [])
+        .map((line) => line.itemId)
+        .filter((itemId): itemId is string => Boolean(itemId)),
+    )
+    for (const line of normalized.lines) {
+      if (!line.itemId || storedIds.has(line.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
   }
   const nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
   if (
