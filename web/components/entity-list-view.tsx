@@ -6,7 +6,8 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { getRecordType, listColumnMeta } from '@openbooks/customization'
+import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
+import { isFeatureEnabled } from '../lib/features'
 import { SearchInput } from './search-input'
 import { FilterChips } from './filter-bar'
 import { ShowInactivesToggle } from './show-inactives-toggle'
@@ -64,7 +65,10 @@ export async function EntityListView({
 }) {
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
-  const meta = getRecordType(recordType)
+  const catalog = getRecordType(recordType)
+  const meta = catalog
+    ? recordTypeForFeatureState(catalog, { inventory: await isFeatureEnabled(orgId, 'inventory') })
+    : catalog
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
   const basePath = source.basePath
 
