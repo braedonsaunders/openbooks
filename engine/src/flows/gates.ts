@@ -70,7 +70,7 @@ export async function gateDecisionCapability(
   const submitterUserId =
     (await adapter?.loadContext(gate.subjectId))?.submitterUserId ?? null;
   if (submitterUserId === userId) {
-    const node = await gateNodeData(gate.flowId, gate.nodeId);
+    const node = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId);
     if (
       adapter?.selfApprovalPolicy === "forbidden" ||
       !node ||
@@ -83,8 +83,8 @@ export async function gateDecisionCapability(
 }
 
 /** The gate node's authored GateData, for escalation targets. */
-async function gateNodeData(flowId: string, nodeId: string): Promise<GateData | null> {
-  const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, flowId));
+async function gateNodeData(orgId: string, flowId: string, nodeId: string): Promise<GateData | null> {
+  const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, flowId), eq(schema.flows.orgId, orgId)));
   if (!flow) return null;
   const graph = parseFlowGraph(flow.id, flow.graph);
   if (!graph) return null;
@@ -168,7 +168,7 @@ export async function decideGate(args: {
   const submitterUserId =
     (await preAdapter?.loadContext(pre.subjectId))?.submitterUserId ?? null;
   if (submitterUserId && submitterUserId === userId) {
-    const node = await gateNodeData(pre.flowId, pre.nodeId);
+    const node = await gateNodeData(pre.orgId, pre.flowId, pre.nodeId);
     if (
       preAdapter?.selfApprovalPolicy === "forbidden" ||
       !node ||
@@ -698,7 +698,9 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
        where id = ${id} and org_id = ${orgId} and status = 'pending' and reminded_at is null
     `));
     if (!claimed.rowCount) continue;
-    const gate = await withBypassContext(() => loadGate(id));
+    const [gate] = await withBypassContext(() =>
+      db.select().from(schema.flowGates).where(and(eq(schema.flowGates.id, id), eq(schema.flowGates.orgId, orgId))),
+    );
     if (!gate) {
       // Claim set, row gone (or unreadable) — release so a later tick can
       // retry instead of silently retiring the reminder forever.
@@ -825,7 +827,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
 
     const adapter = getFlowAdapter(gate.subjectKind);
     const subject = adapter ? await adapter.loadContext(gate.subjectId) : null;
-  const nodeGate = await gateNodeData(gate.flowId, gate.nodeId);
+  const nodeGate = await gateNodeData(gate.orgId, gate.flowId, gate.nodeId);
 
   const submitterUserId = subject?.submitterUserId ?? null;
   const values = subject?.values ?? {};
