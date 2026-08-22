@@ -1527,6 +1527,16 @@ test('the surfaces this test was written for are covered', () => {
     'project-charge POST must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('lib/project-charges.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,80}!equipmentOn/,
+    'project-charge lines must not store equipment_charge items when Equipment is off — existing charges stay',
+  )
+  assert.match(
+    read('app/api/project-charges/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'project-charge POST must 404 — not persist equipment_charge items — when Equipment is off',
+  )
+  assert.match(
     read('app/(app)/projects/_cockpit-data.ts'),
     /isFeatureEnabled\([^,]+, 'inventory'\)/,
     'project cockpit must not offer inventory/assembly/kit items when Inventory is off',

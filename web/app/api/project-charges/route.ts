@@ -103,6 +103,16 @@ export async function POST(req: Request) {
       }
     }
   }
+  if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+    for (const line of lines) {
+      if (!isUuid(String(line.itemId ?? ''))) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  }
   try {
     const created = await createProjectCharge(gate.user.orgId, gate.user.id, {
       projectId: body.projectId,
