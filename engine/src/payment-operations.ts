@@ -529,7 +529,7 @@ export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings &
   };
 }
 
-function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: string; contentType: string } {
+function sepaDebit(ctx: FormatContext, _now: Date): { filename: string; content: string; contentType: string } {
   const s = sepaOriginator(ctx.profile.secrets);
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
   const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
@@ -541,7 +541,7 @@ function sepaDebit(ctx: FormatContext, now: Date): { filename: string; content: 
     return `      <DrctDbtTxInf><PmtId><EndToEndId>${esc(p.reference)}</EndToEndId></PmtId><InstdAmt Ccy="EUR">${bankAmount2(p.amount)}</InstdAmt><DrctDbtTx><MndtRltdInf><MndtId>${esc(p.mandateReference)}</MndtId></MndtRltdInf><CdtrSchmeId><Id><PrvtId><Othr><Id>${esc(s.creditorId)}</Id><SchmeNm><Prtry>SEPA</Prtry></SchmeNm></Othr></PrvtId></Id></CdtrSchmeId></DrctDbtTx><Dbtr><Nm>${esc(p.partyName)}</Nm></Dbtr><DbtrAcct><Id><IBAN>${esc(iban)}</IBAN></Id></DbtrAcct><RmtInf><Ustrd>${esc(p.reference)}</Ustrd></RmtInf></DrctDbtTxInf>`;
   }).join("\n");
   const message = `DD-${String(ctx.run.run_number)}`;
-  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${now.toISOString()}</CreDtTm><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
+  const content = `<?xml version="1.0" encoding="UTF-8"?>\n<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.008.001.02"><CstmrDrctDbtInitn><GrpHdr><MsgId>${esc(message)}</MsgId><CreDtTm>${String(ctx.businessDate)}T00:00:00</CreDtTm><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><InitgPty><Nm>${esc(s.originatorName)}</Nm></InitgPty></GrpHdr><PmtInf><PmtInfId>${esc(message)}</PmtInfId><PmtMtd>DD</PmtMtd><NbOfTxs>${ctx.payments.length}</NbOfTxs><CtrlSum>${total2}</CtrlSum><PmtTpInf><SvcLvl><Cd>SEPA</Cd></SvcLvl><LclInstrm><Cd>CORE</Cd></LclInstrm><SeqTp>RCUR</SeqTp></PmtTpInf><ReqdColltnDt>${collectionDate}</ReqdColltnDt><Cdtr><Nm>${esc(s.originatorName)}</Nm></Cdtr><CdtrAcct><Id><IBAN>${esc(s.originatorIban)}</IBAN></Id></CdtrAcct><CdtrAgt><FinInstnId><BIC>${esc(s.originatorBic)}</BIC></FinInstnId></CdtrAgt><ChrgBr>SLEV</ChrgBr>\n${tx}\n</PmtInf></CstmrDrctDbtInitn></Document>\n`;
   return { filename: `SEPA-DEBIT-${String(ctx.run.run_number)}.xml`, content, contentType: ctx.format.contentType };
 }
 
