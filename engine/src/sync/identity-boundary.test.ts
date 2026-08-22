@@ -109,6 +109,21 @@ test("time-entry insert persist writes hours through canonicalDecimal then norma
   assert.doesNotMatch(body, /moneyOrNull\(f\.hours\)/);
 });
 
+test("time-entry insert persist writes costRate through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistTimeEntryCostRate");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistTimeEntryCostRate helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf("const flush = async () => {");
+  const next = loader.indexOf("for (const rec of records)", start);
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistTimeEntryCostRate\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.costRate\)/);
+});
+
 test("time-entry update persist writes hours through canonicalDecimal then normalizeMoney", () => {
   const start = loader.indexOf("update time_entries set worked_on=");
   const next = loader.indexOf("if (billingChanged || costingChanged)", start);
