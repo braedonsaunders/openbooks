@@ -1130,7 +1130,7 @@ export async function createPaymentRun(opts: {
     select p.id, p.bank_account_id, p.subsidiary_id, p.currency, p.require_run_approval, p.settings,
            f.rail, f.direction
       from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.is_active
+      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                         and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
@@ -1159,7 +1159,7 @@ export async function createPaymentRun(opts: {
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
-      left join payment_terms pt on pt.id = vr.payment_terms_id and pt.is_active
+      left join payment_terms pt on pt.id = vr.payment_terms_id and pt.org_id = d.org_id and pt.is_active
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount < 0
       left join lateral (

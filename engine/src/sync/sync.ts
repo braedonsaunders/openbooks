@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
 import { toUnits, fromUnits, normalizeDecimal } from "../money.ts";
 import {
@@ -2050,14 +2050,14 @@ export async function runSync(
         syncedThrough: targetedRefs ? null : changes.syncedThrough,
         stats: result as unknown as Record<string, unknown>,
       })
-      .where(eq(schema.syncRuns.id, run!.id));
+      .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
 
     if (connectionId && !targetedRefs) {
       await db.execute(sql`
         update connections
            set cursor = ${changes.syncedThrough}, last_run_at = now(),
                status = 'active', last_error = null
-         where id = ${connectionId}`);
+         where id = ${connectionId} and org_id = ${org.id}`);
     }
     return result;
   } catch (e) {
@@ -2066,7 +2066,7 @@ export async function runSync(
     if (connectionId) {
       await db.execute(sql`
         update connections set last_run_at = now(), updated_at = now()
-         where id = ${connectionId}`);
+         where id = ${connectionId} and org_id = ${org.id}`);
     }
     await db
       .update(schema.syncRuns)
@@ -2078,7 +2078,7 @@ export async function runSync(
           : {}),
         errorMessage: (e as Error).message,
       })
-      .where(eq(schema.syncRuns.id, run!.id));
+      .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
     throw e;
   } finally {
     if (source.dispose) {
