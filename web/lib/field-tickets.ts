@@ -352,6 +352,8 @@ export async function saveCrewGrid(orgId: string, userId: string, ticketId: stri
   }
 }
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 /** Add an item/equipment line using the same project/customer/unit rate-book
  * assignment and package-tier engine as project charges. */
 export async function addTicketLine(
@@ -373,9 +375,9 @@ export async function addTicketLine(
     select id, name, unit, default_rate, default_cost, kind from items where id = ${input.itemId} and org_id = ${orgId}`))
   if (!item.rows[0]) throw new FieldTicketError('Item not found')
   // The drawer already hides inventory from the picker. Turning Inventory off
-  // must also refuse a new inventory line so a crafted add-line cannot write
-  // one. Lines that already carry an inventory item stay as they are.
-  if (item.rows[0].kind === 'inventory' && !(await isFeatureEnabled(orgId, 'inventory'))) {
+  // must also refuse a new inventory / assembly / kit line so a crafted
+  // add-line cannot write one. Lines that already carry those items stay.
+  if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(orgId, 'inventory'))) {
     throw new FieldTicketError('Inventory is disabled')
   }
   const quantity = exactTicketQuantity(input.quantity)

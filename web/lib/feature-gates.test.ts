@@ -1044,13 +1044,23 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/field-tickets.ts'),
-    /kind === 'inventory'[\s\S]{0,80}isFeatureEnabled\([^,]+, 'inventory'\)/,
-    'field-ticket lines must not store inventory items when Inventory is off — existing lines stay',
+    /\['inventory', 'assembly', 'kit'\]/,
+    'field-ticket add-line must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('lib/field-tickets.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'field-ticket lines must not store inventory/assembly/kit items when Inventory is off — existing lines stay',
   )
   assert.match(
     read('app/api/field-tickets/[id]/route.ts'),
-    /isFeatureEnabled\([^,]+, 'inventory'\)[\s\S]{0,280}status: 404/,
-    'field-ticket add-line must 404 — not persist inventory items — when Inventory is off',
+    /\['inventory', 'assembly', 'kit'\]/,
+    'field-ticket add-line API must name the inventory kinds the Features switch 404s',
+  )
+  assert.match(
+    read('app/api/field-tickets/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS[\s\S]{0,200}status: 404/,
+    'field-ticket add-line must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
     read('app/(app)/items/page.tsx'),
