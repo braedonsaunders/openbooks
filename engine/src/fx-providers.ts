@@ -67,6 +67,15 @@ const CONFIG_COLS = sql`id, org_id as "orgId", provider, display_name as "displa
   next_sync_at as "nextSyncAt", last_attempt_at as "lastAttemptAt",
   last_success_at as "lastSuccessAt", last_observation_date as "lastObservationDate", last_error as "lastError"`;
 
+/** Same contract as the FX write API: stored override, else the registry default (off). */
+async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
+  const r = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'multiCurrency')::boolean, false) as enabled
+      from orgs where id = ${orgId}
+  `));
+  return r.rows[0]?.enabled === true;
+}
+
 export async function readFxProviderConfig(orgId: string): Promise<FxProviderConfigRow | null> {
   const r = (await db.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
@@ -364,6 +373,9 @@ export async function runFxProvider(
 ): Promise<FxSyncResult> {
   const config = await readFxProviderConfig(orgId);
   if (!config) throw new FxProviderError("configure an FX provider first");
+  if (!(await multiCurrencyFeatureEnabled(orgId))) {
+    throw new FxProviderError("multi-currency is disabled");
+  }
   if (trigger !== "test" && !config.isEnabled) throw new FxProviderError("enable the FX provider before synchronizing");
   try {
     await assertNotSandbox(orgId, "FX provider synchronization");
@@ -459,6 +471,7 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
          select 1 from orgs organization
           where organization.id = fx_provider_configs.org_id
             and organization.env_kind = 'production'
+            and coalesce((organization.settings->'features'->>'multiCurrency')::boolean, false)
        )
      order by next_sync_at limit 20
   `));

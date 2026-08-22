@@ -1408,7 +1408,7 @@ export async function refreshCloseRun(
                  data_fingerprint = ${fingerprint},
                  result = ${JSON.stringify({ count: check.count, checkedAt: new Date().toISOString() })}::jsonb,
                  updated_at = now(), updated_by = ${actorId ?? null}
-           where id = ${taskId} and completion_mode = 'computed'`);
+           where id = ${taskId} and org_id = ${orgId} and completion_mode = 'computed'`);
       }
     }
 
@@ -1842,7 +1842,7 @@ export async function finalizeCloseFlowApproval(args: {
       update close_runs set status = 'in_progress', current_stage = 'review',
              data_fingerprint = ${currentFingerprint}, last_validated_at = now(),
              approved_at = null, approved_by = null, updated_at = now(), updated_by = ${args.actorId}
-       where id = ${args.runId}
+       where id = ${args.runId} and org_id = ${args.orgId}
     `);
     await db.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
@@ -1856,7 +1856,7 @@ export async function finalizeCloseFlowApproval(args: {
     await db.execute(sql`
       update close_runs set status = 'in_progress', current_stage = 'review',
              approved_at = null, approved_by = null, updated_at = now(), updated_by = ${args.actorId}
-       where id = ${args.runId}
+       where id = ${args.runId} and org_id = ${args.orgId}
     `);
     await db.execute(sql`
       update close_run_tasks set status = 'changes_requested', completed_at = null, completed_by = null,
@@ -1874,7 +1874,7 @@ export async function finalizeCloseFlowApproval(args: {
   await db.execute(sql`
     update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
            approved_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
-     where id = ${args.runId}
+     where id = ${args.runId} and org_id = ${args.orgId}
   `);
   await db.execute(sql`
     update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${args.actorId},
@@ -2522,6 +2522,9 @@ function conditionMatches(expected: unknown, actual: unknown): boolean {
 export async function runCloseAutomations(
   context: CloseAutomationContext,
 ): Promise<{ completed: number; failed: number }> {
+  // Tenant-authored deadline/task automations are the Advanced Close layer.
+  // Core close (start, attest, lock) still runs; existing rules are preserved.
+  if (!(await advancedCloseEnabled(context.orgId))) return { completed: 0, failed: 0 };
   const runResult = (await db.execute<any>(sql`
     select r.*, p.name as period_name, b.name as book_name,
            t.key as task_key, t.workstream, t.status as task_status,
@@ -2669,7 +2672,7 @@ export async function runCloseAutomations(
           await tx.execute(sql`update close_run_tasks set status = 'complete', completed_at = now(),
             completed_by = ${context.actorId ?? run.started_by ?? null}, data_fingerprint = ${run.data_fingerprint},
             updated_at = now(), updated_by = ${context.actorId ?? null}
-            where id = ${context.taskId} and run_id = ${context.runId} and status not in ('complete','waived')`);
+            where id = ${context.taskId} and run_id = ${context.runId} and org_id = ${context.orgId} and status not in ('complete','waived')`);
           await resolveTaskDependenciesTx(tx, context.orgId, context.runId);
         });
         await refreshCloseRun(context.orgId, context.runId, context.actorId);
@@ -2777,6 +2780,8 @@ export async function runDueCloseAutomations(): Promise<number> {
       join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
       join orgs organization on organization.id = r.org_id and organization.env_kind = 'production'
      where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 91
+       and coalesce((organization.settings->'features'->>'advancedClose')::boolean, false)
+       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
   `));
   for (const run of due.rows) {
     await withOrgContext(run.org_id, async () => {

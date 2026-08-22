@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { loadDaemonConfig, updateDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
 /** SFTP daemon config + connection details for the UI (no env — all DB-backed). */
 export async function GET(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const cfg = await loadDaemonConfig()
   const reqHost = new URL(req.url).hostname
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
 /** Configure the daemon (enable/disable, port, advertised host); restarts it live. */
 export async function PATCH(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as { enabled?: boolean; port?: number; advertisedHost?: string | null }
   if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {

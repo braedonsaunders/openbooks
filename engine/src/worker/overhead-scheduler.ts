@@ -54,7 +54,8 @@ export async function tick(): Promise<void> {
       db.execute<{ id: string; cadence: string | null }>(sql`
       select id, settings->'overheadRateLifecycle'->>'cadence' as cadence
         from orgs
-       where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'`));
+       where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'
+         and coalesce((settings->'features'->>'projects')::boolean, true)`));
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
       const today = await businessToday(org.id);

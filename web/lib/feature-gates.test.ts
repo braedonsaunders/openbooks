@@ -110,7 +110,11 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   propertyManagement: ['app/api/property-management'],
   projectScheduling: ['app/api/project-schedule'],
   subcontracts: ['app/api/subcontracts'],
-  bankFeeds: ['app/api/banking/bank-feeds'],
+  bankFeeds: [
+    'app/api/banking/bank-feeds',
+    'app/api/banking/sftp/schedules',
+    'app/api/banking/sftp/daemon',
+  ],
   crm: ['app/api/crm'],
   subcontractorCompliance: ['app/api/compliance'],
   scripts: ['app/api/scripts'],
@@ -658,6 +662,76 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/admin/custom-fields/page.tsx'),
     /disabledCustomFieldTargets\(/,
     'the custom-fields list must hide optional-module targets when the feature is off',
+  )
+  assert.match(
+    read('app/api/banking/sftp/daemon/route.ts'),
+    /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
+    'inbound SFTP daemon writes must refuse when Bank Feeds is off',
+  )
+  assert.match(
+    read('app/api/banking/sftp/schedules/route.ts'),
+    /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
+    'SFTP import-schedule writes must refuse when Bank Feeds is off',
+  )
+  assert.match(
+    read('../engine/src/fx-providers.ts'),
+    /coalesce\(\(organization\.settings->'features'->>'multiCurrency'\)::boolean, false\)/,
+    'scheduled FX imports must not write rates when Multi-currency is off',
+  )
+  assert.match(
+    read('../engine/src/fx-providers.ts'),
+    /multiCurrencyFeatureEnabled\(orgId\)/,
+    'manual FX sync must refuse when Multi-currency is off',
+  )
+  assert.match(
+    read('../engine/src/close.ts'),
+    /if \(!\(await advancedCloseEnabled\(context\.orgId\)\)\) return \{ completed: 0, failed: 0 \}/,
+    'close automations must not fire when Advanced close is off — core close still runs',
+  )
+  assert.match(
+    read('../engine/src/close.ts'),
+    /coalesce\(\(organization\.settings->'features'->>'advancedClose'\)::boolean, false\)/,
+    'scheduled close automations must skip orgs whose Advanced close switch is off',
+  )
+  assert.match(
+    read('../engine/src/worker/overhead-scheduler.ts'),
+    /coalesce\(\(settings->'features'->>'projects'\)::boolean, true\)/,
+    'scheduled overhead publish must skip orgs whose Projects switch is off',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /when 'quote' then coalesce\(\(o\.settings->'features'->>'orders'\)::boolean, true\)/,
+    'scheduled recurring must not mint quotes/orders when Orders is off',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /when 'expense_report' then coalesce\(\(o\.settings->'features'->>'expenses'\)::boolean, true\)/,
+    'scheduled recurring must not mint expense reports when Expenses is off',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /isRecurringKindEnabled\(orgId, String\(tpl\.kind\)\)/,
+    'recurring generate-now must refuse optional-module kinds when the feature is off',
+  )
+  assert.match(
+    read('app/api/recurring/route.ts'),
+    /isDocKindEnabled\(/,
+    'recurring schedule create must refuse optional-module templates when the feature is off',
+  )
+  assert.match(
+    read('app/api/recurring/route.ts'),
+    /disabledDocKinds\(/,
+    'the recurring list must hide optional-module schedules when the feature is off',
+  )
+  assert.match(
+    read('app/api/recurring/[id]/route.ts'),
+    /isDocKindEnabled\(/,
+    'recurring run-now / patch must 404 optional-module schedules when the feature is off',
+  )
+  assert.match(
+    read('app/api/recurring/[id]/route.ts'),
+    /status: 404/,
+    'recurring run-now must 404 — not mint — when the template kind is off',
   )
 })
 
