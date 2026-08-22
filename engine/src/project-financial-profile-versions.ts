@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { FinancialProfile } from "@openbooks/schema";
 import { db, type SqlExecutor } from "./db.ts";
+import { normalizeDecimal } from "./money.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MEASURES = new Set([
@@ -51,13 +52,51 @@ function strings(value: unknown, name: string): string[] {
   return value;
 }
 
-function optionalNonnegativeNumber(value: unknown, name: string): void {
-  if (
-    value !== undefined &&
-    (typeof value !== "number" || !Number.isFinite(value) || value < 0)
-  ) {
-    throw new Error(`${name} must be a finite non-negative number`);
+function optionalNonnegativeDecimal(
+  value: unknown,
+  name: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  let canonical: string;
+  try {
+    canonical = normalizeDecimal(value as string | number, 4);
+  } catch {
+    throw new Error(`${name} must be a finite non-negative decimal`);
   }
+  if (canonical.startsWith("-")) {
+    throw new Error(`${name} must be a finite non-negative decimal`);
+  }
+  return canonical;
+}
+
+/**
+ * Persist-ready clone: policy rates/amounts that later drive posting become
+ * canonical decimal strings. Readers that already `String()` these fields keep
+ * working; legacy JSON numbers remain accepted on the way in.
+ */
+export function canonicalizeProjectFinancialProfile(
+  profile: FinancialProfile,
+): FinancialProfile {
+  const next = structuredClone(profile);
+  if (next.overhead?.ratePercent !== undefined) {
+    next.overhead.ratePercent = optionalNonnegativeDecimal(
+      next.overhead.ratePercent,
+      "overhead.ratePercent",
+    );
+  }
+  if (next.overhead?.ratePerHour !== undefined) {
+    next.overhead.ratePerHour = optionalNonnegativeDecimal(
+      next.overhead.ratePerHour,
+      "overhead.ratePerHour",
+    );
+  }
+  if (next.totalPrice?.defaultMarkupPercent !== undefined) {
+    next.totalPrice.defaultMarkupPercent = optionalNonnegativeDecimal(
+      next.totalPrice.defaultMarkupPercent,
+      "totalPrice.defaultMarkupPercent",
+    );
+  }
+  return next;
 }
 
 /** Runtime boundary validation for tenant-authored financial policy. */
@@ -98,8 +137,8 @@ export function assertValidProjectFinancialProfile(
     ["none", "percent_of_labor", "per_labor_hour", "rate_engine", "posted_gl_account_group"],
     "overhead.method",
   );
-  optionalNonnegativeNumber(overhead.ratePercent, "overhead.ratePercent");
-  optionalNonnegativeNumber(overhead.ratePerHour, "overhead.ratePerHour");
+  optionalNonnegativeDecimal(overhead.ratePercent, "overhead.ratePercent");
+  optionalNonnegativeDecimal(overhead.ratePerHour, "overhead.ratePerHour");
   if (overhead.method === "percent_of_labor" && overhead.ratePercent === undefined) {
     throw new Error("overhead.ratePercent is required");
   }
@@ -181,7 +220,7 @@ export function assertValidProjectFinancialProfile(
     ["contract_field", "billable_value", "not_to_exceed", "cost_plus"],
     "totalPrice.method",
   );
-  optionalNonnegativeNumber(price.defaultMarkupPercent, "totalPrice.defaultMarkupPercent");
+  optionalNonnegativeDecimal(price.defaultMarkupPercent, "totalPrice.defaultMarkupPercent");
   oneOf(
     object(profile.couldBeInvoiced, "couldBeInvoiced").formula,
     ["price_minus_invoiced", "unbilled_billable"],
@@ -255,6 +294,9 @@ export async function correctProjectFinancialProfile(
   }
   assertValidProjectFinancialProfile(input.expectedFinancialProfile);
   assertValidProjectFinancialProfile(input.correctedFinancialProfile);
+  const storedCorrected = canonicalizeProjectFinancialProfile(
+    input.correctedFinancialProfile,
+  );
 
   return db.transaction(async (tx) => {
     const current = (await tx.execute<{
@@ -295,9 +337,9 @@ export async function correctProjectFinancialProfile(
     await tx.execute(
       sql`select set_config('openbooks.project_profile_correction_reason', ${reason}, true)`,
     );
-    const updated = await tx.execute(sql`
+    const updated =     await tx.execute(sql`
       update project_financial_profile_versions
-         set financial_profile = ${JSON.stringify(input.correctedFinancialProfile)}::jsonb,
+         set financial_profile = ${JSON.stringify(storedCorrected)}::jsonb,
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${row.id} and org_id = ${input.orgId}
          and financial_profile = ${expected}::jsonb
@@ -323,7 +365,7 @@ export async function correctProjectFinancialProfile(
           after: {
             effectiveFrom: row.effective_from,
             effectiveTo: row.effective_to,
-            financialProfile: input.correctedFinancialProfile,
+            financialProfile: storedCorrected,
           },
         })}::jsonb,
         ${input.actorId}
@@ -375,6 +417,7 @@ export async function publishProjectFinancialProfileInTransaction(
     throw new Error("a meaningful reason is required");
   }
   assertValidProjectFinancialProfile(input.financialProfile);
+  const storedProfile = canonicalizeProjectFinancialProfile(input.financialProfile);
 
   await tx.execute(
     sql`select set_config('openbooks.publish_project_profile', 'on', true)`,
@@ -483,7 +526,7 @@ export async function publishProjectFinancialProfileInTransaction(
     )
     values (
       ${input.orgId}, ${input.projectTypeId}, ${input.effectiveFrom},
-      ${effectiveTo}, ${JSON.stringify(input.financialProfile)}::jsonb,
+      ${effectiveTo}, ${JSON.stringify(storedProfile)}::jsonb,
       ${reason}, ${input.actorId}, ${input.actorId}
     )
     returning id, effective_from::text as effective_from,
@@ -501,7 +544,7 @@ export async function publishProjectFinancialProfileInTransaction(
           projectTypeId: input.projectTypeId,
           effectiveFrom: input.effectiveFrom,
           effectiveTo,
-          financialProfile: input.financialProfile,
+          financialProfile: storedProfile,
           reason,
         },
       })}::jsonb,

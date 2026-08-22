@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
+import {
+  canonicalizeProjectFinancialProfile,
+  publishProjectFinancialProfileInTransaction,
+} from '@openbooks/engine/src/project-financial-profile-versions.ts'
+import type { FinancialProfile } from '@openbooks/schema'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -157,9 +161,15 @@ export async function PATCH(req: Request) {
       let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
       if (b.financialProfile) {
         const comparison = (await tx.execute<{ changed: boolean }>(sql`
-          select ${JSON.stringify(b.financialProfile)}::jsonb
+          select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile))}::jsonb
                  is distinct from
-                 ${JSON.stringify(before.rows[0].financial_profile)}::jsonb as changed
+                 ${JSON.stringify(
+                   before.rows[0].financial_profile
+                     ? canonicalizeProjectFinancialProfile(
+                         before.rows[0].financial_profile as FinancialProfile,
+                       )
+                     : null,
+                 )}::jsonb as changed
         `))
         if (comparison.rows[0]?.changed) {
           financialVersion = await publishProjectFinancialProfileInTransaction(tx, {

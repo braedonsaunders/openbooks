@@ -50,7 +50,7 @@ export default async function OverheadModelSetup({
   fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
   const from = fromDate.toISOString().slice(0, 10)
   const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' })
-  const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: number; ratePerHour?: number } | null }>(sql`
+  const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
       from project_types pt
@@ -89,11 +89,11 @@ export default async function OverheadModelSetup({
     db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active order by number nulls last, name`),
   ])
 
-  const methodLabel = (oh: { method?: string; ratePercent?: number; ratePerHour?: number } | null) => {
+  const methodLabel = (oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null) => {
     switch (oh?.method) {
       case 'rate_engine': return t('setup.entities.overhead-model.methodCard')
       case 'percent_of_labor': return t('setup.entities.overhead-model.methodPct', { rate: oh.ratePercent ?? 0 })
-      case 'per_labor_hour': return t('setup.entities.overhead-model.methodHr', { rate: (oh.ratePerHour ?? 0).toFixed(2) })
+      case 'per_labor_hour': return t('setup.entities.overhead-model.methodHr', { rate: Number(oh.ratePerHour ?? 0).toFixed(2) })
       case 'posted_gl_account_group': return t('setup.entities.overhead-model.methodGl')
       default: return t('setup.entities.overhead-model.methodNone')
     }
