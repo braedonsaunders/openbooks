@@ -93,7 +93,7 @@ export default async function MatchBankData({
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
       and je.status = 'posted' and je.posting_date <= ${session.through_date}
       and jl.reconciled_at is null
-      and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
+      and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
       ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
     const exWhere = sql`s.account_id = ${account.id} and s.org_id = ${orgId} and l.match_status = 'excluded'
       ${exParams.q ? sql` and (l.description ilike ${'%' + exParams.q + '%'} or l.amount::text ilike ${'%' + exParams.q + '%'})` : sql``}`
