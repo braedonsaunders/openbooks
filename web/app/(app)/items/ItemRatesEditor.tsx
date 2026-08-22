@@ -1,5 +1,6 @@
 'use client'
 
+import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -36,7 +37,7 @@ export function ItemRatesEditor({
   }, [canManage])
   const [busy, setBusy] = useState(false)
   const [rateBookId, setRateBookId] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [effectiveFrom, setEffectiveFrom] = useState(useBusinessToday())
   const [baseUnit, setBaseUnit] = useState('day')
   const [pricingPolicy, setPricingPolicy] = useState('capped_ladder')
   const [invoicePresentation, setInvoicePresentation] = useState('rate_components')

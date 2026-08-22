@@ -11,6 +11,8 @@ import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 import { orgInfo } from '../../lib/data'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { BusinessDateProvider } from '../../components/business-date-provider'
 import { MoneyProvider } from '../../components/money-provider'
 import { OnboardingWizard } from '../../components/onboarding-wizard'
 
@@ -19,12 +21,13 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
     shellEnvironments(authz),
     orgInfo(authz.user.orgId),
+    businessToday(authz.user.orgId),
   ])
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const jar = await cookies()
@@ -48,6 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <MoneyProvider currency={org.base_currency}>
+      <BusinessDateProvider today={today}>
       <ThemeProvider>
         <NavigationProvider>
           <AppShell
@@ -87,6 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {can(authz, 'admin.setup.manage') && <OnboardingWizard authz={authz} />}
         </NavigationProvider>
       </ThemeProvider>
+      </BusinessDateProvider>
     </MoneyProvider>
   )
 }

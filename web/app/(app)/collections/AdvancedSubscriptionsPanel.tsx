@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription, Badge, Button, Card, Input, Label, Select, Skeleton } from "@openbooks/ui";
+import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 
 type BasePlan = { id: string; name: string; interval: string; intervalCount: number; isActive: boolean };
@@ -11,11 +12,11 @@ type Version = { id: string; planId: string; versionNumber: number; status: stri
 type Lifecycle = { subscriptionId: string; planVersionId: string; contractRevision: number; termStartsOn: string; termEndsOn: string | null; trialEndsOn: string | null; billingTiming: string; renewalPolicy: string; renewalTermMonths: number | null; components: Component[] };
 type Amendment = { id: string; subscriptionId: string; amendmentNumber: number; amendmentType: string; effectiveOn: string; status: string; reason: string | null };
 
-const today = () => new Date().toISOString().slice(0, 10);
 const blankComponent = (): Component => ({ componentKey: "base", name: "Base subscription", quantity: "1", unitPrice: "0" });
 
 export function AdvancedSubscriptionsPanel() {
   const { money } = useMoney();
+  const today = useBusinessToday();
   const [plans, setPlans] = useState<BasePlan[]>([]);
   const [subscriptions, setSubscriptions] = useState<BaseSubscription[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -25,9 +26,9 @@ export function AdvancedSubscriptionsPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [versionForm, setVersionForm] = useState({ planId: "", effectiveFrom: today(), billingTiming: "advance", changeSummary: "", components: [blankComponent()] });
-  const [lifecycleForm, setLifecycleForm] = useState({ subscriptionId: "", planVersionId: "", termStartsOn: today(), termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" });
-  const [amendForm, setAmendForm] = useState({ subscriptionId: "", type: "add_component", effectiveOn: today(), componentKey: "", name: "", quantity: "1", unitPrice: "0", termEndsOn: "", billingTiming: "advance", renewalTermMonths: "12", anchorSubscriptionId: "", reason: "" });
+  const [versionForm, setVersionForm] = useState({ planId: "", effectiveFrom: today, billingTiming: "advance", changeSummary: "", components: [blankComponent()] });
+  const [lifecycleForm, setLifecycleForm] = useState({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" });
+  const [amendForm, setAmendForm] = useState({ subscriptionId: "", type: "add_component", effectiveOn: today, componentKey: "", name: "", quantity: "1", unitPrice: "0", termEndsOn: "", billingTiming: "advance", renewalTermMonths: "12", anchorSubscriptionId: "", reason: "" });
 
   const load = async () => {
     try {
@@ -89,7 +90,7 @@ export function AdvancedSubscriptionsPanel() {
         <div className="mt-3 space-y-2">
           {versionForm.components.map((component, index) => <div key={index} className="grid gap-2 rounded-md border p-2 sm:grid-cols-5"><div><Label htmlFor={`catalog-component-key-${index}`}>Component key</Label><Input id={`catalog-component-key-${index}`} placeholder="Key" value={component.componentKey} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, componentKey: e.target.value } : c) })} /></div><div className="sm:col-span-2"><Label htmlFor={`catalog-component-name-${index}`}>Component name</Label><Input id={`catalog-component-name-${index}`} placeholder="Component name" value={component.name} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, name: e.target.value } : c) })} /></div><div><Label htmlFor={`catalog-component-quantity-${index}`}>Quantity</Label><Input id={`catalog-component-quantity-${index}`} type="number" placeholder="Qty" value={component.quantity} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, quantity: e.target.value } : c) })} /></div><div className="flex gap-1"><div className="flex-1"><Label htmlFor={`catalog-component-price-${index}`}>Unit price</Label><Input id={`catalog-component-price-${index}`} type="number" placeholder="Price" value={component.unitPrice} onChange={(e) => setVersionForm({ ...versionForm, components: versionForm.components.map((c, i) => i === index ? { ...c, unitPrice: e.target.value } : c) })} /></div>{versionForm.components.length > 1 && <Button size="sm" variant="ghost" aria-label={`Remove ${component.name || "component"}`} onClick={() => setVersionForm({ ...versionForm, components: versionForm.components.filter((_, i) => i !== index) })}>×</Button>}</div></div>)}
         </div>
-        <div className="mt-3 flex gap-2"><Button size="sm" variant="secondary" onClick={() => setVersionForm({ ...versionForm, components: [...versionForm.components, { ...blankComponent(), componentKey: `addon-${versionForm.components.length}`, name: "Add-on" }] })}>Add component</Button><Button size="sm" disabled={busy || !versionForm.planId || versionForm.components.some((c) => !c.componentKey || !c.name)} onClick={async () => { const result = await post({ action: "createVersion", ...versionForm }); if (result) { setMessage("Draft catalog version created"); setVersionForm({ planId: "", effectiveFrom: today(), billingTiming: "advance", changeSummary: "", components: [blankComponent()] }); } }}>Create draft</Button></div>
+        <div className="mt-3 flex gap-2"><Button size="sm" variant="secondary" onClick={() => setVersionForm({ ...versionForm, components: [...versionForm.components, { ...blankComponent(), componentKey: `addon-${versionForm.components.length}`, name: "Add-on" }] })}>Add component</Button><Button size="sm" disabled={busy || !versionForm.planId || versionForm.components.some((c) => !c.componentKey || !c.name)} onClick={async () => { const result = await post({ action: "createVersion", ...versionForm }); if (result) { setMessage("Draft catalog version created"); setVersionForm({ planId: "", effectiveFrom: today, billingTiming: "advance", changeSummary: "", components: [blankComponent()] }); } }}>Create draft</Button></div>
       </Card>
 
       <Card className="p-4">
@@ -102,7 +103,7 @@ export function AdvancedSubscriptionsPanel() {
           <div><Label>Trial ends</Label><Input type="date" value={lifecycleForm.trialEndsOn} onChange={(e) => setLifecycleForm({ ...lifecycleForm, trialEndsOn: e.target.value })} /></div>
           <div><Label>Renewal</Label><Select value={lifecycleForm.renewalPolicy} onChange={(e) => setLifecycleForm({ ...lifecycleForm, renewalPolicy: e.target.value })}><option value="auto">Auto-renew</option><option value="manual">Manual renewal</option><option value="none">No renewal</option></Select></div>
           <div><Label>Renewal term (months)</Label><Input type="number" value={lifecycleForm.renewalTermMonths} onChange={(e) => setLifecycleForm({ ...lifecycleForm, renewalTermMonths: e.target.value })} /></div>
-          <div className="flex items-end"><Button disabled={busy || !lifecycleForm.subscriptionId || !lifecycleForm.planVersionId} onClick={async () => { if (await post({ action: "activateLifecycle", ...lifecycleForm })) { setMessage("Advanced lifecycle activated"); setLifecycleForm({ subscriptionId: "", planVersionId: "", termStartsOn: today(), termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" }); } }}>Activate lifecycle</Button></div>
+          <div className="flex items-end"><Button disabled={busy || !lifecycleForm.subscriptionId || !lifecycleForm.planVersionId} onClick={async () => { if (await post({ action: "activateLifecycle", ...lifecycleForm })) { setMessage("Advanced lifecycle activated"); setLifecycleForm({ subscriptionId: "", planVersionId: "", termStartsOn: today, termEndsOn: "", trialEndsOn: "", renewalPolicy: "auto", renewalTermMonths: "12" }); } }}>Activate lifecycle</Button></div>
         </div>
         <div className="mt-4 space-y-2">{lifecycles.map((lifecycle) => { const sub = subscriptions.find((s) => s.id === lifecycle.subscriptionId); return <div key={lifecycle.subscriptionId} className="rounded-md border p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><span className="font-medium">{sub?.customerName ?? "Customer"} · {sub?.planName ?? "Subscription"}</span><span className="ml-2 text-xs text-muted-foreground">revision {lifecycle.contractRevision}</span></div><div className="flex gap-1"><Badge variant="secondary">{lifecycle.billingTiming}</Badge><Badge variant="secondary">{lifecycle.renewalPolicy}</Badge></div></div><div className="mt-1 text-xs text-muted-foreground">{lifecycle.trialEndsOn ? `Trial through ${lifecycle.trialEndsOn} · ` : ""}Term {lifecycle.termStartsOn} → {lifecycle.termEndsOn ?? "open"}</div><div className="mt-2 flex flex-wrap gap-2">{lifecycle.components.filter((c) => !c.effectiveTo).map((c) => <span key={c.componentKey} className="rounded bg-muted px-2 py-1 text-xs">{c.name}: {c.quantity} × {money(c.unitPrice)}</span>)}</div></div>; })}</div>
       </Card>

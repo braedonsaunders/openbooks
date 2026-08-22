@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 
 const WAIVER_TYPES = [
   'conditional_progress',
@@ -43,7 +44,7 @@ export function LienWaiverToolbar({
     partyId: '',
     projectId: '',
     waiverType: 'unconditional_progress',
-    throughDate: new Date().toISOString().slice(0, 10),
+    throughDate: useBusinessToday(),
     amount: '',
     jurisdiction: '',
   })

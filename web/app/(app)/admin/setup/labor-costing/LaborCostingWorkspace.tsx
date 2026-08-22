@@ -13,6 +13,7 @@ import { FilterChips } from '../../../../../components/filter-bar'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref } from '../../../../../lib/list-params'
 import type { LaborCostComponent, LaborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
+import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { LaborCostingWizard } from './LaborCostingWizard'
 
 export interface RateRow {
@@ -124,6 +125,7 @@ export function LaborCostingWorkspace(props: {
   const locale = useLocale()
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
+  const today = useBusinessToday()
   const [busy, setBusy] = useState(false)
 
   // ---- settings state ------------------------------------------------------
@@ -162,12 +164,12 @@ export function LaborCostingWorkspace(props: {
   const dirty = currentSnap !== savedSnap
 
   // ---- reconciliation state ------------------------------------------------
-  const now = new Date()
-  const lastMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 1, 1))
-  const lastMonthEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 0))
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  const [recFrom, setRecFrom] = useState(iso(lastMonth))
-  const [recTo, setRecTo] = useState(iso(lastMonthEnd))
+  const thisMonthStart = `${today.slice(0, 7)}-01`
+  const priorMonthEnd = new Date(`${thisMonthStart}T00:00:00Z`)
+  priorMonthEnd.setUTCDate(0)
+  const priorMonthStart = `${priorMonthEnd.toISOString().slice(0, 7)}-01`
+  const [recFrom, setRecFrom] = useState(priorMonthStart)
+  const [recTo, setRecTo] = useState(priorMonthEnd.toISOString().slice(0, 10))
   const [recSubsidiaryId, setRecSubsidiaryId] = useState(props.subsidiaries[0]?.id ?? props.defaultSubsidiary?.id ?? '')
   const [rec, setRec] = useState<{
     subsidiaryId: string

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'
 import type { LienWaiverRow } from '../../../../lib/compliance'
@@ -29,12 +30,13 @@ export function LienWaiverDrawer({
 }) {
   const t = useTranslations('compliance')
   const router = useRouter()
+  const today = useBusinessToday()
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [sign, setSign] = useState({
     signedByName: waiver.signedByName ?? '',
     signedByTitle: waiver.signedByTitle ?? '',
-    signedAt: waiver.signedAt?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    signedAt: waiver.signedAt?.slice(0, 10) ?? today,
     notarized: waiver.notarized,
   })
   const [edit, setEdit] = useState({

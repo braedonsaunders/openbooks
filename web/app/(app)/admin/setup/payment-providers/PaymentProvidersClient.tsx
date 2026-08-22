@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, CardContent, Input, Label, Select } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../../components/business-date-provider";
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
 
@@ -295,7 +296,7 @@ function SurchargeRules({
   const [feeIncomeAccountId, setFeeIncomeAccountId] = useState("");
   const [provider, setProvider] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("all");
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [effectiveFrom, setEffectiveFrom] = useState(useBusinessToday());
 
   async function add() {
     const ok = await onSave({

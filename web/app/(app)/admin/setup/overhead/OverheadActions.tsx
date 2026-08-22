@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowRight, BookMarked, Wand2, X } from 'lucide-react'
 import { Button, Input, Label, cn } from '@openbooks/ui'
+import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 
 export interface DeptRate {
@@ -18,7 +19,6 @@ export interface TypeOpt {
   name: string
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
@@ -44,13 +44,14 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
  */
 export function OverheadActions({ departments, projectTypes, autoOpen }: { departments: DeptRate[]; projectTypes: TypeOpt[]; autoOpen?: boolean }) {
   const { currency, money } = useMoney()
+  const today = useBusinessToday()
   const t = useTranslations('admin.setup.entities.overhead-model')
   const router = useRouter()
   const [open, setOpen] = useState<'publish' | 'wizard' | null>(autoOpen ? 'wizard' : null)
   const [busy, setBusy] = useState(false)
 
   // Publish state — pre-seeded from the live engine, editable.
-  const [effectiveFrom, setEffectiveFrom] = useState(today())
+  const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [rates, setRates] = useState<Record<string, string>>(() =>
     Object.fromEntries(departments.filter((d) => d.composite > 0).map((d) => [d.id, d.composite.toFixed(2)])))
 

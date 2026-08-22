@@ -13,6 +13,7 @@ import {
   SearchSelect,
   Select,
 } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 
 /**
@@ -80,7 +81,7 @@ const decimal = (value: string) =>
 const sumHours = (days: ScheduleDay[]) =>
   days.reduce((total, day) => total + (Number(day.hours) || 0), 0)
 
-const blank = (): Schedule => ({
+const blank = (today: string): Schedule => ({
   id: '',
   name: null,
   employeePartyId: null,
@@ -94,7 +95,7 @@ const blank = (): Schedule => ({
   // can be labelled Sunday…Saturday.
   cycleAnchor: '2024-01-07',
   days: [1, 2, 3, 4, 5].map((dayIndex) => ({ dayIndex, hours: '8' })),
-  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveFrom: today,
   effectiveTo: null,
   isActive: true,
 })
@@ -102,6 +103,7 @@ const blank = (): Schedule => ({
 export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
   const t = useTranslations('payroll.workSchedules')
   const tc = useTranslations('common')
+  const today = useBusinessToday()
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [options, setOptions] = useState<Options>({
     employees: [], trades: [], departments: [], subsidiaries: [],
@@ -246,7 +248,7 @@ export function WorkSchedulesSection({ canManage }: { canManage: boolean }) {
           </p>
         </div>
         {canManage ? (
-          <Button onClick={() => setDraft(blank())}>{t('add')}</Button>
+          <Button onClick={() => setDraft(blank(today))}>{t('add')}</Button>
         ) : null}
       </header>
 
@@ -303,6 +305,7 @@ function ScheduleForm({
   onChange: (next: Schedule) => void
 }) {
   const t = useTranslations('payroll.workSchedules')
+  const today = useBusinessToday()
   const scope = scopeOf(draft)
   const patch = (next: Partial<Schedule>) => onChange({ ...draft, ...next })
 
@@ -429,8 +432,8 @@ function ScheduleForm({
             onChange={() => patch({
               pattern: 'cycle',
               cycleDays: draft.cycleDays ?? 7,
-              cycleAnchor: draft.cycleAnchor ?? blank().cycleAnchor,
-              days: draft.days.length ? draft.days : blank().days,
+              cycleAnchor: draft.cycleAnchor ?? blank(today).cycleAnchor,
+              days: draft.days.length ? draft.days : blank(today).days,
             })}
           />
           <span>

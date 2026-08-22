@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { Alert, Badge } from '@openbooks/ui'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   previewDerivedRule,
@@ -46,7 +47,7 @@ export async function DerivedRulePreviewSection({
   // Default to the period the last run covered — the operator is almost always
   // asking "what would this have paid last time?".
   const lastRun = lastRunRes.rows[0]
-  const today = new Date().toISOString().slice(0, 10)
+  const today = await businessToday(orgId)
   const defaultFrom = lastRun ? String(lastRun.period_start).slice(0, 10) : `${today.slice(0, 7)}-01`
   const defaultTo = lastRun ? String(lastRun.period_end).slice(0, 10) : today
 

@@ -14,6 +14,7 @@ import {
   UrlDrawer,
 } from '@openbooks/ui'
 import type { RequirementPolicy } from '@openbooks/engine/src/compliance.ts'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { AttachmentPanel } from '../../../../components/attachment-panel'
 import { promptDialog } from '../../../../lib/prompt'
 import type {
@@ -89,6 +90,7 @@ export function VendorComplianceDrawer({
 }) {
   const t = useTranslations('compliance')
   const router = useRouter()
+  const today = useBusinessToday()
   const [tab, setTab] = useState<Tab>('certificates')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -97,7 +99,7 @@ export function VendorComplianceDrawer({
     projectId: '',
     issuerName: '',
     policyNumber: '',
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: today,
     expiresOn: '',
     coverageAmount: '',
     aggregateAmount: '',

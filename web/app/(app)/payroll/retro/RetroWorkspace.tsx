@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { AlertTriangle, History, Search } from 'lucide-react'
 import { Badge, Button, Drawer, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 
 /* ------------------------------------------------------------------ */
@@ -68,7 +69,6 @@ export type RetroSchedule = {
   name: string
 };
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
 
 /**
  * Retroactive pay — detect, quantify, review, pay.
@@ -95,11 +95,12 @@ export function RetroWorkspace({
   const tCommon = useTranslations('common')
   const router = useRouter()
   const { money } = useMoney()
+  const today = useBusinessToday()
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 
   const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
-  const [payDate, setPayDate] = useState(todayIso())
+  const [payDate, setPayDate] = useState(today)
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<RetroProposal | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])

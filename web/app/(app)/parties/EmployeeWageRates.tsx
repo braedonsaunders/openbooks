@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import { BookOpen, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { useBusinessToday } from '../../../components/business-date-provider'
 import { PagedTable } from '../../../components/paged-table'
 
 interface RateRow {
@@ -26,13 +27,12 @@ interface RatesResponse {
   defaultCurrency: string
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-
 /** Confidential employee compensation history, gated by admin.setup.manage. */
 export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const t = useTranslations('parties.drawer.wages')
   const tc = useTranslations('common')
   const format = useFormatter()
+  const today = useBusinessToday()
   const [data, setData] = useState<RatesResponse | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,7 +40,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const [currency, setCurrency] = useState('')
   const [basis, setBasis] = useState<'hour' | 'year'>('hour')
   const [annualHours, setAnnualHours] = useState('2080')
-  const [effectiveFrom, setEffectiveFrom] = useState(today())
+  const [effectiveFrom, setEffectiveFrom] = useState(today)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoadError(false)
@@ -271,7 +271,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
                       disabled={busy}
                       onClick={() => {
                         if (window.confirm(t('confirmEnd'))) {
-                          void mutate({ action: 'end-rate', id: row.id, effectiveTo: today() }, t('ended'))
+                          void mutate({ action: 'end-rate', id: row.id, effectiveTo: today }, t('ended'))
                         }
                       }}
                     >
