@@ -39,6 +39,17 @@ function persistSubcontractSovScheduledValue(value: unknown): string {
   }
 }
 
+/** Persist leftover SOV-line retainage percent through exact decimal then ledger money. Fail closed. */
+function persistSubcontractSovRetainage(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("retainage percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("retainage percent must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -295,7 +306,7 @@ export async function addSubcontractSovLine(input: {
   const value = persistSubcontractSovScheduledValue(input.scheduledValue);
   const retainage = input.retainagePercent == null || input.retainagePercent === ""
     ? null
-    : normalizeMoney(input.retainagePercent);
+    : persistSubcontractSovRetainage(input.retainagePercent);
   if (!description || cmp(value, "0") <= 0) throw new SubcontractError("Description and positive scheduled value are required");
   if (retainage !== null && (cmp(retainage, "0") < 0 || cmp(retainage, "100") > 0)) throw new SubcontractError("Retainage percent must be between 0 and 100");
   return db.transaction(async (tx) => {
