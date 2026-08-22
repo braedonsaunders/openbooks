@@ -109,7 +109,8 @@ export async function promoteCrmAccount(
     await executor.execute(sql`
       insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
       values (${input.orgId}, ${input.partyId}, true, ${input.actorId}, ${input.actorId})
-      on conflict (party_id) do update set is_active = true, updated_at = now(), updated_by = ${input.actorId}`);
+      on conflict (party_id) do update set is_active = true, updated_at = now(), updated_by = ${input.actorId}
+      where customer_roles.org_id = ${input.orgId}`);
   }
   await executor.execute(sql`
     insert into crm_account_stage_events
