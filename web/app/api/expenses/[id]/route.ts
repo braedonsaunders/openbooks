@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -8,7 +9,19 @@ import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLi
 import { DocumentEditError, validateEditableDocumentLines } from '../../../../lib/documents'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
+
+/** Exact numeric(19,4) money string, or 'invalid'. */
+function exactMoney(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
 
 export const runtime = 'nodejs'
 
@@ -82,11 +95,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (e instanceof DocumentEditError) return NextResponse.json({ error: e.message }, { status: e.status })
       throw e
     }
+    const exactLines: typeof valid = []
+    for (let i = 0; i < valid.length; i++) {
+      const line = valid[i]!
+      const amount = exactMoney(line.amount)
+      if (amount === 'invalid') {
+        return NextResponse.json(
+          { error: `Line ${i + 1}: "${line.amount}" is not a valid amount — enter an exact decimal of at most 4 decimal places` },
+          { status: 422 },
+        )
+      }
+      let taxAmount = line.taxAmount ?? null
+      if (taxAmount != null && String(taxAmount).trim() !== '') {
+        const exactTax = exactMoney(taxAmount)
+        if (exactTax === 'invalid') {
+          return NextResponse.json({ error: `Line ${i + 1}: tax amount is not a valid amount` }, { status: 422 })
+        }
+        taxAmount = exactTax
+      } else {
+        taxAmount = null
+      }
+      exactLines.push({ ...line, amount, taxAmount })
+    }
     const computed = computeBillTotals(
-      valid,
+      exactLines,
       await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
     )
-    totals = computed
+    totals = {
+      subtotal: normalizeMoney(computed.subtotal),
+      taxTotal: normalizeMoney(computed.taxTotal),
+      total: normalizeMoney(computed.total),
+    }
     preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
       const l = computed.lines[i]! as (typeof computed.lines)[number] & {
@@ -107,11 +146,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       preparedLines.push({
         accountId: l.accountId!,
         description: l.description ?? null,
-        amount: l.amount,
+        amount: normalizeMoney(l.amount),
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
-        taxInputAmount: l.taxInputAmount,
-        taxAmount: l.taxAmount,
+        taxInputAmount: normalizeMoney(l.taxInputAmount),
+        taxAmount: normalizeMoney(l.taxAmount),
         taxOverridden: l.taxOverridden === true,
         taxComponents: l.taxComponents,
         departmentId: l.departmentId ?? null,
