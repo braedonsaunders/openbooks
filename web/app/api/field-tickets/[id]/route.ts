@@ -85,13 +85,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           : {}),
       })
     } else if (action === 'add-line') {
+      const equipmentUnitId = isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
+      if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       await addTicketLine(orgId, userId, id, {
         itemId: body.itemId,
         quantity: Number(body.quantity),
         rateUnitCode: typeof body.rateUnitCode === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(body.rateUnitCode)
           ? body.rateUnitCode
           : null,
-        equipmentUnitId: isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null,
+        equipmentUnitId,
         employeeId: isUuid(body.employeeId) ? body.employeeId : null,
         description: body.description ?? null,
       })

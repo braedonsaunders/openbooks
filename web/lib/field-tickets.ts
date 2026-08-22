@@ -6,9 +6,11 @@ import {
   captureFieldTicketLaborEvidence,
   type FieldTicketLaborEvidenceLine,
 } from '@openbooks/engine/src/field-ticket-labor-evidence.ts'
-import { mul, div, isZero, add, sum } from '@openbooks/engine/src/money.ts'
+import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { nextDocumentNumber } from './bills'
+import { canonicalDecimal } from './exact-decimal'
+import { isFeatureEnabled } from './features'
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
@@ -238,7 +240,22 @@ export interface CrewRowInput {
   projectTaskId?: string | null
   timeTypeId: string
   /** hours keyed by ISO date within the ticket window ('' / 0 = none). */
-  hours: Record<string, number>
+  hours: Record<string, string | number>
+}
+
+/** Exact numeric(19,4) hours for the money column, or null (blank/zero). */
+function exactTicketHours(value: unknown): string | null {
+  if (value == null || value === '') return null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new FieldTicketError('Hours must be a number with at most 4 decimal places')
+  let hours: string
+  try {
+    hours = normalizeMoney(exact)
+  } catch {
+    throw new FieldTicketError('Hours must be a number with at most 4 decimal places')
+  }
+  if (cmp(hours, '0') <= 0) return null
+  return hours
 }
 
 /**
@@ -291,12 +308,12 @@ export async function saveCrewGrid(orgId: string, userId: string, ticketId: stri
     for (const [day, hours] of Object.entries(row.hours)) {
       if (day < ft.periodStart || day > ft.periodEnd) continue
       const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
-      const h = Number(hours)
-      if (!Number.isFinite(h) || h <= 0) continue
+      const h = exactTicketHours(hours)
+      if (h == null) continue
       seen.add(k)
       const cur = byKey.get(k)
       if (cur) {
-        if (Number(cur.hours) !== h) {
+        if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
           await db.execute(sql`
             update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
              where id = ${cur.id} and org_id = ${orgId} and status = 'draft'`)
@@ -344,6 +361,12 @@ export async function addTicketLine(
 
   if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
   if (input.equipmentUnitId) {
+    // The drawer already hides the picker. Turning Equipment off must also
+    // refuse a new link here so a crafted add-line cannot write
+    // equipment_unit_id. Lines that already carry a unit stay as they are.
+    if (!(await isFeatureEnabled(orgId, 'equipment'))) {
+      throw new FieldTicketError('Equipment is disabled')
+    }
     const equipment = (await db.execute<{ charge_item_id: string | null; status: string }>(sql`
       select charge_item_id, status from equipment_units
        where id = ${input.equipmentUnitId} and org_id = ${orgId}`))

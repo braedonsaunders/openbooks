@@ -878,6 +878,16 @@ test('the surfaces this test was written for are covered', () => {
     'equipment page must hide Fixed Assets links when the switch is off',
   )
   assert.match(
+    read('lib/field-tickets.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'field-ticket lines must not store equipment_unit_id when Equipment is off — existing links stay',
+  )
+  assert.match(
+    read('app/api/field-tickets/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'field-ticket add-line must 404 — not persist equipment_unit_id — when Equipment is off',
+  )
+  assert.match(
     read('app/(app)/items/page.tsx'),
     /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
     'the items page must not load recognition rules when Revenue Recognition is off',
