@@ -10,13 +10,13 @@ import {
   type FxProviderKey,
   type FxSyncSchedule,
 } from '@openbooks/engine/src/fx-providers.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 const PERMISSION = 'admin.setup.manage'
 
 export async function GET() {
-  const gate = await guardPermission(PERMISSION)
+  const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const config = await readFxProviderConfigView(gate.user.orgId)
   const runs = (await db.execute<Record<string, unknown>>(sql`
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const gate = await guardPermission(PERMISSION)
+  const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as {
     provider?: FxProviderKey
@@ -71,7 +71,7 @@ export async function PUT(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission(PERMISSION)
+  const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as { action?: 'test' | 'sync' }
   if (body.action !== 'test' && body.action !== 'sync') {

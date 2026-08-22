@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { can, requirePermission } from '../../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
 import { SearchInput } from '../../../../../components/search-input'
@@ -208,7 +209,10 @@ export default async function SetupEntityPage({
     await requirePermission('periods.manage')
     return <CloseSetupPage orgId={orgId} searchParams={sp} canReopen={can(authz, 'close.reopen')} />
   }
-  if (entityKey === 'fx-provider') return <FxProviderPage orgId={orgId} />
+  if (entityKey === 'fx-provider') {
+    await requireFeatureEnabled(orgId, 'multiCurrency')
+    return <FxProviderPage orgId={orgId} />
+  }
 
   const assetSetupTabs: Record<string, string> = {
     'tax-regimes': 'regimes',

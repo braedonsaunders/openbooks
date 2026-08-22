@@ -117,6 +117,8 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   queryConsole: ['app/api/query'],
   flows: ['app/api/flows', 'app/api/admin/flows'],
   multiSubsidiary: ['app/api/consolidation'],
+  multiCurrency: ['app/api/admin/fx-provider', 'app/api/close/run-revaluation'],
+  apiAccess: ['app/api/admin/api-keys'],
 }
 
 function routeFilesUnder(dir: string): string[] {
