@@ -7,12 +7,25 @@ import {
   type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { can, getAuthz, type Authz } from '../../../../lib/authz'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
+
+/** Exact numeric(19,4) money string, or 'invalid'. */
+function exactMoney(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly. */
 async function gateForDocument(
@@ -60,8 +73,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     allocations?: AllocationInput[]
   }
 
+  let allocations = body.allocations
+  if (allocations !== undefined) {
+    if (!Array.isArray(allocations)) {
+      return NextResponse.json({ error: 'allocation amounts must be exact decimals' }, { status: 422 })
+    }
+    const exact: AllocationInput[] = []
+    for (const allocation of allocations) {
+      const sourceTransactionAmount = exactMoney(allocation?.sourceTransactionAmount)
+      const targetTransactionAmount = exactMoney(allocation?.targetTransactionAmount)
+      const targetBaseAmount = allocation?.targetBaseAmount === undefined
+        ? undefined
+        : exactMoney(allocation.targetBaseAmount)
+      if (
+        sourceTransactionAmount === 'invalid' ||
+        targetTransactionAmount === 'invalid' ||
+        targetBaseAmount === 'invalid'
+      ) {
+        return NextResponse.json({ error: 'allocation amounts must be exact decimals' }, { status: 422 })
+      }
+      exact.push({
+        ...allocation,
+        sourceTransactionAmount,
+        targetTransactionAmount,
+        ...(targetBaseAmount === undefined ? {} : { targetBaseAmount }),
+      })
+    }
+    allocations = exact
+  }
+
   try {
-    await updateDraftPayment(id, body, gate.authz.user.id, gate.authz.user.orgId)
+    await updateDraftPayment(id, { ...body, allocations }, gate.authz.user.id, gate.authz.user.orgId)
     const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
     return NextResponse.json(payment)
   } catch (e) {
