@@ -10,3 +10,10 @@ test('interactive report-definition PDFs stamp the footer from the org business 
     /const stamp = await businessToday\(user\.orgId\)[\s\S]*?exportDataToPdf\(data, branding, page, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
   )
 })
+
+test('interactive report-definition xlsx stamps workbook created/modified from the org business day', () => {
+  assert.match(
+    route,
+    /const stamp = await businessToday\(user\.orgId\)[\s\S]*?exportDataToXlsx\(data, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
+  )
+})
