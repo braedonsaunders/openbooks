@@ -1652,6 +1652,16 @@ test('the surfaces this test was written for are covered', () => {
     'lease apply-escalation must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/property-management.ts'),
+    /export async function billDueLeaseCharges[\s\S]{0,4000}INVENTORY_ITEM_KINDS\.has/,
+    'billDueLeaseCharges must not persist inventory/assembly/kit items when Inventory is off — stored schedule lines and existing invoices stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /if \(!invoiceId\) \{[\s\S]{0,800}Inventory is disabled/,
+    'billDueLeaseCharges must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
     read('app/api/admin/settings/route.ts'),
     /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
     'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',

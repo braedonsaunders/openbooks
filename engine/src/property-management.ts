@@ -910,6 +910,18 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       const prior = (await db.execute<{ id: string }>(sql`select id from documents where org_id=${orgId} and custom->'propertyManagement'->>'billingKey'=${key}`));
       let invoiceId = prior.rows[0]?.id;
       if (!invoiceId) {
+        // Stored schedule lines and an existing invoice stay. Copying an
+        // inventory / assembly / kit item onto a new invoice is Inventory configuration.
+        if (!(await inventoryFeatureEnabled(db, orgId))) {
+          for (const row of billRows) {
+            if (!row.itemId) continue;
+            const item = (await db.execute<{ kind: string }>(sql`
+              select kind from items where id = ${row.itemId} and org_id = ${orgId}`));
+            if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+              throw new PropertyManagementError("Inventory is disabled", 404);
+            }
+          }
+        }
         const lines: AdvancedBillingLine[] = billRows.map((row) => ({ description: `${row.description} · ${row.periodStartsOn}–${row.periodEndsOn}`, quantity: "1", unitPrice: row.amount, incomeAccountId: row.incomeAccountId, itemId: row.itemId, taxCodeId: row.taxCodeId }));
         const actor = actorId ?? first.createdBy; if (!actor) throw new PropertyManagementError(`Lease ${first.leaseNumber} has no billing owner`);
         const generated = await createSubscriptionInvoice({ orgId, actorId: actor, customerId: first.tenantId, subsidiaryId: first.subsidiaryId,
