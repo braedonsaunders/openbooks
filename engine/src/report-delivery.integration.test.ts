@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 import {
   dispatchQueuedReportRuns,
@@ -90,9 +91,9 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     ]);
     assert.equal(renderCalls, 1);
     assert.equal(processed.filter((value) => value.deliveries === 2).length, 1);
-    const evidence = (await db.execute<{ status: string; attempt_count: number; size_bytes: number; content_hash: string; bytes: Buffer; deliveries: number }>(sql`
+    const evidence = (await db.execute<{ status: string; attempt_count: number; size_bytes: number; content_hash: string; bytes: Buffer; deliveries: number; filename: string }>(sql`
       select r.status, r.attempt_count, a.size_bytes, a.content_hash, a.bytes,
-             count(d.id)::int as deliveries
+             a.filename, count(d.id)::int as deliveries
         from report_runs r
         join report_run_artifacts a on a.run_id=r.id
         left join report_delivery_outbox d on d.run_id=r.id
@@ -103,6 +104,7 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       { status: evidence.rows[0]!.status, attempts: evidence.rows[0]!.attempt_count, size: evidence.rows[0]!.size_bytes, deliveries: evidence.rows[0]!.deliveries },
       { status: "succeeded", attempts: 1, size: pdf.length, deliveries: 2 },
     );
+    assert.equal(evidence.rows[0]!.filename, `delivery-contract-${await businessToday(org.orgId)}.pdf`);
     assert.equal(evidence.rows[0]!.content_hash, createHash("sha256").update(pdf).digest("hex"));
     assert.deepEqual(Buffer.from(evidence.rows[0]!.bytes), pdf);
 

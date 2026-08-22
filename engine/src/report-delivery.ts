@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
 import { scheduledReportEmail } from "@openbooks/emails";
+import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
 
 const MAX_RUN_ATTEMPTS = 5;
@@ -135,7 +136,7 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     const pdf = await render(row.org_id, row.definition_id, runId);
     if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
     const slug = meta.rows[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
-    const filename = `${slug || "report"}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = `${slug || "report"}-${await businessToday(row.org_id)}.pdf`;
     const hash = createHash("sha256").update(pdf).digest("hex");
     const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
 
