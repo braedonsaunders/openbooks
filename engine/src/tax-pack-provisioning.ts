@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db, withOrgTransaction } from "./db.ts";
 import { normalizeMoney } from "./money.ts";
 import { installTaxReturnPacks, taxReturnPack, TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
@@ -12,9 +13,15 @@ import {
 } from "./country-tax-packs/index.ts";
 import type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxPackDefinition } from "./country-tax-packs/index.ts";
 
-/** Persist a pack JSON rate through ledger money — never as an IEEE-754 number. */
+/** Persist a pack JSON rate through exact decimal then ledger money — never as an IEEE-754 number. */
 function persistPackRatePercent(ratePercent: string | number): string {
-  return normalizeMoney(ratePercent);
+  const exact = canonicalDecimal(ratePercent, 4);
+  if (exact === null) throw new Error("rate percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("rate percent must be an exact decimal");
+  }
 }
 
 function packRateSchedule(
