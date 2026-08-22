@@ -456,6 +456,7 @@ async function seedVacationEntitlementPlan(
            liability_account_id = coalesce(entitlement_plans.liability_account_id,
                                            excluded.liability_account_id),
            updated_by = ${actorId}, updated_at = now()
+     where entitlement_plans.org_id = ${orgId}
   `);
 }
 
