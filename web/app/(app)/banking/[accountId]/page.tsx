@@ -65,7 +65,7 @@ export default async function BankingAccount({
   const accountRes = (await db.execute<any>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
-                      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+                      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
                      where jl.account_id = a.id), 0) as balance,
            (select max(r.through_date) from reconciliations r
              where r.account_id = a.id and r.status = 'signed_off') as reconciled_through,

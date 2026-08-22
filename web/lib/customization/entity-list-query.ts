@@ -150,8 +150,8 @@ export const PROJECT_BASE_JOINS = sql`
   left join lateral (
     select coalesce(sum(l.amount), 0) as cost
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = p.org_id and l.project_id = p.id and e.status in ('posted', 'reversed')
        and a.type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
   ) actual on true`

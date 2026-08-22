@@ -231,7 +231,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   // The spend base: expense/COGS journal lines sourced from spend documents.
   const spendBase = (f: string, t: string) => sql`
     from journal_lines l
-    join journal_entries e on e.id = l.entry_id
+    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
     join documents d on d.id = e.source_document_id
     join accounts a on a.id = l.account_id
     where l.org_id = ${orgId} and d.voided_at is null
@@ -265,7 +265,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(l.amount) as total_amount,
         count(distinct d.id) as transaction_count
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join documents d on d.id = e.source_document_id
       join accounts a on a.id = l.account_id
       left join parties p on p.id = d.party_id
@@ -296,7 +296,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       select coalesce(-sum(l.amount), 0) as revenue
       from journal_lines l
       join accounts a on a.id = l.account_id
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `) as Promise<any>,
@@ -322,7 +322,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join documents d on d.id = e.source_document_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and d.voided_at is null

@@ -107,11 +107,11 @@ export default async function MatchBankData({
       db.execute<any>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id where ${stmtWhere}`),
       db.execute<any>(sql`
         select jl.id, je.posting_date, je.entry_number, jl.amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
-          from journal_lines jl join journal_entries je on je.id = jl.entry_id
+          from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
           left join parties p on p.id = jl.party_id
          where ${glWhere} order by je.posting_date, jl.line_number
          limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`),
-      db.execute<any>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id where ${glWhere}`),
+      db.execute<any>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`),
       // Review: auto matches with low confidence in this session
       db.execute<any>(sql`
         select m.id, m.statement_line_id, m.confidence,
@@ -120,7 +120,7 @@ export default async function MatchBankData({
           from reconciliation_matches m
           join bank_statement_lines sl on sl.id = m.statement_line_id
           join journal_lines jl on jl.id = m.journal_line_id
-          join journal_entries je on je.id = jl.entry_id
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
            and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7
          order by m.confidence asc, sl.posted_on limit 50`),
