@@ -1,16 +1,28 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { fromUnits, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
+
+/** Exact numeric(19,4) money string, or 'invalid'. */
+function exactMoney(v: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.read')
@@ -106,13 +118,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
     const valid: typeof body.lines = []
-    try {
-      for (const line of body.lines) {
-        const units = toUnits(line.amount)
-        if (line.accountId && units !== 0n) valid.push({ ...line, amount: fromUnits(units) })
+    for (const line of body.lines) {
+      const amount = exactMoney(line.amount)
+      if (amount === 'invalid') {
+        return NextResponse.json({ error: 'Journal lines contain an invalid monetary amount' }, { status: 422 })
       }
-    } catch {
-      return NextResponse.json({ error: 'Journal lines contain an invalid monetary amount' }, { status: 422 })
+      if (line.accountId && toUnits(amount) !== 0n) valid.push({ ...line, amount })
     }
     totalDebits = sum(valid.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
     preparedLines = []
