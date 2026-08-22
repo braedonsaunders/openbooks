@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../../web/lib/exact-decimal.ts";
 import { db, schema, withOrg, withOrgContext } from "../db.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money.ts";
 import { postDocument } from "../posting.ts";
@@ -48,6 +49,17 @@ const text = (value: unknown): string | null => {
   const out = value == null ? "" : String(value).trim();
   return out || null;
 };
+
+/** Persist a NetSuite FAM document FX rate through exact decimal at numeric(19,10). Fail closed. */
+function persistSyncFxRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 10);
+  if (exact === null) throw new Error("FX rate must be an exact decimal");
+  try {
+    return normalizeDecimal(exact, 10);
+  } catch {
+    throw new Error("FX rate must be an exact decimal");
+  }
+}
 
 const truthy = (value: unknown): boolean => value === true || value === "T";
 
@@ -537,7 +549,7 @@ export async function syncNetSuiteFixedAssets(
         postingPeriodId: document.postingPeriodId ?? null,
         dueDate: document.dueDate,
         currency: document.currency ?? source.baseCurrency,
-        fxRate: normalizeDecimal(document.fxRate ?? "1", 10),
+        fxRate: persistSyncFxRate(document.fxRate ?? "1"),
         status: "approved",
         subtotal: normalizeMoney(document.subtotal ?? "0"),
         taxTotal: "0",
