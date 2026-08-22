@@ -1087,9 +1087,9 @@ async function insertImportedLines(
         quantity: persistSyncLineMoney(line.quantity ?? "1", "quantity"),
         unit: line.unit ?? null,
         unitPrice: persistSyncLineMoney(line.unitPrice ?? line.amount, "unit price"),
-        amount: normalizeMoney(line.amount),
+        amount: persistSyncLineMoney(line.amount, "amount"),
         taxCodeId: effectiveTaxCodeId(line.taxAmount, line.taxCodeId),
-        taxAmount: normalizeMoney(line.taxAmount),
+        taxAmount: persistSyncLineMoney(line.taxAmount, "tax amount"),
         taxOverridden: line.taxOverridden,
         partyId: line.partyId ?? null,
         departmentId: line.departmentId,
@@ -1099,7 +1099,7 @@ async function insertImportedLines(
         description: line.description,
         isBillable: line.isBillable ?? false,
         markupPercent: line.markupPercent ?? null,
-        billAmount: line.billAmount == null ? null : normalizeMoney(line.billAmount),
+        billAmount: line.billAmount == null ? null : persistSyncLineMoney(line.billAmount, "bill amount"),
         // Line identity from the source system, so a migrated document can be
         // reconciled and re-synced line by line rather than only as a whole.
         custom: line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {},
