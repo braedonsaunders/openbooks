@@ -336,7 +336,7 @@ export async function completeRequestedDocumentVoid(
           const lines = await tx
             .select()
             .from(schema.journalLines)
-            .where(eq(schema.journalLines.entryId, sourceEntryId));
+            .where(and(eq(schema.journalLines.entryId, sourceEntryId), eq(schema.journalLines.orgId, orgId)));
           const [reversal] = await tx
             .insert(schema.journalEntries)
             .values({
