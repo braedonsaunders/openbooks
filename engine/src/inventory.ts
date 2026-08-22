@@ -2504,7 +2504,7 @@ export async function loadDocumentInventoryLines(
     select dl.id as line_id, dl.item_id, dl.quantity, dl.amount, dl.stock_location_id,
            p.asset_account_id, p.received_not_billed_account_id, p.costing_method
       from document_lines dl
-      join item_inventory_profiles p on p.item_id = dl.item_id
+      join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and dl.item_id is not null and dl.quantity <> 0
      order by dl.line_number`));

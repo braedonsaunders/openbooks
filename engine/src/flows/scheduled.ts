@@ -3,7 +3,7 @@
 // lastCronOccurrenceBetween's catch. CronExpressionParser.parse works under
 // both CJS and ESM interop.
 import { CronExpressionParser } from "cron-parser";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   evaluateLogicRule,
   planAutomation,
@@ -124,7 +124,7 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
     const claimed = await withBypassContext(() =>
       db.execute(sql`
       update flows set last_scheduled_run_at = ${due.latest}
-       where id = ${flow.id}
+       where id = ${flow.id} and org_id = ${flow.orgId}
          and (last_scheduled_run_at is null or last_scheduled_run_at < ${due.latest})
     `));
     if (!claimed.rowCount) continue;
@@ -213,7 +213,7 @@ async function executeScheduledRun(
       error: errorText,
       finishedAt: new Date(),
     })
-    .where(eq(schema.flowRuns.id, run.id));
+    .where(and(eq(schema.flowRuns.id, run.id), eq(schema.flowRuns.orgId, flow.orgId)));
   return failedText;
 }
 

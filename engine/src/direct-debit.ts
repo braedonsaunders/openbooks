@@ -65,7 +65,7 @@ export async function createDirectDebitRun(opts: {
     await cancelPaymentRun(run.id, opts.orgId);
     if (createdReceiptIds.length > 0) {
       await db.transaction(async (tx) => {
-        await tx.execute(sql`delete from document_lines dl using documents d where dl.document_id = d.id and d.id in ${createdReceiptIds} and d.org_id = ${opts.orgId} and d.status = 'draft'`);
+        await tx.execute(sql`delete from document_lines dl using documents d where dl.document_id = d.id and dl.org_id = d.org_id and d.id in ${createdReceiptIds} and d.org_id = ${opts.orgId} and d.status = 'draft'`);
         await tx.execute(sql`delete from documents where id in ${createdReceiptIds} and org_id = ${opts.orgId} and status = 'draft'`);
       });
     }

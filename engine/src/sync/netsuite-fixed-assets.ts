@@ -294,7 +294,7 @@ export async function syncNetSuiteFixedAssets(
                  default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
                  default_convention = 'full_month', tax_attributes = ${json(rawMetadata)}::jsonb,
                  is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
-           where id = ${categoryId}
+           where id = ${categoryId} and org_id = ${options.orgId}
         `);
         updatedCategories += 1;
       } else {
@@ -385,7 +385,7 @@ export async function syncNetSuiteFixedAssets(
                  project_id = ${projectId}, location_id = ${locationId}, custodian_party_id = ${custodianPartyId},
                  custom = coalesce(custom, '{}'::jsonb) || ${json(custom)}::jsonb,
                  updated_at = now(), updated_by = ${options.actorId ?? null}
-           where id = ${assetId}
+           where id = ${assetId} and org_id = ${options.orgId}
         `);
         updatedAssets += 1;
       } else {
@@ -442,7 +442,7 @@ export async function syncNetSuiteFixedAssets(
         await db.execute(sql`
           update depreciation_schedules
              set method = ${sourceMethod}, life_months = ${lifeMonths}, updated_at = now(), updated_by = ${options.actorId ?? null}
-           where id = ${scheduleId}
+           where id = ${scheduleId} and org_id = ${options.orgId}
         `);
       } else {
         const inserted = (await db.execute<{ id: string }>(sql`

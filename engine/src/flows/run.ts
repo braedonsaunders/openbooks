@@ -176,7 +176,7 @@ export async function runRecordFlows(
             error: res.failed.length > 0 ? res.failed.join("; ") : null,
             finishedAt: status === "waiting" ? null : new Date(),
           })
-          .where(eq(schema.flowRuns.id, run.id));
+          .where(and(eq(schema.flowRuns.id, run.id), eq(schema.flowRuns.orgId, ctx.orgId)));
         if (res.failed.length > 0) {
           console.error(`[flows] run ${run.id} (flow "${flow.name}") failed:`, res.failed.join("; "));
         }
@@ -187,7 +187,7 @@ export async function runRecordFlows(
         await db
           .update(schema.flowRuns)
           .set({ status: "failed", error: reason, finishedAt: new Date() })
-          .where(eq(schema.flowRuns.id, run.id))
+          .where(and(eq(schema.flowRuns.id, run.id), eq(schema.flowRuns.orgId, ctx.orgId)))
           .catch(() => {});
       }
 

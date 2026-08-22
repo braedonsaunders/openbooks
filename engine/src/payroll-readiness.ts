@@ -1194,9 +1194,9 @@ export async function payRunChanges(orgId: string, documentId: string): Promise<
     select c.employee_party_id, c.name, c.gross, c.net_pay,
            pv.gross as prev_gross, pv.net_pay as prev_net, pv.pay_date as prev_pay_date,
            coalesce((select json_agg(json_build_object('d', l.description, 'a', l.amount, 'h', l.hours))
-                       from pay_stub_lines l where l.stub_id = c.id), '[]'::json) as current_lines,
+                       from pay_stub_lines l where l.org_id = ${orgId} and l.stub_id = c.id), '[]'::json) as current_lines,
            coalesce((select json_agg(json_build_object('d', l.description, 'a', l.amount, 'h', l.hours))
-                       from pay_stub_lines l where l.stub_id = pv.id), '[]'::json) as previous_lines
+                       from pay_stub_lines l where l.org_id = ${orgId} and l.stub_id = pv.id), '[]'::json) as previous_lines
       from current_stub c
       left join previous_stub pv on pv.employee_party_id = c.employee_party_id
      order by c.name

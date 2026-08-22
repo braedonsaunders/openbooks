@@ -146,6 +146,11 @@ export async function submitAndReleaseIfUngated(
   if (result.gated || result.flowError) {
     return { ...result, autoApproved: false };
   }
+  const [current] = await db
+    .select({ orgId: schema.documents.orgId })
+    .from(schema.documents)
+    .where(eq(schema.documents.id, targetId));
+  if (!current) throw new Error("document changed while submission was being released");
   const released = await db
     .update(schema.documents)
     .set({
@@ -153,7 +158,13 @@ export async function submitAndReleaseIfUngated(
       updatedBy: actorId,
       updatedAt: new Date(),
     })
-    .where(sql`${schema.documents.id} = ${targetId} and ${schema.documents.status} = 'draft'`)
+    .where(
+      and(
+        eq(schema.documents.id, targetId),
+        eq(schema.documents.orgId, current.orgId),
+        eq(schema.documents.status, "draft"),
+      ),
+    )
     .returning({ id: schema.documents.id });
   if (released.length !== 1) {
     throw new Error("document changed while submission was being released");

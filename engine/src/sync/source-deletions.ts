@@ -187,11 +187,11 @@ export async function mirrorSourceDeletion(input: {
       await tx
         .update(schema.journalEntries)
         .set({ status: "posted", postedAt: new Date() })
-        .where(eq(schema.journalEntries.id, reversal.id));
+        .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, input.orgId)));
       await tx
         .update(schema.journalEntries)
         .set({ status: "reversed" })
-        .where(eq(schema.journalEntries.id, entry.id));
+        .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, input.orgId)));
       await tx.execute(sql`
         update documents
            set status = 'voided', voided_at = now(), open_balance = null,
@@ -374,11 +374,11 @@ export async function resolveSourceDeletion(input: {
         await db
           .update(schema.journalEntries)
           .set({ status: "posted", postedAt: new Date() })
-          .where(eq(schema.journalEntries.id, reversal.id));
+          .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, input.orgId)));
         await db
           .update(schema.journalEntries)
           .set({ status: "reversed" })
-          .where(eq(schema.journalEntries.id, entry.id));
+          .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, input.orgId)));
         await db.execute(sql`
           update documents
              set status = 'voided', voided_at = now(),

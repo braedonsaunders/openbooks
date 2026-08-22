@@ -178,15 +178,15 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'earning'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
                   and coalesce(pc.taxable, true))) as taxable_income,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'deduction'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
                   and pc.system_key = 'qc_income_tax')) as qc_income_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'deduction'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}

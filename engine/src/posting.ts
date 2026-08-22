@@ -1306,6 +1306,7 @@ export async function postDocument(
         .where(
           and(
             inArray(schema.flowGates.runId, runIds),
+            eq(schema.flowGates.orgId, doc.orgId),
             inArray(schema.flowGates.status, ["pending", "escalated"]),
           ),
         );
@@ -1318,7 +1319,7 @@ export async function postDocument(
             : "approval gates must be configured on on_submit",
           finishedAt: new Date(),
         })
-        .where(inArray(schema.flowRuns.id, runIds));
+        .where(and(inArray(schema.flowRuns.id, runIds), eq(schema.flowRuns.orgId, doc.orgId)));
     }
     throw new PostingError(
       beforePostFlows.failed
@@ -1492,7 +1493,7 @@ export async function postDocument(
     await tx
       .update(schema.journalEntries)
       .set({ status: "posted", postedAt: new Date() })
-      .where(eq(schema.journalEntries.id, entry.id));
+      .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
 
     // Exactly-once posting, serialized at the aggregate root: the flip only
     // lands while the document is still unposted. Postgres row-locks the
@@ -2138,7 +2139,7 @@ export async function regenerateGlImpactTx(
       postedBy: correction.actorId,
       updatedBy: correction.actorId,
     })
-    .where(eq(schema.journalEntries.id, reversal.id));
+    .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, doc.orgId)));
   await tx
     .update(schema.journalEntries)
     .set({
@@ -2146,7 +2147,7 @@ export async function regenerateGlImpactTx(
       updatedAt: new Date(),
       updatedBy: correction.actorId,
     })
-    .where(eq(schema.journalEntries.id, entry.id));
+    .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
 
   const [replacement] = await tx
     .insert(schema.journalEntries)

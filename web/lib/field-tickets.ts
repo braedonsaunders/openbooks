@@ -186,7 +186,7 @@ export async function updateTicketHeader(
   }
 
   const hourCount = (
-    (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where field_ticket_id = ${ticketId}`))
+    (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
   ).rows[0].n
   if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
     const period = patch.period ?? ft.period
@@ -433,7 +433,7 @@ export async function removeTicketLine(orgId: string, ticketId: string, lineId: 
 async function recomputeTotals(orgId: string, ticketId: string): Promise<void> {
   await db.execute(sql`
     update documents d set subtotal = x.amt, total = x.amt, updated_at = now()
-      from (select coalesce(sum(amount), 0) as amt from document_lines where document_id = ${ticketId}) x
+      from (select coalesce(sum(amount), 0) as amt from document_lines where document_id = ${ticketId} and org_id = ${orgId}) x
      where d.id = ${ticketId} and d.org_id = ${orgId}`)
 }
 type HeaderRow = {

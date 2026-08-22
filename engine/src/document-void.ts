@@ -388,7 +388,7 @@ export async function completeRequestedDocumentVoid(
               postedAt: new Date(),
               postedBy: String(doc.void_requested_by),
             })
-            .where(eq(schema.journalEntries.id, reversal.id));
+            .where(and(eq(schema.journalEntries.id, reversal.id), eq(schema.journalEntries.orgId, orgId)));
           await tx
             .update(schema.journalEntries)
             .set({
@@ -396,7 +396,7 @@ export async function completeRequestedDocumentVoid(
               updatedAt: new Date(),
               updatedBy: String(doc.void_requested_by),
             })
-            .where(eq(schema.journalEntries.id, sourceEntryId));
+            .where(and(eq(schema.journalEntries.id, sourceEntryId), eq(schema.journalEntries.orgId, orgId)));
           return reversal.id;
         };
 

@@ -291,15 +291,15 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'earning'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'earning'
                   and coalesce(pc.taxable, true))) as taxable_income,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'deduction'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
                   and pc.system_key = 'income_tax')) as income_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = c.id and l.kind = 'deduction'
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
@@ -496,7 +496,7 @@ export async function roeWorksheet(
   const rows = (await db.execute<{ pay_date: string; period_start: string; period_end: string; insurable_earnings: string; hours: string }>(sql`
     select s.pay_date, r.period_start, r.period_end, s.insurable_earnings,
            (select coalesce(sum(l.hours), 0) from pay_stub_lines l
-             where l.stub_id = s.id and l.kind = 'earning') as hours
+             where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning') as hours
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
@@ -757,18 +757,18 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
            sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
            sum(s.pensionable_earnings) as medicare_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and pc.system_key = 'fit')) as fit,
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'fit')) as fit,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and pc.system_key = 'ss')) as ss_tax,
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'ss')) as ss_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
@@ -853,18 +853,18 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and pc.system_key = 'fit')) as fit,
+                where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'fit')) as fit,
            sum(coalesce((s.factors->>'SS_TAXABLE')::numeric, 0)) as ss_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and l.kind = 'deduction' and pc.system_key = 'ss')) as ss_tax,
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction' and pc.system_key = 'ss')) as ss_tax,
            sum(s.pensionable_earnings) as medicare_wages,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
-                where l.stub_id = s.id and l.kind = 'deduction'
+                where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
                   and pc.system_key in ('medicare', 'medicare_addl'))) as medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
