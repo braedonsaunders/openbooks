@@ -231,7 +231,7 @@ export async function loadEntities(
         if (!rec.parentRef) continue;
         const child = idByRef.get(rec.sourceRef);
         const parent = idByRef.get(rec.parentRef);
-        if (child && parent) await db.execute(sql`update accounts set parent_id = ${parent} where id = ${child}`);
+        if (child && parent) await db.execute(sql`update accounts set parent_id = ${parent} where id = ${child} and org_id = ${orgId}`);
       }
     }
     stats[stream.resource] = s;

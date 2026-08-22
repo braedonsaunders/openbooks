@@ -393,7 +393,7 @@ export async function buildScheduleWithRunner(
         update depreciation_schedules
            set method = ${method}, depreciation_method_id = ${depreciationMethodId}, life_months = ${lifeMonths || null},
                rate_percent = ${ratePercent}, units_total = ${unitsTotal}, updated_at = now(), updated_by = ${actorId}
-         where id = ${scheduleId}`);
+         where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
       const ins = (await tx.execute<{ id: string }>(sql`
         insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, created_by, updated_by)

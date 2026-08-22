@@ -1377,7 +1377,7 @@ export async function refreshCloseRun(
 
     for (const check of checks) {
       const task = (await tx.execute<{ id: string }>(sql`
-        select id from close_run_tasks where run_id = ${runId} and key = ${check.taskKey}`));
+        select id from close_run_tasks where run_id = ${runId} and org_id = ${orgId} and key = ${check.taskKey}`));
       const taskId = task.rows[0]?.id ?? null;
       if (check.count > 0) {
         await tx.execute(sql`
@@ -1572,7 +1572,7 @@ export async function updateCloseTask(args: {
         reviewed_by = case when ${args.action} = 'approve' then ${args.actorId} else reviewed_by end,
         data_fingerprint = case when ${status} in ('complete','submitted','waived') then ${fingerprint} else data_fingerprint end,
         updated_at = now(), updated_by = ${args.actorId}
-       where id = ${args.taskId}`);
+       where id = ${args.taskId} and org_id = ${args.orgId}`);
     if (["approve", "waive"].includes(args.action)) {
       await tx.execute(sql`
         insert into close_signoffs
@@ -2038,11 +2038,11 @@ export async function closeApprovedRun(
     await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              updated_at = now(), updated_by = ${actorId}
-       where run_id = ${runId} and key in ('lock-subledgers','lock-gl')`);
+       where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl')`);
     await tx.execute(sql`
       update close_runs set status = 'closed', current_stage = 'publish', closed_at = now(),
              closed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId}`);
+       where id = ${runId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
       values (${orgId}, ${runId}, 'run.closed', ${actorId}, ${JSON.stringify({ modules: CLOSE_MODULES })}::jsonb)`);
@@ -2073,11 +2073,11 @@ export async function publishCloseRun(
     await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              data_fingerprint = ${run.rows[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
-       where run_id = ${runId} and key = 'publish-package'`);
+       where run_id = ${runId} and org_id = ${orgId} and key = 'publish-package'`);
     await tx.execute(sql`
       update close_runs set status = 'published', current_stage = 'publish', published_at = now(),
              published_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId}`);
+       where id = ${runId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
       values (${orgId}, ${runId}, 'publish', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);
@@ -2208,7 +2208,7 @@ export async function decidePeriodReopen(args: {
       await tx.execute(sql`
         update close_reopen_requests set status = 'rejected', approved_by = ${args.actorId},
                approved_at = now(), updated_at = now(), updated_by = ${args.actorId}
-         where id = ${args.requestId}`);
+         where id = ${args.requestId} and org_id = ${args.orgId}`);
       return;
     }
     const policy = (await tx.execute<{ rules: { defaultHours?: number; maxHours?: number } }>(sql`select rules from close_policies
@@ -2280,7 +2280,7 @@ export async function decidePeriodReopen(args: {
     await tx.execute(sql`
       update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
              approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}
-       where id = ${args.requestId}`);
+       where id = ${args.requestId} and org_id = ${args.orgId}`);
     await tx.execute(sql`
       update close_runs set status = 'in_progress', current_stage = 'review', approved_at = null,
              approved_by = null, closed_at = null, closed_by = null, published_at = null,
@@ -2691,7 +2691,7 @@ export async function runCloseAutomations(
       } else if (rule.action === "generate_report") {
         const report = String(config.report ?? "trial-balance");
         const target =
-          (await db.execute<{ id: string }>(sql`select id from close_run_tasks where run_id = ${context.runId}
+          (await db.execute<{ id: string }>(sql`select id from close_run_tasks where run_id = ${context.runId} and org_id = ${context.orgId}
           and id = coalesce(${context.taskId ?? null}, id) order by case when key = 'publish-package' then 0 else 1 end, sort_order limit 1`));
         if (!target.rows[0])
           throw new CloseError(
@@ -2747,7 +2747,7 @@ export async function runCloseAutomations(
         );
       }
       await db.execute(sql`update close_automation_executions set status = 'completed', executed_at = now(),
-        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId}`);
+        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId} and org_id = ${context.orgId}`);
       await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
         values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.completed', ${context.actorId ?? null},
                 ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action })}::jsonb)`);
@@ -2755,7 +2755,7 @@ export async function runCloseAutomations(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await db.execute(sql`update close_automation_executions set status = 'failed', error = ${message}, executed_at = now(),
-        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId}`);
+        updated_at = now(), updated_by = ${context.actorId ?? null} where id = ${executionId} and org_id = ${context.orgId}`);
       await db.execute(sql`insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
         values (${context.orgId}, ${context.runId}, ${context.taskId ?? null}, 'automation.failed', ${context.actorId ?? null},
                 ${JSON.stringify({ ruleId: rule.id, executionId, trigger: context.trigger, action: rule.action, error: message })}::jsonb)`);

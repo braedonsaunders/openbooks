@@ -171,7 +171,7 @@ export async function syncProjectRevenueContracts(
         update revenue_contracts
            set total_transaction_price = ${p.contract_value}, customer_id = ${p.customer_id},
                starts_on = coalesce(starts_on, ${startsOn}), updated_at = now(), updated_by = ${actorId}
-         where id = ${contractId}`);
+         where id = ${contractId} and org_id = ${orgId}`);
     } else {
       const ins = (await db.execute<{ id: string }>(sql`
         insert into revenue_contracts
@@ -194,7 +194,7 @@ export async function syncProjectRevenueContracts(
                allocated_price = ${p.contract_value}, percent_complete = ${percent},
                deferred_account_id = ${accts.unbilledReceivable}, recognized_account_id = ${accts.projectRevenue},
                updated_at = now(), updated_by = ${actorId}
-         where id = ${obligationId}`);
+         where id = ${obligationId} and org_id = ${orgId}`);
     } else {
       const ins = (await db.execute<{ id: string }>(sql`
         insert into performance_obligations
