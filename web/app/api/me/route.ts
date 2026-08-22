@@ -50,7 +50,7 @@ export async function PATCH(req: Request) {
 
   await db.execute(sql`
     update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
-     where id = ${user.id}`);
+     where id = ${user.id} and org_id = ${user.orgId}`);
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${user.orgId}, 'users', ${user.id}, 'update',
