@@ -48,6 +48,7 @@ export async function loadProjectCockpit(
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active
          ${inventoryEnabled ? sql`` : sql`and kind not in ('inventory', 'assembly', 'kit')`}
+         ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
        order by name limit 2000`),
     equipmentEnabled
       ? db.execute(sql`

@@ -1547,6 +1547,11 @@ test('the surfaces this test was written for are covered', () => {
     'project charge picker must drop inventory/assembly/kit when Inventory is off — stored charges stay',
   )
   assert.match(
+    read('app/(app)/projects/_cockpit-data.ts'),
+    /kind <> 'equipment_charge'/,
+    'project charge picker must drop equipment_charge when Equipment is off — stored charges stay',
+  )
+  assert.match(
     read('app/(app)/projects/tabs/ChargesSection.tsx'),
     /equipmentEnabled \? \{[\s\S]{0,80}equipmentUnitId/,
     'the charge form must not send equipment_unit_id when Equipment is off',
