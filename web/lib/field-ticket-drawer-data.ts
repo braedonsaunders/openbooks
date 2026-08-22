@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FieldTicketDrawerProps, TicketPayload } from '../app/(app)/field-tickets/FieldTicketDrawer'
 import { can, type Authz } from './authz'
@@ -37,6 +38,7 @@ export async function loadFieldTicketDrawerData({
   }
 
   const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
+  const today = await businessToday(orgId)
   const [employees, laborItems, timeTypes, catalogItems, projects, projectTasks, equipmentUnits, resolvedForm] =
     (await Promise.all([
       db.execute<(FieldTicketDrawerProps['employees'])[number]>(sql`
@@ -88,8 +90,8 @@ export async function loadFieldTicketDrawerData({
                  select policy.period
                    from field_ticket_policies policy
                   where policy.org_id = p.org_id and policy.is_active
-                    and policy.effective_from <= current_date
-                    and (policy.effective_to is null or policy.effective_to >= current_date)
+                    and policy.effective_from <= ${today}
+                    and (policy.effective_to is null or policy.effective_to >= ${today})
                     and (
                       (policy.scope = 'project' and policy.project_id = p.id)
                       or (policy.scope = 'customer' and policy.customer_party_id = p.customer_id)

@@ -61,10 +61,11 @@ export async function publishOverheadRates(
 
 /** Current published per-hour rate per department (open row covering today). */
 export async function currentPublishedRates(orgId: string): Promise<Map<string, number>> {
+  const today = await businessToday(orgId)
   const r = (await db.execute<{ department_id: string | null; rate_percent: string }>(sql`
     select department_id, rate_percent from overhead_rates
-     where org_id = ${orgId} and rate_kind = 'per_hour' and effective_from <= current_date
-       and (effective_to is null or effective_to >= current_date)`))
+     where org_id = ${orgId} and rate_kind = 'per_hour' and effective_from <= ${today}
+       and (effective_to is null or effective_to >= ${today})`))
   const out = new Map<string, number>()
   for (const row of r.rows) if (row.department_id) out.set(row.department_id, Number(row.rate_percent))
   return out

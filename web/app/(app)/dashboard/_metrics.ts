@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
 import {
@@ -64,6 +65,7 @@ export type DashboardMetrics = {
 export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetrics> {
   const orgId = authz.user.orgId
   const userId = authz.user.id
+  const today = await businessToday(orgId)
 
   const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
@@ -73,11 +75,11 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
       select
         (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
-        (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = current_date) as entries_today,
+        (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
         (select count(*) from flow_gates where org_id = ${orgId} and status = 'pending') as pending_approvals,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
-    db.execute(dashboardFinancialMetricsQuery(orgId)),
+    db.execute(dashboardFinancialMetricsQuery(orgId, today)),
     // Top-N first, then aggregate the five entries' lines — grouping before
     // the limit aggregated every entry in the tenant.
     db.execute(sql`

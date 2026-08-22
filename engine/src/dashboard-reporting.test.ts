@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env } from "./db.ts";
+import { businessToday } from "./business-date.ts";
 import { dashboardFinancialMetricsQuery, type DashboardFinancialMetricsRow } from "./dashboard-reporting.ts";
 import { fromUnits, mulRate, toUnits } from "./money.ts";
 
@@ -23,10 +24,11 @@ test("dashboard financial totals match exact per-document FX conversion", { skip
   const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by id`));
 
   for (const org of orgs.rows) {
+    const today = await businessToday(org.id);
     const [actualResult, documentsResult, cashResult] = await Promise.all([
-      db.execute(dashboardFinancialMetricsQuery(org.id)),
+      db.execute(dashboardFinancialMetricsQuery(org.id, today)),
       db.execute(sql`
-        select kind, open_balance, fx_rate, due_date < current_date as overdue
+        select kind, open_balance, fx_rate, due_date < ${today} as overdue
           from documents
          where org_id = ${org.id}
            and kind in ('customer_invoice', 'vendor_bill')
