@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 
@@ -222,14 +223,28 @@ export async function POST(req: NextRequest) {
       return team;
     });
   } else if (action === "save-quota") {
+    // Quota currency is Multi-currency configuration. Turning that switch
+    // off must refuse a new write; the stored code stays so turning the
+    // feature back on restores the same currency. New quotas without a
+    // currency fall back to the org base so the NOT NULL column stays valid.
+    if (
+      body.currency !== undefined &&
+      !(await isFeatureEnabled(user.orgId, "multiCurrency"))
+    ) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
     const ownerUserId = body.ownerUserId || null;
     const salesTeamId = body.salesTeamId || null;
+    const currency =
+      body.currency !== undefined
+        ? String(body.currency).toUpperCase()
+        : undefined;
     if (
       (ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) !== 1 ||
       !/^\d{4}-\d{2}-\d{2}$/.test(body.periodStart ?? "") ||
       !/^\d{4}-\d{2}-\d{2}$/.test(body.periodEnd ?? "") ||
       body.periodEnd < body.periodStart ||
-      !/^[A-Z]{3}$/.test(String(body.currency ?? "").toUpperCase())
+      (currency !== undefined && !/^[A-Z]{3}$/.test(currency))
     )
       return NextResponse.json(
         {
@@ -248,8 +263,8 @@ export async function POST(req: NextRequest) {
         { status: 422 },
       );
     const amount = normalizeMoney(amountRaw);
-    const currency = String(body.currency).toUpperCase();
     if (
+      currency !== undefined &&
       !(
         (await db.execute(
           sql`select 1 from currencies where code=${currency}`,
@@ -257,6 +272,15 @@ export async function POST(req: NextRequest) {
       ).rows[0]
     )
       return NextResponse.json({ error: "invalid currency" }, { status: 422 });
+    let createCurrency = currency;
+    if (createCurrency === undefined && !recordId) {
+      const org = (await db.execute(
+        sql`select base_currency from orgs where id=${user.orgId}`,
+      )) as any;
+      createCurrency = org.rows[0]?.base_currency;
+      if (!createCurrency)
+        return NextResponse.json({ error: "invalid currency" }, { status: 422 });
+    }
     if (
       ownerUserId &&
       !(
@@ -283,10 +307,10 @@ export async function POST(req: NextRequest) {
       );
     row = recordId
       ? await db.execute(
-          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${currency},amount=${amount},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
+          sql`update crm_sales_quotas set owner_user_id=${ownerUserId},sales_team_id=${salesTeamId},period_start=${body.periodStart},period_end=${body.periodEnd},currency=${currency !== undefined ? currency : sql`crm_sales_quotas.currency`},amount=${amount},filters=${JSON.stringify(body.filters ?? {})}::jsonb,updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
         )
       : await db.execute(
-          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${currency},${amount},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
+          sql`insert into crm_sales_quotas (org_id,owner_user_id,sales_team_id,period_start,period_end,currency,amount,filters,created_by,updated_by) values (${user.orgId},${ownerUserId},${salesTeamId},${body.periodStart},${body.periodEnd},${createCurrency},${amount},${JSON.stringify(body.filters ?? {})}::jsonb,${user.id},${user.id}) returning *`,
         );
   } else {
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
