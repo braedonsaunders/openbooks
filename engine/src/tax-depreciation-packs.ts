@@ -1,11 +1,18 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { normalizeDecimal, normalizeMoney } from "./money.ts";
 import { TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
 
-/** Persist a pack JSON rate through the FX decimal helper — never as an IEEE-754 number. */
+/** Persist a pack JSON rate through exact decimal at numeric(19,10). Fail closed. */
 function persistPackFxRate(rate: string | number): string {
-  return normalizeDecimal(rate, 10);
+  const exact = canonicalDecimal(rate, 10);
+  if (exact === null) throw new Error("pack rate must be an exact decimal");
+  try {
+    return normalizeDecimal(exact, 10);
+  } catch {
+    throw new Error("pack rate must be an exact decimal");
+  }
 }
 
 export interface TaxDepreciationPack {
