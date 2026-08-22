@@ -2386,7 +2386,7 @@ async function recloseApprovedReopenRow(args: {
            reclosed_at = ${finalStatus === "reclosed" ? sql`now()` : sql`null`},
            updated_at = now(),
            updated_by = ${args.actorId ?? null}
-     where id = ${args.row.id} and status = 'approved'
+     where id = ${args.row.id} and org_id = ${args.row.org_id} and status = 'approved'
     returning id`);
   if (updated.rows.length !== 1) {
     throw new CloseError("approved reopen request changed during re-close");

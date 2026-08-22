@@ -99,7 +99,7 @@ export class QbdSource implements MigrationSource {
       since,
     });
     await waitForCapture(this.config.orgId, this.captureId);
-    const captured = (await db.execute<{ through: Date }>(sql`select captured_through as through from qbd_captures where id = ${this.captureId}`));
+    const captured = (await db.execute<{ through: Date }>(sql`select captured_through as through from qbd_captures where id = ${this.captureId} and org_id = ${this.config.orgId}`));
     this.capturedThrough = captured.rows[0]?.through ?? new Date();
     this.captureReady = true;
   }
@@ -108,7 +108,7 @@ export class QbdSource implements MigrationSource {
     await this.capture();
     const result = (await db.execute<CaptureResponse>(sql`
       select family, request_kind as "requestKind", page, response_xml as "responseXml"
-        from qbd_requests where capture_id = ${this.captureId} and family = ${family} and status = 'complete'
+        from qbd_requests where capture_id = ${this.captureId} and org_id = ${this.config.orgId} and family = ${family} and status = 'complete'
        order by sequence`));
     if (result.rows.some((row) => !row.responseXml)) throw new Error(`QuickBooks capture family ${family} contains an empty response`);
     return result.rows;
@@ -224,7 +224,7 @@ export class QbdSource implements MigrationSource {
     await this.capture();
     const result = (await db.execute<{ family: string }>(sql`
       select distinct family from qbd_requests
-       where capture_id = ${this.captureId} and family like 'ledger:%' and status = 'complete'
+       where capture_id = ${this.captureId} and org_id = ${this.config.orgId} and family like 'ledger:%' and status = 'complete'
        order by family`));
     return result.rows.map((row) => row.family);
   }
