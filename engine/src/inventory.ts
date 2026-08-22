@@ -2688,7 +2688,7 @@ export async function ensureLot(
     const existing = (await tx.execute<{ id: string; org_id: string; expires_on: string | null }>(sql`
       select id, org_id, expires_on::text
         from lots
-       where item_id = ${itemId} and lot_number = ${lotNumber.trim()}
+       where org_id = ${orgId} and item_id = ${itemId} and lot_number = ${lotNumber.trim()}
        for update
     `));
     const row = existing.rows[0];
@@ -2755,7 +2755,7 @@ export async function ensureSerial(
       }>(sql`
       select id, org_id, current_stock_location_id
         from serials
-       where item_id = ${itemId} and serial_number = ${serialNumber.trim()}
+       where org_id = ${orgId} and item_id = ${itemId} and serial_number = ${serialNumber.trim()}
        for update
     `));
     const row = existing.rows[0];
