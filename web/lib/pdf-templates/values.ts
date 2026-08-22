@@ -294,7 +294,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
     ytd_tax: money(String(ytd.rows[0]?.tax ?? '0')),
     ytd_net: money(String(ytd.rows[0]?.net ?? '0')),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    printed_date: fmtDate(await businessToday(orgId), locale),
     earnings: byKind('earning'),
     deductions: byKind('deduction'),
     employer_contributions: byKind('employer_contribution'),
