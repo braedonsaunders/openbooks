@@ -54,6 +54,22 @@ test("time type persist writes cost_multiplier through canonicalDecimal then nor
   assert.doesNotMatch(body, /normalizeMoney\("1"\)/);
 });
 
+test("tax-code persist writes ratePercent through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistTaxCodeRatePercent");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistTaxCodeRatePercent helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf('if (resource === "tax_codes")');
+  const next = loader.indexOf('if (resource === "items")');
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistTaxCodeRatePercent\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.ratePercent\)/);
+  assert.doesNotMatch(body, /normalizeMoney\("0"\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);

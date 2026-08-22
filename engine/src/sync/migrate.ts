@@ -84,6 +84,17 @@ function persistTimeTypeCostMultiplier(value: unknown): string {
   }
 }
 
+/** Persist a migrated tax-code rate through exact decimal then ledger money. Fail closed. */
+function persistTaxCodeRatePercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("tax-code rate must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("tax-code rate must be an exact decimal");
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -551,7 +562,9 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const code = String(f.code ?? `TAX-${rec.sourceRef}`);
     const name = String(f.name ?? code);
     const appliesTo = String(f.appliesTo ?? "both");
-    const rate = moneyOrNull(f.ratePercent) ?? normalizeMoney("0");
+    const rate = persistTaxCodeRatePercent(
+      f.ratePercent == null || f.ratePercent === "" ? "0" : f.ratePercent,
+    );
     const taxCustom = JSON.stringify({
       [refKey]: rec.sourceRef,
       source: { system: ctx.sourceName, externalId: rec.sourceRef },
