@@ -7,6 +7,7 @@ import {
   API_RECORD_TYPES,
   RECORD_TYPE_BY_KEY,
   ITEM_REVENUE_RECOGNITION_COLUMNS,
+  ITEM_TIME_TRACKING_COLUMNS,
   READONLY_COLUMNS,
   RW,
   fieldTypeToApi,
@@ -103,10 +104,12 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   }
 
   const revenueRecognitionOn = await isFeatureEnabled(orgId, "revenueRecognition");
+  const timeTrackingOn = await isFeatureEnabled(orgId, "timeTracking");
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
     const physical = (byTable.get(t.table!) ?? [])
       .filter((c) => t.key !== "items" || revenueRecognitionOn || !ITEM_REVENUE_RECOGNITION_COLUMNS.has(c.column_name))
+      .filter((c) => t.key !== "items" || timeTrackingOn || !ITEM_TIME_TRACKING_COLUMNS.has(c.column_name))
       .map((c): ApiField => ({
         name: c.column_name,
         type: pgTypeToOpenApi(c.data_type),

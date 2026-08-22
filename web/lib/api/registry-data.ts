@@ -199,6 +199,13 @@ export const ITEM_REVENUE_RECOGNITION_COLUMNS = new Set<string>([
 ]);
 
 /**
+ * Item columns that belong to Time Tracking. The items catalog itself stays
+ * available when Time Tracking is off; this flag must still disappear from
+ * REST/MCP and refuse writes. Existing flags stay on the row.
+ */
+export const ITEM_TIME_TRACKING_COLUMNS = new Set<string>(["show_on_timesheet"]);
+
+/**
  * Columns that are never writable through the API — identity, tenant scope,
  * and audit stamps are set by the server, not the caller.
  */
