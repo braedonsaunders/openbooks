@@ -108,8 +108,8 @@ async function loadContext(data: {
     ? ((await db.execute<PackageContext>(sql`
         select ${select}
           from close_runs r
-          join accounting_periods p on p.id = r.period_id
-          join accounting_books b on b.id = r.book_id
+          join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+          join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
           join close_reporting_packages pkg on pkg.id = ${packageId} and pkg.org_id = ${orgId}
           join orgs o on o.id = r.org_id
          where r.id = ${runId} and r.org_id = ${orgId}`))).rows

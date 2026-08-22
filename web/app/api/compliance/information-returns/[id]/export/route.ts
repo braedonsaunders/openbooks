@@ -37,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
            coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
       from information_return_filings f
       join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id
+      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
      where f.org_id = ${orgId} and f.id = ${id}
   `))
   const filing = filings.rows[0]

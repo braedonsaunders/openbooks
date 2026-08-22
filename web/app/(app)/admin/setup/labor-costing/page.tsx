@@ -80,9 +80,9 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
            r.effective_from::text as effective_from, r.effective_to::text as effective_to, r.notes,
            null::text as employee_name, tr.name as trade_name, dep.name as department_name, sub.name as subsidiary_name
       from labor_cost_rates r
-      left join trades tr on tr.id = r.trade_id
-      left join departments dep on dep.id = r.department_id
-      left join subsidiaries sub on sub.id = r.subsidiary_id`
+      left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id
+      left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id
+      left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id`
 
   const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
     laborCostingSettings(orgId),

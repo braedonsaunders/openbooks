@@ -430,7 +430,7 @@ export async function generatePayApplicationInvoice(
 
     const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
-        from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id
+        from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
        where p.id = ${app.project_id} and p.org_id = ${orgId}
     `));
     const project = projRes.rows[0];
@@ -554,7 +554,7 @@ export async function releaseRetainage(
     if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
     const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
-        from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id
+        from projects p join orgs o on o.id = p.org_id left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
        where p.id = ${projectId} and p.org_id = ${orgId}
     `));
     const project = projRes.rows[0];

@@ -53,7 +53,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            o.settings->'taxIds' as org_tax_ids
       from information_return_filings f
       join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id
+      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
      where f.org_id = ${orgId} and f.id = ${id}
   `))
   const filing = filings.rows[0]

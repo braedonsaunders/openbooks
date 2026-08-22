@@ -973,7 +973,7 @@ export async function finalizeFiling(args: {
              where r.filing_id = f.id and r.status = 'included' and r.tin_last4 is null) as missing_tin
       from information_return_filings f
       join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id
+      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
      where f.org_id = ${args.orgId} and f.id = ${args.filingId}
   `));
   const filing = rows.rows[0];

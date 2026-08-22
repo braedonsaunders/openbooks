@@ -393,7 +393,7 @@ export async function addTicketLine(
   const transactionUnit = resolved?.transactionUnitCode ?? item.rows[0].unit ?? 'unit'
 
   const next = (await db.execute<{ n: number }>(sql`
-    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId}`))
+    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId} and org_id = ${orgId}`))
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
                                 project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,

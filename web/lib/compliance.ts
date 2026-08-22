@@ -471,7 +471,7 @@ export async function loadFilings(orgId: string): Promise<FilingListRow[]> {
            coalesce(agg.missing_tin, 0) as "missingTinCount",
            coalesce(agg.total, 0) as "filedTotal"
       from information_return_filings f
-      left join subsidiaries s on s.id = f.subsidiary_id
+      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
       left join lateral (
         select count(*) filter (where r.status = 'included')::int as included,
                count(*) filter (where r.status = 'excluded')::int as excluded,

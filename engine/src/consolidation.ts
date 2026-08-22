@@ -251,7 +251,7 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
             and rate_type = 'spot'
             and as_of between ${period.starts_on} and ${period.ends_on}) as average,
         (select cf.historical_rate from consolidated_fx_rates cf
-           join accounting_periods p on p.id = cf.period_id
+           join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
           where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
             and p.ends_on < ${period.starts_on}
           order by p.ends_on desc limit 1) as historical
@@ -319,7 +319,7 @@ export async function runAutoElimination(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join subsidiaries source_sub on source_sub.id = l.subsidiary_id
+      join subsidiaries source_sub on source_sub.id = l.subsidiary_id and source_sub.org_id = l.org_id
       left join consolidated_fx_rates consolidated
         on consolidated.org_id = e.org_id
        and consolidated.period_id = e.period_id

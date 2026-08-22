@@ -728,12 +728,12 @@ export async function runDepreciation(
            c.accumulated_depreciation_account_id as cat_accum,
            c.depreciation_expense_account_id     as cat_expense
       from depreciation_schedule_lines l
-      join depreciation_schedules s on s.id = l.schedule_id
-      join accounting_books bk on bk.id = s.book_id and bk.posts_gl and bk.is_active
-      join fixed_assets a on a.id = s.asset_id
-      join subsidiaries sub on sub.id = a.subsidiary_id
-      join asset_categories c on c.id = a.category_id
-      join accounting_periods p on p.id = l.period_id
+      join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+      join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
+      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
+      join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
        and a.status not in ('disposed', 'written_off')
@@ -804,8 +804,8 @@ export async function runDepreciation(
                  (period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'assets')
                    or period_module_is_closed(${orgId}, l.period_id, s.book_id, a.subsidiary_id, 'gl')) as period_closed
             from depreciation_schedule_lines l
-            join depreciation_schedules s on s.id = l.schedule_id
-            join fixed_assets a on a.id = s.asset_id
+            join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+            join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
            where l.id = ${row.line_id} and l.org_id = ${orgId} and l.posted_amount is null
            for update of l`));
         const claimed = claim.rows[0];
@@ -890,7 +890,7 @@ export async function runDepreciation(
        ${assetId ? sql`and a.id = ${assetId}` : sql``}
        and exists (
          select 1 from depreciation_schedules s
-           join accounting_books b on b.id = s.book_id and b.posts_gl and b.is_active and b.is_primary
+           join accounting_books b on b.id = s.book_id and b.org_id = s.org_id and b.posts_gl and b.is_active and b.is_primary
            join depreciation_schedule_lines l on l.schedule_id = s.id
           where s.asset_id = a.id
           group by s.id
