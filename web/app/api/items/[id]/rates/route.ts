@@ -73,6 +73,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
   }
+  // Stored rate lines stay. Turning Equipment off must 404 a save that would
+  // persist new rates on an equipment_charge item.
+  if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+    const existing = (await db.execute<{ kind: string }>(sql`
+      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
+    if (existing.rows[0] && existing.rows[0].kind === 'equipment_charge') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
   const body = await req.json() as {
     rateBookId?: string | null; effectiveFrom?: string; baseUnit?: string;
     pricingPolicy?: string; invoicePresentation?: string; tiers?: TierInput[]
