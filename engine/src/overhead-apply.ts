@@ -108,8 +108,8 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
          and te.overhead_journal_entry_id is null
          and not exists (
            select 1 from projects p
-           join project_types pt on pt.id = p.project_type_id
-          where p.id = te.project_id
+           join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
+          where p.id = te.project_id and p.org_id = te.org_id
             and (
               select v.financial_profile->'overhead'->>'method'
                 from project_financial_profile_versions v
@@ -191,8 +191,8 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
        )
        and not exists (
          select 1 from projects p
-         join project_types pt on pt.id = p.project_type_id
-        where p.id = te.project_id
+         join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
+        where p.id = te.project_id and p.org_id = te.org_id
           and (
             select v.financial_profile->'overhead'->>'method'
               from project_financial_profile_versions v
@@ -233,8 +233,8 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
          )
          and not exists (
            select 1 from projects p
-           join project_types pt on pt.id = p.project_type_id
-          where p.id = te.project_id
+           join project_types pt on pt.id = p.project_type_id and pt.org_id = te.org_id
+          where p.id = te.project_id and p.org_id = te.org_id
             and (
               select v.financial_profile->'overhead'->>'method'
                 from project_financial_profile_versions v

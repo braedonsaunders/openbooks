@@ -1419,7 +1419,7 @@ export async function employeesNearLimit(
            l.employee_party_id, p.display_name as employee_name,
            sum(l.amount) as balance
       from entitlement_ledger l
-      join entitlement_plans pl on pl.id = l.plan_id and pl.is_active
+      join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id and pl.is_active
       join parties p on p.id = l.employee_party_id and p.org_id = l.org_id
      where l.org_id = ${orgId} and l.movement_date <= ${onDate}
        and (${opts.planId ?? null}::uuid is null or l.plan_id = ${opts.planId ?? null}::uuid)
@@ -1488,7 +1488,7 @@ export async function milestonesReachedInPeriod(
       from entitlement_service_tiers t
       join employee_roles er on er.org_id = t.org_id and er.hired_on is not null and er.is_active
       join parties p on p.id = er.party_id and p.org_id = er.org_id
-      left join entitlement_plans pl on pl.id = t.plan_id
+      left join entitlement_plans pl on pl.id = t.plan_id and pl.org_id = t.org_id
       left join pay_components c on c.id = t.component_id and c.org_id = t.org_id
      where t.org_id = ${orgId} and t.is_active
        and (er.terminated_on is null or er.terminated_on >= ${from})

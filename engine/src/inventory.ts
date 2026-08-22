@@ -2819,8 +2819,8 @@ export async function queryLotRecall(
       from inventory_movements im
       join lots l on l.id = im.lot_id and l.org_id = im.org_id
       join items i on i.id = im.item_id and i.org_id = im.org_id
-      left join stock_locations sl on sl.id = im.stock_location_id
-      left join document_lines dl on dl.id = im.document_line_id
+      left join stock_locations sl on sl.id = im.stock_location_id and sl.org_id = im.org_id
+      left join document_lines dl on dl.id = im.document_line_id and dl.org_id = im.org_id
       left join documents d on d.id = dl.document_id and d.org_id = im.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where im.org_id = ${orgId}
