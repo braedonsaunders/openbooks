@@ -737,6 +737,7 @@ async function finalizePreview(args: {
         on conflict (member_user_id, org_id) do update
           set acting_user_id = excluded.acting_user_id, is_active = true,
               updated_at = now(), updated_by = excluded.updated_by
+        where user_org_access.org_id = ${args.sandboxOrgId}
       `);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
