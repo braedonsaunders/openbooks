@@ -193,7 +193,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
            acc.number as account_number, acc.name as account_name
       from journal_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
-     where l.entry_id = ${id}
+     where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `))
 

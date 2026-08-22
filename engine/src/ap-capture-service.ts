@@ -548,7 +548,7 @@ export async function materializeCapture(input: {
         await tx.execute(sql`
           update ap_capture_rules set confirmation_count = confirmation_count + 1,
                  is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
-           where id = ${existing.rows[0].id}
+           where id = ${existing.rows[0].id} and org_id = ${input.orgId}
         `);
       } else {
         await tx.execute(sql`
@@ -572,7 +572,7 @@ export async function materializeCapture(input: {
           await tx.execute(sql`
             update ap_capture_rules set confirmation_count = confirmation_count + 1,
                    is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
-             where id = ${existing.rows[0].id}
+             where id = ${existing.rows[0].id} and org_id = ${input.orgId}
           `);
         } else {
           await tx.execute(sql`
