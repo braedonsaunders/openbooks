@@ -58,6 +58,7 @@ export function reportResultToCsv(
 export type ReportExportOptions = {
   reportName: string
   dateRangeLabel?: string
+  generatedAt?: Date
 }
 
 const MAX_COL_WIDTH = 56
@@ -75,7 +76,7 @@ export async function reportResultToXlsx(
 ): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'openbooks'
-  const now = new Date()
+  const now = opts.generatedAt ?? new Date()
   wb.created = now
   wb.modified = now
 
