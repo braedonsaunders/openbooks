@@ -668,7 +668,7 @@ export async function restoreOrgBackup(args: {
               from journal_entries entry
               left join lateral (
                 select count(*)::int line_count, coalesce(sum(amount), 0) balance
-                  from journal_lines line where line.entry_id = entry.id
+                  from journal_lines line where line.entry_id = entry.id and line.org_id = entry.org_id
               ) totals on true
              where entry.org_id = $1 and entry.status in ('posted', 'reversed')
                and (totals.line_count < 2 or totals.balance <> 0)

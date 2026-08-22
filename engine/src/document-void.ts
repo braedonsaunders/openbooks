@@ -287,7 +287,7 @@ export async function completeRequestedDocumentVoid(
             from (
               select distinct subsidiary_id
                 from journal_lines
-               where entry_id = ${entryId}
+               where entry_id = ${entryId} and org_id = ${orgId}
             ) s
            where period_module_is_closed(
              ${orgId}, ${period.rows[0].id}, ${String(entry.book_id)},

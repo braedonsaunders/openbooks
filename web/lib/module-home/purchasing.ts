@@ -74,7 +74,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
            and d.open_balance > 0
-         where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
@@ -99,7 +99,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
            and d.open_balance > 0
-         where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
         select party_id, sum(remaining) as billed_open,
                sum(remaining) filter (where due_date < ${today}) as overdue,

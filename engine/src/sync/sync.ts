@@ -1007,9 +1007,9 @@ async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
     left join lateral (
       select sum(jl.amount) filter (where jl.amount > 0) as pos,
              sum(jl.amount) filter (where jl.is_open_item) as oi
-        from journal_lines jl where jl.entry_id = d2.posted_entry_id) j on true
+        from journal_lines jl where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id) j on true
     left join lateral (
-      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id) lt on true
+      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id and l.org_id = d2.org_id) lt on true
     where d.id = d2.id and d2.id = ${docId}
   `);
   });

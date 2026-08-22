@@ -1349,7 +1349,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
                  case when quantity is null then null else -quantity end,
                  unit, null, false, custom
             from journal_lines
-           where entry_id = ${source.journal_entry_id}
+           where entry_id = ${source.journal_entry_id} and org_id = ${input.orgId}
            order by line_number
         `);
         await tx.execute(sql`
