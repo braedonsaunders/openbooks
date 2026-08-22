@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import {
   assertMovementDate,
@@ -7,6 +8,7 @@ import {
   saveEntitlementOpenings,
   type EntitlementOpeningWrite,
 } from '@openbooks/engine/src/payroll-entitlements.ts'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -51,6 +53,28 @@ interface SaveBody {
   rows?: unknown
 }
 
+/** Exact numeric(19,4) money string, empty when omitted, or 'invalid'. */
+function persistMoney(value: unknown): string | '' | 'invalid' {
+  if (value == null || value === '' || (typeof value === 'string' && value.trim() === '')) return ''
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
+
+function persistMoneyMap(raw: Record<string, unknown>): Record<string, unknown> | 'invalid' {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const persisted = persistMoney(value)
+    if (persisted === 'invalid') return 'invalid'
+    out[key] = persisted
+  }
+  return out
+}
+
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -74,9 +98,13 @@ export async function POST(req: Request) {
     if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
       return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
     }
+    const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
+    if (amounts === 'invalid') {
+      return NextResponse.json({ error: 'entitlement opening amounts must be exact decimals' }, { status: 422 })
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
-      amounts: (row.amounts ?? {}) as Record<string, unknown>,
+      amounts,
     })
   }
 

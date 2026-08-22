@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import {
   assertTaxYear,
@@ -9,6 +10,7 @@ import {
   saveOpeningBalances,
   type OpeningBalanceWrite,
 } from '@openbooks/engine/src/payroll-opening-balances.ts'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -63,6 +65,28 @@ interface SaveBody {
   rows?: unknown
 }
 
+/** Exact numeric(19,4) money string, empty when omitted, or 'invalid'. */
+function persistMoney(value: unknown): string | '' | 'invalid' {
+  if (value == null || value === '' || (typeof value === 'string' && value.trim() === '')) return ''
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+}
+
+function persistMoneyMap(raw: Record<string, unknown>): Record<string, unknown> | 'invalid' {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const persisted = persistMoney(value)
+    if (persisted === 'invalid') return 'invalid'
+    out[key] = persisted
+  }
+  return out
+}
+
 /** Component openings arrive keyed by component id (or code); values are text. */
 function componentAmounts(raw: unknown): Record<string, unknown> | undefined {
   if (raw === undefined || raw === null) return undefined
@@ -90,12 +114,28 @@ export async function POST(req: Request) {
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
       return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
     }
+    if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
+      return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
+    }
+    const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
+    if (amounts === 'invalid') {
+      return NextResponse.json({ error: 'opening-balance amounts must be exact decimals' }, { status: 422 })
+    }
+    const rawComponents = componentAmounts(row.components)
+    let components: Record<string, unknown> | undefined
+    if (rawComponents !== undefined) {
+      const persisted = persistMoneyMap(rawComponents)
+      if (persisted === 'invalid') {
+        return NextResponse.json({ error: 'opening-balance component amounts must be exact decimals' }, { status: 422 })
+      }
+      components = persisted
+    }
     rows.push({
       employeePartyId: row.employeePartyId,
-      amounts: (row.amounts ?? {}) as Record<string, unknown>,
+      amounts,
       // Absent means "this client does not speak components", which the service
       // treats as "keep what is stored". Sending {} is how the grid clears them.
-      components: componentAmounts(row.components),
+      components,
     })
   }
 
