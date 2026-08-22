@@ -878,6 +878,31 @@ export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntrie
   REPORT_ENTITIES.map((e) => [e.key, e]),
 )
 
+/** Item kinds that belong to the Inventory Features switch. The items report
+ *  entity stays available; these values must not appear as filter-picker
+ *  options while that switch is off. */
+export const ITEM_INVENTORY_KIND_VALUES = ['inventory', 'assembly', 'kit'] as const
+
+/** Apply Features-gated enum options. The entity catalog stays static. */
+export function reportEntityForFeatureState(
+  entity: ReportEntity,
+  features: { inventory: boolean },
+): ReportEntity {
+  if (features.inventory || entity.key !== 'items') return entity
+  return {
+    ...entity,
+    columns: entity.columns.map((column) => {
+      if (column.key !== 'kind' || !column.options?.length) return column
+      return {
+        ...column,
+        options: column.options.filter(
+          (option) => !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option),
+        ),
+      }
+    }),
+  }
+}
+
 export function entityColumn(entity: ReportEntity, key: string): ReportEntityColumn | null {
   return entity.columns.find((c) => c.key === key) ?? null
 }

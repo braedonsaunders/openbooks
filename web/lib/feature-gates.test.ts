@@ -583,6 +583,31 @@ test('the surfaces this test was written for are covered', () => {
     'the entity list must hide inventory item-kind chips when Inventory is off',
   )
   assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /ITEM_INVENTORY_KIND_VALUES/,
+    'items report kind options must name the inventory kinds the Features switch hides',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /function reportEntityForFeatureState[\s\S]{0,400}ITEM_INVENTORY_KIND_VALUES/,
+    'items report kind options must drop inventory/assembly/kit when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/reports/custom/FilterTree.tsx'),
+    /reportEntityForFeatureState\([\s\S]{0,120}inventory/,
+    'the report filter picker must hide inventory item kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/reports/custom/builder/[id]/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'the report builder must read the Inventory switch before offering item kinds',
+  )
+  assert.match(
+    read('app/(app)/knowledge/views/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'the view studio must read the Inventory switch before offering item kinds',
+  )
+  assert.match(
     read('../packages/customization/src/registry.ts'),
     /key: "budget_scenario"[\s\S]{0,200}featureKey: "budgets"/,
     'budget-scenario list views must follow the Budgets switch',

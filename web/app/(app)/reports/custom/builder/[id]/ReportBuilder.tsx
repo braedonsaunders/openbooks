@@ -29,6 +29,7 @@ export function ReportBuilder({
   definition,
   company,
   hiddenEntityKeys = [],
+  inventoryEnabled,
 }: {
   definition: {
     id: string
@@ -41,6 +42,7 @@ export function ReportBuilder({
   company: string
   /** Entities the user lacks permission for (e.g. payroll wages) — hidden from the picker. */
   hiddenEntityKeys?: string[]
+  inventoryEnabled: boolean
 }) {
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
@@ -326,6 +328,7 @@ export function ReportBuilder({
               <Label>{tc('labels.filters')}</Label>
               <FilterTree
                 entity={entity}
+                inventoryEnabled={inventoryEnabled}
                 group={query.filters ?? { combinator: 'and', rules: [] }}
                 onChange={(g) => patch({ filters: g.rules.length ? g : null })}
               />

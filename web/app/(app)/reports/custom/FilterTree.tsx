@@ -7,6 +7,7 @@ import {
   operatorsForKind,
   PERIOD_PRESETS,
   PERIOD_PRESET_GROUP_LABELS,
+  reportEntityForFeatureState,
   type PeriodPresetGroup,
   type ReportEntity,
   type ReportFilterOperator,
@@ -43,17 +44,20 @@ function isGroup(n: Node): n is ReportRuleGroup {
 }
 
 export function FilterTree({
-  entity,
+  entity: catalogEntity,
   group,
   onChange,
   depth = 0,
+  inventoryEnabled,
 }: {
   entity: ReportEntity
   group: ReportRuleGroup
   onChange: (g: ReportRuleGroup) => void
   depth?: number
+  inventoryEnabled: boolean
 }) {
   const t = useTranslations('reports.custom.filterTree')
+  const entity = reportEntityForFeatureState(catalogEntity, { inventory: inventoryEnabled })
   const setRule = (i: number, rule: Node) => {
     const rules = [...group.rules]
     rules[i] = rule
@@ -102,6 +106,7 @@ export function FilterTree({
               entity={entity}
               group={rule}
               depth={depth + 1}
+              inventoryEnabled={inventoryEnabled}
               onChange={(g) => setRule(i, g)}
             />
           ) : (
