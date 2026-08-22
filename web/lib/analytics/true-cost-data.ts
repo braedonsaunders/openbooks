@@ -279,7 +279,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
           sum(t.hours) as hours,
           sum(coalesce(t.cost_rate, 0) * t.hours) / nullif(sum(t.hours) filter (where t.cost_rate > 0), 0) as rate
         from time_entries t
-        left join parties p on p.id = t.employee_party_id
+        left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
         where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
         group by 1, 2
       ), dom_dept as (

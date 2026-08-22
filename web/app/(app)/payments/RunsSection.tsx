@@ -151,8 +151,8 @@ export async function RunsSection({
              count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
              coalesce(sum(i.amount) filter (where i.status <> 'cancelled'), 0) as total
         from payment_runs r
-        left join accounts a on a.id = r.bank_account_id
-        left join payment_instructions i on i.payment_run_id = r.id
+        left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
+        left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
        where r.org_id = ${orgId} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
        group by r.id, a.number, a.name
        order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
@@ -164,14 +164,14 @@ export async function RunsSection({
     db.execute(sql`
       select count(*) as n
         from payment_runs r
-        left join accounts a on a.id = r.bank_account_id
+        left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
     `) as any,
     building ? db.execute(sql`
       select p.id, p.name, p.currency, f.name as format_name,
              a.number as bank_number, a.name as bank_name
         from payment_bank_profiles p
-        join payment_formats f on f.id = p.payment_format_id and f.is_active
+        join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
         join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
                            and a.type = 'asset_bank' and a.is_active and not a.is_summary
        where p.org_id = ${orgId} and p.is_active and f.direction <> ${collections ? 'credit' : 'debit'}
@@ -211,9 +211,9 @@ export async function RunsSection({
              p.name as profile_name, f.name as format_name, f.rail,
              p.sftp_server_id as profile_sftp_server_id
         from payment_runs r
-        left join accounts a on a.id = r.bank_account_id
-        left join payment_bank_profiles p on p.id = r.payment_bank_profile_id
-        left join payment_formats f on f.id = p.payment_format_id
+        left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
+        left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
+        left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
        where r.id = ${runId} and r.org_id = ${orgId} and r.direction = ${direction}
     `)) as any
     if (run.rows[0]) {
@@ -224,10 +224,10 @@ export async function RunsSection({
                  ps.effective_on as settlement_effective_on, ps.bank_reference,
                  ps.return_code, ps.return_reason
             from payment_instructions i
-            join parties p on p.id = i.payee_party_id
+            join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
             left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-            left join payment_settlements ps on ps.payment_instruction_id = i.id
-           where i.payment_run_id = ${runId}
+            left join payment_settlements ps on ps.payment_instruction_id = i.id and ps.org_id = i.org_id
+           where i.payment_run_id = ${runId} and i.org_id = ${orgId}
            order by p.display_name
         `) as any,
         paymentRunReadiness(runId, orgId),

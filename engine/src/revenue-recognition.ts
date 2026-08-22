@@ -925,11 +925,11 @@ export async function runRevenueRecognition(
            coalesce(doc.extra_dims, '{}'::jsonb)
              || coalesce(dl.extra_dims, '{}'::jsonb) as extra_dims
       from recognition_schedule_lines l
-      join recognition_schedules s on s.id = l.schedule_id
-      join accounting_books bk on bk.id = s.book_id and bk.posts_gl and bk.is_active
-      join performance_obligations o on o.id = s.obligation_id
-      join revenue_contracts c on c.id = o.contract_id
-      join recognition_rules r on r.id = o.recognition_rule_id
+      join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+      join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.posts_gl and bk.is_active
+      join performance_obligations o on o.id = s.obligation_id and o.org_id = s.org_id
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
       left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
       left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id

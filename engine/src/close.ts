@@ -2089,7 +2089,7 @@ export async function publishCloseRun(
         tx.execute(sql`select r.*, p.name as period_name, p.starts_on, p.ends_on, b.code as book_code, b.name as book_name,
         bp.name as blueprint_name, bp.version as blueprint_version, pkg.name as package_name, pkg.reports as package_reports
         from close_runs r join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
-        join close_blueprints bp on bp.id = r.blueprint_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id
+        join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id and pkg.org_id = r.org_id
         where r.id = ${runId} and r.org_id = ${orgId}`),
         tx.execute(
           sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`,
@@ -2172,9 +2172,9 @@ export async function requestPeriodReopen(args: {
   const impact = (await db.execute<Record<string, unknown>>(sql`
     select
       (select count(*) from journal_entries where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}) as entries,
-      (select count(*) from close_signoffs s join close_runs r on r.id = s.run_id
+      (select count(*) from close_signoffs s join close_runs r on r.id = s.run_id and r.org_id = s.org_id
         where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as signoffs,
-      (select count(*) from close_task_evidence e join close_runs r on r.id = e.run_id
+      (select count(*) from close_task_evidence e join close_runs r on r.id = e.run_id and r.org_id = e.org_id
         where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`));
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into close_reopen_requests

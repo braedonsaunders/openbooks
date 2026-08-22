@@ -167,7 +167,7 @@ export async function vendorData(
       join journal_entries be on be.id = bl.entry_id and be.org_id = bl.org_id
       join journal_lines pl on pl.id = a.from_line_id
       join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
-      join accounts ba on ba.id = bl.account_id
+      join accounts ba on ba.id = bl.account_id and ba.org_id = bl.org_id
       where a.org_id = ${orgId} and bl.org_id = ${orgId} and be.org_id = ${orgId}
         and pl.org_id = ${orgId} and pe.org_id = ${orgId} and ba.org_id = ${orgId}
         and ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null

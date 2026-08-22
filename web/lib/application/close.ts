@@ -53,8 +53,8 @@ async function closeRun(context: ApplicationContext, runId: string): Promise<Clo
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
            r.scope, r.started_at as "startedAt", r.last_validated_at as "lastValidatedAt"
       from close_runs r
-      join accounting_periods p on p.id = r.period_id
-      join accounting_books b on b.id = r.book_id
+      join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+      join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${runId} and r.org_id = ${context.authz.user.orgId}
      limit 1
   `));
@@ -76,8 +76,8 @@ export async function listCloseRuns(
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
            r.scope, r.started_at as "startedAt", r.last_validated_at as "lastValidatedAt"
       from close_runs r
-      join accounting_periods p on p.id = r.period_id
-      join accounting_books b on b.id = r.book_id
+      join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+      join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
      where r.org_id = ${context.authz.user.orgId}
        ${input.status ? sql`and r.status = ${input.status}` : sql``}
      order by p.ends_on desc, r.started_at desc

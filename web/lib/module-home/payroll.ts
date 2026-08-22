@@ -119,7 +119,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
              r.pay_date::text as pay_date, r.net_total, r.employee_count
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-        left join pay_schedules sc on sc.id = r.pay_schedule_id
+        left join pay_schedules sc on sc.id = r.pay_schedule_id and sc.org_id = r.org_id
        where r.org_id = ${orgId} and r.run_status = 'committed'
        order by r.pay_date desc, r.period_end desc limit 1
     `),

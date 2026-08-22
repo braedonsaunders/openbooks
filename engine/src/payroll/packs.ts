@@ -1716,7 +1716,7 @@ export async function uninstallPayrollPack(
     db.execute<{ n: number }>(sql`
       select count(distinct l.stub_id)::int as n
         from pay_stub_lines l
-        join pay_components c on c.id = l.component_id
+        join pay_components c on c.id = l.component_id and c.org_id = l.org_id
        where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`),
   ]));
 

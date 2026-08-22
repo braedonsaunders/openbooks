@@ -1779,7 +1779,7 @@ async function calculateStub(
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, c.*
       from employee_pay_components a
-      join pay_components c on c.id = a.component_id
+      join pay_components c on c.id = a.component_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
        and a.is_active and c.is_active and c.system_key is null
        and (c.country is null or c.country = ${country})
@@ -2071,7 +2071,7 @@ async function calculateStub(
   const adjustments = (await tx.execute<Record<string, unknown>>(sql`
     select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*
       from pay_run_adjustments a
-      join pay_components c on c.id = a.component_id
+      join pay_components c on c.id = a.component_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
        and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
      order by c.sequence, a.created_at
@@ -3116,8 +3116,8 @@ async function payRunGlLegs(
       select s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.expense_account_id, c.liability_account_id, s.net_pay
         from pay_stub_lines l
-        join pay_stubs s on s.id = l.stub_id
-        left join pay_components c on c.id = l.component_id
+        join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+        left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
        where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        order by s.employee_party_id, l.sequence
     `));
@@ -3255,8 +3255,8 @@ export async function commitPayRun(input: {
          and exists (
            select 1
              from pay_stub_lines l
-             join pay_stubs s on s.id = l.stub_id
-             join pay_components c on c.id = l.component_id
+             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+             join pay_components c on c.id = l.component_id and c.org_id = l.org_id
             where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
               and s.employee_party_id = te.employee_party_id
               and c.system_key in ('base_pay', 'overtime')

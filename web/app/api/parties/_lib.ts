@@ -36,18 +36,18 @@ export async function loadParty(id: string, orgId: string): Promise<PartyPayload
       select r.*, a.name as ar_account_name, a.number as ar_account_number,
              tc.code as tax_code, sp.display_name as sales_rep_name
         from customer_roles r
-        left join accounts a on a.id = r.ar_account_id
-        left join tax_codes tc on tc.id = r.tax_code_id
-        left join parties sp on sp.id = r.sales_rep_id
+        left join accounts a on a.id = r.ar_account_id and a.org_id = r.org_id
+        left join tax_codes tc on tc.id = r.tax_code_id and tc.org_id = r.org_id
+        left join parties sp on sp.id = r.sales_rep_id and sp.org_id = r.org_id
        where r.party_id = ${id} and r.org_id = ${orgId}`),
     db.execute<Record<string, unknown>>(sql`
       select r.*, ap.name as ap_account_name, ap.number as ap_account_number,
              ex.name as expense_account_name, ex.number as expense_account_number,
              tc.code as tax_code
         from vendor_roles r
-        left join accounts ap on ap.id = r.ap_account_id
-        left join accounts ex on ex.id = r.default_expense_account_id
-        left join tax_codes tc on tc.id = r.tax_code_id
+        left join accounts ap on ap.id = r.ap_account_id and ap.org_id = r.org_id
+        left join accounts ex on ex.id = r.default_expense_account_id and ex.org_id = r.org_id
+        left join tax_codes tc on tc.id = r.tax_code_id and tc.org_id = r.org_id
        where r.party_id = ${id} and r.org_id = ${orgId}`),
     db.execute<Record<string, unknown>>(sql`select * from employee_roles where party_id = ${id} and org_id = ${orgId}`),
     db.execute<Record<string, unknown>>(sql`

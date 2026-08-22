@@ -156,11 +156,11 @@ export async function CloseSetupPage({
              )) filter (where l.id is not null), '{}'::jsonb) as locks,
              coalesce(j.entries, 0) as entries
         from accounting_periods p
-        join fiscal_calendars c on c.id = p.fiscal_calendar_id
+        join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
         left join period_locks l on l.period_id = p.id and l.org_id = p.org_id and l.subsidiary_id is null
           and l.book_id = ${selectedBookId || null}
         left join lateral (
-          select count(*) as entries from journal_entries e where e.period_id = p.id
+          select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id
         ) j on true
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
          ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
@@ -168,7 +168,7 @@ export async function CloseSetupPage({
        order by p.period_number
        limit ${PER_PAGE} offset ${offset}`),
     db.execute(sql`
-      select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id
+      select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
          ${q ? sql`and (p.name ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
     db.execute(sql`
@@ -230,8 +230,8 @@ export async function CloseSetupPage({
       select r.*, p.name as period_name, b.name as book_name,
              requester.name as requester_name, approver.name as approver_name
         from close_reopen_requests r
-        join accounting_periods p on p.id = r.period_id
-        join accounting_books b on b.id = r.book_id
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+        join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join users requester on requester.id = r.requested_by
         left join users approver on approver.id = r.approved_by
        where r.org_id = ${orgId}
@@ -241,8 +241,8 @@ export async function CloseSetupPage({
     db.execute(sql`
       select count(*) as count
         from close_reopen_requests r
-        join accounting_periods p on p.id = r.period_id
-        join accounting_books b on b.id = r.book_id
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+        join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join users requester on requester.id = r.requested_by
        where r.org_id = ${orgId}
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),

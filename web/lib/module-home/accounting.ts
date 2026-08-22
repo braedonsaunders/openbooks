@@ -41,7 +41,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
              coalesce(t.total, 0) as tasks_total,
              coalesce(t.done, 0) as tasks_done
         from close_runs r
-        join accounting_periods p on p.id = r.period_id
+        join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
         left join lateral (
           select count(*) as total,
                  count(*) filter (where ct.status in ('complete', 'approved')) as done

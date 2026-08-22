@@ -69,8 +69,8 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
     `),
     db.execute(sql`
       select count(*)::int as n from ap_capture_items ci
-      left join parties vendor on vendor.id = ci.vendor_candidate_id
-      left join documents po on po.id = ci.purchase_order_id
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
       where ${where}
     `),
     db.execute(sql`

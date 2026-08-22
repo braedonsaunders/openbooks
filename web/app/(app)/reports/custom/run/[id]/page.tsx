@@ -90,7 +90,7 @@ export default async function ReportRunPage({
       select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-        left join pay_schedules ps on ps.id = r.pay_schedule_id
+        left join pay_schedules ps on ps.id = r.pay_schedule_id and ps.org_id = r.org_id
        where r.org_id = ${authz.user.orgId}
        order by r.period_end desc
        limit 27

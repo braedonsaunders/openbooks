@@ -34,7 +34,7 @@ export async function resolveInvoicingPreference(orgId: string, projectId: strin
   const type = await loadProjectType(orgId, projectId)
   const row = (await db.execute<{ project_pref: unknown; customer_pref: unknown }>(sql`
     select p.invoicing_preference as project_pref, cust.invoicing_preference as customer_pref
-      from projects p left join parties cust on cust.id = p.customer_id
+      from projects p left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
   `))
   const custPref = pref(row.rows[0]?.customer_pref)

@@ -146,7 +146,7 @@ export const employeeWhere = (
 
 /** Posted actual cost per project (expense/cogs journal lines), lateral-joined. */
 export const PROJECT_BASE_JOINS = sql`
-  left join parties cust on cust.id = p.customer_id
+  left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
   left join lateral (
     select coalesce(sum(l.amount), 0) as cost
       from journal_lines l
@@ -438,7 +438,7 @@ export const ACTIVITY_BASE_JOINS = sql`
   left join users u on u.id = a.assigned_user_id
   left join lateral (
     select p.id, p.display_name as name
-      from crm_activity_links l join parties p on p.id = l.subject_id
+      from crm_activity_links l join parties p on p.id = l.subject_id and p.org_id = l.org_id
      where l.activity_id = a.id and l.subject_kind = 'account' and l.org_id = a.org_id
      order by p.display_name limit 1
   ) customer on true`
@@ -593,7 +593,7 @@ export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 
  */
 export function accountBaseJoins(today: string): SQL {
   return sql`
-  left join accounts parent on parent.id = a.parent_id
+  left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
   left join lateral (
     with recursive descendants(id) as (
       select a.id

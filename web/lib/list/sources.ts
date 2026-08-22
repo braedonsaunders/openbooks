@@ -203,8 +203,8 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: ['pay_run'],
     drawerParam: 'run',
     dateRange: true,
-    joins: sql`join pay_runs pr on pr.document_id = d.id
-               left join pay_schedules ps on ps.id = pr.pay_schedule_id`,
+    joins: sql`join pay_runs pr on pr.document_id = d.id and pr.org_id = d.org_id
+               left join pay_schedules ps on ps.id = pr.pay_schedule_id and ps.org_id = pr.org_id`,
     builtInExpr: {
       document_number: sql`d.document_number`,
       schedule_name: sql`ps.name`,

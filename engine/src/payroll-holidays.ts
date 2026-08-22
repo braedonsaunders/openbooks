@@ -1143,7 +1143,7 @@ async function lookbackEarnings(
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-      left join pay_components c on c.id = l.component_id
+      left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and l.kind = 'earning'
        and s.pay_run_document_id <> ${input.excludeDocumentId}
@@ -1346,7 +1346,7 @@ async function loadHolidayDayEvidence(
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
       left join pay_stub_lines l on l.stub_id = s.id
-      left join pay_components c on c.id = l.component_id
+      left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}

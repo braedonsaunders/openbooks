@@ -108,9 +108,9 @@ export async function payrollRemittanceSummary(
            c.liability_account_id, ${filingAccount} as filing_account_id, s.province,
            sum(l.amount) as amount
       from pay_stub_lines l
-      join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-      join pay_components c on c.id = l.component_id
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components c on c.id = l.component_id and c.org_id = l.org_id
       left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}

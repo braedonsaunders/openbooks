@@ -162,7 +162,7 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
     with committed as (
       select s.*
         from pay_stubs s
-        join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
         join employee_payroll_profiles prof
           on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
        where s.org_id = ${orgId} and s.tax_year = ${taxYear}
@@ -177,15 +177,15 @@ export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[
            sum((c.factors->>'EI')::numeric) as ei,
            sum(coalesce((c.factors->>'QPIP')::numeric, 0)) as qpip,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'earning'
                   and coalesce(pc.taxable, true))) as taxable_income,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'deduction'
                   and pc.system_key = 'qc_income_tax')) as qc_income_tax,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
-                 join pay_components pc on pc.id = l.component_id
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.stub_id = c.id and l.kind = 'deduction'
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
@@ -251,8 +251,8 @@ export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1Sum
       sum(case when pc.system_key = 'qpip' then l.amount else 0 end) as employer_qpip
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-      join pay_components pc on pc.id = l.component_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
   `));

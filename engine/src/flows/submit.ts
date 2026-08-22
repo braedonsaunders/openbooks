@@ -46,7 +46,7 @@ export async function submitForApproval(
   const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
     select source.document_number
       from document_links link
-      join documents source on source.id = link.to_document_id
+      join documents source on source.id = link.to_document_id and source.org_id = link.org_id
      where link.from_document_id = ${targetId}
        and link.link_type = 'reverses'
        and source.status <> 'voided'

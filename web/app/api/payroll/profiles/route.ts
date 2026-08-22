@@ -124,8 +124,8 @@ export async function GET(req: Request) {
                prof.stub_delivery, prof.payment_method
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-          left join pay_schedules s on s.id = prof.pay_schedule_id
-          left join payroll_filing_accounts fa on fa.id = prof.filing_account_id
+          left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
+          left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
          where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`),
       db.execute(sql`
         select id, name, frequency from pay_schedules
@@ -154,8 +154,8 @@ export async function GET(req: Request) {
            prof.stub_delivery, prof.payment_method
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-      left join pay_schedules s on s.id = prof.pay_schedule_id
-      left join payroll_filing_accounts fa on fa.id = prof.filing_account_id
+      left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
+      left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
      where prof.org_id = ${gate.user.orgId}
      order by p.display_name`))
   return NextResponse.json({

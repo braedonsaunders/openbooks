@@ -94,7 +94,7 @@ export async function resolveSubsidiaryView(
     const r = (await db.execute<{ from: string; avg: string; cur: string; hist: string }>(sql`
       select cf.from_currency as "from", cf.average_rate as avg, cf.current_rate as cur, cf.historical_rate as hist
         from consolidated_fx_rates cf
-        join accounting_periods p on p.id = cf.period_id
+        join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
        where cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
          and p.starts_on <= ${periodTo} and p.ends_on >= ${periodTo}`));
