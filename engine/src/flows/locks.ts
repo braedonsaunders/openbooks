@@ -89,10 +89,18 @@ export async function lockRecord(args: {
     });
 }
 
-export async function unlockRecord(subjectKind: string, subjectId: string): Promise<void> {
+export async function unlockRecord(args: {
+  orgId: string;
+  subjectKind: string;
+  subjectId: string;
+}): Promise<void> {
   await db
     .delete(schema.flowLocks)
     .where(
-      and(eq(schema.flowLocks.subjectKind, subjectKind), eq(schema.flowLocks.subjectId, subjectId)),
+      and(
+        eq(schema.flowLocks.orgId, args.orgId),
+        eq(schema.flowLocks.subjectKind, args.subjectKind),
+        eq(schema.flowLocks.subjectId, args.subjectId),
+      ),
     );
 }
