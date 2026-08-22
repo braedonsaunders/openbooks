@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, compileRuleGroup } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, bindReportFromAsOf, compileRuleGroup } from '@openbooks/reports'
 import { getSource } from './catalog'
 import { fieldRef, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -322,7 +322,7 @@ export function compileInsightQuery(
 
   const sql =
     `select ${selects.join(', ')}\n` +
-    `from ${source.from}\n` +
+    `from ${bindReportFromAsOf(source.from, ctx.asOf, (value) => bind(ctx, value))}\n` +
     `where ${wheres.join(' and ')}` +
     groupBy +
     orderBy +

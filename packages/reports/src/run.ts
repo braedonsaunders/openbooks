@@ -100,6 +100,7 @@ export async function runCustomQuery(
   const compiled = compileCustomQuery(entity, q, opts.orgId, {
     maxRows: opts.maxRows,
     fiscalStartMonth: opts.fiscalStartMonth,
+    asOf: opts.asOf,
   })
   const { rows } = await client.query(compiled.text, compiled.values)
 

@@ -107,6 +107,21 @@ export type ReportEntity = {
   latestOrderExpr?: string
 }
 
+/** Sentinel in static FROM SQL for the org-calendar as-of day (entitlement
+ *  limit effective-dating). Compilers replace every occurrence with one bound
+ *  parameter; the token is never sent to Postgres. */
+export const REPORT_AS_OF = '__report_as_of__'
+
+export function bindReportFromAsOf(
+  from: string,
+  asOf: string | undefined,
+  bind: (value: string) => string,
+): string {
+  if (!from.includes(REPORT_AS_OF)) return from
+  if (!asOf) throw new Error('report entity FROM requires asOf')
+  return from.split(REPORT_AS_OF).join(bind(asOf))
+}
+
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'ledger_lines',
@@ -755,8 +770,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
                     ELSE 'plan default' END AS scope
           FROM entitlement_plan_limits lim
          WHERE lim.org_id = bal.org_id AND lim.plan_id = bal.plan_id AND lim.is_active
-           AND lim.effective_from <= CURRENT_DATE
-           AND (lim.effective_to IS NULL OR lim.effective_to >= CURRENT_DATE)
+           AND lim.effective_from <= ${REPORT_AS_OF}
+           AND (lim.effective_to IS NULL OR lim.effective_to >= ${REPORT_AS_OF})
            AND (lim.employee_party_id = bal.employee_party_id
                 OR (lim.job_title IS NOT NULL AND lower(lim.job_title) = lower(er.job_title))
                 OR (lim.trade_id IS NOT NULL AND lim.trade_id = er.trade_id)

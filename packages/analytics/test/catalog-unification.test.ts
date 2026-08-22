@@ -96,6 +96,18 @@ test("an entity's implicit baseFilter is applied to insight queries too", () => 
   assert.equal(compiled.params[0], 'org-1')
 })
 
+test('entitlement_balances as-of binds the org business day, never current_date', () => {
+  const compiled = compileInsightQuery(
+    { source: 'entitlement_balances', measures: [{ agg: 'count' }] },
+    'org-1',
+    {},
+    '2026-08-22',
+  )
+  assert.doesNotMatch(compiled.sql, /current_date/i)
+  assert.doesNotMatch(compiled.sql, /__report_as_of__/)
+  assert.ok(compiled.params.includes('2026-08-22'))
+})
+
 test('relative date filters bind the org business day, never current_date', () => {
   const compiled = compileInsightQuery(
     {

@@ -10,7 +10,7 @@
 // This module only COMPILES (query plan → { text, values }); execution and
 // result shaping live in run.ts so the compiler stays pure and testable.
 
-import { columnRef, entityColumn, type ReportEntity, type ReportEntityColumn } from './entities'
+import { bindReportFromAsOf, columnRef, entityColumn, type ReportEntity, type ReportEntityColumn } from './entities'
 import { compileCustomFilters, compileRuleGroup, SqlParams } from './filters'
 import {
   REPORT_AGG_FNS,
@@ -47,6 +47,9 @@ export type CompileCustomQueryOpts = {
   /** Org fiscal-year start month (1–12) for the `fiscal_*` temporal bins. The
    *  engine stays DB-free — the caller supplies it. Defaults to 1 (calendar). */
   fiscalStartMonth?: number
+  /** Org business day (YYYY-MM-DD). Required when the entity FROM uses the
+   *  as-of sentinel — bound as a parameter, never CURRENT_DATE. */
+  asOf?: string
 }
 
 /**
@@ -94,6 +97,7 @@ function compileRows(
 
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, orgId, params)
+  const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
 
@@ -115,7 +119,7 @@ function compileRows(
 
   const text = [
     `SELECT ${selectList}`,
-    `FROM ${entity.from}`,
+    `FROM ${from}`,
     `WHERE ${whereParts.join(' AND ')}`,
     sortSpecs.length ? `ORDER BY ${sortSpecs.join(', ')}` : '',
     `LIMIT ${limit}`,
@@ -157,6 +161,7 @@ function compileSummarize(
 
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, orgId, params)
+  const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
 
@@ -188,7 +193,7 @@ function compileSummarize(
 
   const text = [
     `SELECT ${[...dimSelect, ...measSelect].join(', ')}`,
-    `FROM ${entity.from}`,
+    `FROM ${from}`,
     `WHERE ${whereParts.join(' AND ')}`,
     breakouts.length > 0 ? `GROUP BY ${breakouts.map((_, i) => i + 1).join(', ')}` : '',
     orderSql,
