@@ -378,7 +378,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
     total_deductions: money(deductionsTotal),
     net_pay: money(net),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    printed_date: fmtDate(await businessToday(orgId), locale),
     earnings: byKind('earning'),
     deductions: byKind('deduction'),
   }
