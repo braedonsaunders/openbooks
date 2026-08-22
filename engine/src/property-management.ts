@@ -1138,6 +1138,7 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
   const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
   const expenseAccountIds = [...new Set(input.expenseAccountIds)];
+  const budgetAmount = exactMoney(input.budgetAmount, "CAM budget");
   if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
   if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
   return db.transaction(async (tx) => {
@@ -1147,13 +1148,13 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     const result = (await tx.execute<{ id: string; propertyId: string }>(sql`
       update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
-        allocation_basis=${input.allocationBasis},budget_amount=${normalizeMoney(input.budgetAmount)},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
+        allocation_basis=${input.allocationBasis},budget_amount=${budgetAmount},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
         updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') returning id,property_id as "propertyId"
     `));
     const row = result.rows[0];
     if (!row) throw new PropertyManagementError("Editable CAM pool not found");
-    await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, { name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount: normalizeMoney(input.budgetAmount), expenseAccountIds });
+    await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, { name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount, expenseAccountIds });
     return { id: row.id };
   });
 }
