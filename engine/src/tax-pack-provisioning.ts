@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "./db.ts";
+import { normalizeMoney } from "./money.ts";
 import { installTaxReturnPacks, taxReturnPack, TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 import {
   COUNTRY_TAX_PACKS,
@@ -10,6 +11,21 @@ import {
   resolveJurisdictionSelection,
 } from "./country-tax-packs/index.ts";
 import type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxPackDefinition } from "./country-tax-packs/index.ts";
+
+/** Persist a pack JSON rate through ledger money — never as an IEEE-754 number. */
+function persistPackRatePercent(ratePercent: string | number): string {
+  return normalizeMoney(ratePercent);
+}
+
+function packRateSchedule(
+  rates: ReadonlyArray<{ ratePercent: string | number; effectiveFrom: string; effectiveTo?: string | null }>,
+): Array<{ ratePercent: string; effectiveFrom: string; effectiveTo: string | null }> {
+  return rates.map((rate) => ({
+    ratePercent: persistPackRatePercent(rate.ratePercent),
+    effectiveFrom: rate.effectiveFrom,
+    effectiveTo: rate.effectiveTo ?? null,
+  }));
+}
 
 /**
  * One-click country provisioning for INDIRECT tax (sales tax / GST / VAT).
@@ -103,16 +119,8 @@ async function assertTaxCodeMatchesPack(
               code.region, code.applies_to, code.is_active
   `));
   const actual = result.rows[0];
-  const expectedRates = (args.definition.rates ?? []).map((rate) => ({
-    ratePercent: String(rate.ratePercent),
-    effectiveFrom: rate.effectiveFrom,
-    effectiveTo: rate.effectiveTo ?? null,
-  }));
-  const actualRates = (actual?.rates ?? []).map((rate) => ({
-    ratePercent: String(Number(rate.ratePercent)),
-    effectiveFrom: rate.effectiveFrom,
-    effectiveTo: rate.effectiveTo,
-  }));
+  const expectedRates = packRateSchedule(args.definition.rates ?? []);
+  const actualRates = packRateSchedule(actual?.rates ?? []);
   const metadataMatches = actual
     && actual.name === args.definition.name
     && actual.jurisdictionId === args.jurisdictionId
@@ -201,16 +209,8 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
   ) {
     return null;
   }
-  const expectedRates = (args.definition.rates ?? []).map((rate) => ({
-    ratePercent: String(rate.ratePercent),
-    effectiveFrom: rate.effectiveFrom,
-    effectiveTo: rate.effectiveTo ?? null,
-  }));
-  const actualRates = (actual.rates ?? []).map((rate) => ({
-    ratePercent: String(Number(rate.ratePercent)),
-    effectiveFrom: rate.effectiveFrom,
-    effectiveTo: rate.effectiveTo,
-  }));
+  const expectedRates = packRateSchedule(args.definition.rates ?? []);
+  const actualRates = packRateSchedule(actual.rates ?? []);
   if (JSON.stringify(actualRates) === JSON.stringify(expectedRates)) return null;
 
   const used = (await args.tx.execute(sql`
@@ -236,7 +236,7 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
     const insertedRate = (await args.tx.execute<{ id: string }>(sql`
       insert into tax_rates
         (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
-      values (${args.orgId}, ${args.codeId}, ${rate.ratePercent}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${args.actorId}, ${args.actorId})
+      values (${args.orgId}, ${args.codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${args.actorId}, ${args.actorId})
       returning id`));
     await args.tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -528,7 +528,7 @@ async function provisionTaxPacksInTenant(
           const insertedRate = (await tx.execute<{ id: string }>(sql`
             insert into tax_rates
               (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
-            values (${orgId}, ${codeId}, ${rate.ratePercent}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
+            values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
             returning id`));
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -670,7 +670,7 @@ async function provisionTaxPacksInTenant(
             const insertedRate = (await tx.execute<{ id: string }>(sql`
               insert into tax_rates
                 (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
-              values (${orgId}, ${codeId}, ${rate.ratePercent}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
+              values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
               returning id`));
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
