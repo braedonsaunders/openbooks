@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { PageContainer } from '../../../components/page-layout'
 import { requirePermission } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { AnalyticsHub, type AnalyticsGroup } from './AnalyticsHub'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +13,11 @@ export async function generateMetadata() {
 
 export default async function AnalyticsPage() {
   const t = await getTranslations('analytics.hub')
-  await requirePermission('reports.read')
+  const authz = await requirePermission('reports.read')
+  const [projectsOn, timeOn] = await Promise.all([
+    isFeatureEnabled(authz.user.orgId, 'projects'),
+    isFeatureEnabled(authz.user.orgId, 'timeTracking'),
+  ])
 
   const card = (key: string, href: string, icon: string, planned?: boolean): AnalyticsGroup['cards'][number] => ({
     href,
@@ -29,7 +34,7 @@ export default async function AnalyticsPage() {
       accent: 'teal',
       cards: [
         card('financialHealth', '/analytics/financial-health', 'Activity'),
-        card('trueCost', '/analytics/true-cost', 'Coins'),
+        ...(projectsOn ? [card('trueCost', '/analytics/true-cost', 'Coins')] : []),
       ],
     },
     {
@@ -38,7 +43,7 @@ export default async function AnalyticsPage() {
       accent: 'sky',
       cards: [
         card('cashflow', '/analytics/cashflow', 'Wallet'),
-        card('utilization', '/analytics/utilization', 'Clock'),
+        ...(timeOn ? [card('utilization', '/analytics/utilization', 'Clock')] : []),
       ],
     },
     {

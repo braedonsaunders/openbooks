@@ -100,6 +100,12 @@ export async function GET(req: Request) {
     })
     })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'render failed' }, { status: 422 })
+    const message = err instanceof Error ? err.message : 'render failed'
+    // A stored plan survives a Features toggle; a fresh artifact must not.
+    // 404 (not 422) so the scheduler treats this as refuse, not a bad plan.
+    if (message.endsWith('feature is disabled')) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    return NextResponse.json({ error: message }, { status: 422 })
   }
 }

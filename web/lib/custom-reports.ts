@@ -17,6 +17,8 @@ import { reportResultToCsv } from '@openbooks/office'
 import { reportCsvOptions, reportRunLabels } from './report-labels'
 import { resolvePeriod } from './periods'
 import { fiscalStartMonth } from './fiscal'
+import { isFeatureEnabled } from './features'
+import { reportEntityFeatureKey } from './report-authz'
 import { ensureReportDefinitions } from '@openbooks/engine/src/ensure-report-definitions.ts'
 
 /**
@@ -178,6 +180,12 @@ export function mergeReportFilters(
  * Shaped display strings (headings, group titles, summary labels) come out in
  * the request locale; pass `labels` to override (e.g. a future scheduled
  * pipeline pinning the org default outside a request).
+ *
+ * Optional-module entities follow the Features switch here — not only at the
+ * interactive list/run/export routes. Scheduled and internal renders have no
+ * session, so a stored plan must be refused at the executor or it keeps
+ * producing output after the module is switched off. The definition, schedule,
+ * and prior run history stay put; this only withholds a fresh result.
  */
 export async function executeReport(
   orgId: string,
@@ -185,6 +193,10 @@ export async function executeReport(
   maxRows: number = REPORT_MAX_ROWS,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
+  const featureKey = reportEntityFeatureKey(query)
+  if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
+    throw new Error(`${featureKey} feature is disabled`)
+  }
   const resolved = await resolvePeriodPresets(query, orgId)
   return runCustomQuery(pool, resolved, {
     orgId,

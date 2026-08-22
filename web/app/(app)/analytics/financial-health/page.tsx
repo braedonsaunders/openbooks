@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { AnalyticsHeader } from '../_ui/AnalyticsHeader'
 import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { RATIO_DEFS } from '../../../../lib/analytics/financial-health'
@@ -28,7 +29,10 @@ export default async function FinancialHealthPage({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const data = await healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId)
+  const [data, budgetsEnabled] = await Promise.all([
+    healthData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'budgets'),
+  ])
 
   return (
     <ListPageLayout
@@ -38,7 +42,7 @@ export default async function FinancialHealthPage({
         </AnalyticsHeader>
       }
     >
-      <FinancialHealthView data={data} defs={RATIO_DEFS} />
+      <FinancialHealthView data={data} defs={RATIO_DEFS} budgetsEnabled={budgetsEnabled} />
     </ListPageLayout>
   )
 }

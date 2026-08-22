@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../lib/features";
 import { ANALYTICS_CONFIG, mergeConfig, type AnalyticsDashboard } from "../../../../../lib/analytics/config";
 
 export const runtime = "nodejs";
+
+/** Dashboards that disappear when their parent Features switch is off. */
+const DASHBOARD_FEATURE: Partial<Record<string, string>> = {
+  utilization: "timeTracking",
+};
 
 /**
  * Per-org analytics dashboard settings, stored under
@@ -13,10 +19,20 @@ export const runtime = "nodejs";
  * keys dropped, values clamped — see lib/analytics/config.ts). Editing is
  * gated on the same permission as the Setup workspace.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
-  const gate = await guardPermission("reports.read");
+async function gateDashboard(permission: string, dashboard: string) {
+  const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
+  const featureKey = DASHBOARD_FEATURE[dashboard];
+  if (featureKey && !(await isFeatureEnabled(gate.user.orgId, featureKey))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  return gate;
+}
+
+export async function GET(_req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
   const { dashboard } = await params;
+  const gate = await gateDashboard("reports.read", dashboard);
+  if (gate instanceof NextResponse) return gate;
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 
@@ -31,9 +47,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ dashboa
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
   const { dashboard } = await params;
+  const gate = await gateDashboard("admin.setup.manage", dashboard);
+  if (gate instanceof NextResponse) return gate;
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 

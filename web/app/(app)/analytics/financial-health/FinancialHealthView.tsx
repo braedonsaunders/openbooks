@@ -27,12 +27,15 @@ type Tab = (typeof TABS)[number]
 export function FinancialHealthView({
   data,
   defs,
+  budgetsEnabled = true,
 }: {
   data: HealthData
   defs: Record<string, RatioDef>
+  budgetsEnabled?: boolean
 }) {
   const fmtMoney = useAnalyticsMoney()
   const t = useTranslations('analytics.financialHealth')
+  const tabs = budgetsEnabled ? TABS : TABS.filter((k) => k !== 'budget')
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const f = data.figures
@@ -79,7 +82,7 @@ export function FinancialHealthView({
       {/* Tab strip */}
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {TABS.map((k) => (
+          {tabs.map((k) => (
             <button
               key={k}
               type="button"
@@ -106,7 +109,7 @@ export function FinancialHealthView({
         {tab === 'segments' ? <SegmentsTab data={data} /> : null}
         {tab === 'forecast' ? <ForecastTab data={data} /> : null}
         {tab === 'scenarios' ? <ScenariosTab data={data} /> : null}
-        {tab === 'budget' ? <BudgetTab data={data} /> : null}
+        {tab === 'budget' && budgetsEnabled ? <BudgetTab data={data} /> : null}
         {tab === 'drivers' ? <DriversTab data={data} onDrill={openAccount} /> : null}
         {tab === 'ratios' ? <RatiosTab data={data} defs={defs} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
