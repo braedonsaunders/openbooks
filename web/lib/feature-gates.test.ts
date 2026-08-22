@@ -348,6 +348,16 @@ test('the surfaces this test was written for are covered', () => {
     /status: 404/,
     'CRM estimate must 404 — not mint a quote — when Orders is off',
   )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/estimate/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'CRM estimate must name the inventory kinds the Features switch 404s',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/estimate/route.ts'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)[\s\S]{0,400}INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'CRM estimate must 404 — not copy inventory/assembly/kit onto a quote — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(

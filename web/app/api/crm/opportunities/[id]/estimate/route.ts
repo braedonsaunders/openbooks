@@ -5,9 +5,12 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { isDocKindEnabled } from '../../../../../../lib/documents'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('ar.create', 'crm')
@@ -18,6 +21,18 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Opportunity lines stay as stored. Turning Inventory off must 404 a new
+  // estimate that would copy inventory / assembly / kit onto a quote.
+  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+    const lineItems = (await db.execute<{ kind: string }>(sql`
+      select i.kind
+        from crm_opportunity_lines line
+        join items i on i.id = line.item_id and i.org_id = line.org_id
+       where line.org_id = ${user.orgId} and line.opportunity_id = ${id}`))
+    if (lineItems.rows.some((row) => INVENTORY_ITEM_KINDS.has(row.kind))) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
   const today = await businessToday(user.orgId)
   const result = await db.transaction(async (tx) => {
     const opportunity = (await tx.execute<any>(sql`
