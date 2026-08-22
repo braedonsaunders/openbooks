@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from './exact-decimal'
 import { computeLineTaxes } from '@openbooks/engine/src/tax.ts'
 import {
   loadTaxComponentConfig,
@@ -26,6 +27,16 @@ export class WipBillingError extends Error {
   constructor(message: string, readonly status = 422) {
     super(message)
     this.name = 'WipBillingError'
+  }
+}
+
+function persistMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new WipBillingError(`${label} must be an exact decimal`)
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new WipBillingError(`${label} must be an exact decimal`)
   }
 }
 
@@ -616,7 +627,7 @@ export async function updatePrebillLine(
   lineId: string,
   input: UpdatePrebillLineInput,
 ) {
-  const proposed = normalizeMoney(input.proposedBillAmount)
+  const proposed = persistMoney(input.proposedBillAmount, 'Proposed bill amount')
   const evidence = evidenceList(input.adjustmentEvidence)
   return db.transaction(async (tx) => {
     const current = (await tx.execute<{ proposed: string; original: string; status: PrebillStatus; project_id: string; period_end: string; custom: { policy?: { totalPriceMethod?: string } }; other_proposed: string }>(sql`

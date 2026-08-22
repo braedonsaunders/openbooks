@@ -38,6 +38,9 @@ test('WIP service reserves eligible work and governs supported billing adjustmen
   assert.match(service, /A reason is required for a write-up or write-down/)
   assert.match(service, /Evidence is required for a write-up or write-down/)
   assert.match(service, /Every write-up and write-down requires a reason and evidence/)
+  assert.match(service, /canonicalDecimal\(value, 4\)/)
+  assert.match(service, /normalizeMoney\(exact\)/)
+  assert.match(service, /persistMoney\(input\.proposedBillAmount/)
 })
 
 test('WIP conversion is retry-safe, rejects held sources, and stamps exact native provenance', () => {
