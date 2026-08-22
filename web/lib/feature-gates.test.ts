@@ -1197,6 +1197,16 @@ test('the surfaces this test was written for are covered', () => {
     'REST/MCP items catalog must hide inventory/assembly/kit kind values when Inventory is off',
   )
   assert.match(
+    read('lib/api/registry-data.ts'),
+    /ITEM_EQUIPMENT_KINDS/,
+    'REST/MCP items catalog must name the equipment kinds the Features switch hides',
+  )
+  assert.match(
+    read('lib/api/schema-registry.ts'),
+    /equipmentOn[\s\S]{0,250}ITEM_EQUIPMENT_KINDS/,
+    'REST/MCP items catalog must hide equipment_charge kind values when Equipment is off',
+  )
+  assert.match(
     read('lib/api/writers.ts'),
     /refuseDisabledItemTimeTracking\(/,
     'REST/MCP item writes must refuse show-on-timesheet when Time Tracking is off — existing flags stay',

@@ -208,9 +208,10 @@ export const ITEM_REVENUE_RECOGNITION_COLUMNS = new Set<string>([
 export const ITEM_TIME_TRACKING_COLUMNS = new Set<string>(["show_on_timesheet"]);
 
 /**
- * Item `kind` values. The items catalog stays available when Inventory is
- * off; inventory / assembly / kit must still disappear from REST/MCP so the
- * catalog does not advertise writes the Features switch already 404s.
+ * Item `kind` values. The items catalog stays available when Inventory or
+ * Equipment is off; inventory / assembly / kit and equipment_charge must
+ * still disappear from REST/MCP so the catalog does not advertise writes
+ * the Features switch already 404s. Existing items stay on the row.
  */
 export const ITEM_KIND_VALUES = [
   "service",
@@ -226,6 +227,8 @@ export const ITEM_KIND_VALUES = [
 ] as const;
 
 export const ITEM_INVENTORY_KINDS = new Set<string>(["inventory", "assembly", "kit"]);
+
+export const ITEM_EQUIPMENT_KINDS = new Set<string>(["equipment_charge"]);
 
 /**
  * Columns that are never writable through the API — identity, tenant scope,

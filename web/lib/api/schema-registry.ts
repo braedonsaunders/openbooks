@@ -6,6 +6,7 @@ import { normalizeSectionsInput } from "../record-schema";
 import {
   API_RECORD_TYPES,
   RECORD_TYPE_BY_KEY,
+  ITEM_EQUIPMENT_KINDS,
   ITEM_INVENTORY_KINDS,
   ITEM_KIND_VALUES,
   ITEM_REVENUE_RECOGNITION_COLUMNS,
@@ -109,7 +110,10 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   const timeTrackingOn = await isFeatureEnabled(orgId, "timeTracking");
   const multiCurrencyOn = await isFeatureEnabled(orgId, "multiCurrency");
   const inventoryOn = await isFeatureEnabled(orgId, "inventory");
-  const itemKinds = ITEM_KIND_VALUES.filter((kind) => inventoryOn || !ITEM_INVENTORY_KINDS.has(kind));
+  const equipmentOn = await isFeatureEnabled(orgId, "equipment");
+  const itemKinds = ITEM_KIND_VALUES.filter((kind) =>
+    (inventoryOn || !ITEM_INVENTORY_KINDS.has(kind)) &&
+    (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(kind)));
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
     const physical = (byTable.get(t.table!) ?? [])
