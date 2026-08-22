@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   computeNextSyncAt,
@@ -7,6 +8,8 @@ import {
   parseEcbCsv,
   ratioRate,
 } from "./fx-providers.ts";
+
+const source = readFileSync(new URL("./fx-providers.ts", import.meta.url), "utf8");
 
 test("ratioRate uses exact decimal arithmetic and numeric(19,10) rounding", () => {
   assert.equal(ratioRate("1", "1.25"), "0.8000000000");
@@ -48,6 +51,17 @@ test("normalization materializes every directed currency pair", () => {
   assert.equal(rates.length, 6);
   assert.equal(rates.find((rate) => rate.fromCurrency === "USD" && rate.toCurrency === "CAD")?.rate, "1.2500000000");
   assert.equal(rates.find((rate) => rate.fromCurrency === "CAD" && rate.toCurrency === "USD")?.rate, "0.8000000000");
+});
+
+test("FX provider observation window uses the org business day, not UTC today", () => {
+  const start = source.indexOf("export async function runFxProvider");
+  const end = source.indexOf("\nexport async function runDueFxProviders", start);
+  assert.ok(start >= 0 && end > start, "runFxProvider is defined");
+  const body = source.slice(start, end);
+  assert.match(body, /const today = await businessToday\(orgId\)/);
+  assert.match(body, /from: addDays\(today, -6\), to: today/);
+  assert.match(body, /syncRange\(config, today\)/);
+  assert.doesNotMatch(body, /isoDate\(now\)/);
 });
 
 test("weekday schedules skip weekends and weekly schedules remain seven days apart", () => {
