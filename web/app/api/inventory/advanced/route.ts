@@ -15,6 +15,8 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
+import { normalizeMoney } from "@openbooks/engine/src/money.ts";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -134,8 +136,10 @@ export async function POST(req: Request) {
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
+        const amount = canonicalDecimal(body.amount, 4);
+        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const res = await postLandedCostVoucher(orgId, userId, {
-          amount: String(body.amount),
+          amount: normalizeMoney(amount),
           basis: body.basis ?? "value",
           freightAccountId: body.freightAccountId,
           subsidiaryId,

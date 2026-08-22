@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardLienWaiverFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -117,10 +118,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
            set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id}`)
     } else {
+      const amount =
+        body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
+      if (body.amount != null && body.amount !== '' && amount === null) {
+        return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+      }
       await db.execute(sql`
         update lien_waivers
            set through_date = coalesce(${body.throughDate ?? null}::date, through_date),
-               amount = coalesce(${body.amount ?? null}::numeric, amount),
+               amount = coalesce(${amount}::numeric, amount),
                jurisdiction = coalesce(${body.jurisdiction ?? null}, jurisdiction),
                notes = coalesce(${body.notes ?? null}, notes),
                updated_at = now(), updated_by = ${actorId}

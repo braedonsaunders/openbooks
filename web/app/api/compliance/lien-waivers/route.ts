@@ -5,6 +5,7 @@ import { nextNumber } from '@openbooks/engine/src/payments.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { isUuid, pickString } from '@/lib/list-params'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -86,7 +87,10 @@ export async function POST(req: Request) {
 
   // Default the amount from the bill being released, so the released figure and
   // the money it releases cannot drift apart through a typo.
-  let amount = body.amount ?? null
+  let amount = body.amount == null || body.amount === '' ? null : canonicalDecimal(body.amount, 4)
+  if (body.amount != null && body.amount !== '' && amount === null) {
+    return NextResponse.json({ error: 'invalid amount' }, { status: 422 })
+  }
   let currency = body.currency ?? org?.base_currency ?? 'USD'
   if (body.billDocumentId && isUuid(body.billDocumentId)) {
     const bill = (await db.execute<{ amount: string; currency: string; party_id: string | null }>(sql`
