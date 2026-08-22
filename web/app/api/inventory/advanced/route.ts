@@ -105,6 +105,17 @@ export async function POST(req: Request) {
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
+        const lines: { itemId: string; quantity: string; lotId?: string | null; serialId?: string | null }[] = [];
+        for (const line of Array.isArray(body.lines) ? body.lines : []) {
+          const quantityRaw = canonicalDecimal(line?.quantity, 4);
+          if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+          lines.push({
+            itemId: line.itemId,
+            quantity: normalizeMoney(quantityRaw),
+            lotId: line.lotId ?? null,
+            serialId: line.serialId ?? null,
+          });
+        }
         const res = await createTransferOrder(orgId, userId, {
           fromStockLocationId: body.fromStockLocationId,
           toStockLocationId: body.toStockLocationId,
@@ -112,7 +123,7 @@ export async function POST(req: Request) {
           orderedOn: body.orderedOn || (await businessToday(orgId)),
           inTransitAccountId: body.inTransitAccountId ?? null,
           memo: body.memo ?? null,
-          lines: body.lines ?? [],
+          lines,
         });
         return NextResponse.json(res, { status: 201 });
       }
@@ -138,6 +149,21 @@ export async function POST(req: Request) {
         }
         const amount = canonicalDecimal(body.amount, 4);
         if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        const targets: { itemId: string; stockLocationId: string; manualAmount?: string | null }[] = [];
+        for (const target of Array.isArray(body.targets) ? body.targets : []) {
+          const manualRaw =
+            target?.manualAmount == null || target.manualAmount === ""
+              ? null
+              : canonicalDecimal(target.manualAmount, 4);
+          if (target?.manualAmount != null && target.manualAmount !== "" && manualRaw === null) {
+            return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+          }
+          targets.push({
+            itemId: target.itemId,
+            stockLocationId: target.stockLocationId,
+            manualAmount: manualRaw === null ? null : normalizeMoney(manualRaw),
+          });
+        }
         const res = await postLandedCostVoucher(orgId, userId, {
           amount: normalizeMoney(amount),
           basis: body.basis ?? "value",
@@ -146,7 +172,7 @@ export async function POST(req: Request) {
           voucherDate: body.voucherDate || (await businessToday(orgId)),
           sourceDocumentLineId: body.sourceDocumentLineId ?? null,
           memo: body.memo ?? null,
-          targets: body.targets ?? [],
+          targets,
         });
         return NextResponse.json(res, { status: 201 });
       }
