@@ -533,7 +533,7 @@ export type AdvancedBillingLine = {
 };
 
 /** Snapshot used by the invoice engine; null means single-plan billing. */
-export async function advancedBillingSnapshot(subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
+export async function advancedBillingSnapshot(orgId: string, subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
   contractRevision: number;
   billingTiming: BillingTiming;
   periodStartsOn: string;
@@ -547,7 +547,7 @@ export async function advancedBillingSnapshot(subscriptionId: string, billOn: st
            v.interval, v.interval_count as "intervalCount"
       from subscription_lifecycles l join subscriptions s on s.id = l.subscription_id and s.org_id = l.org_id
       join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = l.org_id
-     where l.subscription_id = ${subscriptionId}
+     where l.org_id = ${orgId} and l.subscription_id = ${subscriptionId}
   `));
   const row = lifecycle.rows[0];
   if (!row) return null;
@@ -558,7 +558,7 @@ export async function advancedBillingSnapshot(subscriptionId: string, billOn: st
     select name as description, quantity, unit_price as "unitPrice", income_account_id as "incomeAccountId",
            item_id as "itemId", tax_code_id as "taxCodeId"
       from subscription_components
-     where subscription_id = ${subscriptionId} and effective_from <= ${activeOn}
+     where org_id = ${orgId} and subscription_id = ${subscriptionId} and effective_from <= ${activeOn}
        and (effective_to is null or effective_to >= ${activeOn})
      order by sort_order, component_key
   `));

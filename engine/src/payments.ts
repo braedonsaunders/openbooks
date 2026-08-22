@@ -815,7 +815,7 @@ export async function postPaymentWithApplications(
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
-       where jl.id in ${allocs.map((a) => a.openLineId)}
+       where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}
        group by jl.id
     `));
     const targetById = new Map(targetsResult.rows.map((row) => [row.id, row]));
@@ -911,7 +911,7 @@ export async function postPaymentWithApplications(
       const creditRows = (await db.execute<{ id: string; currency: string; base_currency: string }>(sql`
         select jl.id, jl.currency, s.base_currency
           from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
-         where jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
+         where jl.org_id = ${doc.orgId} and jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
       `));
       if (creditRows.rows.some((row) => row.currency !== row.base_currency)) {
         throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
@@ -938,7 +938,7 @@ export async function postPaymentWithApplications(
     const targets = (await db.execute<{ doc_id: string }>(sql`
       select distinct je.source_document_id as doc_id
         from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.id in ${targetIds} and je.source_document_id is not null
+       where jl.org_id = ${doc.orgId} and jl.id in ${targetIds} and je.source_document_id is not null
     `));
     if (targets.rows.length > 0) {
       await db.insert(schema.documentLinks).values(targets.rows.map((target) => ({
