@@ -553,6 +553,16 @@ test('the surfaces this test was written for are covered', () => {
     'subscription addPlan/updatePlan must 404 — not persist inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /kind === "equipment_charge"[\s\S]{0,80}isFeatureEnabled\([^,]+, "equipment"\)/,
+    'refuseInventoryPlanItem must not persist equipment_charge items when Equipment is off — stored plans stay when itemId is omitted',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /kind === "equipment_charge"[\s\S]{0,160}status: 404/,
+    'subscription addPlan/updatePlan must 404 — not persist equipment_charge items — when Equipment is off',
+  )
+  assert.match(
     read('../engine/src/advanced-subscriptions.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'advanced subscription component writes must name the inventory kinds the Features switch refuses',
