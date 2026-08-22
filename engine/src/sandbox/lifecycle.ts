@@ -137,10 +137,12 @@ export async function rebaseSandboxControlAccounts(args: {
 
 async function asOfPeriodOf(
   periodId: string | null | undefined,
+  orgId: string,
 ): Promise<{ fiscalYear: number; periodNumber: number } | null> {
   if (!periodId) return null;
   const res = (await db.execute(sql`
-    select fiscal_year, period_number from accounting_periods where id = ${periodId}`)) as any;
+    select fiscal_year, period_number from accounting_periods
+     where id = ${periodId} and org_id = ${orgId}`)) as any;
   const r = res.rows[0];
   return r ? { fiscalYear: r.fiscal_year, periodNumber: r.period_number } : null;
 }
@@ -245,7 +247,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       seed,
       tier,
       masked,
-      asOfPeriod: await asOfPeriodOf(input.asOfPeriodId),
+      asOfPeriod: await asOfPeriodOf(input.asOfPeriodId, input.productionOrgId),
     });
     await rebaseSandboxControlAccounts({
       productionOrgId: input.productionOrgId,
@@ -313,7 +315,7 @@ export async function refreshSandbox(
       seed: sandboxSeed,
       tier: s.tier,
       masked: s.masked,
-      asOfPeriod: await asOfPeriodOf(s.as_of_period_id),
+      asOfPeriod: await asOfPeriodOf(s.as_of_period_id, s.production_org_id),
       onlyTables: target,
     });
     await rebaseSandboxControlAccounts({
