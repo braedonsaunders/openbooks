@@ -868,6 +868,16 @@ test('the surfaces this test was written for are covered', () => {
     'items import must refuse — not persist — show-on-timesheet when Time Tracking is off',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /orgFeatureEnabled\([^,]+, 'fixedAssets'\)/,
+    'properties import must refuse fixedAsset when Fixed Assets is off — existing links stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /fixedAsset !== undefined/,
+    'properties import must refuse — not persist — fixedAsset when Fixed Assets is off',
+  )
+  assert.match(
     read('app/api/items/[id]/route.ts'),
     /status: 404/,
     'item catalog PATCH must 404 — not persist — revenue-recognition fields when the feature is off',
