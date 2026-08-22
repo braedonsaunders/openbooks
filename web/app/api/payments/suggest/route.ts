@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { suggestApplications } from '@openbooks/engine/src/payments.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 
@@ -25,9 +26,13 @@ export async function POST(req: Request) {
   if (!body.partyId || !isUuid(body.partyId)) {
     return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
   }
+  const exact = canonicalDecimal(body.amount ?? '', 4)
+  if (exact === null) {
+    return NextResponse.json({ error: 'a numeric amount is required' }, { status: 400 })
+  }
   let amount: string
   try {
-    amount = fromUnits(toUnits(String(body.amount ?? '')))
+    amount = normalizeMoney(exact)
   } catch {
     return NextResponse.json({ error: 'a numeric amount is required' }, { status: 400 })
   }
