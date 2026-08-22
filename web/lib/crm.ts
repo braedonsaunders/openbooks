@@ -150,7 +150,7 @@ export async function calculateForecast(scope: ForecastScope) {
         from documents d
        where d.org_id = ${scope.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
          and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
-         ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
+         ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
        group by d.currency
     ), currencies as (
       select currency from opportunity_base union select currency from actuals

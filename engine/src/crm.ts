@@ -128,7 +128,8 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
              cp.owner_user_id, cp.territory_id, a.country, a.region
         from crm_account_profiles cp
         left join lateral (
-          select country, region from addresses where party_id = cp.party_id
+          select country, region from addresses
+           where org_id = ${orgId} and party_id = cp.party_id
           order by is_default_billing desc, created_at limit 1
         ) a on true
        where cp.id = ${profileId} and cp.org_id = ${orgId} for update`));

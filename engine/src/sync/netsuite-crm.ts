@@ -262,6 +262,10 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
 
 /** Idempotent CRM import from the tenant's stored NetSuite connection. */
 export async function importNetSuiteCrm(orgId: string, connectionId?: string): Promise<CrmImportReport> {
+  const enabled = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'crm')::boolean, true) as enabled
+      from orgs where id = ${orgId}`))
+  if (enabled.rows[0]?.enabled !== true) throw new Error('CRM feature is disabled')
   const creds = await credentials(orgId, connectionId)
   const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${orgId} and is_active order by role='controller' desc, created_at limit 1`))
   const actorId = actor.rows[0]?.id
@@ -295,7 +299,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     const score = scoreText == null || scoreText === '' ? null : Math.max(0, Math.min(100, Math.round(Number(scoreText))))
     const statusId = customer.entitystatus ? statusIds.get(`${lifecycle}:${customer.entitystatus}`) ?? null : null
     const saved = (await db.execute<{ id: string }>(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${party.rows[0].id},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} returning id`))
-    await db.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved.rows[0]!.id},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where not exists(select 1 from crm_account_stage_events where account_profile_id=${saved.rows[0]!.id} and source_kind='import')`)
+    await db.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved.rows[0]!.id},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where not exists(select 1 from crm_account_stage_events where org_id=${orgId} and account_profile_id=${saved.rows[0]!.id} and source_kind='import')`)
     report.accounts++
   }
 
