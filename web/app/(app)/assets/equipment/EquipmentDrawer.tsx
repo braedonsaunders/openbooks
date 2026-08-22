@@ -10,10 +10,12 @@ import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer }
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { confirmDialog } from '../../../../lib/confirm'
 type Opt = { id: string; name: string; code?: string | null; number?: string | null };
-export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage, closeHref = '/assets/equipment', fixedAssetsEnabled = false }: {
+export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage, closeHref = '/assets/equipment', fixedAssetsEnabled = false, projectsEnabled = false }: {
   payload: any; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean; closeHref?: string
   /** Capitalize writes a fixed-asset row — hide that action while Fixed Assets is off. */
   fixedAssetsEnabled?: boolean
+  /** Rate books are labor pricing — hide that picker while Projects is off. */
+  projectsEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('assets.equipment'); const common = useTranslations('common'); const router = useRouter()
@@ -28,9 +30,9 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   const [capacityQuantity, setCapacityQuantity] = useState(e.capacity_quantity ?? ''); const [capacityUnit, setCapacityUnit] = useState(e.capacity_unit ?? '')
   const opts = (rows: Opt[]) => rows.map((x) => ({ value: x.id, label: `${x.code ?? x.number ?? ''}${x.code || x.number ? ' · ' : ''}${x.name}` }))
   const form = useMemo(() => ({ name, unitNumber, description, status, subsidiaryId, chargeItemId: chargeItemId || null, fixedAssetId: fixedAssetId || null,
-    rateBookId: rateBookId || null, purchasePrice, acquiredOn: acquiredOn || null, inServiceOn: inServiceOn || null,
+    ...(projectsEnabled ? { rateBookId: rateBookId || null } : {}), purchasePrice, acquiredOn: acquiredOn || null, inServiceOn: inServiceOn || null,
     serialNumber: serialNumber || null, capacityQuantity: capacityQuantity || null, capacityUnit: capacityUnit || null }),
-    [name, unitNumber, description, status, subsidiaryId, chargeItemId, fixedAssetId, rateBookId, purchasePrice, acquiredOn, inServiceOn, serialNumber, capacityQuantity, capacityUnit])
+    [name, unitNumber, description, status, subsidiaryId, chargeItemId, fixedAssetId, rateBookId, projectsEnabled, purchasePrice, acquiredOn, inServiceOn, serialNumber, capacityQuantity, capacityUnit])
   async function save(extra: Record<string, unknown> = {}) {
     setBusy(true); const res = await fetch(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...form, ...extra}) })
     if (!res.ok) toast.error(t('saveFailed')); else {
@@ -71,7 +73,9 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
         {subsidiaries.length > 0 ? <div className="space-y-1.5"><Label>{t('subsidiary')}</Label>{editable ? <SearchSelect value={subsidiaryId} onChange={setSubsidiaryId} options={opts(subsidiaries)} sheetTitle={t('subsidiary')} ariaLabel={t('subsidiary')}/> : <p className="text-sm">{subsidiaries.find(x=>x.id===subsidiaryId)?.name ?? '—'}</p>}</div> : null}
         <div className="space-y-1.5"><Label>{t('chargeItem')}</Label>{editable ? <SearchSelect value={chargeItemId} onChange={setChargeItemId} options={opts(items)} clearable sheetTitle={t('chargeItem')} ariaLabel={t('chargeItem')}/> : <p className="text-sm">{e.charge_item_name ?? '—'}</p>}</div>
         {fixedAssetsEnabled ? <div className="space-y-1.5"><Label>{t('fixedAsset')}</Label>{editable ? <SearchSelect value={fixedAssetId} onChange={setFixedAssetId} options={opts(assets)} clearable sheetTitle={t('fixedAsset')} ariaLabel={t('fixedAsset')}/> : <p className="text-sm">{e.fixed_asset_number ?? '—'}</p>}</div> : null}
-        <div className="space-y-1.5"><Label>{t('rateBook')}</Label>{editable ? <SearchSelect value={rateBookId} onChange={setRateBookId} options={opts(books)} clearable sheetTitle={t('rateBook')} ariaLabel={t('rateBook')}/> : <p className="text-sm">{e.rate_book_name ?? t('defaultRateBook')}</p>}</div>
+        {projectsEnabled ? (
+          <div className="space-y-1.5"><Label>{t('rateBook')}</Label>{editable ? <SearchSelect value={rateBookId} onChange={setRateBookId} options={opts(books)} clearable sheetTitle={t('rateBook')} ariaLabel={t('rateBook')}/> : <p className="text-sm">{e.rate_book_name ?? t('defaultRateBook')}</p>}</div>
+        ) : null}
         {input(t('purchasePrice'), purchasePrice, setPurchasePrice, {inputMode:'decimal',className:'text-right tabular-nums'})}{input(t('acquiredOn'), acquiredOn, setAcquiredOn, {type:'date'})}{input(t('inServiceOn'), inServiceOn, setInServiceOn, {type:'date'})}
         {input(t('capacityQuantity'), String(capacityQuantity), setCapacityQuantity, {inputMode:'decimal'})}{input(t('capacityUnit'), capacityUnit, setCapacityUnit)}
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3"><Label>{t('description')}</Label>{editable ? <Input value={description} onChange={(x)=>setDescription(x.target.value)}/> : <p className="text-sm">{description || '—'}</p>}</div>

@@ -158,6 +158,10 @@ export async function syncNetSuiteFixedAssets(
   source: NetSuiteSource,
   options: NetSuiteFixedAssetSyncOptions,
 ): Promise<NetSuiteFixedAssetSyncResult> {
+  const enabled = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'fixedAssets')::boolean, true) as enabled
+      from orgs where id = ${options.orgId}`));
+  if (enabled.rows[0]?.enabled !== true) throw new Error("Fixed Assets feature is disabled");
   const snapshot = await source.fixedAssets();
   const asOf = extractionDate(snapshot);
   const historyByAsset = new Map<string, Row[]>();

@@ -41,6 +41,7 @@ export function TransactionsTab({
   absorption,
   chargeFormOpen,
   onChargeFormOpenChange,
+  equipmentEnabled = false,
 }: {
   projectId: string
   transactions: TxnRow[]
@@ -51,6 +52,7 @@ export function TransactionsTab({
   absorption: { recovered: string; billValue: string }
   chargeFormOpen: boolean
   onChargeFormOpenChange: (open: boolean) => void
+  equipmentEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('projects')
@@ -92,6 +94,7 @@ export function TransactionsTab({
         onFormOpenChange={onChargeFormOpenChange}
         showKpis={false}
         showList={false}
+        equipmentEnabled={equipmentEnabled}
       />
       <div className="space-y-2">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.transactions')}</h2>

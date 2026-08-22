@@ -6,6 +6,7 @@ import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { createProjectCharge, ChargeError, type ChargeLineInput } from '../../../lib/project-charges'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { isFeatureEnabled } from '../../../lib/features'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
@@ -86,6 +87,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Bill rate must be an exact decimal' }, { status: 422 })
     }
     lines.push({ ...line, quantity, costRate, billRate })
+  }
+  if (lines.some((line) => line.equipmentUnitId) && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   try {
     const created = await createProjectCharge(gate.user.orgId, gate.user.id, {

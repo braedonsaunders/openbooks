@@ -41,6 +41,7 @@ export function ChargesSection({
   onFormOpenChange,
   showKpis = true,
   showList = true,
+  equipmentEnabled = false,
 }: {
   projectId: string
   charges: ChargeRow[]
@@ -56,6 +57,8 @@ export function ChargesSection({
   showKpis?: boolean
   /** Transactions owns the canonical list; false keeps only creation controls. */
   showList?: boolean
+  /** Equipment attribution writes a unit link — hide that picker while Equipment is off. */
+  equipmentEnabled?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('projects.charges')
@@ -103,8 +106,11 @@ export function ChargesSection({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId,
-        lines: [{ itemId, equipmentUnitId: equipmentUnitId || null, employeeId: (equipmentUnitId && employeeId) || null, quantity,
-          costRate: equipmentUnitId ? null : (costRate || null), billRate: equipmentUnitId ? null : (billRate || null), isBillable: true }],
+        lines: [{ itemId, quantity,
+          costRate: equipmentEnabled && equipmentUnitId ? null : (costRate || null),
+          billRate: equipmentEnabled && equipmentUnitId ? null : (billRate || null),
+          isBillable: true,
+          ...(equipmentEnabled ? { equipmentUnitId: equipmentUnitId || null, employeeId: (equipmentUnitId && employeeId) || null } : {}) }],
       }),
     })
     if (res.ok) {
@@ -142,29 +148,33 @@ export function ChargesSection({
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">{t('addHint')}</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-              <div className={`${field} lg:col-span-2`}>
-                <Label>{t('equipmentUnit')}</Label>
-                <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
-              </div>
+              {equipmentEnabled ? (
+                <div className={`${field} lg:col-span-2`}>
+                  <Label>{t('equipmentUnit')}</Label>
+                  <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
+                </div>
+              ) : null}
               {/* Operator — only for an equipment line, because that is the only
                   line an equipment incentive can pay on. Optional by design:
                   refusing to record the charge because nobody remembered who ran
                   the machine would cost the customer their job cost and their
                   invoice, which is worse. The incentive rule is what refuses,
                   and it refuses loudly. */}
-              <div className={`${field} lg:col-span-2`}>
-                <Label>{tOr('operator', 'Operator')}</Label>
-                <SearchSelect
-                  value={employeeId}
-                  onChange={(v) => setEmployeeId(v ?? '')}
-                  options={operatorOptions}
-                  disabled={!equipmentUnitId}
-                  clearable
-                  placeholder={equipmentUnitId ? tOr('selectOperator', 'Select an operator…') : tOr('operatorNeedsEquipment', 'Equipment lines only')}
-                  sheetTitle={tOr('operator', 'Operator')}
-                  ariaLabel={tOr('operator', 'Operator')}
-                />
-              </div>
+              {equipmentEnabled ? (
+                <div className={`${field} lg:col-span-2`}>
+                  <Label>{tOr('operator', 'Operator')}</Label>
+                  <SearchSelect
+                    value={employeeId}
+                    onChange={(v) => setEmployeeId(v ?? '')}
+                    options={operatorOptions}
+                    disabled={!equipmentUnitId}
+                    clearable
+                    placeholder={equipmentUnitId ? tOr('selectOperator', 'Select an operator…') : tOr('operatorNeedsEquipment', 'Equipment lines only')}
+                    sheetTitle={tOr('operator', 'Operator')}
+                    ariaLabel={tOr('operator', 'Operator')}
+                  />
+                </div>
+              ) : null}
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('item')}</Label>
                 <SearchSelect value={itemId} onChange={(v) => pickItem(v ?? '')} options={itemOptions} disabled={!!equipmentUnitId} placeholder={t('selectItem')} sheetTitle={t('item')} ariaLabel={t('item')} />

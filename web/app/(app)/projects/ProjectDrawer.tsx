@@ -78,6 +78,7 @@ export interface ProjectCockpitData {
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
   operators: ChargeOperatorOption[]
+  equipmentEnabled: boolean
   absorption: { recovered: string; billValue: string }
   recognition: RecognitionStatus | null
   glRange: { from: string; to: string }
@@ -751,6 +752,7 @@ export function ProjectDrawer({
           absorption={cockpit.absorption}
           chargeFormOpen={chargeFormOpen}
           onChargeFormOpenChange={setChargeFormOpen}
+          equipmentEnabled={cockpit.equipmentEnabled}
         />
       ) : null}
 

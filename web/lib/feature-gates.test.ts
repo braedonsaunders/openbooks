@@ -902,6 +902,61 @@ test('the surfaces this test was written for are covered', () => {
     /\{fairValuePrices \? <section/,
     'the item drawer must hide the revenue-recognition section when the feature is off',
   )
+  assert.match(
+    read('lib/project-charges.ts'),
+    /isFeatureEnabled\(orgId, 'equipment'\)/,
+    'project-charge lines must not store equipment_unit_id when Equipment is off — existing charges stay',
+  )
+  assert.match(
+    read('app/api/project-charges/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'project-charge POST must refuse equipment_unit_id when Equipment is off',
+  )
+  assert.match(
+    read('app/api/project-charges/route.ts'),
+    /status: 404/,
+    'project-charge POST must 404 — not persist — equipment_unit_id when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/projects/tabs/ChargesSection.tsx'),
+    /equipmentEnabled \? \{[\s\S]{0,80}equipmentUnitId/,
+    'the charge form must not send equipment_unit_id when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/projects/tabs/ChargesSection.tsx'),
+    /\{equipmentEnabled \? \(/,
+    'the charge form must hide the equipment picker when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/projects/_cockpit-data.ts'),
+    /isFeatureEnabled\(orgId, 'equipment'\)/,
+    'project cockpit must not load equipment pickers when Equipment is off',
+  )
+  assert.match(
+    read('app/api/equipment/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'projects'\)/,
+    'equipment PATCH must not change the rate-book link when Projects is off — existing links stay',
+  )
+  assert.match(
+    read('app/(app)/assets/equipment/EquipmentDrawer.tsx'),
+    /projectsEnabled \? \{ rateBookId/,
+    'equipment drawer must not send rateBookId when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/assets/equipment/EquipmentDrawer.tsx'),
+    /\{projectsEnabled \? \(/,
+    'equipment drawer must hide the rate-book picker when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/assets/equipment/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'projects'\)/,
+    'equipment page must hide rate books when Projects is off',
+  )
+  assert.match(
+    read('../engine/src/sync/netsuite-fixed-assets.ts'),
+    /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
+    'NetSuite FAM sync must not write fixed assets when the Fixed Assets switch is off — existing register stays',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

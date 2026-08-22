@@ -112,6 +112,7 @@ export async function createProjectCharge(
   opts: { post?: boolean } = { post: true },
 ): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
+  const equipmentOn = await isFeatureEnabled(orgId, 'equipment')
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await inDbTransaction(async (tx) => {
@@ -170,6 +171,11 @@ export async function createProjectCharge(
       const it = item.rows[0]
       if (!it) throw new ChargeError('Item not found')
       if (line.equipmentUnitId) {
+        // Equipment attribution is a Features-gated write. Turning Equipment
+        // off must stop new unit links without touching posted charges.
+        if (!equipmentOn) {
+          throw new ChargeError('Equipment feature is disabled')
+        }
         const unit = (await tx.execute<{ charge_item_id: string; status: string; subsidiary_id: string }>(sql`
           select charge_item_id, status, subsidiary_id from equipment_units
            where id = ${line.equipmentUnitId} and org_id = ${orgId}
