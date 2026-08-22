@@ -1321,6 +1321,7 @@ async function transferInventoryTx(
   // A posted movement is immutable (no post-insert UPDATE), so the id is
   // generated up front and only the transfer_in leg carries the pairing
   // link back to the transfer_out (one direction is enough to relate them).
+  const transferQuantity = persistReceiptMoney(input.quantity, "transfer quantity");
   const fromMovementId = randomUUID();
   await tx.execute(sql`
       insert into inventory_movements
@@ -1329,7 +1330,7 @@ async function transferInventoryTx(
          memo, created_by, updated_by)
       values (${fromMovementId}, ${orgId}, ${input.itemId}, 'transfer_out',
               ${input.date}, ${input.fromStockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${neg(input.quantity)}, ${unitCost},
+              ${input.serialId ?? null}, ${neg(transferQuantity)}, ${unitCost},
               ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null},
               ${actorId}, ${actorId})`);
   const toMovementId = randomUUID();
@@ -1340,7 +1341,7 @@ async function transferInventoryTx(
          paired_movement_id, status, memo, created_by, updated_by)
       values (${toMovementId}, ${orgId}, ${input.itemId}, 'transfer_in',
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${normalizeMoney(input.quantity)}, ${unitCost}, ${cost},
+              ${input.serialId ?? null}, ${transferQuantity}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
               ${actorId}, ${actorId})`);
 
