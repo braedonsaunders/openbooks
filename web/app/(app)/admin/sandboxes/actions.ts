@@ -37,10 +37,11 @@ export async function createSandboxAction(input: {
   revalidatePath("/admin/sandboxes");
 }
 
-async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise<void> {
+async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise<string> {
   const r = (await db.execute(sql`
-    select 1 from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`)) as any;
+    select org_id as "orgId" from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`)) as any;
   if (!r.rows.length) throw new Error("sandbox not found");
+  return r.rows[0].orgId as string;
 }
 
 export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean): Promise<void> {
@@ -66,9 +67,9 @@ export async function deleteSandboxAction(sandboxId: string): Promise<void> {
 
 export async function setScheduleAction(sandboxId: string, cadence: string | null): Promise<void> {
   const authz = await requireManager();
-  await ownedSandbox(sandboxId, authz.user.productionOrgId);
+  const orgId = await ownedSandbox(sandboxId, authz.user.productionOrgId);
   const value = cadence && ["hourly", "daily", "weekly"].includes(cadence) ? cadence : null;
-  await db.execute(sql`update sandboxes set refresh_schedule = ${value} where id = ${sandboxId} and production_org_id = ${authz.user.productionOrgId}`);
+  await db.execute(sql`update sandboxes set refresh_schedule = ${value} where id = ${sandboxId} and org_id = ${orgId}`);
   revalidatePath("/admin/sandboxes");
 }
 
