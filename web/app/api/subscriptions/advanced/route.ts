@@ -57,6 +57,12 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "createVersion": {
+        // Plan-version currency is Multi-currency configuration. Turning that
+        // switch off must refuse a new write; omitting the field copies the
+        // plan's stored code so turning the feature back on restores it.
+        if (body.currency !== undefined && !(await isFeatureEnabled(authz.user.orgId, "multiCurrency"))) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         if (!body.planId || !body.effectiveFrom) return NextResponse.json({ error: "plan and effective date are required" }, { status: 400 });
         const components: Array<{
           componentKey: string;
@@ -93,7 +99,7 @@ export async function POST(req: Request) {
           effectiveFrom: String(body.effectiveFrom),
           name: body.name == null ? undefined : String(body.name),
           description: body.description == null ? null : String(body.description),
-          currency: body.currency == null ? null : String(body.currency),
+          currency: body.currency === undefined ? undefined : body.currency == null ? null : String(body.currency),
           interval: body.interval as Interval | undefined,
           intervalCount: body.intervalCount == null ? undefined : Number(body.intervalCount),
           billingTiming: body.billingTiming as BillingTiming | undefined,

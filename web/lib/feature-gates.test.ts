@@ -1372,6 +1372,36 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? \(/,
     'the quota form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'subscription plan writes must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'subscription plan writes must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /currency !== undefined \? body\.currency : sql`currency_code`/,
+    'subscription plan writes must keep the stored currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/subscriptions/advanced/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'subscription plan-version writes must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/subscriptions/advanced/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'subscription plan-version writes must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/subscriptions/advanced/route.ts'),
+    /body\.currency === undefined \? undefined/,
+    'subscription plan-version writes must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
