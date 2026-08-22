@@ -161,6 +161,17 @@ function persistTimeEntryCostRate(value: unknown): string {
   }
 }
 
+/** Persist leftover migrated time-entry bill rate through exact decimal then ledger money. Fail closed. */
+function persistTimeEntryBillRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("time-entry bill rate must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("time-entry bill rate must be an exact decimal");
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -914,7 +925,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       return sql`(${orgId}, ${ref(ctx.maps.parties, f.employeeRef)!}, ${str(f.workedOn) ?? "1970-01-01"},
         ${persistTimeEntryHours(f.hours == null || f.hours === "" ? "0" : f.hours)}, ${ref(ctx.maps.time_types, f.timeTypeRef)}, ${ref(ctx.maps.items, f.itemRef)},
         ${ref(ctx.maps.projects, f.projectRef)}, ${ref(ctx.maps.departments, f.departmentRef)},
-        ${!!f.isBillable}, ${f.costRate == null || f.costRate === "" ? null : persistTimeEntryCostRate(f.costRate)}, ${moneyOrNull(f.billRate)}, 'approved',
+        ${!!f.isBillable}, ${f.costRate == null || f.costRate === "" ? null : persistTimeEntryCostRate(f.costRate)}, ${f.billRate == null || f.billRate === "" ? null : persistTimeEntryBillRate(f.billRate)}, 'approved',
         ${str(f.billingStatus) === "billed" ? "billed" : "unbilled"},
         ${str(f.costingBasis) === "estimated" ? "estimated" : "actual"},
         ${JSON.stringify({
