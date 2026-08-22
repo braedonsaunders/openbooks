@@ -2186,6 +2186,36 @@ test('the surfaces this test was written for are covered', () => {
     /\{multiCurrency \? <CurrencyField[\s\S]{0,120}format\?\.currency/,
     'the payment-profile form must hide the currency picker when Multi-currency is off',
   )
+  assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'party bank-account create must refuse currency when Multi-currency is off — stored accounts stay',
+  )
+  assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'party bank-account create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/bank-accounts/route.ts'),
+    /body\.currency !== undefined \? \(body\.currency\?\.trim\(\)\.toUpperCase\(\) \|\| null\) : null/,
+    'party bank-account create must keep a null currency when the field is omitted',
+  )
+  assert.match(
+    read('app/(app)/parties/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'the parties page must not load the bank-account currency control when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /bankName: draft\.bankName\.trim\(\)[\s\S]{0,120}multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the party bank-account create must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /\{multiCurrency \? <div className=\{field\}><Label>\{tc\('labels\.currency'\)\}<\/Label><Select value=\{draft\.currency/,
+    'the party bank-account create must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
