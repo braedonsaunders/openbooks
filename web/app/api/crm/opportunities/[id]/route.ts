@@ -61,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
   if (!await orgUuidExists('parties', partyId, user.orgId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
-  if (contactId && !(await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId}`) as any).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
+  if (contactId && !(await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`) as any).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
   if (!await orgUuidExists('users', ownerUserId, user.orgId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (!await orgUuidExists('crm_sales_teams', salesTeamId, user.orgId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
   if (!await orgUuidExists('crm_lead_sources', leadSourceId, user.orgId)) return NextResponse.json({ error: 'invalid lead source' }, { status: 422 })

@@ -262,7 +262,7 @@ export async function assembleInvoiceBackup(
   `)
   if (prior.rows[0]?.file_id && prior.rows[0].file_id !== stored.id) {
     await db.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${prior.rows[0].file_id}`)
-    await db.execute(sql`delete from file_blobs where version_id in (select current_version_id from files where id = ${prior.rows[0].file_id})`)
+    await db.execute(sql`delete from file_blobs where version_id in (select current_version_id from files where id = ${prior.rows[0].file_id} and org_id = ${orgId})`)
     await db.execute(sql`delete from files where id = ${prior.rows[0].file_id} and org_id = ${orgId}`)
   }
 

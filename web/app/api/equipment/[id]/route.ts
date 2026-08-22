@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { loadEquipment } from '../_lib'
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
@@ -56,8 +57,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const found = (await db.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)) as any
     if (!found.rows[0]) return bad('rate_book_not_found')
   }
-  const purchasePrice = body.purchasePrice !== undefined ? String(body.purchasePrice || '0') : String(current.rows[0].purchase_price)
-  try { if (cmp(purchasePrice, '0') < 0) return bad('purchase_price_negative') } catch { return bad('purchase_price_invalid') }
+  const purchasePriceRaw = body.purchasePrice !== undefined
+    ? canonicalDecimal(body.purchasePrice || '0', 4)
+    : String(current.rows[0].purchase_price)
+  if (purchasePriceRaw === null || compareDecimal(purchasePriceRaw, '0') < 0) {
+    return bad(purchasePriceRaw === null ? 'purchase_price_invalid' : 'purchase_price_negative')
+  }
+  const purchasePrice = normalizeMoney(purchasePriceRaw)
   const capacityQuantity = body.capacityQuantity !== undefined && text(body.capacityQuantity) ? String(body.capacityQuantity) : null
   try { if (capacityQuantity && cmp(capacityQuantity, '0') <= 0) return bad('capacity_not_positive') } catch { return bad('capacity_invalid') }
   const acquiredOn = body.acquiredOn !== undefined ? text(body.acquiredOn) : current.rows[0].acquired_on

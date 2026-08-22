@@ -10,8 +10,10 @@ import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,22 +123,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (body.action === 'bulk-adjustment') {
       const { componentId, amount, note, replaceComponent } = body
       const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
+      const amountRaw = canonicalDecimal(amount, 4)
       if (
         !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
         !employees.every((v: unknown) => typeof v === 'string' && isUuid(v)) ||
-        typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount) ||
+        amountRaw === null ||
         (note != null && (typeof note !== 'string' || note.length > 500)) ||
         (replaceComponent != null && typeof replaceComponent !== 'boolean')
       ) {
         return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       }
+      const canonicalAmount = normalizeMoney(amountRaw)
       await withOrgTransaction(gate.user.orgId, async () => {
         for (const employeePartyId of employees as string[]) {
           await mutatePayRunAdjustment({
             orgId: gate.user.orgId,
             documentId: id,
             actorId: gate.user.id,
-            mutation: { action: 'add', employeePartyId, componentId, amount, replaceComponent, note },
+            mutation: { action: 'add', employeePartyId, componentId, amount: canonicalAmount, replaceComponent, note },
           })
         }
       })
@@ -151,10 +155,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (body.action === 'add-adjustment') {
       const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
+      const amountRaw = canonicalDecimal(amount, 4)
+      const hoursRaw = hours == null || hours === '' ? null : canonicalDecimal(hours, 4)
       if (
         !isUuid(employeePartyId) || !isUuid(componentId) ||
-        typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount) ||
-        (hours != null && (typeof hours !== 'string' || !/^\d+(\.\d{1,2})?$/.test(hours))) ||
+        amountRaw === null ||
+        (hoursRaw !== null && compareDecimal(hoursRaw, '0') < 0) ||
         (note != null && (typeof note !== 'string' || note.length > 500)) ||
         (replaceComponent != null && typeof replaceComponent !== 'boolean')
       ) {
@@ -164,7 +170,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orgId: gate.user.orgId,
         documentId: id,
         actorId: gate.user.id,
-        mutation: { action: 'add', employeePartyId, componentId, amount, hours, replaceComponent, note },
+        mutation: { action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw), hours: hoursRaw, replaceComponent, note },
       })
       return NextResponse.json({ ok: true })
     }
