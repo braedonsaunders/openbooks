@@ -383,7 +383,7 @@ export async function buildScheduleWithRunner(
       if (existing.rows[0].method !== method || existing.rows[0].depreciation_method_id !== depreciationMethodId) {
         const evidence = (await tx.execute(sql`
           select 1 from depreciation_schedule_lines
-           where schedule_id = ${scheduleId} and source <> 'formula'
+           where org_id = ${orgId} and schedule_id = ${scheduleId} and source <> 'formula'
            limit 1 for update`));
         if (evidence.rows[0]) {
           throw new Error("depreciation method cannot change after manual or production evidence exists");
@@ -405,7 +405,7 @@ export async function buildScheduleWithRunner(
     // preserve posted lines; drop only the unposted plan and rewrite it
     const posted = (await tx.execute<{ period_id: string; posted_amount: string }>(sql`
       select period_id, posted_amount from depreciation_schedule_lines
-       where schedule_id = ${scheduleId} and posted_amount is not null`));
+       where org_id = ${orgId} and schedule_id = ${scheduleId} and posted_amount is not null`));
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
 
     // What is actually left to depreciate, measured against what was POSTED
@@ -433,7 +433,7 @@ export async function buildScheduleWithRunner(
     if (depreciationMethodId || (method !== "manual" && method !== "units_of_production")) {
       await tx.execute(sql`
         delete from depreciation_schedule_lines
-         where schedule_id = ${scheduleId} and posted_amount is null and source = 'formula'`);
+         where org_id = ${orgId} and schedule_id = ${scheduleId} and posted_amount is null and source = 'formula'`);
     }
 
     const skippedMonths: string[] = [];
@@ -630,7 +630,7 @@ export async function recordDepreciationInput(
       await tx.execute(sql`
         update depreciation_inputs
            set voided_at = now(), voided_by = ${args.actorId}, updated_at = now(), updated_by = ${args.actorId}
-         where id = ${replacedInputId} and voided_at is null`);
+         where id = ${replacedInputId} and org_id = ${args.orgId} and voided_at is null`);
     }
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into depreciation_inputs
@@ -649,13 +649,13 @@ export async function recordDepreciationInput(
         update depreciation_schedule_lines
            set planned_amount = ${plannedAmount}, source = ${args.kind === "manual" ? "manual" : "production_usage"},
                input_id = ${inputId}, updated_at = now(), updated_by = ${args.actorId}
-         where id = ${scheduleLineId} and posted_amount is null`);
+         where id = ${scheduleLineId} and org_id = ${args.orgId} and posted_amount is null`);
     } else {
       const line = (await tx.execute<{ id: string }>(sql`
         insert into depreciation_schedule_lines
           (org_id, schedule_id, period_id, sequence, planned_amount, source, input_id, created_by, updated_by)
         values (${args.orgId}, ${row.id}, ${row.period_id},
-                (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where schedule_id = ${row.id}),
+                (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where org_id = ${args.orgId} and schedule_id = ${row.id}),
                 ${plannedAmount}, ${args.kind === "manual" ? "manual" : "production_usage"},
                 ${inputId}, ${args.actorId}, ${args.actorId})
         returning id`));
@@ -816,7 +816,7 @@ export async function runDepreciation(
           await tx.execute(sql`
             update depreciation_schedule_lines
                set posted_amount = '0', updated_at = now(), updated_by = ${actorId}
-             where id = ${row.line_id} and posted_amount is null`);
+             where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null`);
           return { entryId: null, amount: planned };
         }
 
@@ -892,7 +892,7 @@ export async function runDepreciation(
          select 1 from depreciation_schedules s
            join accounting_books b on b.id = s.book_id and b.org_id = s.org_id and b.posts_gl and b.is_active and b.is_primary
            join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
-          where s.asset_id = a.id
+          where s.org_id = a.org_id and s.asset_id = a.id
           group by s.id
           having coalesce(sum(l.posted_amount), 0) >= a.acquisition_cost - a.salvage_value)`);
 
