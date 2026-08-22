@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Record<string, any>;
   try {
     if (body.action === "manualQuote") {
-      const q = quoteFromRate(String(body.taxableAmount ?? "0"), Number(body.ratePercent ?? 0), String(body.jurisdiction ?? "LOCAL"));
+      const q = quoteFromRate(String(body.taxableAmount ?? "0"), String(body.ratePercent ?? "0"), String(body.jurisdiction ?? "LOCAL"));
       return NextResponse.json(q);
     }
     const result = await quoteExternalTax(

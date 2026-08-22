@@ -225,8 +225,8 @@ export async function disposeAsset(
                        join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
                       where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
-      join subsidiaries sub on sub.id = a.subsidiary_id
-      join asset_categories c on c.id = a.category_id
+      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${assetId}`));
   const asset = assetRes.rows[0];
   if (!asset) throw new AssetLifecycleError("asset not found");
@@ -555,8 +555,8 @@ export async function remeasureAsset(
                        join depreciation_schedules s on s.id = l.schedule_id and s.book_id = ${bookId}
                       where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
-      join subsidiaries sub on sub.id = a.subsidiary_id
-      join asset_categories c on c.id = a.category_id
+      join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${assetId}`));
   const asset = res.rows[0];
   if (!asset) throw new AssetLifecycleError("asset not found");

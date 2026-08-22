@@ -44,10 +44,10 @@ export default async function PaymentOperationsSetupPage({
                f.name as format_name, f.rail, a.number as bank_number, a.name as bank_name,
                s.name as subsidiary_name, sv.name as sftp_server_name
           from payment_bank_profiles x
-          join payment_formats f on f.id = x.payment_format_id
-          join accounts a on a.id = x.bank_account_id
-          left join subsidiaries s on s.id = x.subsidiary_id
-          left join sftp_servers sv on sv.id = x.sftp_server_id
+          join payment_formats f on f.id = x.payment_format_id and f.org_id = x.org_id
+          join accounts a on a.id = x.bank_account_id and a.org_id = x.org_id
+          left join subsidiaries s on s.id = x.subsidiary_id and s.org_id = x.org_id
+          left join sftp_servers sv on sv.id = x.sftp_server_id and sv.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or f.name ilike ${q} or a.name ilike ${q})
            ${stateWhere}
          order by x.is_active desc, x.name

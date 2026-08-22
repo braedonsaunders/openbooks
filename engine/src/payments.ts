@@ -909,7 +909,7 @@ export async function postPaymentWithApplications(
       // transaction values as base amounts.
       const creditRows = (await db.execute<{ id: string; currency: string; base_currency: string }>(sql`
         select jl.id, jl.currency, s.base_currency
-          from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id
+          from journal_lines jl join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
          where jl.id in ${creditAllocs.flatMap((a) => [a.fromLineId, a.toLineId])}
       `));
       if (creditRows.rows.some((row) => row.currency !== row.base_currency)) {

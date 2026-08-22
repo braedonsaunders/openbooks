@@ -139,7 +139,7 @@ export async function runTaxPool(
                              then a.acquisition_cost else 0 end), 0)::text as additions,
            bool_or(a.status not in ('disposed', 'written_off')) as has_assets
       from fixed_assets a
-      join asset_categories c on c.id = a.category_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where a.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
      group by c.tax_attributes->>${attr}`));
@@ -149,8 +149,8 @@ export async function runTaxPool(
     select c.tax_attributes->>${attr} as class_code,
            coalesce(sum(least(e.amount, a.acquisition_cost)), 0)::text as dispositions
       from asset_events e
-      join fixed_assets a on a.id = e.asset_id
-      join asset_categories c on c.id = a.category_id
+      join fixed_assets a on a.id = e.asset_id and a.org_id = e.org_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
      where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}
        and e.kind in ('disposed', 'written_off') and e.occurred_on between ${opts.yearStart} and ${opts.yearEnd}
        and coalesce(c.tax_attributes->>${attr}, '') <> ''
@@ -246,7 +246,7 @@ async function runMacrs(
            a.acquisition_cost::text, coalesce(a.in_service_on, a.acquired_on)::text as placed_on,
            d.occurred_on::text as disposed_on, d.amount::text as disposition_amount, a.custom
       from fixed_assets a
-      join asset_categories c on c.id = a.category_id
+      join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
       left join lateral (
         select e.occurred_on, e.amount from asset_events e
          where e.asset_id = a.id and e.kind in ('disposed', 'written_off')

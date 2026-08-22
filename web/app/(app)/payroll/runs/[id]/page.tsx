@@ -123,9 +123,9 @@ export default async function PayRunPage({
         from employee_payroll_profiles prof
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
         left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id and er.is_active
-        left join departments dep on dep.id = er.department_id
-        left join trades tr on tr.id = er.trade_id
-        left join subsidiaries sub on sub.id = p.subsidiary_id
+        left join departments dep on dep.id = er.department_id and dep.org_id = er.org_id
+        left join trades tr on tr.id = er.trade_id and tr.org_id = er.org_id
+        left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
         left join lateral (
           select sum(te.hours) as hours from time_entries te
            where te.org_id = prof.org_id and te.employee_party_id = prof.employee_party_id

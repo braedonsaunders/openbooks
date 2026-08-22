@@ -39,7 +39,7 @@ export async function RatesTab({ orgId, rowParam }: { orgId: string; rowParam: s
       select o.id, o.department_id, d.name as department_name,
              o.rate_kind, o.rate_percent, o.effective_from::text, o.effective_to::text
         from overhead_rates o
-        left join departments d on d.id = o.department_id
+        left join departments d on d.id = o.department_id and d.org_id = o.org_id
        where o.org_id = ${orgId}
        order by d.name nulls last, o.effective_from desc`),
     db.execute(sql`

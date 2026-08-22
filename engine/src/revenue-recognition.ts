@@ -930,7 +930,7 @@ export async function runRevenueRecognition(
       join performance_obligations o on o.id = s.obligation_id
       join revenue_contracts c on c.id = o.contract_id
       join recognition_rules r on r.id = o.recognition_rule_id
-      join accounting_periods p on p.id = l.period_id
+      join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
       left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
       left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
       left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id

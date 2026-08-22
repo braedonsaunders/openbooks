@@ -186,7 +186,7 @@ export async function createSubcontract(input: {
                  and d.kind = 'purchase_order' and d.project_id = p.id and d.party_id = ${input.vendorId}
              )) as po_ok
         from projects p join orgs o on o.id = p.org_id
-        left join subsidiaries s on s.id = p.subsidiary_id
+        left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
         left join vendor_roles vr on vr.org_id = p.org_id and vr.party_id = ${input.vendorId}
        where p.org_id = ${input.orgId} and p.id = ${input.projectId} and p.is_active
     `));

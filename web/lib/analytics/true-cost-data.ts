@@ -298,7 +298,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         dd.department_id as dept_id, coalesce(d.name, '—') as dept_name, coalesce(di.title, '—') as title
       from per_emp pe
       left join dom_dept dd on dd.employee_party_id = pe.employee_party_id
-      left join departments d on d.id = dd.department_id
+      left join departments d on d.id = dd.department_id and d.org_id = ${orgId}
       left join dom_item di on di.employee_party_id = pe.employee_party_id
       where pe.hours > 0
     `) as Promise<any>,

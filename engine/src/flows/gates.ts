@@ -550,8 +550,8 @@ const WORKLIST_SELECT = sql`
       from flow_gates g
       left join documents d on d.id = g.subject_id and d.org_id = g.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join close_runs cr on cr.id = g.subject_id and g.subject_kind = 'close_run'
-      left join accounting_periods cp on cp.id = cr.period_id`;
+      left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = 'close_run'
+      left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id`;
 
 /**
  * Pending gates the user may act on: assigned to them directly, to a role

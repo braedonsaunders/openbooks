@@ -1079,7 +1079,7 @@ async function readinessChecks(
            p.fiscal_calendar_id, p.period_number, p.is_adjustment,
            o.base_currency
       from close_runs r
-      join accounting_periods p on p.id = r.period_id
+      join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join orgs o on o.id = r.org_id
      where r.id = ${runId} and r.org_id = ${orgId}`));
   const ctx = context.rows[0];
@@ -1118,7 +1118,7 @@ async function readinessChecks(
            or coalesce((
              select sum(jl.amount) from journal_lines jl
              join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-             join accounting_periods jp on jp.id=je.period_id
+             join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
               where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
                 and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
            ), 0) <> 0
@@ -1131,7 +1131,7 @@ async function readinessChecks(
       db.execute(sql`
       select count(*) as count
         from depreciation_schedule_lines l
-        join depreciation_schedules s on s.id = l.schedule_id
+        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
          and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0`),
       db.execute(sql`
@@ -2088,7 +2088,7 @@ export async function publishCloseRun(
       (await Promise.all([
         tx.execute(sql`select r.*, p.name as period_name, p.starts_on, p.ends_on, b.code as book_code, b.name as book_name,
         bp.name as blueprint_name, bp.version as blueprint_version, pkg.name as package_name, pkg.reports as package_reports
-        from close_runs r join accounting_periods p on p.id = r.period_id join accounting_books b on b.id = r.book_id
+        from close_runs r join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join close_blueprints bp on bp.id = r.blueprint_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id
         where r.id = ${runId} and r.org_id = ${orgId}`),
         tx.execute(
@@ -2527,8 +2527,8 @@ export async function runCloseAutomations(
            t.key as task_key, t.workstream, t.status as task_status,
            x.severity as exception_severity, x.code as exception_code
       from close_runs r
-      join accounting_periods p on p.id = r.period_id
-      join accounting_books b on b.id = r.book_id
+      join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
+      join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
       left join close_run_tasks t on t.id = ${context.taskId ?? null} and t.run_id = r.id
       left join close_exceptions x on x.id = ${context.exceptionId ?? null} and x.run_id = r.id
      where r.id = ${context.runId} and r.org_id = ${context.orgId}
