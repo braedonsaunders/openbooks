@@ -657,7 +657,7 @@ export async function buildRecognitionSchedule(
       await tx.execute(sql`
         update recognition_schedules
            set total_amount = ${o.allocated_price}, updated_at = now(), updated_by = ${actorId}
-         where id = ${scheduleId}`);
+         where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
       const ins = (await tx.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)

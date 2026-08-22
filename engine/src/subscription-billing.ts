@@ -487,7 +487,7 @@ export async function billSubscriptionNow(subscriptionId: string, asOf?: string)
   if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const today = asOf ?? (await businessToday(orgId));
   const gen = await withOrg(orgId, async () => {
-    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} limit 1`));
+    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
     return billOne(s, today, s.nextBillOn, s.currentPeriodStart);
@@ -496,7 +496,7 @@ export async function billSubscriptionNow(subscriptionId: string, asOf?: string)
     await db.execute(sql`
       update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId},
              last_billed_at = now(), last_error = null
-       where id = ${subscriptionId}
+       where id = ${subscriptionId} and org_id = ${orgId}
     `);
   });
   return gen;
@@ -615,7 +615,7 @@ export async function changeSubscription(
       update subscriptions set quantity = ${newQty},
              price_override = ${changes.priceOverride !== undefined ? (changes.priceOverride ?? null) : row.priceOverride},
              last_invoice_id = coalesce(${invoiceId}, last_invoice_id), updated_at = now()
-       where id = ${subscriptionId}
+       where id = ${subscriptionId} and org_id = ${orgId}
     `);
     return { invoiceId, documentNumber, adjustment };
   });
@@ -672,7 +672,7 @@ export async function prorateFirstInvoice(
     await db.execute(sql`
       update subscriptions set next_bill_on = ${firstBillOn}, current_period_start = ${row.startOn},
              run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_billed_at = now()
-       where id = ${subscriptionId}
+       where id = ${subscriptionId} and org_id = ${orgId}
     `);
     return { ...gen, amount };
   });
