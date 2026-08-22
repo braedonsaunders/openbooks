@@ -632,7 +632,7 @@ export async function postSettlementBatch(
       `);
     }
     await db.execute(
-      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId}`,
+      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId} and org_id = ${orgId}`,
     );
     await db.execute(sql`
       update psp_settlement_batches set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(),

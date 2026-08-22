@@ -100,7 +100,7 @@ export async function runOwnershipConsolidation(
                     ${elimination.baseCurrency},${line.amount},1,${line.memo})
           `);
         }
-        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId}`);
+        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId} and org_id=${orgId}`);
         if (reverses) {
           await tx.execute(sql`
             update journal_entries
@@ -119,13 +119,13 @@ export async function runOwnershipConsolidation(
       const prior = (await tx.execute<{ interest_id: string; id: string; entry_number: string }>(sql`
         select oce.interest_id, je.id, je.entry_number
           from ownership_consolidation_entries oce
-          join ownership_consolidation_runs r on r.id=oce.run_id and r.period_id=${periodId}
+          join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
           join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
          where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
            and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted')
       `));
       for (const old of prior.rows) {
-        const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} order by line_number`));
+        const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`));
         await post(old.interest_id, "reversal", oldLines.rows.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), memo: `Reversal of ${old.entry_number}` })), old.id);
       }
 
@@ -398,10 +398,10 @@ export async function runAutoElimination(
            currency, txn_amount, fx_rate, memo)
         select org_id, ${reversalId}, line_number, account_id, subsidiary_id, -amount,
                currency, -txn_amount, fx_rate, ${`Reversal of ${p.entryNumber}`}
-          from journal_lines where entry_id = ${p.id}`);
+          from journal_lines where entry_id = ${p.id} and org_id = ${orgId}`);
       await tx.execute(sql`
         update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-         where id = ${reversalId}`);
+         where id = ${reversalId} and org_id = ${orgId}`);
       await tx.execute(sql`
         update journal_entries
            set status = 'reversed', updated_at = now(), updated_by = ${userId}
@@ -433,7 +433,7 @@ export async function runAutoElimination(
     }
     await tx.execute(sql`
       update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
-       where id = ${entryId}`);
+       where id = ${entryId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)

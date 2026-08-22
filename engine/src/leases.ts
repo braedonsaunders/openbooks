@@ -542,7 +542,7 @@ async function postLeaseEntry(
   }
   await tx.execute(sql`
     update journal_entries set status = 'posted', posted_at = now(), posted_by = ${args.actorId}
-     where id = ${entryId}`);
+     where id = ${entryId} and org_id = ${args.orgId}`);
   return entryId;
 }
 

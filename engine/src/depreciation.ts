@@ -849,12 +849,12 @@ export async function runDepreciation(
 
         await tx.execute(sql`
           update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
-           where id = ${eid}`);
+           where id = ${eid} and org_id = ${orgId}`);
 
         await tx.execute(sql`
           update depreciation_schedule_lines
              set posted_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.line_id}`);
+           where id = ${row.line_id} and org_id = ${orgId}`);
 
         return { entryId: eid, amount: planned };
       });

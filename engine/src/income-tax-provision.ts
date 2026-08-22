@@ -893,7 +893,7 @@ export async function postProvisionRun(
           from journal_lines where org_id = ${orgId} and entry_id = ${priorPosted.rows[0].journal_entry_id}
       `);
       await db.execute(
-        sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${reversalEntryId}`,
+        sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${reversalEntryId} and org_id = ${orgId}`,
       );
       await db.execute(sql`
         update journal_entries
@@ -938,7 +938,7 @@ export async function postProvisionRun(
       `);
     }
     await db.execute(
-      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId}`,
+      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId} and org_id = ${orgId}`,
     );
     await db.execute(sql`
       update tax_provision_runs

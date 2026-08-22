@@ -358,7 +358,7 @@ export async function postInventoryEntry(
               ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.locationId ?? null}, ${l.memo ?? p.memo})`);
   }
   await tx.execute(
-    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${eid}`,
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${eid} and org_id = ${p.orgId}`,
   );
   return eid;
 }

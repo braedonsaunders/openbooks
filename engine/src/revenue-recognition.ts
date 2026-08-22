@@ -1057,12 +1057,12 @@ export async function runRevenueRecognition(
         }
 
         await tx.execute(sql`
-          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${eid}`);
+          update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${eid} and org_id = ${orgId}`);
 
         await tx.execute(sql`
           update recognition_schedule_lines
              set recognized_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.line_id}`);
+           where id = ${row.line_id} and org_id = ${orgId}`);
 
         return { status: "posted" as const, entryId: eid };
       });
