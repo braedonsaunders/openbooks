@@ -932,6 +932,20 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
         }
       }
     }
+    // Stored prebill lines and existing invoices stay. Turning Equipment off
+    // must refuse a convert that would persist equipment_charge.
+    if (!(await isFeatureEnabled(orgId, 'equipment'))) {
+      const itemIds = [...new Set(
+        lines.rows.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          throw new WipBillingError('Equipment is disabled', 404)
+        }
+      }
+    }
 
     const invoiceNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', worksheet.subsidiary_id)
 

@@ -498,6 +498,16 @@ test('the surfaces this test was written for are covered', () => {
     'convertPrebill must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('lib/wip-billing.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,80}Equipment is disabled/,
+    'convertPrebill must not copy equipment_charge lines when Equipment is off — stored prebill lines and existing invoices stay',
+  )
+  assert.match(
+    read('lib/wip-billing.ts'),
+    /WipBillingError\('Equipment is disabled', 404\)/,
+    'convertPrebill must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('../engine/src/subscription-billing.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'subscription invoice generate must name the inventory kinds the Features switch refuses',
