@@ -280,6 +280,6 @@ export async function recomputeOpenBalances(orgId: string): Promise<number> {
          where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
          group by d.id
       ) c
-     where d.id = c.id and d.open_balance is distinct from c.ob`));
+     where d.id = c.id and d.org_id = ${orgId} and d.open_balance is distinct from c.ob`));
   return res.rowCount ?? 0;
 }
