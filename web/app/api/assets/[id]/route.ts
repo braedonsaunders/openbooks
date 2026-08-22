@@ -28,10 +28,11 @@ function strOrNull(v: unknown): string | null {
 
 /** Exact numeric(19,4) money string or null. */
 function moneyOrNull(v: unknown): string | null | 'invalid' {
-  const s = strOrNull(typeof v === 'number' ? String(v) : v)
-  if (s === null) return null
+  if (v === null || v === undefined || v === '') return null
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
   try {
-    return normalizeMoney(s)
+    return normalizeMoney(exact)
   } catch {
     return 'invalid'
   }

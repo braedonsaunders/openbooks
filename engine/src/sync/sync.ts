@@ -1,6 +1,6 @@
 import { desc, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
-import { toUnits, fromUnits, normalizeDecimal } from "../money.ts";
+import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money.ts";
 import {
   postDocument,
   regenerateGlImpactTx,
@@ -1074,10 +1074,10 @@ async function insertImportedLines(
         itemId: line.itemId,
         quantity: line.quantity ?? "1",
         unit: line.unit ?? null,
-        unitPrice: line.unitPrice ?? line.amount,
-        amount: line.amount,
+        unitPrice: normalizeDecimal(line.unitPrice ?? line.amount, 8),
+        amount: normalizeMoney(line.amount),
         taxCodeId: effectiveTaxCodeId(line.taxAmount, line.taxCodeId),
-        taxAmount: line.taxAmount,
+        taxAmount: normalizeMoney(line.taxAmount),
         taxOverridden: line.taxOverridden,
         partyId: line.partyId ?? null,
         departmentId: line.departmentId,
@@ -1087,7 +1087,7 @@ async function insertImportedLines(
         description: line.description,
         isBillable: line.isBillable ?? false,
         markupPercent: line.markupPercent ?? null,
-        billAmount: line.billAmount ?? null,
+        billAmount: line.billAmount == null ? null : normalizeMoney(line.billAmount),
         // Line identity from the source system, so a migrated document can be
         // reconciled and re-synced line by line rather than only as a whole.
         custom: line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {},
@@ -1491,11 +1491,11 @@ export async function runSync(
                 postingPeriodId: doc.postingPeriodId ?? null,
                 dueDate: doc.dueDate,
                 currency: doc.currency ?? source.baseCurrency,
-                fxRate: doc.fxRate ?? "1",
+                fxRate: normalizeDecimal(doc.fxRate ?? "1", 10),
                 status: "draft",
-                subtotal: doc.subtotal ?? "0",
+                subtotal: normalizeMoney(doc.subtotal ?? "0"),
                 taxTotal: "0",
-                total: doc.total ?? "0",
+                total: normalizeMoney(doc.total ?? "0"),
                 memo: doc.memo,
                 referenceNumber: doc.referenceNumber,
                 custom: doc.controlAccountId
@@ -1743,7 +1743,7 @@ export async function runSync(
               document_date = ${doc.documentDate},
               posting_date = ${doc.postingDate ?? doc.documentDate},
               posting_period_id = ${doc.postingPeriodId ?? null}, due_date = ${doc.dueDate},
-              currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
+              currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${normalizeDecimal(doc.fxRate ?? "1", 10)},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
               status = case
                 when posted_entry_id is not null then status

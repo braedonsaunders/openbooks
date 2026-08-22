@@ -6,6 +6,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
@@ -30,12 +31,13 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return isUuid(s) ? s : 'invalid'
 }
 
-/** Parse a money-ish string → 4dp numeric string, null, or 'invalid'. */
+/** Exact numeric(19,4) money string, null, or 'invalid'. */
 function moneyOrNull(v: unknown): string | null | 'invalid' {
-  const s = strOrNull(v)
-  if (s === null) return null
+  if (v === null || v === undefined || v === '') return null
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
   try {
-    return normalizeMoney(s)
+    return normalizeMoney(exact)
   } catch {
     return 'invalid'
   }

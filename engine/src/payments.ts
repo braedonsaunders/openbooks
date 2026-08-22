@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
-import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, sum, toUnits } from "./money.ts";
+import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
@@ -149,6 +149,12 @@ export async function createPaymentDocument(opts: {
     ) as id`));
   const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
+  let fxRate: string;
+  try {
+    fxRate = normalizeDecimal(opts.fxRate ?? "1", 10);
+  } catch {
+    throw new PaymentError("exchange rate must be an exact decimal");
+  }
   const [doc] = await db
     .insert(schema.documents)
     .values({
@@ -159,7 +165,7 @@ export async function createPaymentDocument(opts: {
       subsidiaryId,
       documentDate: opts.documentDate ?? await businessToday(opts.orgId),
       currency: opts.currency ?? org.baseCurrency,
-      fxRate: opts.fxRate ?? "1",
+      fxRate,
       memo: opts.memo ?? null,
       subtotal: "0",
       taxTotal: "0",
