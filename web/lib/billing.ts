@@ -53,6 +53,8 @@ import { featureEnabled, type FeatureState } from './features'
 
 export class BillingError extends Error {}
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 interface GenerateResult {
   id: string
   documentNumber: string
@@ -643,6 +645,20 @@ export async function generateInvoiceFromBillingRequest(
     const presentedLines = rolled.presented
     if (built.some((l) => !l.accountId)) {
       throw new BillingError('An income account is required — configure income accounts on the billable items')
+    }
+    // Stored time/cost rows and existing invoices stay. Turning Inventory off
+    // must refuse a generate that would persist inventory / assembly / kit.
+    if (!featureEnabled(featureState, 'inventory')) {
+      const itemIds = [...new Set(
+        presentedLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          throw new BillingError('Inventory is disabled')
+        }
+      }
     }
 
     // -- create the customer_invoice draft --------------------------------

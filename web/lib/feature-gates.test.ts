@@ -410,6 +410,21 @@ test('the surfaces this test was written for are covered', () => {
       `${file} must drop inventory/assembly/kit from the picker when Inventory is off — stored lines stay`,
     )
   }
+  assert.match(
+    read('lib/billing.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'invoice generate must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('lib/billing.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'generateInvoiceFromBillingRequest must not persist inventory/assembly/kit lines when Inventory is off — stored time/cost rows and existing invoices stay',
+  )
+  assert.match(
+    read('app/api/billing-requests/[id]/create-invoice/route.ts'),
+    /Inventory is disabled[\s\S]{0,200}status: 404/,
+    'invoice generate must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
