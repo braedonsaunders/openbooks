@@ -274,6 +274,7 @@ export async function recomputeOpenBalances(orgId: string): Promise<number> {
             select sum(a.amount) as applied
               from applications a
              where (a.to_line_id = jl.id or a.from_line_id = jl.id)
+               and a.org_id = d.org_id
                and a.unapplied_at is null
           ) ap on true
          where d.org_id = ${orgId} and d.status = 'posted' and d.posted_entry_id is not null
