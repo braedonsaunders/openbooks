@@ -24,6 +24,7 @@ export async function seedDashboardDefaultsForOrg(
         values (${orgId}, ${roleKey}, ${JSON.stringify(layout)}::jsonb)
         on conflict (org_id, role_key) do update
           set layout = excluded.layout, updated_at = now()
+        where role_dashboard_layouts.org_id = ${orgId}
       `);
     }
   });
