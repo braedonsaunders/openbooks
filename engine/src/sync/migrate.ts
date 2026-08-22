@@ -1001,7 +1001,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${persistTimeEntryHours(f.hours == null || f.hours === "" ? "0" : f.hours)},
           time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
           project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
-          is_billable=${!!f.isBillable}, cost_rate=${moneyOrNull(f.costRate)}, bill_rate=${moneyOrNull(f.billRate)},
+          is_billable=${!!f.isBillable}, cost_rate=${f.costRate == null || f.costRate === "" ? null : persistTimeEntryCostRate(f.costRate)}, bill_rate=${moneyOrNull(f.billRate)},
           billing_status=${effectiveBillingStatus},
           costing_basis=${sourceCostingBasis},
           custom = custom || ${JSON.stringify({
