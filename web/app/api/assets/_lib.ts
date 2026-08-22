@@ -136,7 +136,7 @@ export async function loadAsset(
     db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from depreciation_schedule_lines l
-        join depreciation_schedules s on s.id=l.schedule_id
+        join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
         join accounting_books b on b.id=s.book_id
         join accounting_periods p on p.id=l.period_id
        where s.asset_id=${id} and l.org_id=${orgId}
@@ -168,10 +168,10 @@ export async function loadAsset(
                rows between unbounded preceding and current row
              )::text as accumulated
         from depreciation_schedule_lines l
-        join depreciation_schedules s on s.id=l.schedule_id
+        join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
         join accounting_books b on b.id=s.book_id
         join accounting_periods p on p.id=l.period_id
-        left join depreciation_inputs i on i.id=l.input_id
+        left join depreciation_inputs i on i.id=l.input_id and i.org_id=l.org_id
         left join files ef on ef.id=i.evidence_file_id
        where s.asset_id=${id} and l.org_id=${orgId}
     )
