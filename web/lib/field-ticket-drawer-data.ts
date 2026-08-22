@@ -37,8 +37,20 @@ export async function loadFieldTicketDrawerData({
     throw error
   }
 
-  const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
-  const today = await businessToday(orgId)
+  const [equipmentEnabled, inventoryEnabled, today] = await Promise.all([
+    isFeatureEnabled(orgId, 'equipment'),
+    isFeatureEnabled(orgId, 'inventory'),
+    businessToday(orgId),
+  ])
+  // Inventory stays on stored ticket lines. The picker only omits the kind
+  // once the Features switch is off so a draft cannot add a new one.
+  const catalogItemKinds = [
+    'equipment_charge',
+    'non_inventory',
+    'other_charge',
+    ...(inventoryEnabled ? ['inventory'] : []),
+    'service',
+  ]
   const [employees, laborItems, timeTypes, catalogItems, projects, projectTasks, equipmentUnits, resolvedForm] =
     (await Promise.all([
       db.execute<(FieldTicketDrawerProps['employees'])[number]>(sql`
@@ -81,7 +93,7 @@ export async function loadFieldTicketDrawerData({
       db.execute<(FieldTicketDrawerProps['catalogItems'])[number]>(sql`
         select id, name, kind, default_rate from items
          where org_id = ${orgId} and is_active
-           and kind in ('equipment_charge', 'non_inventory', 'other_charge', 'inventory', 'service')
+           and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
          order by kind, name`),
       db.execute<(FieldTicketDrawerProps['projects'])[number]>(sql`
         select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,

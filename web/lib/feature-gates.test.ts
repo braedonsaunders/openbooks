@@ -1033,6 +1033,16 @@ test('the surfaces this test was written for are covered', () => {
     'field-ticket add-line must 404 — not persist equipment_unit_id — when Equipment is off',
   )
   assert.match(
+    read('lib/field-ticket-drawer-data.ts'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'field-ticket catalog picker must read the Inventory switch before offering inventory items',
+  )
+  assert.match(
+    read('lib/field-ticket-drawer-data.ts'),
+    /inventoryEnabled \? \['inventory'\]/,
+    'field-ticket catalog picker must drop inventory when Inventory is off — stored tickets stay',
+  )
+  assert.match(
     read('app/(app)/items/page.tsx'),
     /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
     'the items page must not load recognition rules when Revenue Recognition is off',
