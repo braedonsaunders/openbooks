@@ -1,4 +1,4 @@
-import { businessToday, parseIsoDate } from "../business-date.ts";
+import { addCalendarDays, businessToday, parseIsoDate } from "../business-date.ts";
 import { QboClient } from "../qbo.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money.ts";
 import { buildNativeFromQbo, type QboBuildOpts, type QboTxn } from "./qbo-native.ts";
@@ -305,7 +305,7 @@ export class QboSource implements MigrationSource {
     const report = await this.client.report<QboReport>("GeneralLedger", {
       accounting_method: "Accrual",
       start_date: "1970-01-01",
-      end_date: new Date(Date.now() + 400 * 24 * 3600 * 1000).toISOString().slice(0, 10),
+      end_date: addCalendarDays(await businessToday(this.orgId), 400),
       columns: "tx_date,txn_type,doc_num,name,account_name,debt_home_amt,credit_home_amt",
     });
     const byBucket = new Map<string, bigint>();

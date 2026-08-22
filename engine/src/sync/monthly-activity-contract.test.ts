@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { addCalendarDays, businessToday } from "../business-date.ts";
 import type { QboClient } from "../qbo.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
 import { NetSuiteSource } from "./netsuite-source.ts";
@@ -111,6 +112,7 @@ test("QuickBooks exposes transaction account-month home-currency activity", asyn
     report: async (name: string, params: Record<string, string>) => {
       assert.equal(name, "GeneralLedger");
       assert.equal(params.accounting_method, "Accrual");
+      assert.equal(params.end_date, addCalendarDays(await businessToday("00000000-0000-0000-0000-000000000000"), 400));
       return {
         Rows: {
           Row: [
