@@ -849,6 +849,7 @@ export async function issueInventory(
       lines,
     });
 
+    const issueQuantity = persistReceiptMoney(input.quantity, "issue quantity");
     const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
@@ -856,7 +857,7 @@ export async function issueInventory(
          document_line_id, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'issue', ${input.date}, ${input.stockLocationId},
               ${input.lotId ?? null}, ${input.serialId ?? null},
-              ${neg(input.quantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
+              ${neg(issueQuantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0].id;
