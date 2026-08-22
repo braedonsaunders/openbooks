@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { filedBoxAmounts, formDefinition } from '@openbooks/engine/src/information-returns.ts'
 import { guardPermission } from '@/lib/authz'
@@ -116,7 +117,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     )
   }
 
-  const filename = `${filing.form_type}-${filing.tax_year}-transmittal.csv`
+  const filename = `${filing.form_type}-${filing.tax_year}-transmittal-${await businessToday(orgId)}.csv`
   return new NextResponse(lines.join('\n') + '\n', {
     status: 200,
     headers: {
