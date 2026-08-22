@@ -2057,6 +2057,31 @@ test('the surfaces this test was written for are covered', () => {
     'the labor-rate-card create must not send currency when Multi-currency is off',
   )
   assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'labor-rate-card update must refuse currency when Multi-currency is off — stored books stay',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'labor-rate-card update must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /currency = case when \$\{body\.currency === undefined\} then currency/,
+    'labor-rate-card update must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx'),
+    /\/api\/labor-rate-cards\/\$\{card\.id\}[\s\S]{0,240}multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the labor-rate-card edit must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx'),
+    /placement\.key === "currency"[\s\S]{0,80}!props\.multiCurrency/,
+    'the labor-rate-card form must hide the currency control when Multi-currency is off',
+  )
+  assert.match(
     read('app/api/admin/setup/[entity]/route.ts'),
     /entity\.key === 'item-rate-books'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
     'item-rate-book create must refuse currency when Multi-currency is off — stored books stay',
