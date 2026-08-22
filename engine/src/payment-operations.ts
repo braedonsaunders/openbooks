@@ -615,7 +615,7 @@ async function storeArtifactFile(
       createdBy: userId,
     }).returning({ id: schema.fileVersions.id });
     await tx.insert(schema.fileBlobs).values({ versionId: version.id, bytes });
-    await tx.execute(sql`update files set current_version_id = ${version.id} where id = ${file.id}`);
+    await tx.execute(sql`update files set current_version_id = ${version.id} where id = ${file.id} and org_id = ${orgId}`);
     return { fileId: file.id, versionId: version.id };
   });
 }
@@ -877,7 +877,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
     const claimed = await withBypassContext(() =>
       db.execute<{ id: string }>(sql`
       update payment_schedules set next_run_at = ${next}, last_run_at = ${now}
-       where id = ${schedule.id} and next_run_at <= ${now}
+       where id = ${schedule.id} and org_id = ${schedule.org_id} and next_run_at <= ${now}
        returning id
     `));
     if (!claimed.rows[0]) continue;
@@ -912,7 +912,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
       if (selected.length === 0) {
         const result = { scheduleId: schedule.id, selected: 0 };
         outcomes.push(result);
-        await db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`);
+        await db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id} and org_id = ${schedule.org_id}`);
         return;
       }
       const actor = schedule.created_by ?? schedule.org_id;
@@ -928,13 +928,13 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
       if (schedule.action === "submit_for_approval") await submitPaymentRun(run.id, schedule.org_id, actor);
       const result = { scheduleId: schedule.id, runId: run.id, selected: selected.length };
       outcomes.push(result);
-      await db.execute(sql`update payment_schedules set last_payment_run_id = ${run.id}, last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`);
+      await db.execute(sql`update payment_schedules set last_payment_run_id = ${run.id}, last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id} and org_id = ${schedule.org_id}`);
       });
     } catch (error) {
       const result = { scheduleId: schedule.id, selected: 0, error: error instanceof Error ? error.message : String(error) };
       outcomes.push(result);
       await withOrgContext(schedule.org_id, () =>
-        db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`));
+        db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id} and org_id = ${schedule.org_id}`));
     }
   }
   return outcomes;

@@ -129,6 +129,7 @@ export default async function PeriodClose({
           canReopen={can(authz, "close.reopen")}
           canManageFlows={can(authz, "flows.manage")}
           subsidiaryEnabled={subsidiaryEnabled}
+          multiCurrency={featureEnabled(featureState, "multiCurrency")}
           advancedClose={advancedClose}
         />
       );
