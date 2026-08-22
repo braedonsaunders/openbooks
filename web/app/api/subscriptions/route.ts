@@ -76,6 +76,12 @@ export async function POST(req: Request) {
   try {
     switch (body.action) {
       case "addPlan": {
+        // Plan currency is Multi-currency configuration. Turning that switch
+        // off must refuse a new write; omitted currency leaves the column
+        // unset so turning the feature back on does not invent a code.
+        if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         if (!INTERVALS.includes(body.interval)) return NextResponse.json({ error: "invalid interval" }, { status: 400 });
         const amount = canonicalDecimal(body.amount ?? "0", 4);
@@ -91,11 +97,18 @@ export async function POST(req: Request) {
         return NextResponse.json({ id: r.rows[0]!.id }, { status: 201 });
       }
       case "updatePlan": {
+        // Plan currency is Multi-currency configuration. Turning that switch
+        // off must refuse a new write; the stored code stays so turning the
+        // feature back on restores the same currency.
+        if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
         const amount = canonicalDecimal(body.amount ?? "0", 4);
         if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         await db.execute(sql`
           update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
-                 amount = ${normalizeMoney(amount)}, currency_code = ${body.currency ?? null},
+                 amount = ${normalizeMoney(amount)},
+                 currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
                  interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
                  income_account_id = ${body.incomeAccountId ?? null}, item_id = ${body.itemId ?? null},
                  tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
