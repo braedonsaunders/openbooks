@@ -1,5 +1,6 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { businessToday } from "../business-date.ts";
 import { db, schema, withBypassContext, withOrgContext } from "../db.ts";
 import { unsealJson } from "../secrets.ts";
 import { buildCapturePlan, continueRequestXml, negotiateQbxmlVersion, responseStatus, type QbdRequestSpec } from "./qbxml.ts";
@@ -51,7 +52,8 @@ export async function prepareCapture(input: {
   since: Date | null;
 }): Promise<string> {
   return withOrgContext(input.orgId, async () => {
-    const through = new Date();
+    const now = new Date();
+    const through = new Date(`${await businessToday(input.orgId)}T00:00:00.000Z`);
     const plan = buildCapturePlan(input.historyStartDate, through);
     return db.transaction(async (tx) => {
       await tx.execute(sql`
@@ -66,8 +68,8 @@ export async function prepareCapture(input: {
         orgId: input.orgId,
         connectionId: input.connectionId,
         since: input.since,
-        capturedThrough: through,
-        expiresAt: new Date(through.getTime() + CAPTURE_TTL_MS),
+        capturedThrough: now,
+        expiresAt: new Date(now.getTime() + CAPTURE_TTL_MS),
         progress: { completed: 0, total: plan.length },
       }).returning({ id: schema.qbdCaptures.id });
       if (!capture) throw new Error("failed to create QuickBooks Desktop capture");
