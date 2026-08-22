@@ -127,7 +127,7 @@ export async function payrollRemittanceSummary(
            coalesce(sum(s.gross), 0) as gross,
            count(distinct s.employee_party_id)::int as employees
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       left join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
