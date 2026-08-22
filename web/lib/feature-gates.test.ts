@@ -214,6 +214,11 @@ test('the surfaces this test was written for are covered', () => {
     /builtIn\.featureKey && !\(await isFeatureEnabled/,
     'REST/MCP catalog must hide projects and assets when their Features switch is off',
   )
+  assert.match(
+    read('lib/application/approvals.ts'),
+    /isFeatureEnabled\(context\.authz\.user\.orgId, "flows"\)/,
+    'MCP/assistant approvals must disappear when Flows is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

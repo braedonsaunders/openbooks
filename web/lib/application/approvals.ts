@@ -4,6 +4,7 @@ import {
   GateError,
   worklistGates,
 } from "@openbooks/engine/src/flows/index.ts";
+import { isFeatureEnabled } from "../features";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
@@ -11,6 +12,7 @@ import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export async function listApprovalWorklist(context: ApplicationContext) {
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "flows"))) return [];
   assertApplicationPermission(context, "flows.approve");
   const gates = await worklistGates(
     context.authz.user.orgId,
@@ -33,6 +35,7 @@ export async function decideApproval(
     idempotencyKey: string;
   },
 ): Promise<{ replayed: boolean; result: unknown }> {
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "flows"))) throw notFound("approval");
   assertApplicationPermission(context, "flows.approve");
   if (!isUuid(input.gateId)) throw invalidInput("gateId must be a UUID");
   if (input.decision === "rejected" && !input.comment?.trim()) {
