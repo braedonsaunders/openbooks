@@ -318,7 +318,7 @@ async function billOne(
   // leaving an orphan duplicate document.
   await db.execute(sql`select id from subscriptions where id = ${sub.id} and org_id = ${sub.orgId} for update`);
   const price = sub.priceOverride ?? sub.planAmount;
-  const advanced = await advancedBillingSnapshot(sub.id, billingDate, periodStartOverride);
+  const advanced = await advancedBillingSnapshot(sub.orgId, sub.id, billingDate, periodStartOverride);
   if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
   if (advanced) {
     const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
