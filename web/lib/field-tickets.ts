@@ -942,7 +942,7 @@ export async function loadFieldTicket(
              fv.id as version_id, fv.content_type, fv.storage_kind, fb.bytes
         from field_ticket_signatures s
         join files f on f.id = s.signature_file_id and f.org_id = s.org_id
-        join file_versions fv on fv.id = f.current_version_id
+        join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
         left join file_blobs fb on fb.version_id = fv.id
        where s.org_id = ${orgId} and s.field_ticket_id = ${ticketId}
        order by s.signed_at`),
