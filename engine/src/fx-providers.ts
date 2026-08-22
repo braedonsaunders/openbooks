@@ -157,6 +157,7 @@ export async function saveFxProviderConfig(
       lookback_days = excluded.lookback_days, is_enabled = excluded.is_enabled,
       secrets = excluded.secrets, next_sync_at = excluded.next_sync_at,
       last_error = null, updated_at = now(), updated_by = excluded.updated_by
+    where fx_provider_configs.org_id = ${orgId}
     returning id
   `));
   return r.rows[0]!.id;
