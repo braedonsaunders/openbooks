@@ -15,15 +15,22 @@ export default async function Reports() {
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
+  const orgId = authz?.user.orgId
+  const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
+  const emptyDefs = Promise.resolve({ rows: [] as { id: string; name: string; kind: string; entity: string | null }[] })
   const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities] = await Promise.all([
-    db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
-      rows: { id: string; name: string; path: string; params: Record<string, string> }[]
-    }>,
-    db.execute(
-      sql`select id, name, kind, query->>'entity' as entity from report_definitions where coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
-    ) as Promise<{
-      rows: { id: string; name: string; kind: string; entity: string | null }[]
-    }>,
+    orgId
+      ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
+          rows: { id: string; name: string; path: string; params: Record<string, string> }[]
+        }>
+      : emptySaved,
+    orgId
+      ? db.execute(
+          sql`select id, name, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
+        ) as Promise<{
+          rows: { id: string; name: string; kind: string; entity: string | null }[]
+        }>
+      : emptyDefs,
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),

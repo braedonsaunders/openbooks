@@ -163,10 +163,10 @@ export default async function PeriodClose({
         from accounting_periods p
         left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
           and r.book_id = ${selectedBookId || null}
-        left join lateral (select count(*) as entries from journal_entries e where e.period_id = p.id) a on true
+        left join lateral (select count(*) as entries from journal_entries e where e.period_id = p.id and e.org_id = p.org_id) a on true
         left join lateral (
           select count(*) as closed_modules from period_locks pl
-           where pl.period_id = p.id and pl.subsidiary_id is null and pl.state = 'closed'
+           where pl.period_id = p.id and pl.org_id = p.org_id and pl.subsidiary_id is null and pl.state = 'closed'
              and pl.book_id = ${selectedBookId || null}
         ) l on true
        where p.org_id = ${orgId} and p.fiscal_year = ${fy}

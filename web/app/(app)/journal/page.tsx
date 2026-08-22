@@ -55,9 +55,9 @@ export default async function Journal({
   // module). An entry qualifies if its source document is a journal, or it's a
   // GL-native entry with no subledger document (closing, allocation, etc.).
   const journalsOnly = sql`(
-    exists (select 1 from documents d where d.posted_entry_id = e.id and d.kind = 'journal')
+    exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind = 'journal')
     or (
-      not exists (select 1 from documents d where d.posted_entry_id = e.id)
+      not exists (select 1 from documents d where d.posted_entry_id = e.id and d.org_id = e.org_id)
       and e.origin in ('manual','closing','allocation','revaluation','labor_burden',
                        'depreciation','revenue_recognition','fx_settlement','translation')
     )
@@ -67,7 +67,7 @@ export default async function Journal({
     db.execute(sql`
       select id, document_number, document_date, memo, total
         from documents
-       where kind = 'journal' and status = 'draft'
+       where org_id = ${authz.user.orgId} and kind = 'journal' and status = 'draft'
          ${allowedSubsidiaries
            ? allowedIds.length
              ? sql`and subsidiary_id = any(${`{${allowedIds.join(',')}}`}::uuid[])`
@@ -97,7 +97,7 @@ export default async function Journal({
           customSegmentOptions(authz.user.orgId),
         ])
       : null,
-    db.execute(sql`select count(*) as n from journal_entries e where ${journalsOnly} ${entryVisibility}`) as any,
+    db.execute(sql`select count(*) as n from journal_entries e where e.org_id = ${authz.user.orgId} and ${journalsOnly} ${entryVisibility}`) as any,
   ])
   const total = Number(postedCount.rows[0]?.n ?? 0)
   const resolvedForm = openJournal && pickers

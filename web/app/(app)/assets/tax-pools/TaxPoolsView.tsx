@@ -20,11 +20,22 @@ type Line = {
 }
 type RunResult = { taxYear: number; lines: Line[]; totals: { allowance: string; recapture: string; terminalLoss: string } }
 
-export function TaxPoolsView({ canRun, canConfigure, regimes }: { canRun: boolean; canConfigure: boolean; regimes: { code: string; name: string }[] }) {
+export function TaxPoolsView({
+  canRun,
+  canConfigure,
+  regimes,
+  defaultTaxYear,
+}: {
+  canRun: boolean
+  canConfigure: boolean
+  regimes: { code: string; name: string }[]
+  /** Last completed calendar year on the org business day — never browser UTC. */
+  defaultTaxYear: number
+}) {
   const t = useTranslations('assets')
   const tCommon = useTranslations('common')
   const locale = useLocale()
-  const [taxYear, setTaxYear] = useState(new Date().getFullYear() - 1)
+  const [taxYear, setTaxYear] = useState(defaultTaxYear)
   const [regime, setRegime] = useState(regimes.find((r) => r.code === 'ca_cca')?.code ?? regimes[0]?.code ?? 'ca_cca')
   const [result, setResult] = useState<RunResult | null>(null)
   const [busy, setBusy] = useState(false)
