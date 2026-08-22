@@ -58,9 +58,13 @@ test('setup string-array fields bind jsonb-safe JSON strings and keep empty-mean
 test('setup decimal and percent fields canonicalize without crossing IEEE-754', () => {
   const rate: SetupField = { key: 'ratePercent', kind: 'percent', required: true }
   const money: SetupField = { key: 'acquisitionCost', kind: 'decimal', required: true }
-  assert.deepEqual(coerceField(rate, '13.2500'), { column: 'rate_percent', value: '13.25' })
-  assert.deepEqual(coerceField(rate, 13.25), { column: 'rate_percent', value: '13.25' })
-  assert.deepEqual(coerceField(money, '00100.1000'), { column: 'acquisition_cost', value: '100.1' })
+  assert.deepEqual(coerceField(rate, '13.2500'), { column: 'rate_percent', value: '13.2500000000' })
+  assert.deepEqual(coerceField(rate, 13.25), { column: 'rate_percent', value: '13.2500000000' })
+  assert.deepEqual(coerceField(money, '00100.1000'), { column: 'acquisition_cost', value: '100.1000000000' })
+  assert.deepEqual(coerceField({ key: 'acquisitionRate', kind: 'decimal', required: true }, '1.25'), {
+    column: 'acquisition_rate',
+    value: '1.2500000000',
+  })
   assert.deepEqual(coerceField(rate, '1e-2'), { error: 'ratePercent must be a number' })
   assert.deepEqual(coerceField(rate, '0.30000000000000004'), { error: 'ratePercent must be a number' })
   assert.deepEqual(coerceField(money, 'not-a-number'), { error: 'acquisitionCost must be a number' })
