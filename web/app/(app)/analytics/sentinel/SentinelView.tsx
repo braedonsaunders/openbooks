@@ -12,6 +12,7 @@ import { Panel } from '../_ui/Panel'
 import { Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
@@ -582,6 +583,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
 /* --------------------------------------------------------------- Detection */
 
 function DetectionTab({ data }: { data: SentinelData }) {
+  const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -605,7 +607,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
           actions={
             <button
               type="button"
-              onClick={() => exportCsv('flagged-documents', ['Date', 'Document', 'Kind', 'Party', 'Amount', 'Flag', 'Risk', 'Reason'], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, Math.round(f.amount), f.flagType, f.riskScore, f.reason]))}
+              onClick={() => exportCsv('flagged-documents', ['Date', 'Document', 'Kind', 'Party', 'Amount', 'Flag', 'Risk', 'Reason'], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, Math.round(f.amount), f.flagType, f.riskScore, f.reason])), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV

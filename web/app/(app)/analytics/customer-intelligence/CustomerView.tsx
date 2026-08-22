@@ -48,6 +48,7 @@ import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 import { exportCsv } from '../_ui/exportCsv'
 import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 
@@ -363,6 +364,7 @@ type GroupBy = 'none' | 'segment' | 'tier' | 'churn' | 'grade'
 const HEALTH_PAGE = 25
 
 function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: CustomerRow) => void }) {
+  const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
@@ -452,7 +454,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', ['Customer', 'Health', 'Grade', 'Revenue', 'Projected CLV', 'Segment', 'Churn', 'Payment', 'Recommendation'], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), SEGMENT_LABEL[r.segment], RISK_LABEL[r.churnLevel], r.paymentRating, REC_LABEL[r.recommendation]]))}
+              onClick={() => exportCsv('customer-health', ['Customer', 'Health', 'Grade', 'Revenue', 'Projected CLV', 'Segment', 'Churn', 'Payment', 'Recommendation'], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), SEGMENT_LABEL[r.segment], RISK_LABEL[r.churnLevel], r.paymentRating, REC_LABEL[r.recommendation]]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
