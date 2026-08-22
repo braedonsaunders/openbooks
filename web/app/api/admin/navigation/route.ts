@@ -92,6 +92,7 @@ export async function PUT(req: Request) {
         config = excluded.config,
         updated_at = now(),
         updated_by = ${user.id}
+      where org_nav_configs.org_id = ${user.orgId}
       returning id
     `))
     await tx.execute(sql`
