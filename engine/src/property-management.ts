@@ -74,7 +74,7 @@ export function leaseChargeSchedule(input: {
   const start = maxDate(input.effectiveFrom, input.leaseStartsOn);
   const end = minDate(input.effectiveTo ?? input.throughOn, input.leaseEndsOn ?? input.throughOn, input.throughOn);
   if (end < start) return [];
-  if (input.frequency === "one_time") return [{ periodStartsOn: start, periodEndsOn: start, dueOn: start, amount: normalizeMoney(input.amount) }];
+  if (input.frequency === "one_time") return [{ periodStartsOn: start, periodEndsOn: start, dueOn: start, amount: exactMoney(input.amount, "Charge amount") }];
   const step = input.frequency === "monthly" ? 1 : input.frequency === "quarterly" ? 3 : 12;
   const rows: SchedulePeriod[] = [];
   for (let nominalStart = startOfMonth(start); nominalStart <= end; nominalStart = addMonths(nominalStart, step)) {

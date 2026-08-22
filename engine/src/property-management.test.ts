@@ -45,6 +45,17 @@ test("recurring schedules clamp billing day and prorate first and last periods",
     throughOn: "2026-12-31",
     billingDay: 1,
   }), [{ periodStartsOn: "2026-05-12", periodEndsOn: "2026-05-12", dueOn: "2026-05-12", amount: "250.0000" }]);
+  assert.throws(
+    () => leaseChargeSchedule({
+      amount: "2.5e2",
+      frequency: "one_time",
+      effectiveFrom: "2026-05-12",
+      leaseStartsOn: "2026-01-01",
+      throughOn: "2026-12-31",
+      billingDay: 1,
+    }),
+    (error: unknown) => error instanceof PropertyManagementError && /Charge amount must be an exact decimal/.test(error.message),
+  );
 });
 
 test("rent escalations preserve exact ledger precision", () => {
