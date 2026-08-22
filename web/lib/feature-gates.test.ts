@@ -1047,6 +1047,41 @@ test('the surfaces this test was written for are covered', () => {
     /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
     'NetSuite FAM sync must not write fixed assets when the Fixed Assets switch is off — existing register stays',
   )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /coalesce\(\(settings->'features'->>'fixedAssets'\)::boolean, true\)/,
+    'property writes must not store fixed_asset_id when Fixed Assets is off — existing links stay',
+  )
+  assert.match(
+    read('../engine/src/property-management.ts'),
+    /input\.fixedAssetId && !\(await fixedAssetsFeatureEnabled[\s\S]{0,120}Fixed assets feature is disabled/,
+    'property create must refuse a new fixed-asset link when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /isFeatureEnabled\([^,]+, ["']fixedAssets["']\)/,
+    'property create/update must refuse fixedAssetId when Fixed Assets is off — existing links stay',
+  )
+  assert.match(
+    read('app/api/property-management/route.ts'),
+    /refuseDisabledPropertyFixedAsset[\s\S]{0,900}status: 404/,
+    'property create/update must 404 — not persist — fixedAssetId when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/page.tsx'),
+    /isFeatureEnabled\([^,]+, ["']fixedAssets["']\)/,
+    'property management must not load the asset picker when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    /fixedAssetsEnabled \? \{[\s\S]{0,80}fixedAssetId/,
+    'the property form must not send fixedAssetId when Fixed Assets is off',
+  )
+  assert.match(
+    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    /\{fixedAssetsEnabled \? <Field label="Fixed asset">/,
+    'the property form must hide the fixed-asset picker when Fixed Assets is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

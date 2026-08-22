@@ -9,6 +9,7 @@ import {
   resolveFormLayout,
   resolveListView,
 } from "../../../lib/customization/resolve";
+import { isFeatureEnabled } from "../../../lib/features";
 import { requirePropertyManagementFeature } from "../../../lib/property-management-gate";
 import { PropertyManagementWorkspace } from "./PropertyManagementWorkspace";
 
@@ -35,7 +36,7 @@ export default async function PropertyManagementPage({
       ? sql``
       : sql`and d.subsidiary_id = any(${`{${allowed.join(",")}}`}::uuid[])`;
   const fieldDefs = await loadFieldDefs("managed_properties");
-  const [resolvedForm, resolvedView] = await Promise.all([
+  const [resolvedForm, resolvedView, fixedAssetsEnabled] = await Promise.all([
     resolveFormLayout({
       orgId,
       userId: authz.user.id,
@@ -52,6 +53,7 @@ export default async function PropertyManagementPage({
       viewId: pickString(sp.view),
       showInListDefs: fieldDefs.filter((def) => def.config.showInList),
     }),
+    isFeatureEnabled(orgId, "fixedAssets"),
   ]);
   const [
     subsidiaries,
@@ -85,9 +87,11 @@ export default async function PropertyManagementPage({
     db.execute(
       sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type='asset_bank' order by number nulls last`,
     ) as any,
-    db.execute(
-      sql`select id,concat_ws(' · ',asset_number,name) as name from fixed_assets where org_id=${orgId} and status not in ('disposed','written_off') ${subsidiaryScope} order by asset_number`,
-    ) as any,
+    fixedAssetsEnabled
+      ? (db.execute(
+          sql`select id,concat_ws(' · ',asset_number,name) as name from fixed_assets where org_id=${orgId} and status not in ('disposed','written_off') ${subsidiaryScope} order by asset_number`,
+        ) as any)
+      : Promise.resolve({ rows: [] }),
     db.execute(
       sql`select d.id,d.party_id as "partyId",concat_ws(' · ',d.document_number,d.document_date::text) as name,d.open_balance as "openBalance" from documents d where d.org_id=${orgId} and d.kind='customer_invoice' and d.status='posted' and coalesce(d.open_balance,0)>0 ${documentSubsidiaryScope} order by d.document_date desc`,
     ) as any,
@@ -127,6 +131,7 @@ export default async function PropertyManagementPage({
           bulk: authz.allowedSubsidiaryIds === null,
           customize: can(authz, "admin.customization.manage"),
         }}
+        fixedAssetsEnabled={fixedAssetsEnabled}
       />
     </ListPageLayout>
   );

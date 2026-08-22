@@ -133,6 +133,13 @@ async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string):
   if (!result.rows[0]?.enabled) throw new PropertyManagementError("Property management feature is disabled");
 }
 
+async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
+  const result = (await runner.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'fixedAssets')::boolean, true) as enabled from orgs where id=${orgId}
+  `));
+  return result.rows[0]?.enabled !== false;
+}
+
 async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string, changes: unknown) {
   await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values(${orgId},${table},${rowId},${action},${JSON.stringify(changes)}::jsonb,${actorId})`);
@@ -149,6 +156,9 @@ export async function createManagedProperty(input: {
   if (requestedCurrency && !/^[A-Z]{3}$/.test(requestedCurrency)) throw new PropertyManagementError("Property currency must be a three-letter ISO code");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    if (input.fixedAssetId && !(await fixedAssetsFeatureEnabled(tx, input.orgId))) {
+      throw new PropertyManagementError("Fixed assets feature is disabled");
+    }
     const scope = (await tx.execute<{ currency: string; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }>(sql`
       select s.base_currency as currency,
         (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
@@ -215,9 +225,13 @@ export async function updateManagedProperty(input: {
     throw new PropertyManagementError("Invalid property status");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
+    const nextAssetSql = input.fixedAssetId !== undefined
+      ? sql`${input.fixedAssetId ?? null}::uuid`
+      : sql`p.fixed_asset_id`;
     const scope = (await tx.execute<{
         currentSubsidiaryId: string;
         currentCurrency: string;
+        currentFixedAssetId: string | null;
         has_leases: boolean;
         has_active_leases: boolean;
         subsidiary_ok: boolean;
@@ -228,12 +242,12 @@ export async function updateManagedProperty(input: {
         deposit_account_ok: boolean;
         bank_account_ok: boolean;
       }>(sql`
-      select p.subsidiary_id as "currentSubsidiaryId",p.currency as "currentCurrency",
+      select p.subsidiary_id as "currentSubsidiaryId",p.currency as "currentCurrency",p.fixed_asset_id as "currentFixedAssetId",
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id and status in ('active','notice')) as has_active_leases,
         exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}) as subsidiary_ok,
         (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
-        (${input.fixedAssetId ?? null}::uuid is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${input.fixedAssetId ?? null} and subsidiary_id=${input.subsidiaryId})) as asset_ok,
+        (${nextAssetSql} is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${nextAssetSql} and subsidiary_id=${input.subsidiaryId})) as asset_ok,
         (${input.rentIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.rentIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as rent_account_ok,
         (${input.camIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.camIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as cam_account_ok,
         (${input.depositLiabilityAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.depositLiabilityAccountId ?? null} and type in ('liability_current_other','liability_long_term') and is_active and not is_summary)) as deposit_account_ok,
@@ -242,6 +256,11 @@ export async function updateManagedProperty(input: {
     `));
     const row = scope.rows[0];
     if (!row) throw new PropertyManagementError("Property not found");
+    const currentAssetId = row.currentFixedAssetId ? String(row.currentFixedAssetId) : null;
+    const nextAssetId = input.fixedAssetId !== undefined ? (input.fixedAssetId || null) : currentAssetId;
+    if (nextAssetId !== currentAssetId && !(await fixedAssetsFeatureEnabled(tx, input.orgId))) {
+      throw new PropertyManagementError("Fixed assets feature is disabled");
+    }
     if (!row.subsidiary_ok || !row.location_ok || !row.asset_ok)
       throw new PropertyManagementError(
         "Property dimensions do not belong to this organization",
@@ -272,7 +291,7 @@ export async function updateManagedProperty(input: {
     }
     await tx.execute(sql`
       update managed_properties set subsidiary_id=${input.subsidiaryId},location_id=${input.locationId ?? null},
-        fixed_asset_id=${input.fixedAssetId ?? null},code=${code},name=${name},property_type=${input.propertyType},
+        fixed_asset_id=${nextAssetId},code=${code},name=${name},property_type=${input.propertyType},
         status=${input.status},currency=${currency},address=${JSON.stringify(input.address ?? {})}::jsonb,
         rent_income_account_id=${input.rentIncomeAccountId ?? null},cam_income_account_id=${input.camIncomeAccountId ?? null},
         deposit_liability_account_id=${input.depositLiabilityAccountId ?? null},default_bank_account_id=${input.defaultBankAccountId ?? null},

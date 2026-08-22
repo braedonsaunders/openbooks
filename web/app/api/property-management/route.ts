@@ -38,6 +38,7 @@ import {
   loadFieldDefs,
   validateCustomValues,
 } from "../../../lib/custom-fields";
+import { isFeatureEnabled } from "../../../lib/features";
 import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
 
 export const runtime = "nodejs";
@@ -259,6 +260,37 @@ async function guardSubsidiaryAccess(
   return null;
 }
 
+function submittedFixedAssetId(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value.trim();
+}
+
+async function refuseDisabledPropertyFixedAsset(
+  orgId: string,
+  action: string,
+  body: Record<string, any>,
+): Promise<NextResponse | null> {
+  if (action !== "createProperty" && action !== "updateProperty") return null;
+  const submitted = submittedFixedAssetId(body.fixedAssetId);
+  if (action === "createProperty") {
+    if (!submitted) return null;
+  } else if (submitted === undefined) {
+    return null;
+  } else {
+    const current = (await db.execute<{ fixed_asset_id: string | null }>(sql`
+      select fixed_asset_id from managed_properties
+       where org_id=${orgId} and id=${String(body.propertyId ?? "")}
+    `));
+    const currentId = current.rows[0]?.fixed_asset_id
+      ? String(current.rows[0].fixed_asset_id)
+      : null;
+    if (currentId === submitted) return null;
+  }
+  if (await isFeatureEnabled(orgId, "fixedAssets")) return null;
+  return NextResponse.json({ error: "not found" }, { status: 404 });
+}
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Record<string, any>;
   const action = String(body.action ?? "");
@@ -275,6 +307,12 @@ export async function POST(request: Request) {
   if (feature) return feature;
   const subsidiary = await guardSubsidiaryAccess(authz, action, body);
   if (subsidiary) return subsidiary;
+  const assetGate = await refuseDisabledPropertyFixedAsset(
+    authz.user.orgId,
+    action,
+    body,
+  );
+  if (assetGate) return assetGate;
   const common = { orgId: authz.user.orgId, actorId: authz.user.id };
   try {
     let result: unknown;
