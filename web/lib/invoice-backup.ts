@@ -105,9 +105,9 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
            te.hours * coalesce(te.cost_rate, 0) as cost_amount,
            dl.amount as bill_amount, coalesce(i.name, '') as item
       from time_entries te
-      join document_lines dl on dl.id = te.invoiced_by_line_id
-      left join parties pty on pty.id = te.employee_party_id
-      left join items i on i.id = te.item_id
+      join document_lines dl on dl.id = te.invoiced_by_line_id and dl.org_id = te.org_id
+      left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
+      left join items i on i.id = te.item_id and i.org_id = te.org_id
      where dl.document_id = ${documentId} and te.org_id = ${orgId}
      order by te.worked_on, employee
   `))
@@ -162,7 +162,7 @@ export async function assembleInvoiceBackup(
 ): Promise<AssembleResult> {
   const invRes = (await db.execute<{ document_number: string; currency: string; project_name: string }>(sql`
     select d.document_number, d.currency, coalesce(p.name, '') as project_name
-      from documents d left join projects p on p.id = d.project_id
+      from documents d left join projects p on p.id = d.project_id and p.org_id = d.org_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
   `))
   const inv = invRes.rows[0]

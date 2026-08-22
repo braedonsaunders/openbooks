@@ -291,7 +291,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         select distinct on (x.employee_party_id) x.employee_party_id, i.name as title
         from (select employee_party_id, item_id, sum(hours) h from time_entries
               where org_id = ${orgId} and worked_on >= ${from} and worked_on <= ${to} group by 1, 2) x
-        join items i on i.id = x.item_id
+        join items i on i.id = x.item_id and i.org_id = ${orgId}
         order by x.employee_party_id, x.h desc
       )
       select pe.employee_party_id as id, pe.name, pe.hours, coalesce(pe.rate, 0) as rate,

@@ -934,9 +934,9 @@ export async function runRevenueRecognition(
       left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
       left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
       left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
-      left join items it on it.id = o.item_id
-      left join subsidiaries sub on sub.id = coalesce(dl.subsidiary_id, doc.subsidiary_id)
-      left join subsidiaries psub on psub.id = prj.subsidiary_id
+      left join items it on it.id = o.item_id and it.org_id = o.org_id
+      left join subsidiaries sub on sub.id = coalesce(dl.subsidiary_id, doc.subsidiary_id) and sub.org_id = o.org_id
+      left join subsidiaries psub on psub.id = prj.subsidiary_id and psub.org_id = prj.org_id
       left join lateral (
         select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at limit 1
       ) sub0 on true

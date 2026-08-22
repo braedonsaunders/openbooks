@@ -205,8 +205,8 @@ export async function snapshotTimeBillRates(
            coalesce(tt.bill_multiplier, '1') as bill_multiplier,
            i.default_rate, coalesce(s.base_currency,o.base_currency) as target_currency
       from time_entries te
-      left join time_types tt on tt.id = te.time_type_id
-      left join items i on i.id = te.item_id
+      left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
+      left join items i on i.id = te.item_id and i.org_id = te.org_id
       left join projects p on p.id=te.project_id and p.org_id=te.org_id
       left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=te.org_id
       join orgs o on o.id=te.org_id

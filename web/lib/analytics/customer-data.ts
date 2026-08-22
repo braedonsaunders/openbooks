@@ -278,8 +278,8 @@ export async function customerProfitability(period: { from: string; to: string }
     from ew e
     join journal_lines l on l.entry_id = e.id
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join projects pr on pr.id = l.project_id
-    join parties cp on cp.id = pr.customer_id
+    join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+    join parties cp on cp.id = pr.customer_id and cp.org_id = pr.org_id
     where a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.project_id is not null and pr.customer_id is not null
       ${orgFilter}
@@ -426,11 +426,11 @@ export async function customerData(period: { from: string; to: string; label: st
           coalesce(sum(ap.amount), 0) as applied,
           max(pe.posting_date) as last_payment
         from documents d
-        join journal_entries ie on ie.source_document_id = d.id
-        join journal_lines il on il.entry_id = ie.id
-        join accounts ia on ia.id = il.account_id and ia.type = 'asset_receivable'
-        left join applications ap on ap.to_line_id = il.id and ap.unapplied_at is null
-        left join journal_lines pl on pl.id = ap.from_line_id
+        join journal_entries ie on ie.source_document_id = d.id and ie.org_id = d.org_id
+        join journal_lines il on il.entry_id = ie.id and il.org_id = ie.org_id
+        join accounts ia on ia.id = il.account_id and ia.org_id = il.org_id and ia.type = 'asset_receivable'
+        left join applications ap on ap.to_line_id = il.id and ap.org_id = il.org_id and ap.unapplied_at is null
+        left join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
         left join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
         where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
           and d.voided_at is null and d.party_id is not null

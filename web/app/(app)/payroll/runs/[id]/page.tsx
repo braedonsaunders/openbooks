@@ -78,10 +78,10 @@ export default async function PayRunPage({
       select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
              c.code as component_code, pr.name as project_name, dep.name as department_name
         from pay_stub_lines l
-        join pay_stubs st on st.id = l.stub_id
+        join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
         left join pay_components c on c.id = l.component_id
-        left join projects pr on pr.id = l.project_id
-        left join departments dep on dep.id = l.department_id
+        left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+        left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
        where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
        order by l.stub_id, l.sequence`),
     // Step 1 roster: everyone the schedule would include, with approved hours

@@ -531,7 +531,7 @@ export async function loadPaymentTraces(args: {
     )
     select paid.payment_id, bill.id as bill_id, sum(a.amount) as applied
       from paid
-      join applications a on a.from_line_id = paid.line_id and a.unapplied_at is null
+      join applications a on a.from_line_id = paid.line_id and a.org_id = ${args.orgId} and a.unapplied_at is null
       join journal_lines target on target.id = a.to_line_id and target.org_id = a.org_id
       join journal_entries bje on bje.id = target.entry_id and bje.org_id = target.org_id
       join documents bill on bill.id = bje.source_document_id and bill.org_id = bje.org_id

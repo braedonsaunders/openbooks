@@ -46,8 +46,8 @@ export async function GET(req: Request) {
              coalesce(sum(case when im.kind in ('receipt','transfer_in','return','adjustment') and im.quantity > 0 then im.quantity else 0 end), 0)
                - coalesce(sum(case when im.quantity < 0 then -im.quantity else 0 end), 0) as "approxQty"
         from lots l
-        left join items i on i.id = l.item_id
-        left join inventory_movements im on im.lot_id = l.id
+        left join items i on i.id = l.item_id and i.org_id = l.org_id
+        left join inventory_movements im on im.lot_id = l.id and im.org_id = l.org_id
        where l.org_id = ${orgId}
        group by l.id, i.code, i.name
        order by l.lot_number

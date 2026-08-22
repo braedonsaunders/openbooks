@@ -871,7 +871,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
     join managed_properties p on p.id=l.property_id and p.org_id=l.org_id join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id
     join lateral (
       select greatest(abs(jl.txn_amount)-coalesce(sum(a.target_transaction_amount) filter(where a.unapplied_at is null),0),0)::text as transaction_open
-      from journal_lines jl left join applications a on a.to_line_id=jl.id
+      from journal_lines jl left join applications a on a.to_line_id=jl.id and a.org_id=jl.org_id
       where jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id and jl.is_open_item and jl.amount>0
       group by jl.id
     ) oi on true

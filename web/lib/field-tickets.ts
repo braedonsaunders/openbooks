@@ -924,8 +924,8 @@ export async function loadFieldTicket(
              ) order by c.sequence) from charge_rate_components c
                where c.document_line_id = dl.id and c.role = 'bill'), '[]'::jsonb) as rate_components
         from document_lines dl
-        left join items i on i.id = dl.item_id
-        left join equipment_units eu on eu.id = dl.equipment_unit_id
+        left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+        left join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id
        where dl.document_id = ${ticketId} and dl.org_id = ${orgId}
        order by dl.line_number`),
     db.execute<{

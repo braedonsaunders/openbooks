@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { PagedTable } from '../../../../../components/paged-table'
 
 /**
@@ -118,6 +119,7 @@ interface DraftRate {
 
 export function StatutoryRatesSection({ initialYear }: { initialYear?: number }) {
   const t = useTranslations('payroll.settingsPage')
+  const today = useBusinessToday()
   const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
   const [data, setData] = useState<Payload | null>(null)
   const [year, setYear] = useState<number | null>(initialYear ?? null)
@@ -151,9 +153,9 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   const rows = data?.rows ?? []
 
   const yearOptions = useMemo(() => {
-    const current = year ?? new Date().getFullYear()
+    const current = year ?? Number(today.slice(0, 4))
     return [current - 1, current, current + 1]
-  }, [year])
+  }, [year, today])
 
   async function save() {
     if (!draft) return

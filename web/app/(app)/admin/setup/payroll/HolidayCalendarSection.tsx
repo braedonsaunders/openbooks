@@ -6,6 +6,7 @@ import {
   type ObservedHoliday,
 } from '@openbooks/engine/src/payroll-holidays.ts'
 import { declaredJurisdictions } from '@openbooks/engine/src/payroll/packs.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { pickString } from '../../../../../lib/list-params'
 
@@ -41,7 +42,7 @@ export async function HolidayCalendarSection({
   const jurisdiction = pickString(sp.jurisdiction)
     ?? jurisdictions.find((entry) => entry.key === 'CA-ON')?.key
     ?? jurisdictions[0]!.key
-  const thisYear = new Date().getFullYear()
+  const thisYear = Number((await businessToday(orgId)).slice(0, 4))
   const year = Number(pickString(sp.year) ?? thisYear)
 
   let holidays: ObservedHoliday[] = []
