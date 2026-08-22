@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
-import { add, mul, mulRatio, neg, toUnits } from "./money.ts";
+import { add, mul, mulRatio, neg, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
@@ -242,7 +242,9 @@ export async function createSubscriptionInvoice(
     taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
   }> = [];
   for (const input of invoiceLines) {
-    const amount = mul(input.quantity, input.unitPrice);
+    const quantity = normalizeDecimal(input.quantity, 8);
+    const unitPrice = normalizeDecimal(input.unitPrice, 8);
+    const amount = mul(quantity, unitPrice);
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";
     let taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
@@ -256,7 +258,7 @@ export async function createSubscriptionInvoice(
     }
     netAmount = add(netAmount, amount);
     taxTotal = add(taxTotal, lineTax);
-    prepared.push({ input, amount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
+    prepared.push({ input: { ...input, quantity, unitPrice }, amount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
   }
   const total = add(netAmount, taxTotal);
 
@@ -575,8 +577,10 @@ export async function changeSubscription(
 
     const oldQty = row.quantity;
     const oldPrice = row.priceOverride ?? row.planAmount;
-    const newQty = changes.quantity ?? oldQty;
-    const newPrice = changes.priceOverride !== undefined ? (changes.priceOverride ?? row.planAmount) : oldPrice;
+    const newQty = normalizeMoney(changes.quantity ?? oldQty);
+    const newPrice = changes.priceOverride !== undefined
+      ? (changes.priceOverride == null ? row.planAmount : normalizeMoney(changes.priceOverride))
+      : oldPrice;
     const oldFull = mul(oldQty, oldPrice);
     const newFull = mul(newQty, newPrice);
 
@@ -613,7 +617,7 @@ export async function changeSubscription(
 
     await db.execute(sql`
       update subscriptions set quantity = ${newQty},
-             price_override = ${changes.priceOverride !== undefined ? (changes.priceOverride ?? null) : row.priceOverride},
+             price_override = ${changes.priceOverride !== undefined ? (changes.priceOverride == null ? null : normalizeMoney(changes.priceOverride)) : row.priceOverride},
              last_invoice_id = coalesce(${invoiceId}, last_invoice_id), updated_at = now()
        where id = ${subscriptionId} and org_id = ${orgId}
     `);

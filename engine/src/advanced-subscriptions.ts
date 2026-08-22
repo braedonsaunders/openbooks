@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { add, mul, toUnits } from "./money.ts";
+import { add, mul, normalizeMoney, toUnits } from "./money.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
@@ -99,13 +99,23 @@ function validDate(value: string | null | undefined, label: string): string | nu
 }
 
 function positiveMoney(value: string | undefined, label: string): string {
-  const normalized = String(value ?? "");
+  let normalized: string;
+  try {
+    normalized = normalizeMoney(value ?? "");
+  } catch {
+    throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
+  }
   if (toUnits(normalized) <= 0n) throw new AdvancedSubscriptionError(`${label} must be greater than zero`);
   return normalized;
 }
 
 function nonNegativeMoney(value: string | undefined, label: string): string {
-  const normalized = String(value ?? "");
+  let normalized: string;
+  try {
+    normalized = normalizeMoney(value ?? "");
+  } catch {
+    throw new AdvancedSubscriptionError(`${label} cannot be negative`);
+  }
   if (toUnits(normalized) < 0n) throw new AdvancedSubscriptionError(`${label} cannot be negative`);
   return normalized;
 }
@@ -218,15 +228,18 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
     const effectiveFrom = validDate(input.effectiveFrom, "effective date")!;
     if (!input.components.length) throw new AdvancedSubscriptionError("at least one component is required");
     const seen = new Set<string>();
-    for (const component of input.components) {
+    const components = input.components.map((component) => {
       const key = component.componentKey.trim();
       if (!key || seen.has(key)) throw new AdvancedSubscriptionError("component keys must be unique and non-empty");
       seen.add(key);
       if (!component.name.trim()) throw new AdvancedSubscriptionError("component name is required");
-      positiveMoney(component.quantity ?? "1", "component quantity");
-      nonNegativeMoney(component.unitPrice, "component price");
-      await assertCommercialRefs(orgId, component);
-    }
+      return {
+        ...component,
+        quantity: positiveMoney(component.quantity ?? "1", "component quantity"),
+        unitPrice: nonNegativeMoney(component.unitPrice, "component price"),
+      };
+    });
+    for (const component of components) await assertCommercialRefs(orgId, component);
     const version = (await db.execute<{ id: string }>(sql`
       insert into subscription_plan_versions
         (org_id, plan_id, version_number, effective_from, name, description, currency_code,
@@ -239,13 +252,13 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
       returning id
     `));
     const versionId = version.rows[0]!.id;
-    for (const [sortOrder, component] of input.components.entries()) {
+    for (const [sortOrder, component] of components.entries()) {
       await db.execute(sql`
         insert into subscription_plan_version_components
           (org_id, version_id, component_key, name, description, quantity, unit_price,
            income_account_id, item_id, tax_code_id, is_optional, sort_order, created_by, updated_by)
         values (${orgId}, ${versionId}, ${component.componentKey.trim()}, ${component.name.trim()}, ${component.description ?? null},
-                ${component.quantity ?? "1"}, ${component.unitPrice}, ${component.incomeAccountId ?? null},
+                ${component.quantity}, ${component.unitPrice}, ${component.incomeAccountId ?? null},
                 ${component.itemId ?? null}, ${component.taxCodeId ?? null}, ${component.isOptional ?? false},
                 ${sortOrder}, ${actorId}, ${actorId})
       `);
@@ -368,16 +381,18 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
     if (["remove_component", "change_component"].includes(request.type) && !currentComponent) {
       throw new AdvancedSubscriptionError("active component not found");
     }
+    const quantity = request.type === "add_component" || (request.type === "change_component" && request.quantity != null)
+      ? positiveMoney(request.quantity ?? "1", "component quantity")
+      : null;
+    const unitPrice = request.type === "add_component" || (request.type === "change_component" && request.unitPrice != null)
+      ? nonNegativeMoney(request.unitPrice, "component price")
+      : null;
     if (request.type === "add_component") {
       if (!request.componentKey?.trim() || !request.name?.trim()) throw new AdvancedSubscriptionError("component key and name are required");
       if (currentComponent) throw new AdvancedSubscriptionError("component key is already active");
-      positiveMoney(request.quantity ?? "1", "component quantity");
-      nonNegativeMoney(request.unitPrice, "component price");
       await assertCommercialRefs(orgId, request);
     }
     if (request.type === "change_component") {
-      if (request.quantity != null) positiveMoney(request.quantity, "component quantity");
-      if (request.unitPrice != null) nonNegativeMoney(request.unitPrice, "component price");
       await assertCommercialRefs(orgId, request);
     }
     if (request.type === "change_timing" && !["advance", "arrears"].includes(request.billingTiming ?? "")) {
@@ -400,7 +415,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
            income_account_id, item_id, tax_code_id, effective_from, sort_order, created_by, updated_by)
         values (${orgId}, ${request.subscriptionId}, ${request.componentKey!}, ${request.name ?? source.name},
                 ${request.description !== undefined ? request.description : source.description ?? null},
-                ${request.quantity ?? source.quantity ?? "1"}, ${request.unitPrice ?? source.unitPrice ?? "0"},
+                ${quantity ?? source.quantity ?? "1"}, ${unitPrice ?? source.unitPrice ?? "0"},
                 ${request.incomeAccountId !== undefined ? request.incomeAccountId : source.incomeAccountId ?? null},
                 ${request.itemId !== undefined ? request.itemId : source.itemId ?? null}, ${request.taxCodeId !== undefined ? request.taxCodeId : source.taxCodeId ?? null},
                 ${effectiveOn}, ${before.components.length}, ${actorId}, ${actorId})

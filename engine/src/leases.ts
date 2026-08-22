@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, fromUnits, isZero, neg, sum, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
 import { apportion } from "./revenue-recognition.ts";
 import {
   accreteToZero,
@@ -441,8 +441,8 @@ export async function createLeaseAgreement(
        department_id, project_id, location_id, custom, created_by, updated_by)
     values (${leaseId}, ${orgId}, ${input.subsidiaryId}, ${input.leaseNumber}, ${input.description ?? null},
             'draft', ${input.commencementOn}, ${input.termPeriods},
-            ${input.paymentFrequency}, ${input.paymentTiming ?? "arrears"}, ${input.paymentAmount},
-            ${input.annualDiscountRatePercent}, ${classification.model},
+            ${input.paymentFrequency}, ${input.paymentTiming ?? "arrears"}, ${normalizeMoney(input.paymentAmount)},
+            ${normalizeDecimal(input.annualDiscountRatePercent, 10)}, ${classification.model},
             ${JSON.stringify({ ...classificationInputs, resolvedCriteria: classification.criteria, framework })}::jsonb,
             ${input.exemption ?? null},
             ${input.accounts.rouAsset}, ${input.accounts.leaseLiability}, ${input.accounts.interestExpense},

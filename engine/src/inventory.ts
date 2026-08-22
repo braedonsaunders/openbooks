@@ -7,6 +7,7 @@ import {
   fromUnits,
   isZero,
   neg,
+  normalizeMoney,
   roundDiv,
   sum,
   toUnits,
@@ -602,7 +603,7 @@ export async function receiveInventory(
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${input.quantity}, ${layerUnitCost}, ${assetDelta},
+              ${input.serialId ?? null}, ${normalizeMoney(input.quantity)}, ${normalizeMoney(layerUnitCost)}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0].id;
@@ -1314,7 +1315,7 @@ async function transferInventoryTx(
          paired_movement_id, status, memo, created_by, updated_by)
       values (${toMovementId}, ${orgId}, ${input.itemId}, 'transfer_in',
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${input.quantity}, ${unitCost}, ${cost},
+              ${input.serialId ?? null}, ${normalizeMoney(input.quantity)}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
               ${actorId}, ${actorId})`);
 
@@ -2073,7 +2074,7 @@ export async function buildAssembly(
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
-              ${input.quantity}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+              ${normalizeMoney(input.quantity)}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     await addLayerAtCost(
       tx,
@@ -2927,7 +2928,7 @@ export async function createTransferOrder(
       await tx.execute(sql`
         insert into transfer_order_lines
           (org_id, transfer_order_id, line_number, item_id, quantity, lot_id, serial_id, created_by, updated_by)
-        values (${orgId}, ${id}, ${i + 1}, ${line.itemId}, ${line.quantity},
+        values (${orgId}, ${id}, ${i + 1}, ${line.itemId}, ${normalizeMoney(line.quantity)},
                 ${line.lotId ?? null}, ${line.serialId ?? null}, ${actorId}, ${actorId})`);
     }
     return { id, documentNumber };
@@ -3324,7 +3325,7 @@ export async function postLandedCostVoucher(
       insert into landed_cost_vouchers
         (org_id, document_number, status, amount, basis, freight_account_id, source_document_line_id,
          subsidiary_id, voucher_date, memo, created_by, updated_by)
-      values (${orgId}, ${documentNumber}, 'draft', ${input.amount}, ${input.basis}, ${input.freightAccountId},
+      values (${orgId}, ${documentNumber}, 'draft', ${normalizeMoney(input.amount)}, ${input.basis}, ${input.freightAccountId},
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
@@ -3340,7 +3341,7 @@ export async function postLandedCostVoucher(
         insert into landed_cost_voucher_targets
           (org_id, voucher_id, item_id, stock_location_id, manual_amount, allocated_amount, created_by, updated_by)
         values (${orgId}, ${voucherId}, ${r.target.itemId}, ${r.target.stockLocationId},
-                ${r.manualAmount}, ${shareAmount}, ${actorId}, ${actorId})`);
+                ${r.manualAmount == null ? null : normalizeMoney(r.manualAmount)}, ${shareAmount}, ${actorId}, ${actorId})`);
       if (share === 0n) continue;
 
       // Sub-apportion the share across the target's own layers on the same basis.
