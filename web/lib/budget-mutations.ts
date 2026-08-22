@@ -2,8 +2,9 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
+import { normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
 import type { BudgetDimensions } from './budgets'
+import { canonicalDecimal } from './exact-decimal'
 
 export type BudgetCellInput = BudgetDimensions & {
   accountId: string
@@ -25,14 +26,17 @@ const MAX_UNITS = 9_999_999_999_999_999_999n
 
 export function normalizeBudgetAmount(value: unknown): string {
   if (typeof value !== 'string' && typeof value !== 'number') throw new BudgetMutationError('invalid_amount')
-  let units: bigint
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new BudgetMutationError('invalid_amount')
+  let normalized: string
   try {
-    units = toUnits(String(value))
+    normalized = normalizeMoney(exact)
   } catch {
     throw new BudgetMutationError('invalid_amount')
   }
+  const units = toUnits(normalized)
   if (units > MAX_UNITS || units < -MAX_UNITS) throw new BudgetMutationError('amount_out_of_range')
-  return fromUnits(units)
+  return normalized
 }
 
 function cellKey(cell: Pick<BudgetCellInput, 'accountId' | 'periodId'> & Partial<BudgetDimensions>) {
