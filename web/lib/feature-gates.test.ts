@@ -460,6 +460,26 @@ test('the surfaces this test was written for are covered', () => {
     /e instanceof SubscriptionError[\s\S]{0,120}status: e\.status/,
     'subscription bill-now must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
+  assert.match(
+    read('../engine/src/ap-capture-service.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'AP capture materialize must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('../engine/src/ap-capture-service.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'materializeCapture must not persist inventory/assembly/kit lines when Inventory is off — stored captures and existing bills stay',
+  )
+  assert.match(
+    read('../engine/src/ap-capture-service.ts'),
+    /CaptureMaterializationError\("Inventory is disabled", 404\)/,
+    'materializeCapture must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/materialize/route.ts'),
+    /error instanceof CaptureMaterializationError[\s\S]{0,160}status: error\.status/,
+    'AP capture materialize must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(

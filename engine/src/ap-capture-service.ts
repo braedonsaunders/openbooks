@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
+import { inventoryFeatureEnabled } from "./inventory.ts";
 import { cmp, sum } from "./money.ts";
 import {
   extractAzureInvoice,
@@ -395,7 +396,14 @@ async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string, 
   return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
 }
 
-export class CaptureMaterializationError extends Error {}
+export class CaptureMaterializationError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message);
+    this.name = "CaptureMaterializationError";
+  }
+}
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 export async function materializeCapture(input: {
   orgId: string;
@@ -473,6 +481,20 @@ export async function materializeCapture(input: {
     const currency = capture.currency ?? company.subsidiary_currency ?? company.org_currency;
     if (!currency) {
       throw new CaptureMaterializationError("The company has no configured base currency");
+    }
+    // Stored captures and existing bills stay. Turning Inventory off must
+    // refuse a materialize that would persist inventory / assembly / kit.
+    if (!(await inventoryFeatureEnabled(tx, input.orgId))) {
+      const itemIds = [...new Set(
+        capture.lines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )];
+      for (const itemId of itemIds) {
+        const kindRow = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${input.orgId}`));
+        if (kindRow.rows[0] && INVENTORY_ITEM_KINDS.has(kindRow.rows[0].kind)) {
+          throw new CaptureMaterializationError("Inventory is disabled", 404);
+        }
+      }
     }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind, subsidiaryId);
     const inserted = (await tx.execute<{ id: string }>(sql`
