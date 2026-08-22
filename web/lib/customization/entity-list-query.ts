@@ -111,7 +111,7 @@ function rolePartyWhere(
   const roleTable = sql.raw(`${role}_roles`)
   const parts: SQL[] = [
     sql`p.org_id = ${orgId}`,
-    sql`and exists (select 1 from ${roleTable} r where r.party_id = p.id and r.is_active)`,
+    sql`and exists (select 1 from ${roleTable} r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
   ]
   if (!adhoc.showInactive) parts.push(sql`and p.is_active`)
   if (allowedSubsidiaryIds) {
