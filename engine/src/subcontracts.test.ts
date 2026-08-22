@@ -215,6 +215,23 @@ test("updateVendorPayApplicationLines persists workCompletedThisPeriod through c
   assert.doesNotMatch(body, /normalizeMoney\(update\.workCompletedThisPeriod\)/);
 });
 
+test("updateVendorPayApplicationLines persists materialsStoredCurrent through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistVendorPayApplicationMaterialsStoredCurrent");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationMaterialsStoredCurrent helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export async function updateVendorPayApplicationLines");
+  const next = source.indexOf("async function computeApplicationTx");
+  const body = source.slice(start, next);
+  assert.match(body, /persistVendorPayApplicationMaterialsStoredCurrent\(update\.materialsStoredCurrent\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(update\.materialsStoredCurrent\)/);
+});
+
 test("deductive change cannot erase earned work", () => {
   assert.equal(revisedSubcontractSovValue("1000", "-200", "750"), "800.0000");
   assert.throws(

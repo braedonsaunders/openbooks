@@ -94,6 +94,17 @@ function persistVendorPayApplicationWorkCompletedThisPeriod(value: unknown): str
   }
 }
 
+/** Persist leftover vendor-application materials-stored-current through exact decimal then ledger money. Fail closed. */
+function persistVendorPayApplicationMaterialsStoredCurrent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("materials stored current must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("materials stored current must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -588,7 +599,7 @@ export async function updateVendorPayApplicationLines(input: {
     if (app.rows[0].status !== "draft") throw new SubcontractError("Only a draft application can be edited");
     for (const update of input.lines) {
       const work = persistVendorPayApplicationWorkCompletedThisPeriod(update.workCompletedThisPeriod);
-      const stored = normalizeMoney(update.materialsStoredCurrent);
+      const stored = persistVendorPayApplicationMaterialsStoredCurrent(update.materialsStoredCurrent);
       if (cmp(work, "0") < 0 || cmp(stored, "0") < 0) throw new SubcontractError("Application amounts cannot be negative");
       const changed = (await tx.execute(sql`
         update vendor_pay_application_lines set work_completed_this_period = ${work}, materials_stored_current = ${stored},
