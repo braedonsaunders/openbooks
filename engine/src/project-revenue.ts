@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { buildAllRecognitionSchedules, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 
@@ -145,7 +146,18 @@ export async function syncProjectRevenueContracts(
     let percent: string;
     let overridden = false;
     if (p.pct_override != null) {
-      const override = normalizeMoney(p.pct_override);
+      const exact = canonicalDecimal(p.pct_override, 4);
+      if (exact === null) {
+        result.problems.push(`${p.code}: percent-complete override must be an exact decimal`);
+        continue;
+      }
+      let override: string;
+      try {
+        override = normalizeMoney(exact);
+      } catch {
+        result.problems.push(`${p.code}: percent-complete override must be an exact decimal`);
+        continue;
+      }
       percent = cmp(override, "0") < 0 ? "0.0000" : cmp(override, "100") > 0 ? "100.0000" : override;
       overridden = true;
     } else {
