@@ -91,7 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       await addTicketLine(orgId, userId, id, {
         itemId: body.itemId,
-        quantity: Number(body.quantity),
+        quantity: body.quantity,
         rateUnitCode: typeof body.rateUnitCode === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(body.rateUnitCode)
           ? body.rateUnitCode
           : null,
