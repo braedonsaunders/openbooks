@@ -24,6 +24,17 @@ function persistEstimateProjectedAmount(value: unknown): string {
   }
 }
 
+/** Persist leftover estimate line amount through exact decimal then ledger money. Fail closed. */
+function persistEstimateLineAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new Error('line amount must be an exact decimal')
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new Error('line amount must be an exact decimal')
+  }
+}
+
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('ar.create', 'crm')
   if (gate instanceof NextResponse) return gate
@@ -76,7 +87,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
          amount, tax_amount, created_by, updated_by)
       select ${user.orgId}, ${docId}, ${line.line_number}, ${line.item_id}, i.income_account_id,
              ${line.description}, ${normalizeMoney(line.quantity)}, ${line.unit}, ${normalizeMoney(line.unit_price)},
-             ${normalizeMoney(line.amount)}, 0, ${user.id}, ${user.id}
+             ${persistEstimateLineAmount(line.amount)}, 0, ${user.id}, ${user.id}
         from items i where i.id = ${line.item_id} and i.org_id = ${user.orgId}`)
     await tx.execute(sql`
       insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)
