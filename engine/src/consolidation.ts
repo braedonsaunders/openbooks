@@ -157,7 +157,7 @@ export async function runOwnershipConsolidation(
             select 1 from ownership_consolidation_entries oce
              join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
             where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
-              and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted') limit 1
+              and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
           `));
           if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
             const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
