@@ -126,7 +126,7 @@ async function loadDocumentValues(
       from document_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
-     where l.document_id = ${id}
+     where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `))
 

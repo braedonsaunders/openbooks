@@ -196,7 +196,7 @@ export async function assembleInvoiceBackup(
       const tickets = (await db.execute<{ field_ticket_id: string }>(sql`
         select distinct te.field_ticket_id
           from document_lines inv_line
-          join time_entries te on te.invoiced_by_line_id = inv_line.id
+          join time_entries te on te.invoiced_by_line_id = inv_line.id and te.org_id = inv_line.org_id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
            and te.field_ticket_id is not null
       `))

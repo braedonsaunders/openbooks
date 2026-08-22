@@ -894,7 +894,7 @@ export async function postPaymentWithApplications(
           memo: `Realized FX settlement — ${doc.documentNumber}`,
         },
       ]);
-      await db.update(schema.journalEntries).set({ status: "posted", postedAt: new Date(), postedBy: userId ?? doc.createdBy }).where(eq(schema.journalEntries.id, fxEntryId!));
+      await db.update(schema.journalEntries).set({ status: "posted", postedAt: new Date(), postedBy: userId ?? doc.createdBy }).where(and(eq(schema.journalEntries.id, fxEntryId!), eq(schema.journalEntries.orgId, doc.orgId)));
     }
 
     await db.insert(schema.applications).values(applicationsToWrite.map(({ controlAdjustment: _adjustment, ...application }) => ({

@@ -104,6 +104,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       from documents d
       join document_lines dl
         on dl.document_id = d.id
+       and dl.org_id = d.org_id
        and coalesce(dl.project_id, d.project_id) = ${projectId}
       left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
       where d.org_id = ${orgId}

@@ -236,7 +236,7 @@ export async function decideGate(args: {
     }
 
     // --- Resume the decided branch on the SAME run -------------------------
-    const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, gate.flowId));
+    const [flow] = await db.select().from(schema.flows).where(and(eq(schema.flows.id, gate.flowId), eq(schema.flows.orgId, gate.orgId)));
     const adapter = getFlowAdapter(gate.subjectKind);
     if (!flow || !adapter) {
       await finalizeRunStatus(gate.runId, gate.orgId, true, "flow definition or subject adapter is unavailable");

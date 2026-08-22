@@ -370,7 +370,7 @@ export async function generateInvoiceFromBillingRequest(
               'rate', c.rate, 'amount', c.amount
             ) order by c.sequence) as components
               from charge_rate_components c
-             where c.document_line_id = dl.id and c.role = 'bill'
+             where c.document_line_id = dl.id and c.org_id = dl.org_id and c.role = 'bill'
           ) rc on true
          where dl.org_id = ${orgId}
            and coalesce(dl.project_id, d.project_id) = ${req.project_id}

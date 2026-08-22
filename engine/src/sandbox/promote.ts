@@ -115,7 +115,7 @@ export async function applyChangeSet(changeSetId: string): Promise<void> {
 
   const items = (await db.execute(sql`
     select table_name, target_id, op, payload from change_set_items
-     where change_set_id = ${changeSetId} order by created_at`)) as any;
+     where change_set_id = ${changeSetId} and org_id = ${prod} order by created_at`)) as any;
 
   await withOrg(prod, async () => {
     for (const it of items.rows as any[]) {
@@ -131,6 +131,6 @@ export async function applyChangeSet(changeSetId: string): Promise<void> {
         sql`insert into ${sql.raw(`"${t}"`)} select * from jsonb_populate_record(null::${sql.raw(`"${t}"`)}, ${JSON.stringify(it.payload)}::jsonb)`,
       );
     }
-    await db.execute(sql`update change_sets set status = 'applied', applied_at = now() where id = ${changeSetId}`);
+    await db.execute(sql`update change_sets set status = 'applied', applied_at = now() where id = ${changeSetId} and org_id = ${prod}`);
   });
 }
