@@ -409,7 +409,7 @@ export async function materializeCapture(input: {
     const item = loaded.rows[0];
     if (!item) throw new CaptureMaterializationError("Capture item not found");
     if (item.document_id) {
-      const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id}`));
+      const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id} and org_id = ${input.orgId}`));
       return { documentId: item.document_id, documentNumber: existing.rows[0]?.document_number ?? "" };
     }
     if (!['ready', 'needs_review'].includes(item.status)) {
@@ -588,7 +588,7 @@ export async function materializeCapture(input: {
     }
     return { documentId, documentNumber };
   });
-  const kind = (await db.execute<{ kind: string }>(sql`select kind from documents where id = ${result.documentId}`));
+  const kind = (await db.execute<{ kind: string }>(sql`select kind from documents where id = ${result.documentId} and org_id = ${input.orgId}`));
   await runRecordFlows(
     { kind: "on_create", source: "api" },
     kind.rows[0]?.kind ?? "vendor_bill",

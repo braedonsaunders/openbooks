@@ -1185,7 +1185,7 @@ async function readinessChecks(
         select a.id
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          join accounts a on a.id = l.account_id and a.eliminate
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.eliminate
          where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
          group by a.id
         having sum(l.amount) <> 0

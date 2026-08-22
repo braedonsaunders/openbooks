@@ -216,7 +216,7 @@ export async function createScriptJournal(
         values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
     }
-    const num = (await tx.execute(sql`select document_number from documents where id = ${id}`)) as any;
+    const num = (await tx.execute(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`)) as any;
     return { id, documentNumber: String(num.rows[0].document_number) };
   });
 

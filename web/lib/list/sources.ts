@@ -78,7 +78,7 @@ export interface RelatedPartyTarget {
 }
 
 /** The `documents d left join parties p` base every source builds on. */
-export const DOCUMENT_BASE_JOIN = sql`left join parties p on p.id = d.party_id`
+export const DOCUMENT_BASE_JOIN = sql`left join parties p on p.id = d.party_id and p.org_id = d.org_id`
 
 /** party_id → vendor/customer/employee drawer href. */
 const partyLink = (role: RelatedPartyTarget['role']) => (row: any): RelatedPartyTarget | null =>
@@ -134,7 +134,7 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: ['vendor_payment'],
     drawerParam: 'payment',
     // The custom bank account (`ca`) is referenced by the funding-account exprs.
-    joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid`,
+    joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid and ca.org_id = d.org_id`,
     builtInExpr: PAYMENT_BUILT_IN_EXPR,
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
@@ -147,7 +147,7 @@ const SOURCES: Record<string, DocListSource> = {
     recordType: 'customer_payment',
     kinds: ['customer_payment'],
     drawerParam: 'payment',
-    joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid`,
+    joins: sql`left join accounts ca on ca.id = (d.custom->>'bankAccountId')::uuid and ca.org_id = d.org_id`,
     builtInExpr: PAYMENT_BUILT_IN_EXPR,
     sorts: PAYMENT_SORTS,
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
@@ -185,7 +185,7 @@ const SOURCES: Record<string, DocListSource> = {
     drawerParam: 'ticket',
     partyRole: 'customer',
     joins: sql`join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
-               left join projects ftproj on ftproj.id = d.project_id`,
+               left join projects ftproj on ftproj.id = d.project_id and ftproj.org_id = d.org_id`,
     builtInExpr: {
       ...DOCUMENT_BUILT_IN_EXPR,
       project_name: sql`coalesce(ftproj.code || ' · ' || ftproj.name, ftproj.name)`,

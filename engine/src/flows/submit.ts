@@ -64,7 +64,7 @@ export async function submitForApproval(
     const lines = await db
       .select()
       .from(schema.documentLines)
-      .where(eq(schema.documentLines.documentId, targetId));
+      .where(and(eq(schema.documentLines.documentId, targetId), eq(schema.documentLines.orgId, doc.orgId)));
     const scriptCtx: ScriptContext = {
       trigger: "before_submit",
       document: doc as unknown as Record<string, unknown>,

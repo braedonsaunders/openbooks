@@ -664,8 +664,8 @@ export async function postPaymentWithApplications(
 
   const result = await withOrg(preflight.orgId, async () => {
     // Serialize both the payment aggregate and every application endpoint.
-    await db.execute(sql`select id from documents where id = ${paymentDocId} for update`);
-    const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
+    await db.execute(sql`select id from documents where id = ${paymentDocId} and org_id = ${preflight.orgId} for update`);
+    const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, paymentDocId), eq(schema.documents.orgId, preflight.orgId)));
     if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
     if (doc.status !== "approved") {
       throw new PaymentError(

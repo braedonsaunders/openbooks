@@ -999,15 +999,15 @@ export function budgetWhere(view: ListViewConfig, adhoc: EntityAdhoc, orgId: str
 /* ------------------------------------------------------------------ */
 
 export const REVENUE_CONTRACT_BASE_JOINS = sql`
-  left join parties revenue_customer on revenue_customer.id=rc.customer_id
+  left join parties revenue_customer on revenue_customer.id=rc.customer_id and revenue_customer.org_id=rc.org_id
   left join lateral (
     select coalesce(sum(l.planned_amount), 0) as planned,
            coalesce(sum(l.recognized_amount) filter (where l.journal_entry_id is not null), 0) as recognized
       from performance_obligations o
-      join recognition_schedules s on s.obligation_id=o.id
-      join accounting_books bk on bk.id=s.book_id and bk.is_primary
-      join recognition_schedule_lines l on l.schedule_id=s.id
-     where o.contract_id=rc.id
+      join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id
+      join accounting_books bk on bk.id=s.book_id and bk.org_id=s.org_id and bk.is_primary
+      join recognition_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id
+     where o.contract_id=rc.id and o.org_id=rc.org_id
   ) revenue_rollup on true`
 
 const REVENUE_DEFERRED_EXPR = sql`revenue_rollup.planned - revenue_rollup.recognized`
@@ -1187,12 +1187,12 @@ export function timesheetWeekWhere(view: ListViewConfig, adhoc: EntityAdhoc, org
 /* ------------------------------------------------------------------ */
 
 export const FIXED_ASSET_BASE_JOINS = sql`
-  left join asset_categories c on c.id = a.category_id
+  left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
   left join lateral (
     select coalesce(sum(l.posted_amount), 0) as accumulated
       from depreciation_schedules s
-      join depreciation_schedule_lines l on l.schedule_id = s.id
-     where s.asset_id = a.id and l.posted_amount is not null
+      join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+     where s.asset_id = a.id and s.org_id = a.org_id and l.posted_amount is not null
   ) depr on true`
 
 const FIXED_ASSET_NBV_EXPR = sql`a.acquisition_cost - depr.accumulated`

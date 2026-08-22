@@ -64,11 +64,15 @@ const RECORD_ROUTES: Record<string, (id: string) => string> = {
   quote: (id) => `/estimates?estimate=${id}`,
 };
 
-async function loadDoc(subjectId: string): Promise<DocRow | null> {
+async function loadDoc(subjectId: string, orgId?: string): Promise<DocRow | null> {
   const [doc] = await db
     .select()
     .from(schema.documents)
-    .where(eq(schema.documents.id, subjectId));
+    .where(
+      orgId
+        ? and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, orgId))
+        : eq(schema.documents.id, subjectId),
+    );
   return doc ?? null;
 }
 
@@ -155,8 +159,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         const r = (await db.execute<{ display_name: string; eft_notification_email: string | null }>(sql`
           select p.display_name, vr.eft_notification_email
             from parties p
-            left join vendor_roles vr on vr.party_id = p.id
-           where p.id = ${doc.partyId}
+            left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
+           where p.id = ${doc.partyId} and p.org_id = ${doc.orgId}
         `));
         partyName = r.rows[0]?.display_name ?? null;
         vendorEftEmail = r.rows[0]?.eft_notification_email ?? null;
@@ -164,7 +168,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       const lines = await db
         .select()
         .from(schema.documentLines)
-        .where(eq(schema.documentLines.documentId, subjectId))
+        .where(and(eq(schema.documentLines.documentId, subjectId), eq(schema.documentLines.orgId, doc.orgId)))
         .orderBy(schema.documentLines.lineNumber);
       const values = headerValues(doc, partyName);
       values.lineCount = lines.length;
@@ -196,7 +200,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
     },
 
     async changeStatus(subjectId: string, to: string, ctx: FlowExecCtx): Promise<void> {
-      const doc = await loadDoc(subjectId);
+      const doc = await loadDoc(subjectId, ctx.orgId);
       if (!doc) throw new Error(`document ${subjectId} not found`);
       const legalFrom = STATUS_TRANSITIONS[to];
       if (!legalFrom) {
@@ -224,7 +228,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       // Deterministic, engine-owned release — independent of any authored
       // change_status node. Only acts while the record is awaiting approval, so
       // it is idempotent and never fights a status a later action set.
-      const doc = await loadDoc(subjectId);
+      const doc = await loadDoc(subjectId, ctx.orgId);
       if (
         doc?.voidRequestedAt &&
         (doc.status === "posted" || doc.status === "approved")
