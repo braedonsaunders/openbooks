@@ -514,6 +514,7 @@ export async function cancelPropertyLease(orgId: string, actorId: string, leaseI
 }
 
 export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<{ id: string }> {
+  await assertEnabled(db, input.orgId);
   const amount = normalizeMoney(input.amount); if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
   const result = (await db.execute<{ id: string }>(sql`
     insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
@@ -528,6 +529,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
 }
 
 export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
+  await assertEnabled(db, orgId);
   const leaseResult = (await db.execute<any>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
@@ -1157,6 +1159,7 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
 
 export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
     const poolResult = (await tx.execute<any>(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
