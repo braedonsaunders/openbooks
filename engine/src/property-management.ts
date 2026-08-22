@@ -1126,7 +1126,7 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,budget_amount,expense_account_ids,status,created_by,updated_by)
-      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${normalizeMoney(input.budgetAmount)},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
+      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${exactMoney(input.budgetAmount, "CAM budget")},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`));
     if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
     return { id: result.rows[0].id };
