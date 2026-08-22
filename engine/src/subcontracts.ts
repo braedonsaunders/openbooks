@@ -105,6 +105,17 @@ function persistVendorPayApplicationMaterialsStoredCurrent(value: unknown): stri
   }
 }
 
+/** Persist leftover vendor-bill line gross through exact decimal then ledger money. Fail closed. */
+function persistVendorBillLineGross(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("vendor bill line gross must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("vendor bill line gross must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -731,7 +742,7 @@ export async function generateVendorPayApplicationBill(
     const vendorBillDocumentId = document.rows[0]!.id;
     let lineNumber = 1;
     for (const line of detail.rows) {
-      const amount = normalizeMoney(line.gross);
+      const amount = persistVendorBillLineGross(line.gross);
       if (cmp(amount, "0") === 0) continue;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description, quantity, unit_price,
