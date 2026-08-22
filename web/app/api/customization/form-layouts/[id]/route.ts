@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { parseFormLayout } from "@openbooks/customization";
+import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const row = await loadOwn(gate.user.orgId, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(gate.user.orgId, row.recordType);
+  if (refused) return refused;
   return NextResponse.json(row);
 }
 
@@ -33,6 +36,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const existing = await loadOwn(user.orgId, id);
   if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
+  if (refused) return refused;
   const body = (await req.json().catch(() => ({}))) as {
     name?: string;
     description?: string | null;
@@ -107,6 +112,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
+  const existing = await loadOwn(user.orgId, id);
+  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
+  if (refused) return refused;
   // Delete + audit in one transaction so the two can't diverge (db.execute
   // pools per-statement). audit_log.changes is jsonb NOT NULL, so log the
   // deleted form's name rather than a bare null (which raised a 500).

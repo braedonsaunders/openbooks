@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { getAuthz, guardPermission } from "../../../../lib/authz";
-import { can } from "../../../../lib/authz";
+import { getAuthz, can } from "../../../../lib/authz";
 import { parseListView, RECORD_TYPE_BY_KEY, type ListViewConfig } from "@openbooks/customization";
+import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,8 @@ export async function GET(req: Request) {
   const recordType = new URL(req.url).searchParams.get("recordType") ?? "";
   if (!RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const refused = await refuseDisabledRecordType(user.orgId, recordType);
+  if (refused) return refused;
   const r = (await db.execute(sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
@@ -40,6 +42,8 @@ export async function POST(req: Request) {
   };
   if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
+  if (refused) return refused;
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
   const scope = body.scope === "org" ? "org" : "user";
   // org-scope views require the admin permission; personal views are self-service.

@@ -310,6 +310,13 @@ export interface RecordTypeMeta {
    * tabbed cockpit omit this.
    */
   tabs?: FormTabMeta[]
+  /**
+   * Optional-feature gate (Company Settings → Features). When the feature is
+   * off the type disappears from the customization catalog and every
+   * list-view / form-layout write path refuses it — same contract as
+   * setup-registry and report-entity `featureKey`. Historical layouts stay.
+   */
+  featureKey?: string
 }
 
 export const DEFAULT_PER_PAGE = 25
