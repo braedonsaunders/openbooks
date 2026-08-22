@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../db.ts";
 import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
+import { canonicalDecimal } from "../../../web/lib/exact-decimal.ts";
 import { normalizeMoney } from "../money.ts";
 import type {
   EntityStream,
@@ -71,6 +72,17 @@ const moneyOrNull = (v: unknown): string | null => {
   if (v == null || v === "") return null;
   return normalizeMoney(v as string | number);
 };
+
+/** Persist a migrated time-type cost multiplier through exact decimal then ledger money. Fail closed. */
+function persistTimeTypeCostMultiplier(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("cost multiplier must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("cost multiplier must be an exact decimal");
+  }
+}
 
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
@@ -523,7 +535,9 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
 
   if (resource === "time_types") {
     const name = String(f.name ?? `Time type ${rec.sourceRef}`);
-    const mult = moneyOrNull(f.costMultiplier) ?? normalizeMoney("1");
+    const mult = persistTimeTypeCostMultiplier(
+      f.costMultiplier == null || f.costMultiplier === "" ? "1" : f.costMultiplier,
+    );
     const id = await findByRef("time_types", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
