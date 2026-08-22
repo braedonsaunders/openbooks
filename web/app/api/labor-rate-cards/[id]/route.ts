@@ -168,7 +168,17 @@ export async function PUT(
   if (!isUuid(id)) return error("notFound", 404);
   const body = (await req.json()) as CardInput;
   if (!body.name?.trim() || !body.code?.trim()) return error("name");
-  if (!/^[A-Z]{3}$/.test(body.currency ?? "")) return error("currency");
+  // Rate-book currency is Multi-currency configuration. Turning that
+  // switch off must refuse a write; omitting currency keeps the
+  // stored book.
+  if (
+    body.currency !== undefined &&
+    !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
+  ) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  if (body.currency !== undefined && !/^[A-Z]{3}$/.test(body.currency))
+    return error("currency");
   if (
     !date(body.effective_from) ||
     (body.effective_to &&
@@ -392,7 +402,7 @@ export async function PUT(
       }
 
       await tx.execute(
-        sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
+        sql`update item_rate_books set name=${cardName},code=${cardCode},currency = case when ${body.currency === undefined} then currency else ${body.currency} end,updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
       );
       await tx.execute(
         sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId}`,

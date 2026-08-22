@@ -361,10 +361,14 @@ function RateCardDrawer(
   async function save() {
     setBusy(true);
     try {
+      const { currency, ...rest } = draft;
       const response = await fetch(`/api/labor-rate-cards/${card.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify({
+          ...rest,
+          ...(props.multiCurrency ? { currency } : {}),
+        }),
       });
       const result = (await response.json()) as { errorCode?: string };
       if (!response.ok) {
@@ -498,7 +502,11 @@ function renderHeaderField(args: {
   editable: boolean;
   draft: BillCardDetail;
   setDraft: React.Dispatch<React.SetStateAction<BillCardDetail>>;
-  props: { currencies: string[]; customFieldDefs: CustomFieldDefClient[] };
+  props: {
+    currencies: string[];
+    customFieldDefs: CustomFieldDefClient[];
+    multiCurrency?: boolean;
+  };
   t: ReturnType<typeof useTranslations>;
   common: ReturnType<typeof useTranslations>;
 }) {
@@ -523,6 +531,7 @@ function renderHeaderField(args: {
       />
     );
   }
+  if (placement.key === "currency" && !props.multiCurrency) return null;
   const labels: Record<string, string> = {
     name: t("name"),
     code: t("adjustmentCode"),
