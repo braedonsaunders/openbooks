@@ -63,8 +63,8 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
              ci.validation_issues as "validationIssues", ci.document_id as "documentId",
              ci.received_at as "receivedAt", vendor.display_name as "resolvedVendor"
         from ap_capture_items ci
-        left join parties vendor on vendor.id = ci.vendor_candidate_id
-        left join documents po on po.id = ci.purchase_order_id
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ${where} order by ${order} limit ${list.perPage} offset ${offset}
     `),
     db.execute(sql`
@@ -90,8 +90,8 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
       select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
              vendor.display_name as "resolvedVendor", po.document_number as "purchaseOrderNumber"
         from ap_capture_items ci join files f on f.id = ci.file_id
-        left join parties vendor on vendor.id = ci.vendor_candidate_id
-        left join documents po on po.id = ci.purchase_order_id
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${authz.user.orgId} and ci.id = ${selectedId}
        ${subsidiaryScope}
     `))

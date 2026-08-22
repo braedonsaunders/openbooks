@@ -128,7 +128,7 @@ async function mapLines(
       select dl.id, dl.item_id, coalesce(dl.account_id, i.expense_account_id) as account_id,
              i.code as item_code, dl.description,
              dl.quantity, dl.quantity_billed, dl.quantity_fulfilled, i.kind as item_kind
-        from document_lines dl left join items i on i.id = dl.item_id
+        from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${purchaseOrderId}
        order by dl.line_number
     `));

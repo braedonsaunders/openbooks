@@ -13,6 +13,7 @@ import {
 } from "../../../../../lib/close/report-descriptor";
 import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
@@ -43,7 +44,7 @@ export async function CloseSetupPage({
   const advancedClose = await isFeatureEnabled(orgId, "advancedClose");
   const q = pickString(searchParams.periodQ)?.trim();
   const fiscalYear = Number(
-    pickString(searchParams.fy) ?? new Date().getFullYear(),
+    pickString(searchParams.fy) ?? (await businessToday(orgId)).slice(0, 4),
   );
   const page = clamp(
     Number(pickString(searchParams.periodPage) ?? 1),

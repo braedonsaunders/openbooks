@@ -29,10 +29,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       from budget_lines bl
       join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
-      left join departments d on d.id = bl.department_id
-      left join projects pr on pr.id = bl.project_id
-      left join locations loc on loc.id = bl.location_id
-      left join classes c on c.id = bl.class_id
+      left join departments d on d.id = bl.department_id and d.org_id = bl.org_id
+      left join projects pr on pr.id = bl.project_id and pr.org_id = bl.org_id
+      left join locations loc on loc.id = bl.location_id and loc.org_id = bl.org_id
+      left join classes c on c.id = bl.class_id and c.org_id = bl.org_id
      where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
      order by a.number nulls last, a.name, p.period_number, d.code, pr.code, loc.code, c.code
   `))

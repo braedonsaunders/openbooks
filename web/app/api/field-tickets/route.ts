@@ -46,8 +46,8 @@ export async function GET(req: Request) {
       join field_tickets ft
         on ft.document_id = d.id and ft.org_id = d.org_id
       left join parties cust on cust.id = d.party_id and cust.org_id = d.org_id
-      left join projects p on p.id = d.project_id
-      left join parties fm on fm.id = ft.foreman_party_id
+      left join projects p on p.id = d.project_id and p.org_id = d.org_id
+      left join parties fm on fm.id = ft.foreman_party_id and fm.org_id = ft.org_id
      where d.org_id = ${orgId} and d.kind = 'field_ticket'${filters}
      order by d.document_date desc, d.created_at desc
      limit 200`))

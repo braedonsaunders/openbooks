@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useBusinessToday } from '../../../components/business-date-provider'
 import { toast } from 'sonner'
 import { ChevronDown, Download, ExternalLink, FileCheck2, Play } from 'lucide-react'
 import {
@@ -39,18 +40,11 @@ type Result = {
   boxes: Box[]
 }
 
-function localIso(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function monthBounds(): { from: string; to: string } {
-  const now = new Date()
-  const from = new Date(now.getFullYear(), now.getMonth(), 1)
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-  return { from: localIso(from), to: localIso(to) }
+function monthBounds(today: string): { from: string; to: string } {
+  const [year, month] = today.split('-').map(Number)
+  const from = `${year}-${String(month).padStart(2, '0')}-01`
+  const last = new Date(Date.UTC(year!, month!, 0))
+  return { from, to: last.toISOString().slice(0, 10) }
 }
 
 function safeGovernmentUrl(value: string | null | undefined): string | null {
@@ -76,7 +70,8 @@ export function TaxFilingsView({
   const tCommon = useTranslations('common')
   const locale = useLocale()
   const router = useRouter()
-  const bounds = monthBounds()
+  const today = useBusinessToday()
+  const bounds = monthBounds(today)
   const [code, setCode] = useState(forms[0]?.code ?? '')
   const [from, setFrom] = useState(bounds.from)
   const [to, setTo] = useState(bounds.to)

@@ -107,9 +107,9 @@ async function fetchTimeStats(orgId: string, from: string, to: string): Promise<
       coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
       coalesce(sum(coalesce(t.cost_rate, 0) * t.hours) filter (where not t.is_billable), 0) as non_billable_cost
     from time_entries t
-    left join parties p on p.id = t.employee_party_id
-    left join departments d on d.id = t.department_id
-    left join items i on i.id = t.item_id
+    left join parties p on p.id = t.employee_party_id and p.org_id = t.org_id
+    left join departments d on d.id = t.department_id and d.org_id = t.org_id
+    left join items i on i.id = t.item_id and i.org_id = t.org_id
     where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
     group by 1, 2, 3, 4, 5, 6
   `);

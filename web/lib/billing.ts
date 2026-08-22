@@ -274,8 +274,8 @@ export async function generateInvoiceFromBillingRequest(
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category, tt.name as time_type_name
           from time_entries te
-          left join items i on i.id = te.item_id
-          left join time_types tt on tt.id = te.time_type_id
+          left join items i on i.id = te.item_id and i.org_id = te.org_id
+          left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable
            and te.billing_status = 'unbilled'
@@ -363,7 +363,7 @@ export async function generateInvoiceFromBillingRequest(
                coalesce(rc.components, '[]'::jsonb) as bill_components
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          left join items i on i.id = dl.item_id
+          left join items i on i.id = dl.item_id and i.org_id = dl.org_id
           left join lateral (
             select jsonb_agg(jsonb_build_object(
               'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity,

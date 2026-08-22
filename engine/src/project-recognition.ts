@@ -388,8 +388,8 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
              coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
              coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
         from time_entries te
-        left join projects p on p.id = te.project_id
-        left join subsidiaries s on s.id = p.subsidiary_id
+        left join projects p on p.id = te.project_id and p.org_id = te.org_id
+        left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
         join orgs o on o.id = te.org_id
        where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
          and te.status = 'approved' and te.project_id is not null

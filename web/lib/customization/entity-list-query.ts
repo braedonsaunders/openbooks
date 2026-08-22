@@ -868,8 +868,8 @@ export function inventoryOnhandWhere(view: ListViewConfig, adhoc: EntityAdhoc, o
 }
 
 export const INVENTORY_MOVEMENT_BASE_JOINS = sql`
-  join items it on it.id = m.item_id
-  join stock_locations sl on sl.id = m.stock_location_id`
+  join items it on it.id = m.item_id and it.org_id = m.org_id
+  join stock_locations sl on sl.id = m.stock_location_id and sl.org_id = m.org_id`
 
 export const INVENTORY_MOVEMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   movement_date: sql`to_char(m.moved_at, 'YYYY-MM-DD')`,

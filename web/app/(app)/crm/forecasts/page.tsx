@@ -19,6 +19,7 @@ import { DateRangeFilter } from '../../../../components/date-range-filter'
 import { SearchSelectFilter } from '../../../../components/filter-bar'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { calculateForecast } from '../../../../lib/crm'
 import { isUuid, pickString } from '../../../../lib/list-params'
@@ -70,13 +71,12 @@ export default async function Forecasts({
     getMoneyFormatter(authz.user.orgId),
   ])
   const sp = await searchParams
-  const now = new Date()
-  const defaultStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const today = await businessToday(authz.user.orgId)
+  const defaultStart = startOfMonth(today)
   const requestedStart = pickString(sp.periodStart)
   const requestedEnd = pickString(sp.periodEnd)
   const start = requestedStart && DATE.test(requestedStart) ? requestedStart : defaultStart
-  const startDate = new Date(`${start}T00:00:00`)
-  const startBasedEnd = localDate(new Date(startDate.getFullYear(), startDate.getMonth() + 3, 0))
+  const startBasedEnd = addCalendarDays(addCalendarMonthsStart(start, 3), -1)
   const end = requestedEnd && DATE.test(requestedEnd) && requestedEnd >= start ? requestedEnd : startBasedEnd
   const requestedOwner = pickString(sp.owner)
   const requestedTeam = pickString(sp.team)
@@ -413,11 +413,4 @@ function snapshotBadge(kind: SnapshotRow['snapshot_kind']): 'outline' | 'default
 function formatDate(value: string | Date, locale: string) {
   const date = value instanceof Date ? value : new Date(`${value}T00:00:00`)
   return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date)
-}
-
-function localDate(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }

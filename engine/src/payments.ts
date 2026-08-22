@@ -586,7 +586,7 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind) {
                  td.id as target_document_id, td.document_number as target_document_number,
                  td.kind as target_document_kind, td.reference_number as target_reference_number
             from journal_lines jl
-            join applications a on a.from_line_id = jl.id and a.unapplied_at is null
+            join applications a on a.from_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
             join journal_lines tl on tl.id = a.to_line_id and tl.org_id = jl.org_id
             join journal_entries te on te.id = tl.entry_id and te.org_id = tl.org_id
             left join documents td on td.id = te.source_document_id and td.org_id = te.org_id
@@ -813,7 +813,7 @@ export async function postPaymentWithApplications(
              abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
-        left join applications a on a.to_line_id = jl.id
+        left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.id in ${allocs.map((a) => a.openLineId)}
        group by jl.id
     `));

@@ -55,10 +55,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            o.name as org_name
       from lien_waivers lw
       join parties claimant on claimant.id = lw.party_id and claimant.org_id = lw.org_id
-      join projects pj on pj.id = lw.project_id
+      join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
       join orgs o on o.id = lw.org_id
       left join parties owner on owner.id = pj.customer_id and owner.org_id = lw.org_id
-      left join documents bill on bill.id = lw.bill_document_id
+      left join documents bill on bill.id = lw.bill_document_id and bill.org_id = lw.org_id
       left join lateral (
         select line1, city, region, postal_code from addresses
          where org_id = lw.org_id and party_id = pj.customer_id
