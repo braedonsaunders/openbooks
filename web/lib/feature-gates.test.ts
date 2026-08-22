@@ -2102,6 +2102,21 @@ test('the surfaces this test was written for are covered', () => {
     'the payment-format form must hide the currency picker when Multi-currency is off',
   )
   assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /resource === 'profiles'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'payment-profile PATCH must refuse currency when Multi-currency is off — stored profiles stay',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /resource === 'profiles'[\s\S]{0,500}body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'payment-profile PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/admin/payment-operations/[resource]/[id]/route.ts'),
+    /resource === 'profiles'[\s\S]{0,600}updatePaymentBankProfile/,
+    'payment-profile PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
     read('app/api/admin/payment-operations/[resource]/route.ts'),
     /resource === 'profiles'[\s\S]{0,400}body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
     'payment-profile create must refuse currency when Multi-currency is off — stored profiles stay',
