@@ -33,6 +33,8 @@ export interface ApiRecordType {
   operations: ApiOperation[];
   writer: Writer;
   dynamic: boolean;
+  /** When set, the type disappears from the API catalog if that Features switch is off. */
+  featureKey?: string;
 }
 
 /** The full read+write op set, for types whose writer supports mutation. */
@@ -149,6 +151,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     operations: RW,
     writer: { kind: "entity", table: "projects" },
     dynamic: false,
+    featureKey: "projects",
   },
   {
     key: "assets",
@@ -161,6 +164,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     operations: RW,
     writer: { kind: "entity", table: "fixed_assets" },
     dynamic: false,
+    featureKey: "fixedAssets",
   },
 ];
 

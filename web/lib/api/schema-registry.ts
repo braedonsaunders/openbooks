@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
+import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
 import {
   API_RECORD_TYPES,
@@ -40,7 +41,11 @@ export * from "./registry-data";
  * truth for the OpenAPI spec, the docs browser, and write validation.
  */
 export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[]> {
-  const builtIn = API_RECORD_TYPES.filter((t) => t.table);
+  const builtIn: ApiRecordType[] = []
+  for (const t of API_RECORD_TYPES.filter((candidate) => candidate.table)) {
+    if (t.featureKey && !(await isFeatureEnabled(orgId, t.featureKey))) continue
+    builtIn.push(t)
+  }
 
   // Query live column metadata for all built-in tables at once.
   const tables = [...new Set(builtIn.map((t) => t.table!))];
@@ -161,7 +166,10 @@ export async function resolveApiType(
   typeKey: string,
 ): Promise<ResolvedApiType | null> {
   const builtIn = RECORD_TYPE_BY_KEY.get(typeKey) as ApiRecordType | undefined;
-  if (builtIn && builtIn.table) return toResolved(builtIn);
+  if (builtIn && builtIn.table) {
+    if (builtIn.featureKey && !(await isFeatureEnabled(orgId, builtIn.featureKey))) return null
+    return toResolved(builtIn)
+  }
 
   const r = (await db.execute(sql`
     select key from custom_record_types

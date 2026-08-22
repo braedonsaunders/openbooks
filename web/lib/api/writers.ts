@@ -29,6 +29,7 @@ import {
   controlDeps,
   createDocumentDraft,
   DocumentEditError,
+  isDocKindEnabled,
   loadDocument,
   type DocumentEditCurrent,
   type DocumentEditInput,
@@ -396,6 +397,7 @@ async function createDocument(
   body: DocApiBody,
   source: "api" | "mcp" | "assistant",
 ): Promise<WriteResult> {
+  if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
   const current: DocumentEditCurrent = {
     kind: docKind,
@@ -431,6 +433,7 @@ async function updateDocument(
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`));
   const row = owned.rows[0];
   if (!row) return err(404, "not found");
+  if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
   if (row.status === "voided") return err(422, "a voided document cannot be edited");
   try {
     await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source });
@@ -449,6 +452,7 @@ async function deleteDocumentWriter(user: SessionUser, docKind: string, id: stri
   const owned = (await db.execute(sql`
     select 1 from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as any;
   if (!owned.rows[0]) return err(404, "not found");
+  if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
   try {
     await deleteDocument(id, user.id, user.orgId);
     return { status: 200, body: { ok: true } };
