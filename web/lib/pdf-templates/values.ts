@@ -258,7 +258,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
     select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
            coalesce(sum((s.factors->>'T')::numeric + coalesce((s.factors->>'TB')::numeric, 0)), 0) as tax
       from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
        and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
   `))
