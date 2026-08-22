@@ -9,6 +9,7 @@ import {
   mulRate,
   neg,
   isZero,
+  normalizeDecimal,
   normalizeMoney,
 } from "./money.ts";
 import {
@@ -408,7 +409,7 @@ export async function snapshotLaborCostRates(
              labor_cost_rate_id = ${wage.rateId},
              wage_rate = ${wage.wage},
              wage_currency = ${wage.currency},
-             wage_fx_rate = ${fxRate},
+             wage_fx_rate = ${normalizeDecimal(fxRate, 10)},
              cost_rate_currency = ${targetCurrency},
              cost_rate_subsidiary_id = ${targetSubsidiaryId}
        where id = ${r.id} and org_id = ${orgId} and cost_rate is null`);
