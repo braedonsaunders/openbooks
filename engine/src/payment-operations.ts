@@ -62,6 +62,7 @@ export async function ensureBuiltInPaymentFormats(
         country = excluded.country, currency = excluded.currency,
         file_extension = excluded.file_extension, content_type = excluded.content_type,
         updated_at = now(), updated_by = excluded.updated_by
+      where payment_formats.org_id = ${orgId}
     `);
   }
 }
