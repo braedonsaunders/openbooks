@@ -277,6 +277,38 @@ test('the surfaces this test was written for are covered', () => {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
   }
   assert.match(
+    read('app/api/documents/[id]/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'document line writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/documents/[id]/route.ts'),
+    /storedIds\.has\(line\.itemId\)/,
+    'document PATCH must keep stored inventory lines when Inventory is off',
+  )
+  assert.match(
+    read('app/api/documents/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'document PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
+  )
+  for (const file of [
+    'app/(app)/ar/invoices/page.tsx',
+    'app/(app)/ap/bills/page.tsx',
+    'app/(app)/banking/transactions/page.tsx',
+    'components/related-transaction-drawer.tsx',
+  ]) {
+    assert.match(
+      read(file),
+      /isFeatureEnabled\([^,]+, ['"]inventory['"]\)/,
+      `${file} must not offer inventory/assembly/kit items when Inventory is off`,
+    )
+    assert.match(
+      read(file),
+      /kind not in \('inventory', 'assembly', 'kit'\)/,
+      `${file} must drop inventory/assembly/kit from the picker when Inventory is off — stored lines stay`,
+    )
+  }
+  assert.match(
     read('lib/search.ts'),
     /disabledDocKinds\(/,
     'global search must hide optional-module kinds when the feature is off',
@@ -1248,6 +1280,21 @@ test('the surfaces this test was written for are covered', () => {
     read('lib/api/writers.ts'),
     /async function refuseDisabledItemInventoryKind[\s\S]{0,500}err\(404/,
     'REST/MCP item writes must 404 — not persist — inventory kinds when Inventory is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /orgFeatureEnabled\([^,]+, 'inventory'\)/,
+    'items import must refuse inventory kinds when Inventory is off — existing kinds stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /INVENTORY_ITEM_KINDS\.has\(nextKind\)[\s\S]{0,400}kind is not available/,
+    'items import must refuse — not persist — new inventory/assembly/kit kinds when Inventory is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /c\.key === 'kind' && !inventoryOn[\s\S]{0,80}INVENTORY_ITEM_KINDS\.has\(o\.value\)/,
+    'items import must hide inventory/assembly/kit kind values when Inventory is off',
   )
   assert.match(
     read('app/api/equipment/[id]/capitalize/route.ts'),
