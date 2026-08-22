@@ -260,6 +260,7 @@ export async function assembleInvoiceBackup(
     on conflict (org_id, document_id) do update
       set backup_type = excluded.backup_type, file_id = excluded.file_id, page_count = excluded.page_count,
           component_manifest = excluded.component_manifest, generated_at = now(), updated_by = ${userId}
+    where invoice_backups.org_id = ${orgId}
   `)
   if (prior.rows[0]?.file_id && prior.rows[0].file_id !== stored.id) {
     const priorFileId = prior.rows[0].file_id
