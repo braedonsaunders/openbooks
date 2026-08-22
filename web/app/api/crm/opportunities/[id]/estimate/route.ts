@@ -4,6 +4,7 @@ import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { isDocKindEnabled } from '../../../../../../lib/documents'
+import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -11,6 +12,17 @@ import { isUuid } from '../../../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
+/** Persist leftover estimate projected amount through exact decimal then ledger money. Fail closed. */
+function persistEstimateProjectedAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new Error('projected amount must be an exact decimal')
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new Error('projected amount must be an exact decimal')
+  }
+}
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('ar.create', 'crm')
@@ -46,7 +58,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       returning prefix, next_number, padding`))
     const seq = sequence.rows[0]
     const number = `${seq.prefix}${String(seq.next_number).padStart(seq.padding, '0')}`
-    const projected = normalizeMoney(op.projected_amount ?? '0')
+    const projected = persistEstimateProjectedAmount(op.projected_amount ?? '0')
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents
         (org_id, kind, document_number, party_id, subsidiary_id, document_date, due_date, currency,
