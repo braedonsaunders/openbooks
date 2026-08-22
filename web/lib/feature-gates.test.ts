@@ -476,6 +476,21 @@ test('the surfaces this test was written for are covered', () => {
     'subscription bill-now must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'subscription plan writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /item_id = \$\{body\.itemId !== undefined \? body\.itemId \?\? null : sql`item_id`\}/,
+    'subscription plan update must keep stored item_id when omitted',
+  )
+  assert.match(
+    read('app/api/subscriptions/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'subscription addPlan/updatePlan must 404 — not persist inventory/assembly/kit items — when Inventory is off',
+  )
+  assert.match(
     read('../engine/src/ap-capture-service.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'AP capture materialize must name the inventory kinds the Features switch refuses',

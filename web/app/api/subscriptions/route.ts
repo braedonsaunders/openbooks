@@ -18,6 +18,26 @@ import { businessToday } from "@openbooks/engine/src/business-date.ts";
 export const runtime = "nodejs";
 
 const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+/** Stored plans stay when item_id is omitted. A new inventory / assembly / kit
+ *  item is Inventory configuration — refuse it when that switch is off. */
+async function refuseInventoryPlanItem(
+  orgId: string,
+  itemId: unknown,
+  storedItemId?: string | null,
+): Promise<NextResponse | null> {
+  if (itemId === undefined || itemId === null || itemId === "") return null;
+  const nextId = String(itemId);
+  if (storedItemId && nextId === storedItemId) return null;
+  if (await isFeatureEnabled(orgId, "inventory")) return null;
+  const item = (await db.execute<{ kind: string }>(sql`
+    select kind from items where id = ${nextId} and org_id = ${orgId}`));
+  if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  return null;
+}
 
 /**
  * Subscription billing API — plans + subscriptions. Gated by the
@@ -86,6 +106,8 @@ export async function POST(req: Request) {
         if (!INTERVALS.includes(body.interval)) return NextResponse.json({ error: "invalid interval" }, { status: 400 });
         const amount = canonicalDecimal(body.amount ?? "0", 4);
         if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
+        if (refusedItem) return refusedItem;
         const r = (await db.execute<{ id: string }>(sql`
           insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
                                           interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
@@ -105,12 +127,21 @@ export async function POST(req: Request) {
         }
         const amount = canonicalDecimal(body.amount ?? "0", 4);
         if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        let storedItemId: string | null | undefined;
+        if (body.itemId !== undefined) {
+          const stored = (await db.execute<{ item_id: string | null }>(sql`
+            select item_id from subscription_plans where id = ${body.id} and org_id = ${orgId}`));
+          storedItemId = stored.rows[0]?.item_id;
+          const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId, storedItemId);
+          if (refusedItem) return refusedItem;
+        }
         await db.execute(sql`
           update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
                  amount = ${normalizeMoney(amount)},
                  currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
                  interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
-                 income_account_id = ${body.incomeAccountId ?? null}, item_id = ${body.itemId ?? null},
+                 income_account_id = ${body.incomeAccountId ?? null},
+                 item_id = ${body.itemId !== undefined ? body.itemId ?? null : sql`item_id`},
                  tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
                  updated_at = now(), updated_by = ${userId}
            where id = ${body.id} and org_id = ${orgId}
