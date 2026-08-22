@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { fromUnits, sum, toUnits } from "@openbooks/engine/src/money.ts";
+import { normalizeMoney, sum, toUnits } from "@openbooks/engine/src/money.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { createDraftJournal } from "../../../../lib/journals";
+
+/** Exact numeric(19,4) money string, or 'invalid'. */
+function exactMoney(v: unknown): string | "invalid" {
+  const exact = canonicalDecimal(v, 4);
+  if (exact === null) return "invalid";
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    return "invalid";
+  }
+}
 
 /**
  * The third gate of the propose→confirm→commit pattern. The user clicked Apply
@@ -48,22 +60,25 @@ export async function POST(req: Request) {
   const p = body.preview;
   // Defense in depth: the HMAC already covers a balanced preview, but a
   // balanced check here keeps a signing bug from ever writing a lopsided draft.
-  let balance = 0n;
-  try {
-    balance = p.lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
-  } catch {
-    return NextResponse.json({ error: "draft lines contain an invalid monetary amount" }, { status: 422 });
+  const lines: { accountId: string; description: string | null; amount: string }[] = [];
+  for (const line of p.lines) {
+    const amount = exactMoney(line.amount);
+    if (amount === "invalid") {
+      return NextResponse.json({ error: "draft lines contain an invalid monetary amount" }, { status: 422 });
+    }
+    lines.push({ accountId: line.accountId, description: line.description, amount });
   }
-  if (balance !== 0n || p.lines.length < 2) {
+  const balance = lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
+  if (balance !== 0n || lines.length < 2) {
     return NextResponse.json({ error: "draft lines do not balance" }, { status: 422 });
   }
 
   const user = authz.user;
   const doc = await createDraftJournal(user.orgId, user.id);
-  const totalDebits = sum(p.lines.map((line) => (toUnits(line.amount) > 0n ? fromUnits(toUnits(line.amount)) : "0")));
+  const totalDebits = sum(lines.map((line) => (toUnits(line.amount) > 0n ? line.amount : "0")));
   await db.transaction(async (tx) => {
-    for (let i = 0; i < p.lines.length; i++) {
-      const l = p.lines[i]!;
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i]!;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount)
