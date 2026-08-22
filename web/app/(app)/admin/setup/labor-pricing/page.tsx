@@ -59,8 +59,8 @@ export default async function LaborPricingPage({
   const scopeFilter = dimensionFilter === "all"
     ? sql``
     : dimensionFilter === "unscoped"
-      ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id)`
-      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.scope_type = ${dimensionFilter})`;
+      ? sql`and not exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id)`
+      : sql`and exists (select 1 from labor_rate_version_scopes fs where fs.version_id = v.id and fs.org_id = v.org_id and fs.scope_type = ${dimensionFilter})`;
 
   const [
     cardsRes,
@@ -84,8 +84,8 @@ export default async function LaborPricingPage({
     db.execute(sql`
       select v.id, v.rate_book_id, b.code, b.name, b.currency, v.effective_from::text,
              v.effective_to::text, v.status, p.derivation_policy,
-             (select count(*)::int from item_rate_lines l where l.version_id=v.id) as line_count,
-             (select count(*)::int from item_rate_book_assignments a where a.rate_book_id=b.id and a.is_active) as assignment_count
+             (select count(*)::int from item_rate_lines l where l.version_id=v.id and l.org_id=v.org_id) as line_count,
+             (select count(*)::int from item_rate_book_assignments a where a.rate_book_id=b.id and a.org_id=b.org_id and a.is_active) as assignment_count
         from item_rate_versions v
         join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
         join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
@@ -115,7 +115,7 @@ export default async function LaborPricingPage({
               when 'class' then (select name from classes x where x.id=s.scope_value_id and x.org_id=v.org_id)
               when 'trade' then (select name from trades x where x.id=s.scope_value_id and x.org_id=v.org_id)
             end),'includeChildren',s.include_children) order by s.created_at)
-          from labor_rate_version_scopes s where s.version_id=v.id),'[]'::jsonb) scopes,
+          from labor_rate_version_scopes s where s.version_id=v.id and s.org_id=v.org_id),'[]'::jsonb) scopes,
         coalesce((select jsonb_agg(jsonb_build_object(
           'id',a.id,'code',a.code,'name',a.name,'category',a.category,'calculation',a.calculation,
           'value',a.value,'unit',a.unit,'presentation',a.presentation,'threshold',a.threshold,
@@ -133,9 +133,9 @@ export default async function LaborPricingPage({
                 when 'trade' then (select name from trades x where x.id=at.target_value_id and x.org_id=v.org_id)
                 when 'project' then (select name from projects x where x.id=at.target_value_id and x.org_id=v.org_id)
                 when 'customer' then (select display_name from parties x where x.id=at.target_value_id and x.org_id=v.org_id)
-              end)) order by at.created_at) from labor_rate_adjustment_targets at where at.adjustment_id=a.id),'[]'::jsonb))
-          order by a.sort_order,a.id) from labor_rate_adjustments a where a.version_id=v.id and a.is_active),'[]'::jsonb) adjustments,
-        coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'code',t.code,'label',t.label,'content',t.content,'placement',t.placement) order by t.sort_order,t.id) from labor_rate_terms t where t.version_id=v.id),'[]'::jsonb) terms,
+              end)) order by at.created_at) from labor_rate_adjustment_targets at where at.adjustment_id=a.id and at.org_id=a.org_id),'[]'::jsonb))
+          order by a.sort_order,a.id) from labor_rate_adjustments a where a.version_id=v.id and a.org_id=v.org_id and a.is_active),'[]'::jsonb) adjustments,
+        coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'code',t.code,'label',t.label,'content',t.content,'placement',t.placement) order by t.sort_order,t.id) from labor_rate_terms t where t.version_id=v.id and t.org_id=v.org_id),'[]'::jsonb) terms,
         coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'itemId',l.item_id,'itemName',i.name,'regular',l.bill_rate,'timeTypeRates',l.time_type_bill_rates) order by l.sort_order,l.id) from item_rate_lines l join items i on i.id=l.item_id and i.org_id=l.org_id where l.version_id=v.id and l.org_id=v.org_id),'[]'::jsonb) lines
       from item_rate_versions v
       join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id

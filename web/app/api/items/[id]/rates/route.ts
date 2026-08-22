@@ -121,11 +121,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           rateBookId = created.rows[0].id
         }
       }
-      const duplicate = (await tx.execute(sql`select 1 from item_rate_versions where rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)) as any
+      const duplicate = (await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)) as any
       if (duplicate.rows[0]) throw new Error('A rate version already starts on that date')
       const nextVersion = (await tx.execute(sql`
         select effective_from from item_rate_versions
-         where rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
+         where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
          order by effective_from limit 1
       `)) as any
       await tx.execute(sql`
@@ -136,7 +136,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       `)
       await tx.execute(sql`
         update item_rate_versions set effective_to = (${body.effectiveFrom}::date - interval '1 day')::date, updated_at = now(), updated_by = ${gate.user.id}
-         where rate_book_id = ${rateBookId} and effective_from < ${body.effectiveFrom}
+         where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from < ${body.effectiveFrom}
            and (effective_to is null or effective_to >= ${body.effectiveFrom})
       `)
       const version = (await tx.execute(sql`

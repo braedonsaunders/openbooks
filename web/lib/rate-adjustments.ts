@@ -75,7 +75,7 @@ export async function resolveRateAdjustments(input: {
     scoped_versions as (
       select v.id as version_id, s.priority, s.dimension_specificity,
              s.effective_from as assigned_from, v.effective_from,
-             (select count(*) from labor_rate_version_scopes vs where vs.version_id = v.id) as scope_count
+             (select count(*) from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id) as scope_count
         from scoped s
         join item_rate_versions v on v.rate_book_id = s.rate_book_id and v.org_id = ${input.orgId}
          and v.status = 'active'
@@ -88,9 +88,9 @@ export async function resolveRateAdjustments(input: {
          -- is the most specific statement of intent there is; its own dimension
          -- scopes cannot then disqualify it.
          and (s.priority = 1
-           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
            or exists (select 1 from labor_rate_version_scopes vs
-                       where vs.version_id = v.id
+                       where vs.version_id = v.id and vs.org_id = v.org_id
                          and case vs.scope_type
                                when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
                                when 'subsidiary' then vs.scope_value_id = ${ctx.subsidiary_id}::uuid
@@ -193,10 +193,10 @@ export async function findLapsedRateCard(input: {
           where v.rate_book_id = s.rate_book_id and v.org_id = ${input.orgId} and v.status = 'active'
             and (s.rate_version_id is null or v.id = s.rate_version_id)
             and (s.priority = 1
-              or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+              or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
               or exists (
                 select 1 from labor_rate_version_scopes vs
-                 where vs.version_id = v.id
+                 where vs.version_id = v.id and vs.org_id = v.org_id
                    and case vs.scope_type
                          when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
                          when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)
@@ -228,10 +228,10 @@ export async function findLapsedRateCard(input: {
             and x.presentation = 'separate' and x.value > 0
        )
          and (s.priority = 1
-           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
            or exists (
              select 1 from labor_rate_version_scopes vs
-              where vs.version_id = v.id
+              where vs.version_id = v.id and vs.org_id = v.org_id
                 and case vs.scope_type
                       when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
                       when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)

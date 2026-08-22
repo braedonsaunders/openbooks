@@ -114,7 +114,7 @@ export async function resolveItemRate(input: {
        where v.org_id = ${input.orgId} and v.rate_book_id = ${candidate.rate_book_id}
          and v.status = 'active' and (( ${candidate.rate_version_id}::uuid is not null and v.id=${candidate.rate_version_id}) or
            (${candidate.rate_version_id}::uuid is null and v.effective_from <= ${input.onDate} and (v.effective_to is null or v.effective_to >= ${input.onDate})))
-         and exists (select 1 from item_rate_lines l where l.version_id = v.id and l.item_id = ${input.itemId})
+         and exists (select 1 from item_rate_lines l where l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${input.itemId})
        order by v.effective_from desc limit 1
     `))
     const rateVersionId = version.rows[0]?.id
