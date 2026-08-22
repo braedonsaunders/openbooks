@@ -60,3 +60,61 @@ export async function businessToday(orgId: string): Promise<string> {
   `));
   return formatInZone(now(), validZone(r.rows[0]?.time_zone) ?? "UTC");
 }
+
+/** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */
+export function parseIsoDate(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1));
+}
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** First day of the calendar month that contains `iso`. */
+export function startOfMonth(iso: string): string {
+  return `${iso.slice(0, 7)}-01`;
+}
+
+/** Add (or subtract) whole calendar days on the YYYY-MM-DD grid. */
+export function addCalendarDays(iso: string, days: number): string {
+  const date = parseIsoDate(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return isoDay(date);
+}
+
+/** First day of the calendar month `months` before the month that contains `iso`. */
+export function addCalendarMonthsStart(iso: string, months: number): string {
+  const date = parseIsoDate(startOfMonth(iso));
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return startOfMonth(isoDay(date));
+}
+
+/** Monday of the ISO week that contains `iso` (matches Postgres date_trunc('week')). */
+export function mondayOfIsoWeek(iso: string): string {
+  const date = parseIsoDate(iso);
+  const day = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - day);
+  return isoDay(date);
+}
+
+/** `weeks` consecutive Mondays ending with the week that contains `iso`, oldest first. */
+export function weekStartsEndingOn(iso: string, weeks: number): string[] {
+  const monday = parseIsoDate(mondayOfIsoWeek(iso));
+  const starts: string[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const week = new Date(monday);
+    week.setUTCDate(monday.getUTCDate() - i * 7);
+    starts.push(isoDay(week));
+  }
+  return starts;
+}
+
+/** Inclusive calendar-quarter bounds for the quarter that contains `iso`. */
+export function calendarQuarterBounds(iso: string): { start: string; end: string } {
+  const [year, month] = iso.split("-").map(Number);
+  const quarter = Math.floor(((month ?? 1) - 1) / 3);
+  const start = new Date(Date.UTC(year, quarter * 3, 1));
+  const end = new Date(Date.UTC(year, quarter * 3 + 3, 0));
+  return { start: isoDay(start), end: isoDay(end) };
+}

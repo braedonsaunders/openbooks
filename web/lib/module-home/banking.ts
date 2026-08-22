@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { BANK_KINDS } from '../documents'
 
@@ -49,6 +50,10 @@ export interface BankingHome {
 const TREND_WEEKS = 13
 
 export async function bankingHome(orgId: string, subIds?: string[]): Promise<BankingHome> {
+  const today = await businessToday(orgId)
+  const ago7 = addCalendarDays(today, -7)
+  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
+  const trendFrom = weekStarts[0]!
   const txList = sql`(${sql.join(BANK_KINDS.map((kind) => sql`${kind}`), sql`, `)})`
   // Active subsidiary view: journal sums scope to the subtree's lines, and the
   // roster keeps only accounts whose restriction intersects it (null = shared).
@@ -100,13 +105,13 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
       select jl.account_id,
              (date_trunc('week', je.posting_date))::date as wk,
              sum(jl.amount) as flow,
-             sum(jl.amount) filter (where je.posting_date >= current_date - 7) as flow_7d
+             sum(jl.amount) filter (where je.posting_date >= ${ago7}) as flow_7d
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
         join accounts a on a.id = jl.account_id
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}
-         and je.posting_date >= (date_trunc('week', current_date) - interval '${sql.raw(String(TREND_WEEKS - 1))} weeks')
+         and je.posting_date >= ${trendFrom}
        group by 1, 2
     `),
     // Directory badges — org-wide counts for the workspace's other pages.
@@ -120,23 +125,12 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
           where s.org_id = ${orgId} and a.is_active${acctScope}) as last_imported_at,
         (select count(*) from documents d
           where d.org_id = ${orgId} and d.kind in ${txList}
-            and d.document_date >= current_date - 7
+            and d.document_date >= ${ago7}
             ${subArr ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``}) as txns_7d
     `),
   ]))
 
   // Week grid, oldest → newest, aligned with date_trunc('week', …) (Monday).
-  const weekStarts: string[] = []
-  {
-    const now = new Date()
-    const day = (now.getUTCDay() + 6) % 7 // Monday = 0
-    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
-    for (let i = TREND_WEEKS - 1; i >= 0; i--) {
-      const d = new Date(monday)
-      d.setUTCDate(monday.getUTCDate() - i * 7)
-      weekStarts.push(d.toISOString().slice(0, 10))
-    }
-  }
 
   // Per-account weekly flows → end-of-week balances walked BACKWARD from the
   // current balance (avoids a 13× running-sum query).

@@ -3,7 +3,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { withSimClock } from "./clock.ts";
-import { businessToday, formatInZone } from "./business-date.ts";
+import {
+  addCalendarDays, addCalendarMonthsStart, businessToday, calendarQuarterBounds,
+  formatInZone, mondayOfIsoWeek, startOfMonth, weekStartsEndingOn,
+} from "./business-date.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
 
 test("formatInZone lands local midnights on the local calendar day", () => {
@@ -25,6 +28,23 @@ test("formatInZone in UTC matches the plain ISO day", () => {
   for (const iso of ["2026-01-01T00:00:30Z", "2026-12-31T23:59:59Z"]) {
     assert.equal(formatInZone(new Date(iso), "UTC"), iso.slice(0, 10));
   }
+});
+
+test("calendar helpers stay on the YYYY-MM-DD grid, not the host timezone", () => {
+  assert.equal(startOfMonth("2026-08-21"), "2026-08-01");
+  // 2026-08-21 is a Friday; the ISO week starts Monday the 17th.
+  assert.equal(mondayOfIsoWeek("2026-08-21"), "2026-08-17");
+  assert.deepEqual(weekStartsEndingOn("2026-08-21", 3), [
+    "2026-08-03", "2026-08-10", "2026-08-17",
+  ]);
+  assert.deepEqual(calendarQuarterBounds("2026-08-21"), {
+    start: "2026-07-01", end: "2026-09-30",
+  });
+  assert.deepEqual(calendarQuarterBounds("2026-01-01"), {
+    start: "2026-01-01", end: "2026-03-31",
+  });
+  assert.equal(addCalendarDays("2026-08-21", -7), "2026-08-14");
+  assert.equal(addCalendarMonthsStart("2026-08-21", -11), "2025-09-01");
 });
 
 test("an unrecognized zone is refused, never silently misformatted", () => {

@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
@@ -45,6 +46,12 @@ export interface PurchasingHome {
 const TREND_WEEKS = 13
 
 export async function purchasingHome(orgId: string, subIds?: string[]): Promise<PurchasingHome> {
+  const today = await businessToday(orgId)
+  const ago7 = addCalendarDays(today, -7)
+  const ago30 = addCalendarDays(today, -30)
+  const in7 = addCalendarDays(today, 7)
+  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
+  const trendFrom = weekStarts[0]!
   const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const docScope = subArr ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``
@@ -70,8 +77,8 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
-             coalesce(sum(remaining) filter (where due_date < current_date), 0) as overdue,
-             coalesce(sum(remaining) filter (where due_date >= current_date and due_date < current_date + 7), 0) as due_7,
+             coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
+             coalesce(sum(remaining) filter (where due_date >= ${today} and due_date < ${in7}), 0) as due_7,
              count(*) filter (where remaining > 0.005) as open_count
         from oi where remaining > 0.005
     `),
@@ -95,7 +102,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
         select party_id, sum(remaining) as billed_open,
-               sum(remaining) filter (where due_date < current_date) as overdue,
+               sum(remaining) filter (where due_date < ${today}) as overdue,
                count(*) filter (where remaining > 0.005) as open_bills,
                min(due_date) as oldest_due
           from oi where remaining > 0.005 group by party_id
@@ -127,7 +134,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         from documents d
        where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
          and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= (date_trunc('week', current_date) - interval '${sql.raw(String(TREND_WEEKS - 1))} weeks')
+         and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
        group by 1
     `),
     // Directory badges + the remaining vitals.
@@ -139,32 +146,21 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_po_value,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as payments_7d,
+          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as paid_7d_value,
+          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as paid_7d_value,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope}) as unposted_expenses,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'vendor_bill'
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= current_date - 30) as spend_30d,
+          and coalesce(d.document_date, d.posting_date) >= ${ago30}) as spend_30d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from vendor_roles vr where vr.org_id = ${orgId} and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
     `),
   ]))
 
-  const weekStarts: string[] = []
-  {
-    const now = new Date()
-    const day = (now.getUTCDay() + 6) % 7
-    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
-    for (let i = TREND_WEEKS - 1; i >= 0; i--) {
-      const d = new Date(monday)
-      d.setUTCDate(monday.getUTCDate() - i * 7)
-      weekStarts.push(d.toISOString().slice(0, 10))
-    }
-  }
   const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.spend)]))
 
   const ap = apRes.rows[0] ?? {}
