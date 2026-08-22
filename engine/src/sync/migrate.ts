@@ -139,6 +139,17 @@ function persistItemDefaultRate(value: unknown): string {
   }
 }
 
+/** Persist leftover migrated project contract value through exact decimal then ledger money. Fail closed. */
+function persistProjectContractValue(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("project contract value must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("project contract value must be an exact decimal");
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -673,7 +684,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       manager: ref(ctx.maps.parties, f.managerRef), po: str(f.customerPoNumber),
       starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
     };
-    const contractValue = moneyOrNull(f.contractValue);
+    const contractValue = f.contractValue == null || f.contractValue === "" ? null : persistProjectContractValue(f.contractValue);
     const id = await findProjectByRef(orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,

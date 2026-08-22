@@ -149,6 +149,21 @@ test("item persist writes defaultRate through canonicalDecimal then normalizeMon
   assert.doesNotMatch(body, /moneyOrNull\(f\.defaultRate\)/);
 });
 
+test("project persist writes contractValue through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistProjectContractValue");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistProjectContractValue helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf('if (resource === "projects")');
+  const next = loader.indexOf('if (resource === "addresses")');
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistProjectContractValue\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.contractValue\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);
