@@ -216,8 +216,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         valid,
         await orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
       )
+      const subtotal = exactOrderMoney(computed.subtotal)
+      if (subtotal === 'invalid') {
+        return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
+      }
       totals = {
-        subtotal: normalizeMoney(computed.subtotal),
+        subtotal,
         taxTotal: normalizeMoney(computed.taxTotal),
         total: normalizeMoney(computed.total),
       }
