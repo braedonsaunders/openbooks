@@ -148,7 +148,9 @@ export async function EntityListView({
   const orderExpr = source.sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`
-  const tableSql = sql.raw(`${source.table} ${source.alias}`)
+  const tableSql = typeof source.table === 'function'
+    ? sql`${source.table(orgId)} ${sql.raw(source.alias)}`
+    : sql.raw(`${source.table} ${source.alias}`)
   const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
   const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins
   const countJoinsSource = source.countJoins ?? source.baseJoins

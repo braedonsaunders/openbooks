@@ -769,7 +769,7 @@ async function loadStoredKeys(
            dl.is_billable, dl.markup_percent, dl.bill_amount
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-     where d.org_id = ${orgId} and d.custom->>${refKey} is not null
+     where dl.org_id = ${orgId} and d.org_id = ${orgId} and d.custom->>${refKey} is not null
      order by dl.document_id, dl.line_number`));
   const linesByDocument = new Map<string, StoredLineKeyRow[]>();
   for (const line of lineResult.rows) {
@@ -984,7 +984,7 @@ async function setProgress(
 }
 
 /** Denormalize a posted document's header totals from its journal entry. */
-async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
+async function setDocumentTotalsFromEntry(docId: string, orgId: string): Promise<void> {
   // The document total is the amount on its OPEN-ITEM (AR/AP control) leg — the
   // receivable/payable — not the sum of every positive journal line. A retainage /
   // holdback line debits an income account (a positive amount that is NOT the
@@ -1007,10 +1007,10 @@ async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
     left join lateral (
       select sum(jl.amount) filter (where jl.amount > 0) as pos,
              sum(jl.amount) filter (where jl.is_open_item) as oi
-        from journal_lines jl where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id) j on true
+        from journal_lines jl where jl.entry_id = d2.posted_entry_id and jl.org_id = d2.org_id and jl.org_id = ${orgId}) j on true
     left join lateral (
-      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id and l.org_id = d2.org_id) lt on true
-    where d.id = d2.id and d2.id = ${docId}
+      select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id and l.org_id = d2.org_id and l.org_id = ${orgId}) lt on true
+    where d.id = d2.id and d2.id = ${docId} and d.org_id = ${orgId} and d2.org_id = ${orgId}
   `);
   });
 }
@@ -1526,7 +1526,7 @@ export async function runSync(
                 deferEffects: true,
                 suppressAutomation: true,
               });
-              await setDocumentTotalsFromEntry(row!.id);
+              await setDocumentTotalsFromEntry(row!.id, org.id);
             }
             return row!.id;
           });
@@ -1596,7 +1596,7 @@ export async function runSync(
               deferEffects: true,
               suppressAutomation: true,
             });
-            await setDocumentTotalsFromEntry(have.id);
+            await setDocumentTotalsFromEntry(have.id, org.id);
           });
           try {
             await runPostDocumentEffects(have.id, have.status, {
@@ -1655,7 +1655,7 @@ export async function runSync(
               );
               return result.changed;
             });
-            if (projectionChanged) await setDocumentTotalsFromEntry(have.id);
+            if (projectionChanged) await setDocumentTotalsFromEntry(have.id, org.id);
           }
           if (have.documentNumber === sourceDocumentNumber) {
             if (projectionChanged) docsAmended++;
@@ -1824,7 +1824,7 @@ export async function runSync(
             });
           }
         });
-        if (have.posted) await setDocumentTotalsFromEntry(have.id);
+        if (have.posted) await setDocumentTotalsFromEntry(have.id, org.id);
         numberOwners.delete(
           documentNumberOwnerKey(doc.kind, have.documentNumber),
         );
