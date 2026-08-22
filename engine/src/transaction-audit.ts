@@ -44,23 +44,23 @@ export async function captureTransactionAuditSnapshot(
       'lines', coalesce((
         select jsonb_agg(to_jsonb(dl) order by dl.line_number, dl.id)
           from document_lines dl
-         where dl.document_id = d.id
+         where dl.document_id = d.id and dl.org_id = d.org_id
       ), '[]'::jsonb),
       'taxComponents', coalesce((
         select jsonb_agg(to_jsonb(tc) order by dl.line_number, tc.sequence, tc.id)
           from document_lines dl
-          join document_line_tax_components tc on tc.document_line_id = dl.id
-         where dl.document_id = d.id
+          join document_line_tax_components tc on tc.document_line_id = dl.id and tc.org_id = dl.org_id
+         where dl.document_id = d.id and dl.org_id = d.org_id
       ), '[]'::jsonb),
       'applications', coalesce((
         select jsonb_agg(to_jsonb(a) order by a.applied_on, a.id)
           from applications a
          where e.id is not null and (
            a.from_line_id in (
-             select jl.id from journal_lines jl where jl.entry_id = e.id
+             select jl.id from journal_lines jl where jl.entry_id = e.id and jl.org_id = e.org_id
            )
            or a.to_line_id in (
-             select jl.id from journal_lines jl where jl.entry_id = e.id
+             select jl.id from journal_lines jl where jl.entry_id = e.id and jl.org_id = e.org_id
            )
          )
       ), '[]'::jsonb),
@@ -69,7 +69,7 @@ export async function captureTransactionAuditSnapshot(
         'lines', coalesce((
           select jsonb_agg(to_jsonb(jl) order by jl.line_number, jl.id)
             from journal_lines jl
-           where jl.entry_id = e.id
+           where jl.entry_id = e.id and jl.org_id = e.org_id
         ), '[]'::jsonb),
         'reversals', coalesce((
           select jsonb_agg(
@@ -78,13 +78,13 @@ export async function captureTransactionAuditSnapshot(
               'lines', coalesce((
                 select jsonb_agg(to_jsonb(reversal_line) order by reversal_line.line_number, reversal_line.id)
                   from journal_lines reversal_line
-                 where reversal_line.entry_id = reversal.id
+                 where reversal_line.entry_id = reversal.id and reversal_line.org_id = reversal.org_id
               ), '[]'::jsonb)
             )
             order by reversal.posting_date, reversal.id
           )
             from journal_entries reversal
-           where reversal.reverses_entry_id = e.id
+           where reversal.reverses_entry_id = e.id and reversal.org_id = e.org_id
         ), '[]'::jsonb)
       ) end
     ) as snapshot

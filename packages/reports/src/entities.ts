@@ -428,11 +428,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'eu.serial_number' },
       { key: 'capacity_quantity', label: 'Capacity', kind: 'number', expr: 'eu.capacity_quantity' },
       { key: 'capacity_unit', label: 'Capacity unit', kind: 'text', expr: 'eu.capacity_unit' },
-      { key: 'usage', label: 'Charged usage', kind: 'number', expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'cost_recovery', label: 'Cost recovery', kind: 'money', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billable_value', label: 'Billable value', kind: 'money', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billed_revenue', label: 'Billed revenue', kind: 'money', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='customer_invoice' and d.status='posted')` },
-      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.posted_amount is not null)` },
+      { key: 'usage', label: 'Charged usage', kind: 'number', expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'cost_recovery', label: 'Cost recovery', kind: 'money', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billable_value', label: 'Billable value', kind: 'money', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billed_revenue', label: 'Billed revenue', kind: 'money', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id and d.kind='customer_invoice' and d.status='posted')` },
+      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id and dsl.org_id=ds.org_id where ds.asset_id=eu.fixed_asset_id and ds.org_id=eu.org_id and dsl.posted_amount is not null)` },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
       { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
     ],
@@ -604,8 +604,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         key: 'ytd_amount', label: 'YTD amount', kind: 'money',
         expr: `(select coalesce(sum(l2.amount), 0)
         from pay_stub_lines l2
-        join pay_stubs s2 on s2.id = l2.stub_id
-        join pay_runs r2 on r2.document_id = s2.pay_run_document_id
+        join pay_stubs s2 on s2.id = l2.stub_id and s2.org_id = l2.org_id
+        join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
        where l2.org_id = l.org_id
          and s2.employee_party_id = s.employee_party_id
          and coalesce(l2.component_id::text, l2.description) = coalesce(l.component_id::text, l.description)

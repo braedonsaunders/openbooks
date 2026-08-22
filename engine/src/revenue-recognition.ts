@@ -1023,7 +1023,7 @@ export async function runRevenueRecognition(
                    ${orgId}, l.period_id, s.book_id, ${row.subsidiary_id}, 'gl'
                  ) as period_closed
             from recognition_schedule_lines l
-            join recognition_schedules s on s.id = l.schedule_id
+            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
            where l.id = ${row.line_id}
              and l.org_id = ${orgId}
              and l.journal_entry_id is null
@@ -1109,7 +1109,7 @@ export async function runRevenueRecognition(
            exists (select 1 from recognition_schedules s where s.obligation_id = o.id)
            and not exists (
              select 1 from recognition_schedule_lines l
-               join recognition_schedules s on s.id = l.schedule_id
+               join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
               where s.obligation_id = o.id)
          )
        )`));
@@ -1136,7 +1136,7 @@ export async function runRevenueRecognition(
        and (r.method <> 'percent_complete' or coalesce(o.percent_complete, '0')::numeric >= 100)
        and exists (
          select 1 from recognition_schedule_lines l
-           join recognition_schedules s on s.id = l.schedule_id
+           join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           where s.obligation_id = o.id)
        and not exists (
          select 1 from recognition_schedules s

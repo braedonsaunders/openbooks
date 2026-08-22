@@ -791,7 +791,7 @@ export async function componentYearToDate(
     select (
       coalesce((
         select sum(l.amount) from pay_stub_lines l
-          join pay_stubs s on s.id = l.stub_id
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where l.org_id = ${args.orgId} and s.employee_party_id = ${args.employeePartyId}
            and s.tax_year = ${args.taxYear} and l.component_id = ${args.componentId}

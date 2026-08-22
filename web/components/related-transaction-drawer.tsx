@@ -107,7 +107,7 @@ export async function loadRelatedTransactionDrawerData({
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
     const paymentKind = kind as PaymentKind
-    const payment = await loadPaymentDocument(id, paymentKind)
+    const payment = await loadPaymentDocument(id, paymentKind, authz.user.orgId)
     if (!payment || !canSeeDocument(payment.doc as Record<string, any>, partyId, authz)) return null
 
     const side = PAYMENT_KIND_SIDE[paymentKind]
