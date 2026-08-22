@@ -38,6 +38,7 @@ import {
 import { applyPeriodOverride, executeReport, mergeReportFilters, reportPeriodField } from './custom-reports'
 import type { ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
+import { STATEMENT_KIND_FEATURE } from './report-authz'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -136,11 +137,9 @@ export type ResolveReportCtx = {
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
   const { orgId, t, period, query: q } = ctx
-  if (kind === 'project-profitability' && !(await isFeatureEnabled(orgId, 'projects'))) {
-    throw new Error('Projects feature is disabled')
-  }
-  if (kind === 'budget' && !(await isFeatureEnabled(orgId, 'budgets'))) {
-    throw new Error('Budgets feature is disabled')
+  const featureKey = STATEMENT_KIND_FEATURE[kind]
+  if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
+    throw new Error(`${featureKey} feature is disabled`)
   }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).

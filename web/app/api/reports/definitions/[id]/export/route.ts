@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // An export returns the SAME rows the runner does. `reports.read` alone must
   // not reach a payroll plan through the download button.
-  const denied = guardReportEntity(gate, def.query)
+  const denied = await guardReportEntity(gate, def.query)
   if (denied) return denied
 
   const t = (await getTranslations('reports')) as unknown as Translator

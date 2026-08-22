@@ -14,7 +14,8 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { REPORT_ENTITY_MAP, type ReportCustomQuery } from '@openbooks/reports'
-import { can, requirePermission } from '../../../../lib/authz'
+import { requirePermission } from '../../../../lib/authz'
+import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
@@ -90,22 +91,29 @@ export default async function CustomReports({
       : d.description
   }
 
-  // Entities this reader may not run. The catalog page lists names, slugs and
-  // the stored PLAN, so an unfiltered list leaks the shape of payroll reporting
-  // — and the ids every execution path keys on — to anyone holding reports.read.
-  // Filtered in SQL rather than after the fact so the kind counts and the
-  // pagination totals describe what is actually shown.
-  const deniedEntities = Object.values(REPORT_ENTITY_MAP)
-    .filter((entity) => entity.requiredPermission && !can(authz, entity.requiredPermission))
-    .map((entity) => entity.key)
+  // Entities / statement kinds this reader may not run. The catalog page lists
+  // names, slugs and the stored PLAN, so an unfiltered list leaks the shape of
+  // payroll reporting — and the ids every execution path keys on — to anyone
+  // holding reports.read, and leaks optional-module reports when the Features
+  // switch is off. Filtered in SQL rather than after the fact so the kind
+  // counts and the pagination totals describe what is actually shown.
+  const [deniedEntities, deniedStatementKinds] = await Promise.all([
+    hiddenReportEntityKeys(authz),
+    hiddenReportStatementKinds(authz),
+  ])
 
   // Applied to the list AND to the kind counts: a count is a disclosure too, and
   // a total that includes reports the reader cannot see makes the empty state
   // and the pagination lie about what is there.
-  const visible =
+  const visibleEntity =
     deniedEntities.length > 0
       ? sql` and (query is null or coalesce(query->>'entity', '') <> all(${`{${deniedEntities.join(',')}}`}::text[]))`
       : sql``
+  const visibleStatement =
+    deniedStatementKinds.length > 0
+      ? sql` and (statement is null or coalesce(statement->>'kind', '') <> all(${`{${deniedStatementKinds.join(',')}}`}::text[]))`
+      : sql``
+  const visible = sql`${visibleEntity}${visibleStatement}`
 
   const where = sql`org_id = ${authz.user.orgId}${visible}
     ${kind && kind !== 'all' ? sql` and kind = ${kind}` : sql``}

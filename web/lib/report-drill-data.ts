@@ -241,7 +241,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
   // A drill returns the report's OWN supporting rows, so it owes the same
   // entity gate the runner and the export owe. `loadView` already applies it
   // for saved views; a stored definition reached this far unchecked.
-  if (!canRunReportEntity(authz, stored)) throw new Error('report_entity_forbidden')
+  if (!(await canRunReportEntity(authz, stored))) throw new Error('report_entity_forbidden')
   const support = customSupportColumns(entity.key)
   // Supporting rows show the REPORT'S OWN columns (they carry the drilled
   // amounts); catalog defaults only when the plan has none (summarize mode).

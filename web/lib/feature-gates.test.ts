@@ -197,15 +197,41 @@ test('the surfaces this test was written for are covered', () => {
     'recognition posting must refuse when the revenue recognition gate is off',
   )
   assert.equal(routeGateState('/reports/budget'), 'gated')
+  assert.equal(routeGateState('/reports/orders'), 'gated')
   assert.match(
     read('lib/report-run.ts'),
-    /kind === 'budget' && !\(await isFeatureEnabled\(orgId, 'budgets'\)\)/,
-    'budget vs actual must refuse when the Budgets switch is off',
+    /STATEMENT_KIND_FEATURE\[kind\]/,
+    'statement resolve must refuse budget and project-profitability when their Features switch is off',
+  )
+  assert.match(
+    read('lib/report-authz.ts'),
+    /budget: 'budgets'/,
+    'budget statement kind must follow the Budgets switch',
+  )
+  assert.match(
+    read('lib/report-authz.ts'),
+    /'project-profitability': 'projects'/,
+    'project-profitability statement kind must follow the Projects switch',
+  )
+  assert.match(
+    read('lib/report-authz.ts'),
+    /REPORT_ENTITY_MAP\[entity\]\?\.featureKey/,
+    'query-report entities must consult the catalog featureKey',
   )
   assert.match(
     read('app/api/reports/drill/route.ts'),
     /target\.kind === 'budget' && !\(await isFeatureEnabled/,
     'budget drill must refuse when the Budgets switch is off',
+  )
+  assert.match(
+    read('app/api/reports/drill/route.ts'),
+    /target\.kind === 'time' && !\(await isFeatureEnabled/,
+    'time drill must refuse when Time Tracking is off',
+  )
+  assert.match(
+    read('app/api/reports/drill/route.ts'),
+    /target\.kind === 'orders' && !\(await isFeatureEnabled/,
+    'orders drill must refuse when Orders is off',
   )
   assert.match(
     read('lib/setup/registry.ts'),
@@ -256,13 +282,65 @@ test('the surfaces this test was written for are covered', () => {
     /isFeatureEnabled\(authz\.user\.orgId, "budgets"\)/,
     'budget scenario tools must refuse when Budgets is off',
   )
+  assert.match(
+    read('lib/assistant/tools-reports.ts'),
+    /canRunReportEntity/,
+    'list_report_definitions / run_report must hide optional-module plans when the feature is off',
+  )
+  assert.match(
+    read('lib/assistant/tools-analytics.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "projects"\)/,
+    'true-cost must refuse when Projects is off',
+  )
+  assert.match(
+    read('lib/assistant/tools-analytics.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "timeTracking"\)/,
+    'utilization must refuse when Time Tracking is off',
+  )
+  assert.match(
+    read('lib/assistant/tools-analytics.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "budgets"\)/,
+    'financial health must omit budget variance when Budgets is off',
+  )
+  assert.match(
+    read('lib/setup/number-sequence-kinds.ts'),
+    /SEQUENCE_KIND_FEATURE/,
+    'number-sequence writers must not offer optional-module kinds when the parent feature is off',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /key: 'projects'[\s\S]{0,200}featureKey: 'projects'/,
+    'the projects report entity must follow the Projects switch',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /key: 'timesheets'[\s\S]{0,200}featureKey: 'timeTracking'/,
+    'the timesheets report entity must follow the Time Tracking switch',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /key: 'fixed_assets'[\s\S]{0,200}featureKey: 'fixedAssets'/,
+    'the fixed-assets report entity must follow the Fixed Assets switch',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /key: 'equipment'[\s\S]{0,200}featureKey: 'equipment'/,
+    'the equipment report entity must follow the Equipment switch',
+  )
+  assert.match(
+    read('../packages/reports/src/entities.ts'),
+    /requiredPermission: 'payroll.read',\s*featureKey: 'payroll'/,
+    'payroll wage entities must follow the Payroll switch, not only payroll.read',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
   // The list exposes names, slugs and the stored PLAN, and the counts expose
-  // how many exist. Both are disclosures; both are filtered.
+  // how many exist. Both are disclosures; both are filtered — permission and
+  // the Features switch.
   const page = read('app/(app)/reports/custom/page.tsx')
-  assert.match(page, /requiredPermission && !can\(authz/)
+  assert.match(page, /hiddenReportEntityKeys/)
+  assert.match(page, /hiddenReportStatementKinds/)
   assert.match(page, /const visible =/)
   const countsQuery = page.slice(page.indexOf('select kind, count(*)'))
   assert.match(

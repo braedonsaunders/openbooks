@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { can, guardPermission } from '../../../../../lib/authz'
-import { loadView, runView, viewEntityPermission } from '../../../../../lib/views'
+import { guardPermission } from '../../../../../lib/authz'
+import { canRunReportEntity } from '../../../../../lib/report-authz'
+import { loadView, runView } from '../../../../../lib/views'
 
 export const runtime = 'nodejs'
 
@@ -12,9 +13,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const view = await loadView(user.orgId, id, user.id, permissions)
   if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const needed = viewEntityPermission(view.query)
-  if (needed && !can(gate, needed)) {
-    return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
+  if (!(await canRunReportEntity(gate, view.query))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
   try {

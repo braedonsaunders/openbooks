@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   `))
   const row = r.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const denied = guardReportEntity(gate, row.query)
+  const denied = await guardReportEntity(gate, row.query)
   if (denied) return denied
   if (row.status !== 'succeeded' || row.result_csv == null) {
     return NextResponse.json({ error: 'no result available for this run' }, { status: 409 })

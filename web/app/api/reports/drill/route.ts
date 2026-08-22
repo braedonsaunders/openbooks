@@ -18,6 +18,12 @@ export async function GET(request: Request) {
   if (target.kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  if (target.kind === 'time' && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  if (target.kind === 'orders' && !(await isFeatureEnabled(gate.user.orgId, 'orders'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   try {
     return NextResponse.json(await loadReportDrillData(target, gate, requestedPage))
   } catch (error) {

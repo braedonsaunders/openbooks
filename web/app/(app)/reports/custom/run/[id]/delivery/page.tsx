@@ -3,9 +3,9 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
-import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../../components/page-layout'
-import { can, requirePermission } from '../../../../../../../lib/authz'
+import { requirePermission } from '../../../../../../../lib/authz'
+import { canRunReportEntity } from '../../../../../../../lib/report-authz'
 import { isUuid } from '../../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../../lib/custom-reports'
 import { DeliveryPanel } from './DeliveryPanel'
@@ -26,8 +26,7 @@ export default async function ReportDeliveryPage({ params }: { params: Promise<{
   const definition = await loadReportDefinition(authz.user.orgId, id)
   if (!definition) notFound()
   if (definition.report_type === 'statement' || !definition.query) redirect('/reports/custom')
-  const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
-  if (entity?.requiredPermission && !can(authz, entity.requiredPermission)) notFound()
+  if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
   const t = await getTranslations('reports')
   const tk = await getTranslations('reports.custom')

@@ -12,6 +12,7 @@ import { utilizationData } from "../analytics/utilization-data";
 import { spendVelocityData } from "../analytics/spend-velocity-data";
 import { sentinelData } from "../analytics/sentinel-data";
 import { analyticsConfig } from "../analytics/config";
+import { isFeatureEnabled } from "../features";
 import { apPosition } from "../cash/ap-position";
 import { arPosition } from "../cash/ar-position";
 import { cashPosition } from "../cash/cash-position";
@@ -105,6 +106,7 @@ const financialHealthTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId));
+    const budgetsOn = await isFeatureEnabled(authz.user.orgId, "budgets");
     const ratios = Object.fromEntries(
       Object.entries(r.ratios).map(([cat, list]) => [
         cat,
@@ -152,11 +154,13 @@ const financialHealthTool: AssistantToolDef = {
           decliners: capList(r.items.decliners, 25),
           rows: capList(r.items.rows, 50),
         },
-        budget: {
-          scenario: r.budget.scenario,
-          totals: r.budget.totals,
-          rows: capList(r.budget.rows, 50),
-        },
+        budget: budgetsOn
+          ? {
+              scenario: r.budget.scenario,
+              totals: r.budget.totals,
+              rows: capList(r.budget.rows, 50),
+            }
+          : null,
         insights: capList(r.insights, 25),
         href: "/analytics/financial-health",
       },
@@ -355,6 +359,9 @@ const trueCostTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) {
+      return { ok: false, error: "projects_feature_disabled" };
+    }
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period));
@@ -444,6 +451,9 @@ const utilizationTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "timeTracking"))) {
+      return { ok: false, error: "time_tracking_feature_disabled" };
+    }
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period));
