@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
 import {
   deleteParallelTolerance,
   parallelTolerances,
   saveParallelTolerance,
 } from '@openbooks/engine/src/payroll-parallel-run-store.ts'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const dynamic = 'force-dynamic'
@@ -55,13 +57,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'slot is required' }, { status: 422 })
   }
 
+  const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
+  if (toleranceRaw === null) {
+    return NextResponse.json({ error: 'Tolerance must be an exact decimal' }, { status: 422 })
+  }
+  let tolerance: string
+  try {
+    tolerance = normalizeMoney(toleranceRaw)
+  } catch {
+    return NextResponse.json({ error: 'Tolerance must be an exact decimal' }, { status: 422 })
+  }
+
   try {
     await saveParallelTolerance({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       kind: body.kind as ToleranceKind,
       slot: body.slot.trim(),
-      tolerance: String(body.tolerance ?? '0'),
+      tolerance,
       reason: String(body.reason ?? ''),
     })
   } catch (error) {
