@@ -133,6 +133,7 @@ export async function saveQuickActions(input: unknown) {
       values (uuid_generate_v7(), ${authz.user.orgId}, ${authz.user.id}, ${JSON.stringify(layout)}::jsonb, ${sourceRole}, true, now(), now())
       on conflict (org_id, user_id)
       do update set layout = ${JSON.stringify(layout)}::jsonb, source_role = ${sourceRole}, is_customised = true, updated_at = now()
+      where user_dashboard_layouts.org_id = ${authz.user.orgId}
     `)
   })
 
