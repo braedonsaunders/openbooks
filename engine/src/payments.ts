@@ -343,7 +343,7 @@ export async function updateDraftPayment(
   // Allocations must target real open items of this party, within open balance.
   if (allocations.length > 0) {
     if (!partyId) throw new PaymentError("select a party before applying open items");
-    const openItems = await openItemsForParty(partyId, PAYMENT_KIND_SIDE[doc.kind]);
+    const openItems = await openItemsForParty(partyId, PAYMENT_KIND_SIDE[doc.kind], doc.orgId);
     const byLine = new Map(openItems.map((i) => [i.lineId, i]));
     for (const a of allocations) {
       const item = byLine.get(a.openLineId);
@@ -488,8 +488,9 @@ export async function suggestApplications(
  * Open AP (credit) or AR (debit) journal lines for a party: is_open_item
  * lines on posted entries, with applied-to-date sums and remaining balance.
  */
-export async function openItemsForParty(partyId: string, side: OpenItemSide): Promise<OpenItem[]> {
+export async function openItemsForParty(partyId: string, side: OpenItemSide, orgId?: string): Promise<OpenItem[]> {
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
+  const orgFilter = orgId ? sql`jl.org_id = ${orgId} and` : sql``;
   const r = (await db.execute<{
       line_id: string;
       amount: string;
@@ -522,7 +523,7 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide): Pr
           from applications a
          where a.to_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
       ) ap on true
-     where jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
+     where ${orgFilter} jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
      order by jl.due_date nulls last, je.posting_date, je.entry_number
   `));
   return r.rows
@@ -710,7 +711,7 @@ export async function postPaymentWithApplications(
     await db.execute(sql`select id from journal_lines where id in ${endpointIds} and org_id = ${doc.orgId} order by id for update`);
 
     const side = PAYMENT_KIND_SIDE[doc.kind];
-    const openItems = await openItemsForParty(doc.partyId, side);
+    const openItems = await openItemsForParty(doc.partyId, side, doc.orgId);
     const byLine = new Map(openItems.map((item) => [item.lineId, item]));
     for (const allocation of allocs) {
       const item = byLine.get(allocation.openLineId);

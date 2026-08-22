@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
 
   try {
-    const items = await openItemsForParty(partyId, side)
+    const items = await openItemsForParty(partyId, side, gate.user.orgId)
     return NextResponse.json({ items })
   } catch (e) {
     return paymentErrorResponse(e)

@@ -136,7 +136,7 @@ export async function loadRelatedTransactionDrawerData({
       }),
     ])
     const openItems: OpenItemClient[] = payment.doc.status === 'draft'
-      ? await openItemsForParty(String(payment.doc.party_id), side)
+      ? await openItemsForParty(String(payment.doc.party_id), side, authz.user.orgId)
       : []
     return {
       type: 'payment',

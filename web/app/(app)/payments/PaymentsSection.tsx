@@ -63,7 +63,7 @@ export async function PaymentsSection({
     ])
     const openItems: OpenItemClient[] =
       openPayment.doc.status === 'draft' && openPayment.doc.party_id
-        ? await openItemsForParty(openPayment.doc.party_id as string, side)
+        ? await openItemsForParty(openPayment.doc.party_id as string, side, orgId)
         : []
     const resolvedForm = await resolveFormLayout({
       orgId,
