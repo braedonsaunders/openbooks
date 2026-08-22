@@ -10,3 +10,10 @@ test('app storage upserts pin the known tenant on the app_id/namespace/key confl
     /insert into app_storage[\s\S]*?on conflict \(app_id, namespace, key\) do update set[\s\S]*?where app_storage\.org_id = \$\{orgId\}/,
   )
 })
+
+test('app file upserts pin the known tenant on the version_id/path conflict write', () => {
+  assert.match(
+    store,
+    /insert into app_files[\s\S]*?on conflict \(version_id, path\) do update set[\s\S]*?where app_files\.org_id = \$\{orgId\}/,
+  )
+})

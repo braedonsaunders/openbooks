@@ -724,7 +724,8 @@ export async function writeAppFile(
             ${content}, ${isBinary}, ${content.length}, ${userId}, ${userId})
     on conflict (version_id, path) do update set
       content = excluded.content, is_binary = excluded.is_binary, size = excluded.size,
-      content_type = excluded.content_type, kind = excluded.kind, updated_at = now(), updated_by = ${userId}`)
+      content_type = excluded.content_type, kind = excluded.kind, updated_at = now(), updated_by = ${userId}
+    where app_files.org_id = ${orgId}`)
 }
 
 export async function deleteAppFile(orgId: string, key: string, path: string): Promise<void> {
