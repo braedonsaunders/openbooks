@@ -60,3 +60,11 @@ test("document insert persists fxRate through canonicalDecimal then normalizeDec
   assert.match(body, /persistSyncFxRate\(doc\.fxRate \?\? "1"\)/);
   assert.doesNotMatch(body, /normalizeDecimal\(doc\.fxRate \?\? "1", 10\)/);
 });
+
+test("document amend persists fx_rate through persistSyncFxRate", () => {
+  const amend = source.indexOf("update documents set");
+  const where = source.indexOf("where id = ${have.id} and org_id = ${org.id}", amend);
+  const body = source.slice(amend, where > amend ? where : undefined);
+  assert.match(body, /fx_rate = \$\{persistSyncFxRate\(doc\.fxRate \?\? "1"\)\}/);
+  assert.doesNotMatch(body, /normalizeDecimal\(doc\.fxRate \?\? "1", 10\)/);
+});

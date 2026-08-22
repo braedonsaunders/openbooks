@@ -1766,7 +1766,7 @@ export async function runSync(
               document_date = ${doc.documentDate},
               posting_date = ${doc.postingDate ?? doc.documentDate},
               posting_period_id = ${doc.postingPeriodId ?? null}, due_date = ${doc.dueDate},
-              currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${normalizeDecimal(doc.fxRate ?? "1", 10)},
+              currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${persistSyncFxRate(doc.fxRate ?? "1")},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
               status = case
                 when posted_entry_id is not null then status
