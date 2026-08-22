@@ -10,8 +10,11 @@ import {
   validateCustomValues,
 } from "../../../../lib/custom-fields";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
+import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 const CATEGORIES = [
   "markup",
@@ -208,10 +211,14 @@ export async function PUT(
     itemIds = new Set<string>();
   for (const line of lines) {
     const regular = nonnegativeMoney(line.regular, true);
-    if (!line.itemId || !isUuid(line.itemId) || regular === false)
+    if (regular === false) return error("item");
+    if (line.itemId != null && line.itemId !== "") {
+      if (!isUuid(line.itemId)) return error("item");
+      itemIds.add(line.itemId);
+    } else if (!line.id) {
       return error("item");
+    }
     line.regular = regular;
-    itemIds.add(line.itemId);
     if (line.id) {
       if (!isUuid(line.id) || lineIds.has(line.id)) return error("item");
       lineIds.add(line.id);
@@ -283,6 +290,22 @@ export async function PUT(
   if (!customValidation.ok) return error("custom");
 
   const orgId = gate.user.orgId;
+  // Stored rate-card lines stay when itemId is omitted. Re-sending the stored
+  // item is allowed. A new inventory / assembly / kit item is Inventory configuration.
+  if (!(await isFeatureEnabled(orgId, "inventory"))) {
+    const stored = (await db.execute<{ item_id: string }>(sql`
+      select item_id from item_rate_lines
+       where version_id = ${id} and org_id = ${orgId} and item_id is not null`));
+    const storedIds = new Set(stored.rows.map((row) => row.item_id));
+    for (const line of lines) {
+      if (!line.itemId || storedIds.has(line.itemId)) continue;
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${orgId}`));
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        return NextResponse.json({ error: "not found" }, { status: 404 });
+      }
+    }
+  }
   try {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ rate_book_id: string }>(
@@ -373,7 +396,7 @@ export async function PUT(
       for (const [sortOrder, line] of lines.entries()) {
         if (line.id)
           await tx.execute(
-            sql`update item_rate_lines set item_id=${line.itemId},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId}`,
+            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId}`,
           );
         else
           await tx.execute(
