@@ -144,8 +144,14 @@ export async function POST(req: Request) {
       case "addSov": {
         if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
         const description = String(body.description ?? "").trim();
-        const scheduledValue = normalizeMoney(String(body.scheduledValue ?? "0"));
-        const retainagePercent = body.retainagePercent == null || body.retainagePercent === "" ? null : normalizeMoney(String(body.retainagePercent));
+        const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
+        if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
+        const scheduledValue = normalizeMoney(scheduledRaw);
+        const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
+        if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
+          throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+        }
+        const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
         if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
         if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
         const id = await db.transaction(async (tx) => {
@@ -172,8 +178,14 @@ export async function POST(req: Request) {
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length) throw new ConstructionBillingError("A schedule line used by an application is immutable; use a change order");
           const description = String(body.description ?? "").trim();
-          const scheduledValue = normalizeMoney(String(body.scheduledValue ?? "0"));
-          const retainagePercent = body.retainagePercent == null || body.retainagePercent === "" ? null : normalizeMoney(String(body.retainagePercent));
+          const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
+          if (scheduledRaw === null) throw new ConstructionBillingError("Scheduled value must be a number with no more than four decimal places");
+          const scheduledValue = normalizeMoney(scheduledRaw);
+          const retainageRaw = body.retainagePercent == null || body.retainagePercent === "" ? null : canonicalDecimal(body.retainagePercent, 4);
+          if (body.retainagePercent != null && body.retainagePercent !== "" && retainageRaw === null) {
+            throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+          }
+          const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
           if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
           if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
           const after = (await tx.execute<any>(sql`
@@ -300,12 +312,12 @@ export async function POST(req: Request) {
                       ${JSON.stringify({ changeOrderId: body.id, before: { scheduledValue: target.rows[0].scheduled_value }, after: { scheduledValue: revisedValue } })}::jsonb,
                       ${userId})`);
           } else {
-            if (cmp(String(row.amount), "0") <= 0) throw new ConstructionBillingError("An unallocated change order must be additive");
+            if (cmp(effect, "0") <= 0) throw new ConstructionBillingError("An unallocated change order must be additive");
             const sov = (await tx.execute<{ id: string }>(sql`
               insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id,
                                      sort_order, created_by, updated_by)
               values (${orgId}, ${row.project_id}, ${"CO-" + row.number}, ${row.description ?? "Change order " + row.number},
-                      ${String(row.amount)}, ${body.id},
+                      ${effect}, ${body.id},
                       (select coalesce(max(sort_order), 0) + 1 from sov_lines where org_id = ${orgId} and project_id = ${row.project_id}),
                       ${userId}, ${userId})
               returning id
@@ -348,15 +360,27 @@ export async function POST(req: Request) {
       }
       case "createPayApp": {
         if (!(await ownsProject(orgId, body.projectId))) return NextResponse.json({ error: "not found" }, { status: 404 });
-        const r = await createPayApplication(orgId, userId, body.projectId, body.periodEnd, String(body.retainagePercent ?? "10"));
+        const retainageRaw = canonicalDecimal(body.retainagePercent ?? "10", 4);
+        if (retainageRaw === null) throw new ConstructionBillingError("Retainage percent must be a number with no more than four decimal places");
+        const r = await createPayApplication(orgId, userId, body.projectId, body.periodEnd, normalizeMoney(retainageRaw));
         return NextResponse.json(r, { status: 201 });
       }
       case "submitPayApp": {
-        const lines = Array.isArray(body.lines) ? body.lines.map((line: any) => ({
-          sovLineId: String(line.sovLineId ?? ""),
-          thisPeriodCompleted: String(line.thisPeriodCompleted ?? "0"),
-          materialsStored: String(line.materialsStored ?? "0"),
-        })) : [];
+        const lines = [];
+        if (Array.isArray(body.lines)) {
+          for (const line of body.lines as Array<Record<string, unknown>>) {
+            const thisPeriod = canonicalDecimal(line.thisPeriodCompleted ?? "0", 4);
+            const stored = canonicalDecimal(line.materialsStored ?? "0", 4);
+            if (thisPeriod === null || stored === null) {
+              throw new ConstructionBillingError("Draw amounts must be numbers with no more than four decimal places");
+            }
+            lines.push({
+              sovLineId: String(line.sovLineId ?? ""),
+              thisPeriodCompleted: normalizeMoney(thisPeriod),
+              materialsStored: normalizeMoney(stored),
+            });
+          }
+        }
         const result = await submitPayApplication(orgId, userId, body.payApplicationId, lines);
         return NextResponse.json(result);
       }

@@ -258,7 +258,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } catch {
       return bad('Rate must be an exact non-negative percent')
     }
-    ratePercent = rate
+    ratePercent = rate === null ? null : normalizeMoney(rate)
   }
   let unitsTotal: string | null | undefined
   if (body.unitsTotal !== undefined) {

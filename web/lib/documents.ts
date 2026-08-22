@@ -520,12 +520,16 @@ export async function applyDocumentEdit(
       validateEditableDocumentLines(body.lines),
       await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
     )
-    totals = computed
+    totals = {
+      subtotal: normalizeMoney(computed.subtotal),
+      taxTotal: normalizeMoney(computed.taxTotal),
+      total: normalizeMoney(computed.total),
+    }
     // A transfer moves one amount between two accounts; its two legs carry the
     // same amount, so the document total is that amount — NOT the summed legs.
     if (current.kind === 'transfer' && computed.lines.length > 0) {
-      const amt = computed.lines[0]!.amount
-      totals = { subtotal: amt, taxTotal: '0', total: amt }
+      const amt = normalizeMoney(computed.lines[0]!.amount)
+      totals = { subtotal: amt, taxTotal: '0.0000', total: amt }
     }
     preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
@@ -542,6 +546,12 @@ export async function applyDocumentEdit(
           throw new DocumentEditError(422, `Line ${i + 1}: unit price is not a valid amount`)
         }
       }
+      let amount: string
+      try {
+        amount = normalizeMoney(l.amount)
+      } catch {
+        throw new DocumentEditError(422, `Line ${i + 1}: amount is not a valid amount`)
+      }
       preparedLines.push({
         accountId: l.accountId!,
         itemId: l.itemId ?? null,
@@ -549,7 +559,7 @@ export async function applyDocumentEdit(
         quantity: l.quantity ?? null,
         unit: l.unit ?? null,
         unitPrice,
-        amount: l.amount,
+        amount,
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
         taxInputAmount: l.taxInputAmount,

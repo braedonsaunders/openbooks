@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
@@ -23,7 +24,8 @@ async function itemExists(id: string, orgId: string) {
 
 function money(value: unknown): string | null {
   if (value === null || value === undefined || String(value).trim() === '') return null
-  return canonicalDecimal(value, 4)
+  const exact = canonicalDecimal(value, 4)
+  return exact === null ? null : normalizeMoney(exact)
 }
 
 function dateOrNull(value: unknown): string | null {
