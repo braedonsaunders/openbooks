@@ -44,7 +44,7 @@ export default async function Opportunities({
       loadOpportunity(openId, authz.user.orgId),
       db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`) as any,
       db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id where cp.org_id=${authz.user.orgId} and cp.is_active order by p.display_name limit 2000`) as any,
+      db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active order by p.display_name limit 2000`) as any,
       db.execute(sql`select id,party_id,name from contacts where org_id=${authz.user.orgId} and is_active order by name limit 4000`) as any,
       db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`) as any,

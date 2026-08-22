@@ -68,7 +68,7 @@ export async function setScheduleAction(sandboxId: string, cadence: string | nul
   const authz = await requireManager();
   await ownedSandbox(sandboxId, authz.user.productionOrgId);
   const value = cadence && ["hourly", "daily", "weekly"].includes(cadence) ? cadence : null;
-  await db.execute(sql`update sandboxes set refresh_schedule = ${value} where id = ${sandboxId}`);
+  await db.execute(sql`update sandboxes set refresh_schedule = ${value} where id = ${sandboxId} and production_org_id = ${authz.user.productionOrgId}`);
   revalidatePath("/admin/sandboxes");
 }
 

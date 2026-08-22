@@ -44,13 +44,13 @@ export default async function ReportDeliveryPage({ params }: { params: Promise<{
     `),
     db.execute<any>(sql`
       select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
-             exists(select 1 from report_run_artifacts a where a.run_id=r.id) as artifact_available,
+             exists(select 1 from report_run_artifacts a where a.run_id=r.id and a.org_id=r.org_id) as artifact_available,
              count(d.id)::int as delivery_total,
              count(d.id) filter (where d.status='sent')::int as delivery_sent,
              count(d.id) filter (where d.status='failed')::int as delivery_failed,
              count(d.id) filter (where d.status='suppressed')::int as delivery_suppressed
         from report_runs r
-        left join report_delivery_outbox d on d.run_id=r.id
+        left join report_delivery_outbox d on d.run_id=r.id and d.org_id=r.org_id
        where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
        group by r.id
        order by r.created_at desc limit 10

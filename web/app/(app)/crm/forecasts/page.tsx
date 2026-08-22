@@ -97,7 +97,7 @@ export default async function Forecasts({
       select q.*, u.name owner_name, st.name team_name
         from crm_sales_quotas q
         left join users u on u.id = q.owner_user_id
-        left join crm_sales_teams st on st.id = q.sales_team_id
+        left join crm_sales_teams st on st.id = q.sales_team_id and st.org_id = q.org_id
        where q.org_id = ${authz.user.orgId}
          and q.period_start <= ${end}::date
          and q.period_end >= ${start}::date
@@ -109,7 +109,7 @@ export default async function Forecasts({
       select s.*, u.name owner_name, st.name team_name
         from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id
-        left join crm_sales_teams st on st.id = s.sales_team_id
+        left join crm_sales_teams st on st.id = s.sales_team_id and st.org_id = s.org_id
        where s.org_id = ${authz.user.orgId}
          and s.period_start = ${start}::date
          and s.period_end = ${end}::date

@@ -57,7 +57,7 @@ export default async function Inventory({
     ? await Promise.all([
         db.execute(sql`
           select it.id, it.code, it.name from items it
-            join item_inventory_profiles p on p.item_id = it.id
+            join item_inventory_profiles p on p.item_id = it.id and p.org_id = it.org_id
            where it.org_id = ${orgId} and it.is_active order by it.name`) as any,
         db.execute(sql`select id, code from stock_locations where org_id = ${orgId} and is_active order by code`) as any,
         db.execute(

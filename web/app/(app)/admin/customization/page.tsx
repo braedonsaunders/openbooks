@@ -140,13 +140,13 @@ export default async function CustomizationPage({
           result = await db.execute(sql`select id::text as value, name as label from users where org_id=${authz.user.orgId} and is_active order by name`)
           break
         case 'customer':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join customer_roles r on r.party_id=p.id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
+          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join customer_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
           break
         case 'vendor':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join vendor_roles r on r.party_id=p.id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
+          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join vendor_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
           break
         case 'employee':
-          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join employee_roles r on r.party_id=p.id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
+          result = await db.execute(sql`select p.id::text as value, p.display_name as label from parties p join employee_roles r on r.party_id=p.id and r.org_id=p.org_id and r.is_active where p.org_id=${authz.user.orgId} and p.is_active order by p.display_name`)
           break
         case 'project':
           result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from projects where org_id=${authz.user.orgId} and is_active order by name`)

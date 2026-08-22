@@ -108,7 +108,7 @@ export default async function ContinuousClosePage({ searchParams }: { searchPara
     const detail = (await db.execute<Record<string, any>>(sql`
       select w.*, f.rating
         from ai_work_items w
-        left join ai_work_item_feedback f on f.work_item_id = w.id and f.user_id = ${authz.user.id}
+        left join ai_work_item_feedback f on f.work_item_id = w.id and f.org_id = w.org_id and f.user_id = ${authz.user.id}
        where w.id = ${itemId} and w.org_id = ${authz.user.orgId} and w.agent_key in ${readableSql}
     `))
     const row = detail.rows[0]

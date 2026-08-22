@@ -238,15 +238,15 @@ export async function RunsSection({
                  count(d.id)::int as delivery_count,
                  max(d.delivered_at) as last_delivered_at
             from payment_files pf
-            left join payment_file_deliveries d on d.payment_file_id = pf.id
-           where pf.payment_run_id = ${runId}
+            left join payment_file_deliveries d on d.payment_file_id = pf.id and d.org_id = pf.org_id
+           where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
            group by pf.id order by pf.sequence_number desc
         `) as any,
         db.execute(sql`
           select e.id, e.event_type, e.from_status, e.to_status, e.details, e.created_at,
                  u.name as actor_name
             from payment_events e left join users u on u.id = e.actor_id
-           where e.payment_run_id = ${runId} order by e.created_at desc limit 100
+           where e.payment_run_id = ${runId} and e.org_id = ${orgId} order by e.created_at desc limit 100
         `) as any,
         db.execute(sql`
           select ri.id, ri.kind, ri.gross_amount, ri.discount_amount, ri.credit_amount,
@@ -255,7 +255,7 @@ export async function RunsSection({
             from payment_run_items ri
             join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
-           where ri.payment_run_id = ${runId}
+           where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
            order by p.display_name, d.document_number
         `) as any,
       ])
