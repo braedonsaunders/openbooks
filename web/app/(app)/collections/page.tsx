@@ -30,7 +30,7 @@ export default async function CollectionsPage() {
         db.execute<any>(sql`
           select p.id, p.display_name as "name" from parties p
            where p.org_id = ${authz.user.orgId} and p.is_active
-             and exists (select 1 from customer_roles cr where cr.party_id = p.id)
+             and exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id)
            order by p.display_name
         `),
         db.execute<any>(sql`
