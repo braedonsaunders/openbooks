@@ -236,6 +236,7 @@ export default async function SetupEntityPage({
   if (baseEntity.featureKey && !featureEnabled(features, baseEntity.featureKey)) notFound()
   const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
+    equipment: featureEnabled(features, 'equipment'),
   }))
 
   const t = await getTranslations('admin.setup')
@@ -299,7 +300,11 @@ export default async function SetupEntityPage({
           const multi = entity.fields.find((f) => f.kind === 'multiref')
           if (found && multi) {
             const m = (await db.execute(sql`
-              select tax_code_id from tax_group_members where tax_group_id = ${found.id}`)) as any
+              select tgm.tax_code_id
+                from tax_group_members tgm
+                join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
+               where tgm.tax_group_id = ${found.id}
+               order by tgm.sequence`)) as any
             members = m.rows.map((x: any) => x.tax_code_id as string)
           }
           return { creating: false, row: found, members }

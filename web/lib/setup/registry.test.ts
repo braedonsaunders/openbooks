@@ -84,10 +84,10 @@ test('generic setup subsidiary controls follow the feature flag everywhere', () 
   for (const key of ['number-sequences', 'classes', 'departments', 'locations']) {
     const entity = SETUP_ENTITY_BY_KEY.get(key)
     assert.ok(entity)
-    const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true })
+    const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true })
     assert.ok(enabled.fields.some((field) => field.ref === 'subsidiaries'), `${key} must expose subsidiary scope when enabled`)
 
-    const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: false })
+    const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: false, equipment: true })
     assert.ok(!disabled.fields.some((field) => field.ref === 'subsidiaries' || field.key === 'subsidiaryIncludeChildren'))
     assert.ok(!disabled.columns.some((column) => column.ref === 'subsidiaries'))
   }
@@ -125,6 +125,20 @@ test('every information-return box option is a real statutory box', () => {
   for (const box of statutory) {
     assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`)
   }
+})
+
+test('derived-rule equipment controls follow the Equipment feature flag', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('pay-derived-rules')
+  assert.ok(entity)
+  const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true })
+  assert.ok(enabled.fields.some((field) => field.key === 'equipmentUnitId'))
+  assert.ok(enabled.fields.find((field) => field.key === 'trigger')?.options?.some((option) => option.value === 'equipment_charge'))
+  assert.ok(enabled.filters?.find((filter) => filter.key === 'trigger')?.options.some((option) => option.value === 'equipment_charge'))
+
+  const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: false })
+  assert.ok(!disabled.fields.some((field) => field.key === 'equipmentUnitId' || field.ref === 'equipment-units'))
+  assert.ok(!disabled.fields.find((field) => field.key === 'trigger')?.options?.some((option) => option.value === 'equipment_charge'))
+  assert.ok(!disabled.filters?.find((filter) => filter.key === 'trigger')?.options.some((option) => option.value === 'equipment_charge'))
 })
 
 test('derived-rule job-title lists are chip inputs fed by the roster, never raw JSON', () => {

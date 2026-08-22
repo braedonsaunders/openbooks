@@ -973,6 +973,36 @@ test('the surfaces this test was written for are covered', () => {
     'project cockpit must not load equipment pickers when Equipment is off',
   )
   assert.match(
+    read('lib/setup/registry.ts'),
+    /key === 'equipmentUnitId'[\s\S]{0,40}ref === 'equipment-units'/,
+    'derived-rule setup must hide equipmentUnitId when Equipment is off',
+  )
+  assert.match(
+    read('lib/setup/registry.ts'),
+    /option\.value !== 'equipment_charge'/,
+    'derived-rule setup must hide the equipment_charge trigger when Equipment is off',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'derived-rule setup must not persist equipment_unit_id when Equipment is off — existing rules stay',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /pay-derived-rules[\s\S]{0,900}return 'not found'/,
+    'derived-rule setup must 404 — not persist — equipment_unit_id / equipment_charge when Equipment is off',
+  )
+  assert.match(
+    read('app/api/admin/setup/[entity]/route.ts'),
+    /integrityError === 'not found' \? 404/,
+    'derived-rule setup POST must 404 — not persist — equipment_unit_id when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/[entity]/SetupEntitySection.tsx'),
+    /equipment: await isFeatureEnabled\(orgId, 'equipment'\)/,
+    'derived-rule setup must hide the equipment picker when Equipment is off',
+  )
+  assert.match(
     read('app/api/equipment/[id]/route.ts'),
     /isFeatureEnabled\([^,]+, 'projects'\)/,
     'equipment PATCH must not change the rate-book link when Projects is off — existing links stay',

@@ -85,6 +85,7 @@ const listSetupRecordsTool: AssistantToolDef = {
     // columns when multi-subsidiary is off).
     const entity = setupEntityForFeatureState(base, {
       multiSubsidiary: featureEnabled(features, "multiSubsidiary"),
+      equipment: featureEnabled(features, "equipment"),
     });
     const limit = Math.min(a.limit ?? 50, 200);
     const idColumn = entity.idColumn ?? "id";

@@ -83,7 +83,10 @@ export const PAY_DERIVED_RULES_ENTITY: SetupEntity = {
     { key: 'projectId', kind: 'ref', ref: 'projects' },
     { key: 'departmentId', kind: 'ref', ref: 'departments' },
     // Charge-scope filters (the equipment_charge trigger). itemId is the one
-    // that keeps "all excavators" a single reviewable row.
+    // that keeps "all excavators" a single reviewable row. equipmentUnitId and
+    // the equipment_charge trigger are Features-gated: setupEntityForFeatureState
+    // hides them and the CRUD route refuses a new write when Equipment is off.
+    // Existing unit links and charge-trigger rules stay.
     { key: 'equipmentUnitId', kind: 'ref', ref: 'equipment-units', helpTextKey: 'fieldHelp.equipmentUnitId' },
     { key: 'itemId', kind: 'ref', ref: 'items', helpTextKey: 'fieldHelp.itemId' },
     { key: 'tradeId', kind: 'ref', ref: 'trades' },

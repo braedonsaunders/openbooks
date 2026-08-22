@@ -16,7 +16,7 @@ import {
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
-import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { featureEnabled, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 
 export const runtime = 'nodejs'
@@ -81,6 +81,25 @@ async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<b
   return featureEnabled(await resolvedFeatureState(orgId), entity.featureKey)
 }
 
+/** Hide Equipment-gated controls for writes, but keep an existing
+ *  equipment_charge trigger coercible so editing other fields on that row
+ *  does not rewrite the gated value as a new persist. */
+function writableSetupEntity(
+  entity: SetupEntity,
+  features: { multiSubsidiary: boolean; equipment: boolean },
+): SetupEntity {
+  const next = setupEntityForFeatureState(entity, features)
+  if (features.equipment) return next
+  const trigger = entity.fields.find((field) => field.key === 'trigger')
+  if (!trigger?.options?.some((option) => option.value === 'equipment_charge')) return next
+  return {
+    ...next,
+    fields: next.fields.map((field) => (
+      field.key === 'trigger' ? { ...field, options: trigger.options } : field
+    )),
+  }
+}
+
 /** Domain checks that cannot be expressed by the generic field coercer. */
 async function validateEntityIntegrity(
   entity: SetupEntity,
@@ -93,6 +112,25 @@ async function validateEntityIntegrity(
     .some((field) => Boolean(body[field.key]))
   if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId))) {
     return 'Subsidiaries are not enabled for this organization'
+  }
+  if (entity.key === 'pay-derived-rules') {
+    // Equipment attribution is a Features-gated write. Turning Equipment off
+    // must stop a new unit link or equipment_charge trigger without wiping
+    // rules that already carry one.
+    const current = rowId
+      ? ((await db.execute(sql`
+          select trigger, equipment_unit_id from pay_derived_rules
+           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const submittedUnit = Boolean(body.equipmentUnitId)
+    const submittedChargeTrigger = body.trigger === 'equipment_charge'
+    const changingUnit = submittedUnit && body.equipmentUnitId !== current?.equipment_unit_id
+    const changingTrigger = submittedChargeTrigger && current?.trigger !== 'equipment_charge'
+    if ((changingUnit || changingTrigger || (!rowId && (submittedUnit || submittedChargeTrigger)))
+      && !(await isFeatureEnabled(orgId, 'equipment'))) {
+      return 'not found'
+    }
   }
   if (entity.key === 'number-sequences') {
     const current = rowId
@@ -519,13 +557,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     entity.key,
     (await req.json().catch(() => ({}))) as Record<string, unknown>,
   )
-  const writableEntity = setupEntityForFeatureState(entity, {
+  const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+    equipment: await isFeatureEnabled(orgId, 'equipment'),
   })
   const built = buildRow(writableEntity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
-  if (integrityError) return NextResponse.json({ error: integrityError }, { status: 400 })
+  if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
 
   if (entity.key === 'accounting-books') {
     try {
@@ -676,8 +715,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  const writableEntity = setupEntityForFeatureState(entity, {
+  const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+    equipment: await isFeatureEnabled(orgId, 'equipment'),
   })
   const built = buildRow(writableEntity, body, { forCreate: false })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })

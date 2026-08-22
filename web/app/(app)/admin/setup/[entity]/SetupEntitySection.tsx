@@ -19,7 +19,7 @@ import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-
 import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
-import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 
 /**
@@ -93,6 +93,7 @@ export async function SetupEntitySection({
 }) {
   const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+    equipment: await isFeatureEnabled(orgId, 'equipment'),
   }))
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
