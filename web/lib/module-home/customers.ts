@@ -1,5 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import {
+  addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
+} from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculateForecast } from '../crm'
 
@@ -46,20 +49,16 @@ export interface CustomersHome {
 
 const TREND_WEEKS = 13
 
-/** Quarter bounds for the pipeline vitals (calendar quarter of today). */
-function quarterBounds(): { start: string; end: string } {
-  const now = new Date()
-  const q = Math.floor(now.getUTCMonth() / 3)
-  const start = new Date(Date.UTC(now.getUTCFullYear(), q * 3, 1))
-  const end = new Date(Date.UTC(now.getUTCFullYear(), q * 3 + 3, 0))
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
-}
-
 export async function customersHome(orgId: string, subIds?: string[]): Promise<CustomersHome> {
+  const today = await businessToday(orgId)
+  const ago7 = addCalendarDays(today, -7)
+  const ago365 = addCalendarDays(today, -365)
+  const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
+  const trendFrom = weekStarts[0]!
   const subArr = subIds && subIds.length > 0 ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
   const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   const docScope = subArr ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``
-  const q = quarterBounds()
+  const q = calendarQuarterBounds(today)
 
   const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
@@ -82,9 +81,9 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
-             coalesce(sum(remaining) filter (where due_date < current_date), 0) as overdue,
+             coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
              count(*) filter (where remaining > 0.005) as open_count,
-             count(*) filter (where remaining > 0.005 and due_date < current_date) as overdue_count
+             count(*) filter (where remaining > 0.005 and due_date < ${today}) as overdue_count
         from oi where remaining > 0.005
     `),
     // Days-sales-outstanding is its own query so it runs BESIDE the open-item
@@ -100,8 +99,8 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
         join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
        where ap.org_id = ${orgId}
          and ba.type = 'asset_receivable' and ap.unapplied_at is null
-         and pl.posting_date >= current_date - 365
-         and pl.posting_date <= current_date
+         and pl.posting_date >= ${ago365}
+         and pl.posting_date <= ${today}
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
     db.execute<any>(sql`
@@ -123,7 +122,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       )
       select oi.party_id, coalesce(p.display_name, 'Unspecified') as name,
              sum(oi.remaining) as open,
-             sum(oi.remaining) filter (where oi.due_date < current_date) as overdue,
+             sum(oi.remaining) filter (where oi.due_date < ${today}) as overdue,
              count(*) as open_invoices,
              min(oi.due_date) as oldest_due,
              coalesce(opp.n, 0) as open_opps
@@ -147,7 +146,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
         from documents d
        where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'posted'
          and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= (date_trunc('week', current_date) - interval '${sql.raw(String(TREND_WEEKS - 1))} weeks')
+         and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
        group by 1
     `),
     // Directory badges — cheap counts for the workspace's other pages.
@@ -161,10 +160,10 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}) as open_sos,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as receipts_7d,
+          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as receipts_7d,
         (select coalesce(sum(abs(d.total)), 0) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
           and d.status = 'posted' and d.voided_at is null${docScope}
-          and coalesce(d.document_date, d.posting_date) >= current_date - 7) as collected_7d,
+          and coalesce(d.document_date, d.posting_date) >= ${ago7}) as collected_7d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
@@ -172,17 +171,6 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }),
   ]))
 
-  const weekStarts: string[] = []
-  {
-    const now = new Date()
-    const day = (now.getUTCDay() + 6) % 7
-    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
-    for (let i = TREND_WEEKS - 1; i >= 0; i--) {
-      const d = new Date(monday)
-      d.setUTCDate(monday.getUTCDate() - i * 7)
-      weekStarts.push(d.toISOString().slice(0, 10))
-    }
-  }
   const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.collected)]))
 
   const ar = arRes.rows[0] ?? {}

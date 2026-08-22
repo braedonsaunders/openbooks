@@ -41,8 +41,8 @@ function addPeriod(from: Date, frequency: string): Date {
 }
 
 /** The schedule's next period: the day after its last period end, one cadence long. */
-function nextPeriod(schedule: RunSchedule): { start: string; end: string; payDate: string } {
-  const lastEnd = schedule.last_end ? at(schedule.last_end) : new Date()
+function nextPeriod(schedule: RunSchedule, today: string): { start: string; end: string; payDate: string } {
+  const lastEnd = at(schedule.last_end ?? today)
   const start = new Date(lastEnd.getTime() + DAY)
   const end = new Date(addPeriod(start, schedule.frequency).getTime() - DAY)
   const payDate = new Date(end.getTime() + (schedule.pay_date_offset_days ?? 0) * DAY)
@@ -93,10 +93,13 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
 export function NewRunButton({
   schedules,
   finalPayCandidates = [],
+  today,
 }: {
   schedules: RunSchedule[]
   /** Employees whose employment has ended — the only final-pay scope. */
   finalPayCandidates?: FinalPayCandidate[]
+  /** Org business day — never the browser's UTC date. */
+  today: string
 }) {
   const t = useTranslations('payroll')
   const tCommon = useTranslations('common')
@@ -107,7 +110,7 @@ export function NewRunButton({
   const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination'>('regular')
   const [paidEmployees, setPaidEmployees] = useState<string[]>([])
   const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
-  const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
+  const derived = schedule ? nextPeriod(schedule, today) : { start: '', end: '', payDate: '' }
   const [period, setPeriod] = useState(derived)
   const [touched, setTouched] = useState(false)
 
@@ -120,7 +123,7 @@ export function NewRunButton({
     // The scope belongs to the schedule that was chosen with it.
     setPaidEmployees([])
     const next = schedules.find((s) => s.id === id)
-    if (next) setPeriod(nextPeriod(next))
+    if (next) setPeriod(nextPeriod(next, today))
   }
 
   function setField(key: 'start' | 'end' | 'payDate', value: string) {
@@ -151,7 +154,6 @@ export function NewRunButton({
     }
   }
 
-  const today = iso(new Date())
   // Mirrors the server guards so the dialog never proposes a rejected window.
   const badWindow = !shown.start || !shown.end || !shown.payDate
     || shown.end < shown.start || shown.payDate < shown.end

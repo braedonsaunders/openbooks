@@ -8,6 +8,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { RecordListView } from '../../../../components/record-list-view'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { requirePermission, can } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { NewRunButton } from '../_ui/NewRunButton'
@@ -64,7 +65,7 @@ export default async function PayRunsPage({
     : []
 
   const newButton = canRun
-    ? <NewRunButton schedules={schedules} finalPayCandidates={finalPayCandidates} />
+    ? <NewRunButton schedules={schedules} finalPayCandidates={finalPayCandidates} today={await businessToday(orgId)} />
     : undefined
 
   const moduleTabs = await groupTabs('payroll', '/payroll/runs')

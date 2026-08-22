@@ -86,7 +86,8 @@ export interface PayrollHome {
 const EXCEPTION_LIMIT = 6
 
 export async function payrollHome(orgId: string): Promise<PayrollHome> {
-  const taxYear = Number((await businessToday(orgId)).slice(0, 4))
+  const today = await businessToday(orgId)
+  const taxYear = Number(today.slice(0, 4))
 
   const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
@@ -161,8 +162,8 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
          and not exists (
            select 1 from labor_cost_rates w
             where w.org_id = pr.org_id and w.employee_party_id = pr.employee_party_id
-              and w.is_active and w.effective_from <= current_date
-              and (w.effective_to is null or w.effective_to >= current_date))
+              and w.is_active and w.effective_from <= ${today}
+              and (w.effective_to is null or w.effective_to >= ${today}))
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
     `),

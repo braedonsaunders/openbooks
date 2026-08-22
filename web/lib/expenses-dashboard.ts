@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
@@ -67,12 +68,10 @@ export interface ExpensesDashboardData {
 const r1 = (n: number) => Math.round(n * 10) / 10
 
 export async function expensesDashboard(orgId: string): Promise<ExpensesDashboardData> {
-  const now = new Date()
-  const ymd = (d: Date) => d.toISOString().slice(0, 10)
-  const to = ymd(now)
-  const from = ymd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1)))
-  const priorFrom = ymd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 23, 1)))
-  const monthStart = ymd(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)))
+  const to = await businessToday(orgId)
+  const monthStart = startOfMonth(to)
+  const from = addCalendarMonthsStart(to, -11)
+  const priorFrom = addCalendarMonthsStart(to, -23)
 
   const [pipeRes, spenderRes, catRes, trendRes, queueRes] = (await Promise.all([
     // Approval pipeline — live counts/values by status + posted this month.

@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { addCalendarDays, businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
@@ -32,6 +33,7 @@ export interface AccountingHome {
 }
 
 export async function accountingHome(orgId: string): Promise<AccountingHome> {
+  const ago7 = addCalendarDays(await businessToday(orgId), -7)
   const [closeRes, countsRes, workRes] = (await Promise.all([
     // Latest close run + its task progress ('complete'/'approved' = done).
     db.execute<any>(sql`
@@ -52,7 +54,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
       select
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft') as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
-          and je.posting_date >= current_date - 7) as posted_7d,
+          and je.posting_date >= ${ago7}) as posted_7d,
         (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active) as accounts,
         (select count(*) from budget_scenarios b where b.org_id = ${orgId}) as budgets,
         (select count(*) from fixed_assets f where f.org_id = ${orgId}) as assets
