@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { getFolder } from '../../../../../../lib/file-cabinet'
 import { buildZip, folderZipManifest, MAX_ZIP_FILES } from '../../../../../../lib/file-zip'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -28,7 +29,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   const { bytes } = await buildZip(gate.user.orgId, fileViewer(gate), entries)
-  const name = `${folder.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\/]/g, '_').trim() || 'folder'}.zip`
+  const stamp = await businessToday(gate.user.orgId)
+  const name = `${folder.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\/]/g, '_').trim() || 'folder'}-${stamp}.zip`
   return new NextResponse(new Uint8Array(bytes), {
     status: 200,
     headers: {
