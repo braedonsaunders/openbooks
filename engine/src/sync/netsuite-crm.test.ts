@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   isNetSuiteRecentActivityEmail,
   normalizeNetSuiteRecentActivityNote,
   resolveNetSuiteCrmCurrency,
 } from './netsuite-crm.ts'
+
+const crmSource = readFileSync(new URL('./netsuite-crm.ts', import.meta.url), 'utf8')
+
+test('recent-activity upserts pin the known tenant on the id conflict write', () => {
+  assert.match(
+    crmSource,
+    /on conflict\(id\) do update set[\s\S]*?where crm_activities\.org_id=\$\{orgId\}/,
+  )
+})
 
 test('maps typed recent-activity notes into sales visits and account links', () => {
   const visit = normalizeNetSuiteRecentActivityNote({
