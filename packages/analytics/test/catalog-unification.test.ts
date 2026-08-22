@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { REPORT_ENTITIES, REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { INSIGHT_SOURCES, getSource, sourcePermission, allowedSources } from '../src/catalog.ts'
+import { INSIGHT_SOURCES, getSource, insightSourceForFeatureState, sourcePermission, allowedSources } from '../src/catalog.ts'
 import { compileInsightQuery } from '../src/compile.ts'
 import { migrateLegacyQuery } from '../src/legacy.ts'
 import { validateInsightQuery } from '../src/validate.ts'
@@ -44,6 +44,26 @@ test('money and number columns are measurable; text and dates are not', () => {
   assert.equal(ledger.fields.find((f) => f.key === 'posting_date')?.canBin, true)
   // A timestamp column bins like a date, not like a category.
   assert.equal(ledger.fields.find((f) => f.key === 'reconciled_at')?.canBin, true)
+})
+
+test('items insight kind options drop inventory kinds when Inventory is off', () => {
+  const items = getSource('items')
+  assert.ok(items)
+  const hidden =
+    insightSourceForFeatureState(items, { inventory: false }).fields.find((field) => field.key === 'kind')
+      ?.options ?? []
+  assert.deepEqual(
+    hidden.filter((value) => ['inventory', 'assembly', 'kit'].includes(value)),
+    [],
+  )
+  const shown =
+    insightSourceForFeatureState(items, { inventory: true }).fields.find((field) => field.key === 'kind')
+      ?.options ?? []
+  assert.ok(shown.includes('inventory') && shown.includes('assembly') && shown.includes('kit'))
+  assert.ok(
+    items.fields.find((field) => field.key === 'kind')?.options?.includes('inventory'),
+    'the static catalog keeps inventory kinds for existing cards and saved filters',
+  )
 })
 
 test('boolean columns carry the value vocabulary the studio and renderer need', () => {
