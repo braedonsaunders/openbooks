@@ -1,3 +1,5 @@
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal, compareDecimal } from './exact-decimal'
 import type {
   RuleCriteria,
   RuleOutcome,
@@ -12,6 +14,17 @@ import type {
  * trees. Shared by the CRUD route and the preview route so a draft rule is
  * validated the same way whether it's being saved or dry-run.
  */
+
+/** Persist a non-negative ledger amount without crossing IEEE-754. */
+function persistNonNegativeMoney(value: unknown): string | null {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null || compareDecimal(exact, '0') < 0) return null
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return null
+  }
+}
 
 const TEXT_FIELDS = new Set(['description', 'payee', 'anyText', 'reference'])
 const TEXT_OPS = new Set(['contains', 'notContains', 'equals', 'startsWith', 'endsWith', 'isBlank'])
@@ -53,17 +66,17 @@ function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleC
     if (op === 'between') {
       const arr = raw.value
       if (!Array.isArray(arr) || arr.length !== 2) return { ok: false, error: 'between needs [min, max]' }
-      const min = Number(arr[0])
-      const max = Number(arr[1])
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0) {
+      const min = persistNonNegativeMoney(arr[0])
+      const max = persistNonNegativeMoney(arr[1])
+      if (min === null || max === null) {
         return { ok: false, error: 'between bounds must be non-negative numbers' }
       }
-      if (min > max) return { ok: false, error: 'between min cannot exceed max' }
+      if (compareDecimal(min, max) > 0) return { ok: false, error: 'between min cannot exceed max' }
       return { ok: true, value: { field: 'amount', op: 'between', value: [min, max] } }
     }
-    const n = Number(raw.value)
-    if (!Number.isFinite(n) || n < 0) return { ok: false, error: 'amount must be a non-negative number' }
-    return { ok: true, value: { field: 'amount', op: op as RuleCondition['op'], value: n } }
+    const amount = persistNonNegativeMoney(raw.value)
+    if (amount === null) return { ok: false, error: 'amount must be a non-negative number' }
+    return { ok: true, value: { field: 'amount', op: op as RuleCondition['op'], value: amount } }
   }
   if (field === 'date') {
     if (!DATE_OPS.has(op)) return { ok: false, error: `invalid date operator "${op}"` }
@@ -147,9 +160,11 @@ function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleS
     if (!Number.isFinite(v) || v <= 0 || v > 100) return { ok: false, error: 'percent must be between 0 and 100' }
     portion = { kind: 'percent', value: v }
   } else if (p.kind === 'fixed') {
-    const v = Number(p.value)
-    if (!Number.isFinite(v) || v <= 0) return { ok: false, error: 'fixed amount must be positive' }
-    portion = { kind: 'fixed', value: v }
+    const amount = persistNonNegativeMoney(p.value)
+    if (amount === null || compareDecimal(amount, '0') <= 0) {
+      return { ok: false, error: 'fixed amount must be positive' }
+    }
+    portion = { kind: 'fixed', value: amount }
   } else if (p.kind === 'remainder') {
     portion = { kind: 'remainder' }
   } else {
