@@ -94,6 +94,7 @@ export function SettingsForm({
   accounts,
   currencies,
   multiSubsidiary = false,
+  revenueRecognition = false,
 }: {
   initial: Initial
   accounts: AccountOption[]
@@ -101,6 +102,9 @@ export function SettingsForm({
   /** When the org runs multiple legal entities, identity/currency are per
    *  subsidiary and control accounts here are the fallback defaults. */
   multiSubsidiary?: boolean
+  /** Company Settings → Features. The fair-value range policy is Revenue
+   *  Recognition configuration; hide and omit it when that switch is off. */
+  revenueRecognition?: boolean
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -136,10 +140,11 @@ export function SettingsForm({
       return
     }
     setSaving(true)
+    const { fairValueRangePolicy, ...rest } = form
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(revenueRecognition ? { ...rest, fairValueRangePolicy } : rest),
     })
     setSaving(false)
     if (!res.ok) {
@@ -310,8 +315,7 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
-      {/* Revenue recognition */}
-      <Card>
+      {revenueRecognition ? <Card>
         <CardHeader>
           <CardTitle>{t('revenue.title')}</CardTitle>
           <CardDescription>
@@ -336,7 +340,7 @@ export function SettingsForm({
             </Select>
           </div>
         </CardContent>
-      </Card>
+      </Card> : null}
 
       {/* Control accounts */}
       <Card>

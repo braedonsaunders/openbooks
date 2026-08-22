@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
 import { normalizeCountryCode } from "../../../../lib/countries";
@@ -314,7 +315,13 @@ export async function PUT(req: Request) {
     }
   }
   // --- fair value range policy (rev-rec allocation review: warn | off) ---
+  // The policy lives on Company Settings, but it belongs to Revenue
+  // Recognition. Turning that switch off must refuse a new write; the stored
+  // value stays so turning the feature back on restores the same review rule.
   if (body.fairValueRangePolicy !== undefined) {
+    if (!(await isFeatureEnabled(orgId, "revenueRecognition"))) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
     if (body.fairValueRangePolicy !== "warn" && body.fairValueRangePolicy !== "off") {
       return NextResponse.json(
         { error: "fairValueRangePolicy must be 'warn' or 'off'" },

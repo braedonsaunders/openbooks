@@ -1082,6 +1082,31 @@ test('the surfaces this test was written for are covered', () => {
     /\{fixedAssetsEnabled \? <Field label="Fixed asset">/,
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
+  assert.match(
+    read('app/api/admin/settings/route.ts'),
+    /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
+    'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',
+  )
+  assert.match(
+    read('app/api/admin/settings/route.ts'),
+    /fairValueRangePolicy !== undefined[\s\S]{0,280}status: 404/,
+    'company settings must 404 — not persist — fairValueRangePolicy when Revenue Recognition is off',
+  )
+  assert.match(
+    read('app/(app)/admin/setup/[entity]/CompanyTab.tsx'),
+    /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
+    'company settings must not load the fair-value policy control when Revenue Recognition is off',
+  )
+  assert.match(
+    read('app/(app)/admin/settings/SettingsForm.tsx'),
+    /revenueRecognition \? \{ \.\.\.rest, fairValueRangePolicy \}/,
+    'the company form must not send fairValueRangePolicy when Revenue Recognition is off',
+  )
+  assert.match(
+    read('app/(app)/admin/settings/SettingsForm.tsx'),
+    /\{revenueRecognition \? <Card>/,
+    'the company form must hide the fair-value range policy when Revenue Recognition is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
