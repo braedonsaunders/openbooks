@@ -46,7 +46,7 @@ export async function loadFieldTicketDrawerData({
          where p.org_id = ${orgId} and p.is_active
            and exists (
              select 1 from employee_roles r
-              where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+              where r.party_id = p.id and r.org_id = p.org_id and r.is_active
            )
          order by p.display_name`),
       db.execute<(FieldTicketDrawerProps['laborItems'])[number]>(sql`
