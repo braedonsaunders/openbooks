@@ -355,8 +355,9 @@ async function loadAccountingPeriods(
             reopen_expires_at = null,
             version = period_locks.version + 1,
             updated_at = now()
-          where period_locks.reason is null
-             or period_locks.reason = 'close.importedPeriodLockReason'
+          where (period_locks.reason is null
+             or period_locks.reason = 'close.importedPeriodLockReason')
+            and period_locks.org_id = ${orgId}
         `);
       }
     }
