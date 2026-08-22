@@ -1,8 +1,20 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { isZero, neg, normalizeMoney } from "./money.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Persist leftover overhead-adjustment amounts through exact decimal then ledger money. Fail closed. */
+function persistOverheadAdjustmentAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("overhead adjustment amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("overhead adjustment amount must be an exact decimal");
+  }
+}
 
 export interface RecordProjectOverheadAdjustmentInput {
   orgId: string;
@@ -36,7 +48,7 @@ export async function recordProjectOverheadAdjustment(
   if (!DATE.test(input.adjustmentDate)) {
     throw new Error("adjustmentDate must be YYYY-MM-DD");
   }
-  const amount = normalizeMoney(input.amount);
+  const amount = persistOverheadAdjustmentAmount(input.amount);
   if (isZero(amount)) throw new Error("overhead adjustment cannot be zero");
   const reason = input.reason.trim();
   if (reason.length < 8 || reason.length > 500) {

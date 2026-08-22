@@ -22,6 +22,22 @@ test("statistical overhead exceptions are native immutable evidence", () => {
   assert.match(service, /insert into audit_log/i);
 });
 
+test("recordProjectOverheadAdjustment persists amount through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = service.indexOf("function persistOverheadAdjustmentAmount");
+  const helperEnd = service.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistOverheadAdjustmentAmount helper is defined");
+  const helper = service.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /must be an exact decimal/);
+
+  const start = service.indexOf("export async function recordProjectOverheadAdjustment");
+  const next = service.indexOf("export async function reverseProjectOverheadAdjustment");
+  const body = service.slice(start, next);
+  assert.match(body, /persistOverheadAdjustmentAmount\(input\.amount\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.amount\)/);
+});
+
 test("the configurable overhead result includes explicit adjustments", () => {
   assert.match(resolver, /from project_overhead_adjustments/i);
   assert.match(
