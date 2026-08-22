@@ -78,7 +78,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
            and d.open_balance > 0
-         where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
@@ -118,7 +118,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
            and d.open_balance > 0
-         where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
+         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select oi.party_id, coalesce(p.display_name, 'Unspecified') as name,
              sum(oi.remaining) as open,

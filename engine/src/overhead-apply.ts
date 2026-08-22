@@ -309,8 +309,8 @@ export async function reverseOverheadForTime(
 export async function listOverheadApplications(orgId: string, limit = 24) {
   const r = (await db.execute<{ id: string; entry_number: string; posting_date: string; memo: string; status: string; applied_total: string; projects: number }>(sql`
     select e.id, e.entry_number, e.posting_date::text as posting_date, e.memo, e.status,
-           (select coalesce(sum(l.amount), 0) from journal_lines l where l.entry_id = e.id and l.project_id is not null) as applied_total,
-           (select count(distinct l.project_id) from journal_lines l where l.entry_id = e.id and l.project_id is not null) as projects
+           (select coalesce(sum(l.amount), 0) from journal_lines l where l.entry_id = e.id and l.org_id = e.org_id and l.project_id is not null) as applied_total,
+           (select count(distinct l.project_id) from journal_lines l where l.entry_id = e.id and l.org_id = e.org_id and l.project_id is not null) as projects
       from journal_entries e
      where e.org_id = ${orgId} and e.origin = 'overhead_applied'
      order by e.posting_date desc, e.created_at desc
