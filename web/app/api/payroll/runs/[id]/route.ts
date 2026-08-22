@@ -156,7 +156,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (body.action === 'add-adjustment') {
       const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
       const amountRaw = canonicalDecimal(amount, 4)
-      const hoursRaw = hours == null || hours === '' ? null : canonicalDecimal(hours, 4)
+      let hoursRaw: string | null
+      if (hours == null || hours === '') {
+        hoursRaw = null
+      } else {
+        const exact = canonicalDecimal(hours, 4)
+        if (exact === null) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+        try {
+          hoursRaw = normalizeMoney(exact)
+        } catch {
+          return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+        }
+      }
       if (
         !isUuid(employeePartyId) || !isUuid(componentId) ||
         amountRaw === null ||
