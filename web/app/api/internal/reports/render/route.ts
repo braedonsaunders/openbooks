@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db, withOrg } from '@openbooks/engine/src/db.ts'
 import type { ReportRuleGroup } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
@@ -93,7 +94,11 @@ export async function GET(req: Request) {
     }
     const branding = await orgBranding(orgId)
     const { page, showSummary } = resolveLayout(null)
-    const pdf = await exportDataToPdf(data, branding, page, { showSummary })
+    const stamp = await businessToday(orgId)
+    const pdf = await exportDataToPdf(data, branding, page, {
+      showSummary,
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    })
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store' },
