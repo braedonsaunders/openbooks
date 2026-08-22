@@ -1567,6 +1567,21 @@ test('the surfaces this test was written for are covered', () => {
     'the lease-charge form must not send itemId — stored charges stay',
   )
   assert.match(
+    read('lib/data-io/resources.ts'),
+    /leaseChargeFields\(await orgFeatureEnabled\([^,]+, 'inventory'\)\)/,
+    'lease-charge import must refuse inventory/assembly/kit items when Inventory is off — stored charges stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,80}item is not available/,
+    'lease-charge import must refuse — not persist — inventory/assembly/kit items when Inventory is off',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /field\.key !== 'item'/,
+    'lease-charge import must hide item when Inventory is off',
+  )
+  assert.match(
     read('app/api/admin/settings/route.ts'),
     /isFeatureEnabled\([^,]+, ["']revenueRecognition["']\)/,
     'company settings must refuse fairValueRangePolicy when Revenue Recognition is off — existing policy stays',
