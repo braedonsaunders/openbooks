@@ -45,14 +45,13 @@ export default async function Estimates({
     openId && openId !== 'new'
       ? Promise.all([
           db.execute(sql`
-            select id, display_name from parties
-             where org_id = ${authz.user.orgId}
+            select p.id, p.display_name from parties p
+             where p.org_id = ${authz.user.orgId} and p.is_active
                and exists (
                  select 1 from customer_roles cr
-                  where cr.org_id = ${authz.user.orgId} and cr.party_id = parties.id and cr.is_active
+                  where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
                )
-               and is_active
-             order by display_name limit 2000`) as any,
+             order by p.display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('income','income_other') and is_active and not is_summary order by number nulls last`) as any,
           db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           taxCodeOptions(authz.user.orgId),
