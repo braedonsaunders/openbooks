@@ -102,7 +102,7 @@ export async function promoteCrmAccount(
              qualified_at = case when ${input.toStage} = 'prospect' and qualified_at is null then now() else qualified_at end,
              converted_at = case when ${input.toStage} = 'customer' and converted_at is null then now() else converted_at end,
              updated_at = now(), updated_by = ${input.actorId}
-       where id = ${profileId}`);
+       where id = ${profileId} and org_id = ${input.orgId}`);
   }
 
   if (input.toStage === "customer") {
@@ -155,7 +155,7 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
       update crm_account_profiles set territory_id = ${territory.id},
              owner_user_id = coalesce(${territory.default_owner_user_id}, owner_user_id),
              updated_at = now(), updated_by = ${actorId}
-       where id = ${profileId}`);
+       where id = ${profileId} and org_id = ${orgId}`);
     await tx.execute(sql`
       insert into crm_account_assignment_events
         (org_id, account_profile_id, from_owner_user_id, to_owner_user_id, from_territory_id, to_territory_id,
