@@ -54,3 +54,19 @@ test('CRM estimate persists document_lines quantity through canonicalDecimal the
   assert.match(persist, /persistEstimateLineQuantity\(line\.quantity\)/)
   assert.doesNotMatch(persist, /normalizeMoney\(line\.quantity/)
 })
+
+test('CRM estimate persists document_lines unit_price through canonicalDecimal then normalizeMoney', () => {
+  const estimate = source('app/api/crm/opportunities/[id]/estimate/route.ts')
+  const helperStart = estimate.indexOf('function persistEstimateLineUnitPrice')
+  const helperEnd = estimate.indexOf('\n}', helperStart)
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'persistEstimateLineUnitPrice helper is defined')
+  const helper = estimate.slice(helperStart, helperEnd + 2)
+  assert.match(helper, /canonicalDecimal\(value, 4\)/)
+  assert.match(helper, /normalizeMoney\(exact\)/)
+  assert.match(helper, /line unit price must be an exact decimal/)
+
+  const start = estimate.indexOf('insert into document_lines')
+  const persist = estimate.slice(start, estimate.indexOf('from items i', start))
+  assert.match(persist, /persistEstimateLineUnitPrice\(line\.unit_price\)/)
+  assert.doesNotMatch(persist, /normalizeMoney\(line\.unit_price/)
+})
