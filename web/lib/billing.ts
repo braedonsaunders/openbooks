@@ -75,6 +75,17 @@ function markupMultiplier(markupPercent: unknown): string {
   }
 }
 
+/** Exact numeric(19,4) for an invoice line — never String() a money/qty column. */
+function persistInvoiceDecimal(value: unknown, error: string): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new BillingError(error)
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new BillingError(error)
+  }
+}
+
 export async function generateInvoiceFromBillingRequest(
   orgId: string,
   userId: string,
@@ -299,16 +310,17 @@ export async function generateInvoiceFromBillingRequest(
       `))
 
       for (const te of timeRows.rows) {
+        const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
         const rate =
           invoicing.lineBuilder === 'cost_plus'
-            ? mulDecimal(String(te.cost_rate ?? '0'), markup)
-            : String(te.bill_rate ?? te.default_rate ?? '0')
-        const amount = mulDecimal(String(te.hours ?? '0'), rate)
+            ? mulDecimal(persistInvoiceDecimal(te.cost_rate ?? '0', 'A time entry rate is invalid'), markup)
+            : persistInvoiceDecimal(te.bill_rate ?? te.default_rate ?? '0', 'A time entry rate is invalid')
+        const amount = mulDecimal(hours, rate)
         built.push({
           itemId: te.item_id,
           accountId: te.income_account_id ?? defaultIncomeId,
           description: te.memo || te.item_name || null,
-          quantity: String(te.hours ?? '0'),
+          quantity: hours,
           unitPrice: rate,
           amount,
           taxCodeId: te.tax_code_id,
