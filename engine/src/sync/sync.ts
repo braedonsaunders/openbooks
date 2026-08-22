@@ -720,7 +720,7 @@ function storedCanonicalKey(
   ]);
 }
 
-async function storedKey(docId: string): Promise<string> {
+async function storedKey(docId: string, orgId: string): Promise<string> {
   const [d] = (
     (await db.execute<StoredDocumentKeyRow>(sql`
       select kind, party_id, subsidiary_id,
@@ -729,7 +729,7 @@ async function storedKey(docId: string): Promise<string> {
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
              posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
-        from documents where id = ${docId}`))
+        from documents where id = ${docId} and org_id = ${orgId}`))
   ).rows;
   const lines = (
     (await db.execute<StoredLineKeyRow>(sql`
@@ -738,7 +738,7 @@ async function storedKey(docId: string): Promise<string> {
              amount, tax_amount, tax_overridden, tax_code_id,
              party_id, department_id, project_id, subsidiary_id, extra_dims, description,
              is_billable, markup_percent, bill_amount
-        from document_lines where document_id = ${docId} order by line_number`))
+        from document_lines where document_id = ${docId} and org_id = ${orgId} order by line_number`))
   ).rows;
   return storedCanonicalKey(d!, lines);
 }
@@ -1624,7 +1624,7 @@ export async function runSync(
         }
         const canonicalContentUnchanged =
           canonicalNativeDocumentKey(doc) ===
-          (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id)));
+          (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id, org.id)));
         if (canonicalContentUnchanged) {
           // A bounded repair is also an explicit request to prove the stored
           // GL projection against the current posting rules. Canonical source
@@ -2001,7 +2001,7 @@ export async function runSync(
       const actualKeys = new Map<string, string>();
       for (const expected of expectedKeys) {
         const have = existing.get(expected.sourceRef);
-        if (have) actualKeys.set(expected.sourceRef, await storedKey(have.id));
+        if (have) actualKeys.set(expected.sourceRef, await storedKey(have.id, org.id));
       }
       targetedDocuments = verifyTargetedDocumentKeys(
         expectedKeys,

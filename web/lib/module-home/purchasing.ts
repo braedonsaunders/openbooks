@@ -123,7 +123,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
              b.oldest_due
         from bills b
         full outer join pos po on po.party_id = b.party_id
-        left join parties p on p.id = coalesce(b.party_id, po.party_id)
+        left join parties p on p.id = coalesce(b.party_id, po.party_id) and p.org_id = ${orgId}
        order by coalesce(b.billed_open, 0) + coalesce(po.po_value, 0) desc
        limit 10
     `),

@@ -1230,7 +1230,7 @@ export async function postDocument(
   const lines = await db
     .select()
     .from(schema.documentLines)
-    .where(eq(schema.documentLines.documentId, documentId))
+    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
 
   const rule = RULES[doc.kind];
@@ -1241,7 +1241,7 @@ export async function postDocument(
     const [card] = await db
       .select()
       .from(schema.paymentCards)
-      .where(eq(schema.paymentCards.id, doc.paymentCardId));
+      .where(and(eq(schema.paymentCards.id, doc.paymentCardId), eq(schema.paymentCards.orgId, doc.orgId)));
     if (card)
       deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
@@ -1791,7 +1791,7 @@ export async function regenerateGlImpactTx(
     const [card] = await tx
       .select()
       .from(schema.paymentCards)
-      .where(eq(schema.paymentCards.id, doc.paymentCardId));
+      .where(and(eq(schema.paymentCards.id, doc.paymentCardId), eq(schema.paymentCards.orgId, doc.orgId)));
     if (card)
       deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
@@ -1840,7 +1840,7 @@ export async function regenerateGlImpactTx(
   const lines = await tx
     .select()
     .from(schema.documentLines)
-    .where(eq(schema.documentLines.documentId, documentId))
+    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
 
   const projection = buildProjection(doc, lines, deps);
@@ -1859,7 +1859,7 @@ export async function regenerateGlImpactTx(
   const [entry] = await tx
     .select()
     .from(schema.journalEntries)
-    .where(eq(schema.journalEntries.id, doc.postedEntryId));
+    .where(and(eq(schema.journalEntries.id, doc.postedEntryId), eq(schema.journalEntries.orgId, doc.orgId)));
   if (!entry || entry.status !== "posted") {
     throw new PostingError(
       "the imported document's current journal entry is missing or not posted",
@@ -1868,7 +1868,7 @@ export async function regenerateGlImpactTx(
   const existing = await tx
     .select()
     .from(schema.journalLines)
-    .where(eq(schema.journalLines.entryId, entry.id))
+    .where(and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, doc.orgId)))
     .orderBy(asc(schema.journalLines.lineNumber));
 
   // Memo is business metadata, not accounting impact. A memo-only source edit
