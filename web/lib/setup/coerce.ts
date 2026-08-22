@@ -8,6 +8,7 @@
  * parameter values. This is the same whitelist that keeps the generic API safe.
  */
 
+import { normalizeDecimal } from '@openbooks/engine/src/money.ts'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
@@ -58,7 +59,11 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       if (!present) return { column, value: null }
       const exact = canonicalDecimal(raw, SETUP_DECIMAL_SCALE)
       if (exact === null) return { error: `${field.key} must be a number` }
-      return { column, value: exact }
+      try {
+        return { column, value: normalizeDecimal(exact, SETUP_DECIMAL_SCALE) }
+      } catch {
+        return { error: `${field.key} must be a number` }
+      }
     }
     case 'date': {
       if (!present) return { column, value: null }
