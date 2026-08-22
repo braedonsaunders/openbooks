@@ -176,7 +176,7 @@ export async function exportDataToPdf(data: ExportData, branding: PdfBranding, p
   return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale }))
 }
 
-export async function exportDataToXlsx(data: ExportData, opts: { reportName: string; dateRangeLabel?: string }): Promise<Buffer> {
+export async function exportDataToXlsx(data: ExportData, opts: { reportName: string; dateRangeLabel?: string; generatedAt?: Date }): Promise<Buffer> {
   return reportResultToXlsx(exportDataToRunResult(data), opts)
 }
 
