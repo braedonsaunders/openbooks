@@ -25,6 +25,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       body.country = country
     }
     if (resource === 'profiles') {
+      // Profile currency is Multi-currency configuration. Turning that
+      // switch off must refuse a write; omitting currency keeps the
+      // stored profile.
+      if (
+        body.currency !== undefined &&
+        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+      ) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body)
     } else if (resource === 'formats') {
       // Format currency is Multi-currency configuration. Turning that
