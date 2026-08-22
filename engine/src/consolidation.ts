@@ -133,7 +133,7 @@ export async function runOwnershipConsolidation(
           join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
           join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
          where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
-           and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted')
+           and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
       `));
       for (const old of prior.rows) {
         const oldLines = (await tx.execute<{ account_id: string; amount: string; memo: string | null }>(sql`select account_id,amount,memo from journal_lines where entry_id=${old.id} and org_id=${orgId} order by line_number`));
