@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { startReconciliation } from '@openbooks/engine/src/banking.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { bankingErrorResponse } from '../util'
 
 export const runtime = 'nodejs'
@@ -47,12 +49,22 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  const statementBalanceRaw = canonicalDecimal(body.statementBalance, 4)
+  if (statementBalanceRaw === null) {
+    return NextResponse.json({ error: 'Statement balance must be an exact decimal' }, { status: 422 })
+  }
+  let statementBalance: string
+  try {
+    statementBalance = normalizeMoney(statementBalanceRaw)
+  } catch {
+    return NextResponse.json({ error: 'Statement balance must be an exact decimal' }, { status: 422 })
+  }
   try {
     const { id } = await startReconciliation(
       {
         accountId: body.accountId,
         throughDate: body.throughDate,
-        statementBalance: String(body.statementBalance),
+        statementBalance,
       },
       { orgId: user.orgId, userId: user.id },
     )
