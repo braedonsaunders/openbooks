@@ -1785,12 +1785,12 @@ export async function postPaymentRun(
     await db
       .update(schema.paymentRuns)
       .set({ status: "confirmed", updatedAt: new Date(), updatedBy: userId })
-      .where(eq(schema.paymentRuns.id, runId));
+      .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   } else {
     await db
       .update(schema.paymentRuns)
       .set({ status: "partially_failed", updatedAt: new Date(), updatedBy: userId })
-      .where(eq(schema.paymentRuns.id, runId));
+      .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   }
   return { posted, failures };
 }
@@ -1805,7 +1805,7 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
       join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
       join payment_bank_profiles bp on bp.id = r.payment_bank_profile_id and bp.org_id = i.org_id
       join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
-      left join vendor_roles vr on vr.party_id = p.id
+      left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
       left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
       join orgs o on o.id = i.org_id
      where i.id = ${instructionId} and i.org_id = ${orgId}
@@ -1813,7 +1813,7 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
   const instruction = row.rows[0];
   if (!instruction?.auto_remittance || instruction.direction !== "outbound") return;
   const already = (await db.execute(sql`
-    select 1 from payment_remittances where payment_instruction_id = ${instructionId} and status = 'sent' limit 1
+    select 1 from payment_remittances where payment_instruction_id = ${instructionId} and org_id = ${orgId} and status = 'sent' limit 1
   `));
   if (already.rows[0]) return;
   const recipients = instruction.email ? [instruction.email] : [];
@@ -1851,11 +1851,11 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
       documents: documents.rows,
     });
     await enqueueEmail({ orgId, to: recipients, subject: message.subject, html: message.html, text: message.text, meta: { category: "payment_remittance" } });
-    await db.execute(sql`update payment_remittances set status = 'sent', attempt_count = 1, last_attempt_at = now(), sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${remittance.id}`);
-    await db.execute(sql`update payment_instructions set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${instructionId}`);
+    await db.execute(sql`update payment_remittances set status = 'sent', attempt_count = 1, last_attempt_at = now(), sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${remittance.id} and org_id = ${orgId}`);
+    await db.execute(sql`update payment_instructions set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${userId} where id = ${instructionId} and org_id = ${orgId}`);
   } catch (error) {
     await db.execute(sql`
-      update payment_remittances set status = 'failed', attempt_count = 1, last_attempt_at = now(), error = ${error instanceof Error ? error.message : String(error)}, updated_at = now(), updated_by = ${userId} where id = ${remittance.id}
+      update payment_remittances set status = 'failed', attempt_count = 1, last_attempt_at = now(), error = ${error instanceof Error ? error.message : String(error)}, updated_at = now(), updated_by = ${userId} where id = ${remittance.id} and org_id = ${orgId}
     `);
   }
 }

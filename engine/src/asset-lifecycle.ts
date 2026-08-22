@@ -634,7 +634,7 @@ export async function remeasureAsset(
     for (let i = 0; i < count; i++) {
       const amt = i === count - 1 ? depreciable - allocated : per;
       allocated += amt;
-      await db.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id}`);
+      await db.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
       rebuilt++;
     }
   }

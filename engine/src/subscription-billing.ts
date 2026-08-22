@@ -407,14 +407,14 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
         await withBypass(async () => db.execute(sql`
-          update subscriptions set last_error = 'Contract term ended — renewal required' where id = ${row.id}
+          update subscriptions set last_error = 'Contract term ended — renewal required' where id = ${row.id} and org_id = ${row.orgId}
         `));
         continue;
       }
     } catch (e) {
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
-      await withBypass(async () => db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id}`));
+      await withBypass(async () => db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`));
       continue;
     }
     const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
@@ -428,7 +428,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       (await db.execute<{ id: string }>(sql`
         update subscriptions
            set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
-         where id = ${row.id} and next_bill_on = ${row.nextBillOn} and status = 'active'
+         where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${row.nextBillOn} and status = 'active'
         returning id
       `)),
     );
@@ -446,7 +446,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       await withBypass(async () => {
         await db.execute(sql`
           update subscriptions set run_count = run_count + 1, last_invoice_id = ${sub.invoiceId}, last_error = null
-           where id = ${row.id}
+           where id = ${row.id} and org_id = ${row.orgId}
         `);
       });
     } catch (e) {
@@ -462,9 +462,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
              set next_bill_on = ${rollback.nextBillOn},
                  current_period_start = ${rollback.currentPeriodStart},
                  last_billed_at = ${rollback.lastBilledAt}
-           where id = ${row.id} and next_bill_on = ${rollback.expectedNextBillOn}
+           where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${rollback.expectedNextBillOn}
         `);
-        await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id}`);
+        await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`);
       });
     }
   }

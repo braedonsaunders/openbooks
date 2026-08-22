@@ -979,7 +979,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and jl.currency = ${recon.currency}
          and je.posting_date <= ${recon.through_date}
          and jl.reconciled_at is null
-         and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
+         and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
        order by je.posting_date, jl.line_number
        for update of jl
     `));
@@ -1090,7 +1090,7 @@ export async function createMatch(
          and jl.reconciled_at is null
          and je.posting_date <= ${recon.through_date}
          and not exists (
-           select 1 from reconciliation_matches m where m.journal_line_id = jl.id
+           select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
          )
        order by jl.id
        for update of jl
@@ -1158,7 +1158,7 @@ export async function unmatchStatementLine(
          set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
        where l.id = ${opts.statementLineId} and l.org_id = ${ctx.orgId}
          and not exists (
-           select 1 from reconciliation_matches m where m.statement_line_id = l.id
+           select 1 from reconciliation_matches m where m.statement_line_id = l.id and m.org_id = l.org_id
          )
     `);
     return refreshStatus(recon, ctx, tx);
@@ -1296,7 +1296,8 @@ export async function discardReconciliation(reconciliationId: string, ctx: Banki
         update bank_statement_lines l
            set match_status = 'unmatched', updated_at = now(), updated_by = ${ctx.userId}
          where l.id = any(${sql.param(stmtIds)}::uuid[])
-           and not exists (select 1 from reconciliation_matches m where m.statement_line_id = l.id)
+           and l.org_id = ${ctx.orgId}
+           and not exists (select 1 from reconciliation_matches m where m.statement_line_id = l.id and m.org_id = l.org_id)
       `);
     }
     await tx.execute(sql`

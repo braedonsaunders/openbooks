@@ -958,7 +958,7 @@ export async function runRevenueRecognition(
     const planned: string = row.planned;
     if (isZero(planned)) {
       await db.execute(sql`
-        update recognition_schedule_lines set recognized_amount = '0', updated_at = now() where id = ${row.line_id}`);
+        update recognition_schedule_lines set recognized_amount = '0', updated_at = now() where id = ${row.line_id} and org_id = ${orgId}`);
       result.skipped++;
       continue;
     }
