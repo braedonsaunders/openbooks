@@ -473,6 +473,16 @@ test('the surfaces this test was written for are covered', () => {
     'invoice generate must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('lib/billing.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,80}Equipment is disabled/,
+    'generateInvoiceFromBillingRequest must not persist equipment_charge lines when Equipment is off — stored time/cost rows and existing invoices stay',
+  )
+  assert.match(
+    read('app/api/billing-requests/[id]/create-invoice/route.ts'),
+    /Equipment is disabled[\s\S]{0,200}status: 404/,
+    'invoice generate must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('lib/wip-billing.ts'),
     /\['inventory', 'assembly', 'kit'\]/,
     'prebill convert must name the inventory kinds the Features switch refuses',

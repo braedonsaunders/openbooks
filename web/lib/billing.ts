@@ -660,6 +660,20 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
     }
+    // Stored time/cost rows and existing invoices stay. Turning Equipment off
+    // must refuse a generate that would persist equipment_charge.
+    if (!featureEnabled(featureState, 'equipment')) {
+      const itemIds = [...new Set(
+        presentedLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          throw new BillingError('Equipment is disabled')
+        }
+      }
+    }
 
     // -- create the customer_invoice draft --------------------------------
     const documentNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', project.subsidiary_id ?? undefined)
