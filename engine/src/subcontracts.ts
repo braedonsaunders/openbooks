@@ -50,6 +50,17 @@ function persistSubcontractSovRetainage(value: unknown): string {
   }
 }
 
+/** Persist leftover change-order amount through exact decimal then ledger money. Fail closed. */
+function persistSubcontractChangeOrderAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("change order amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("change order amount must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -412,7 +423,7 @@ export async function createSubcontractChangeOrder(input: {
   targetSovLineId?: string | null;
 }): Promise<{ id: string }> {
   const number = input.number.trim();
-  const amount = normalizeMoney(input.amount);
+  const amount = persistSubcontractChangeOrderAmount(input.amount);
   if (!number || cmp(amount, "0") === 0) throw new SubcontractError("Number and a non-zero change amount are required");
   if (cmp(amount, "0") < 0 && !input.targetSovLineId) throw new SubcontractError("A deductive change must identify the SOV line it reduces");
   return db.transaction(async (tx) => {
