@@ -282,26 +282,27 @@ export async function PUT(
   );
   if (!customValidation.ok) return error("custom");
 
+  const orgId = gate.user.orgId;
   try {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ rate_book_id: string }>(
-        sql`select v.rate_book_id from item_rate_versions v where v.id=${id} and v.org_id=${gate.user.orgId} for update`,
+        sql`select v.rate_book_id from item_rate_versions v where v.id=${id} and v.org_id=${orgId} for update`,
       ));
       if (!current.rows[0]) throw new Error("notFound");
       const before = (await tx.execute<{ snapshot: unknown }>(sql`select jsonb_build_object(
-        'version',(select to_jsonb(v) from item_rate_versions v where v.id=${id}),
-        'book',(select to_jsonb(b) from item_rate_books b where b.id=${current.rows[0].rate_book_id}),
-        'policy',(select to_jsonb(p) from labor_rate_version_policies p where p.version_id=${id}),
-        'scopes',(select coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) from labor_rate_version_scopes s where s.version_id=${id}),
-        'lines',(select coalesce(jsonb_agg(to_jsonb(l)),'[]'::jsonb) from item_rate_lines l where l.version_id=${id}),
-        'adjustments',(select coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb) from labor_rate_adjustments a where a.version_id=${id}),
-        'targets',(select coalesce(jsonb_agg(to_jsonb(at)),'[]'::jsonb) from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id where a.version_id=${id}),
-        'terms',(select coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) from labor_rate_terms t where t.version_id=${id})
+        'version',(select to_jsonb(v) from item_rate_versions v where v.id=${id} and v.org_id=${orgId}),
+        'book',(select to_jsonb(b) from item_rate_books b where b.id=${current.rows[0].rate_book_id} and b.org_id=${orgId}),
+        'policy',(select to_jsonb(p) from labor_rate_version_policies p where p.version_id=${id} and p.org_id=${orgId}),
+        'scopes',(select coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) from labor_rate_version_scopes s where s.version_id=${id} and s.org_id=${orgId}),
+        'lines',(select coalesce(jsonb_agg(to_jsonb(l)),'[]'::jsonb) from item_rate_lines l where l.version_id=${id} and l.org_id=${orgId}),
+        'adjustments',(select coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb) from labor_rate_adjustments a where a.version_id=${id} and a.org_id=${orgId}),
+        'targets',(select coalesce(jsonb_agg(to_jsonb(at)),'[]'::jsonb) from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId}),
+        'terms',(select coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) from labor_rate_terms t where t.version_id=${id} and t.org_id=${orgId})
       ) snapshot`));
 
       if (itemIds.size) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select id from items where org_id=${gate.user.orgId} and is_active and id=any(${[...itemIds]}::uuid[])`,
+          sql`select id from items where org_id=${orgId} and is_active and id=any(${[...itemIds]}::uuid[])`,
         ));
         if (found.rows.length !== itemIds.size) throw new Error("item");
       }
@@ -322,9 +323,7 @@ export async function PUT(
         ].filter(Boolean);
         if (!ids.length) continue;
         const found = (await tx.execute<{ id: string }>(
-          sql.raw(
-            `select id from ${table} where org_id = '${gate.user.orgId}' and id = any(array[${ids.map((x) => `'${x}'::uuid`).join(",")}])`,
-          ),
+          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${ids}::uuid[])`,
         ));
         if (found.rows.length !== ids.length)
           throw new Error(type === "item" ? "item" : "target");
@@ -340,74 +339,74 @@ export async function PUT(
       ].filter(Boolean);
       if (customerIds.length) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${gate.user.orgId} and c.is_active where p.org_id=${gate.user.orgId} and p.is_active and p.id=any(${customerIds}::uuid[])`,
+          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${customerIds}::uuid[])`,
         ));
         if (found.rows.length !== customerIds.length) throw new Error("target");
       }
 
       await tx.execute(
-        sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${gate.user.orgId}`,
+        sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
       );
       await tx.execute(
-        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id}`,
+        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId}`,
       );
       await tx.execute(
-        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id}`,
+        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId}`,
       );
 
       await tx.execute(
-        sql`delete from labor_rate_version_scopes where version_id=${id}`,
+        sql`delete from labor_rate_version_scopes where version_id=${id} and org_id=${orgId}`,
       );
       for (const scope of scopes)
         await tx.execute(
-          sql`insert into labor_rate_version_scopes(org_id,version_id,scope_type,scope_value_id,scope_value_text,include_children,created_by,updated_by) values(${gate.user.orgId},${id},${scope.scopeType},${scope.scopeValueId || null},${scope.scopeValueText?.trim() || null},${scope.includeChildren === true},${gate.user.id},${gate.user.id})`,
+          sql`insert into labor_rate_version_scopes(org_id,version_id,scope_type,scope_value_id,scope_value_text,include_children,created_by,updated_by) values(${orgId},${id},${scope.scopeType},${scope.scopeValueId || null},${scope.scopeValueText?.trim() || null},${scope.includeChildren === true},${gate.user.id},${gate.user.id})`,
         );
 
       if (lineIds.size)
         await tx.execute(
-          sql`delete from item_rate_lines where version_id=${id} and not(id=any(${[...lineIds]}::uuid[]))`,
+          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId} and not(id=any(${[...lineIds]}::uuid[]))`,
         );
       else
         await tx.execute(
-          sql`delete from item_rate_lines where version_id=${id}`,
+          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId}`,
         );
       for (const [sortOrder, line] of lines.entries()) {
         if (line.id)
           await tx.execute(
-            sql`update item_rate_lines set item_id=${line.itemId},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${gate.user.orgId}`,
+            sql`update item_rate_lines set item_id=${line.itemId},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId}`,
           );
         else
           await tx.execute(
-            sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,bill_rate,time_type_bill_rates,sort_order,created_by,updated_by) values(${gate.user.orgId},${id},${line.itemId},'hour','Hour',1,${line.regular || null},${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,${sortOrder},${gate.user.id},${gate.user.id})`,
+            sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,bill_rate,time_type_bill_rates,sort_order,created_by,updated_by) values(${orgId},${id},${line.itemId},'hour','Hour',1,${line.regular || null},${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,${sortOrder},${gate.user.id},${gate.user.id})`,
           );
       }
 
       await tx.execute(
-        sql`delete from labor_rate_adjustment_targets where adjustment_id in(select id from labor_rate_adjustments where version_id=${id})`,
+        sql`delete from labor_rate_adjustment_targets where org_id=${orgId} and adjustment_id in(select id from labor_rate_adjustments where version_id=${id} and org_id=${orgId})`,
       );
       await tx.execute(
-        sql`delete from labor_rate_adjustments where version_id=${id}`,
+        sql`delete from labor_rate_adjustments where version_id=${id} and org_id=${orgId}`,
       );
       for (const [sortOrder, adjustment] of adjustments.entries()) {
         const inserted = (await tx.execute<{ id: string }>(
-          sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${gate.user.orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`,
+          sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`,
         ));
         for (const target of adjustment.targets ?? [])
           await tx.execute(
-            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${gate.user.orgId},${inserted.rows[0].id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
+            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0].id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
           );
       }
 
       await tx.execute(
-        sql`delete from labor_rate_terms where version_id=${id}`,
+        sql`delete from labor_rate_terms where version_id=${id} and org_id=${orgId}`,
       );
       for (const [sortOrder, term] of terms.entries())
         await tx.execute(
-          sql`insert into labor_rate_terms(org_id,version_id,code,label,content,placement,sort_order,created_by,updated_by) values(${gate.user.orgId},${id},${term.code!.trim().toLowerCase()},${term.label!.trim()},${term.content!.trim()},${term.placement},${sortOrder},${gate.user.id},${gate.user.id})`,
+          sql`insert into labor_rate_terms(org_id,version_id,code,label,content,placement,sort_order,created_by,updated_by) values(${orgId},${id},${term.code!.trim().toLowerCase()},${term.label!.trim()},${term.content!.trim()},${term.placement},${sortOrder},${gate.user.id},${gate.user.id})`,
         );
 
       await tx.execute(
-        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${gate.user.orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id})`,
+        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id})`,
       );
     });
     return NextResponse.json({ ok: true, id });
