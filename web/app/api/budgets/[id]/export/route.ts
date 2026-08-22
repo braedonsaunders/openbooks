@@ -55,5 +55,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const stamp = await businessToday(gate.user.orgId)
   const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}-${stamp}`
   if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
-  return xlsxResponse(await reportResultToXlsx(result, { reportName: scenario.rows[0].name }), filename)
+  return xlsxResponse(await reportResultToXlsx(result, {
+    reportName: scenario.rows[0].name,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  }), filename)
 }
