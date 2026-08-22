@@ -223,7 +223,7 @@ export async function disposeAsset(
            c.asset_account_id, c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-                      where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
+                      where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
@@ -554,7 +554,7 @@ export async function remeasureAsset(
            c.accumulated_depreciation_account_id, c.gain_loss_account_id,
            coalesce((select sum(l.posted_amount) from depreciation_schedule_lines l
                        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-                      where s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
+                      where l.org_id = a.org_id and s.asset_id = a.id and l.posted_amount is not null), 0)::text as accumulated
       from fixed_assets a
       join subsidiaries sub on sub.id = a.subsidiary_id and sub.org_id = a.org_id
       join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
