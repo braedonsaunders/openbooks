@@ -4,10 +4,12 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
 import { installedPayrollCountries, payrollStatutoryRateGaps } from '@openbooks/engine/src/payroll-readiness.ts'
 import { PayrollPackError, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
+import { normalizeDecimal, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import {
   deleteStatutoryRate,
   listStatutoryRates,
   packRates,
+  statutoryRateSlot,
   statutoryRateProblem,
   upsertStatutoryRate,
 } from '@openbooks/engine/src/payroll/statutory-rates.ts'
@@ -18,6 +20,7 @@ import {
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +93,46 @@ async function defaultYear(orgId: string, countries: string[]): Promise<number> 
     }
   }
   return Number(today.slice(0, 4))
+}
+
+/**
+ * Persist one slot's values at the write boundary: exact decimal first, then
+ * money scale for amounts and the field's declared scale for rates/percents.
+ * Invalid input is a sentence for 422 — never a raw JSON number into a
+ * money/decimal column.
+ */
+function persistStatutoryRateValues(
+  country: string,
+  rateKey: string,
+  values: Record<string, unknown>,
+): Record<string, string> | string {
+  let slot
+  try {
+    slot = statutoryRateSlot(country, rateKey)
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+  const persisted: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(values)) {
+    const field = slot.fields.find((declared) => declared.key === key)
+    if (!field) {
+      return `"${slot.key}" declares no "${key}" value — it declares `
+        + slot.fields.map((declared) => declared.key).join(', ')
+    }
+    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) continue
+    const exact = canonicalDecimal(raw, field.decimals)
+    if (exact === null) {
+      return `${slot.label}: ${field.label} must be an exact decimal`
+    }
+    try {
+      persisted[key] = field.kind === 'amount'
+        ? normalizeMoney(exact)
+        : normalizeDecimal(exact, field.decimals)
+    } catch {
+      return `${slot.label}: ${field.label} must be an exact decimal`
+    }
+  }
+  return persisted
 }
 
 export async function GET(req: Request) {
@@ -190,6 +233,9 @@ export async function PUT(req: Request) {
   })
   if (problem) return NextResponse.json({ error: problem }, { status: 422 })
 
+  const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values)
+  if (typeof values === 'string') return NextResponse.json({ error: values }, { status: 422 })
+
   try {
     const saved = await upsertStatutoryRate({
       orgId: gate.user.orgId,
@@ -200,7 +246,7 @@ export async function PUT(req: Request) {
       subRegion: parsed.subRegion,
       filingAccountId: parsed.filingAccountId,
       taxYear: parsed.taxYear,
-      values: parsed.values,
+      values,
     })
     return NextResponse.json({ ok: true, ...saved })
   } catch (error) {
