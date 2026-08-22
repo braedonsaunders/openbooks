@@ -944,7 +944,7 @@ export async function postProvisionRun(
       update tax_provision_runs
          set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(), posted_by = ${actorId},
              updated_at = now(), updated_by = ${actorId}
-       where id = ${runId}
+       where id = ${runId} and org_id = ${orgId}
     `);
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
