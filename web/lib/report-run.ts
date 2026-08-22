@@ -139,6 +139,9 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   if (kind === 'project-profitability' && !(await isFeatureEnabled(orgId, 'projects'))) {
     throw new Error('Projects feature is disabled')
   }
+  if (kind === 'budget' && !(await isFeatureEnabled(orgId, 'budgets'))) {
+    throw new Error('Budgets feature is disabled')
+  }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)

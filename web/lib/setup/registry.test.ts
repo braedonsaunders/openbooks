@@ -57,6 +57,14 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
   assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
 })
 
+test('labor pricing setup entities follow the Projects parent gate', () => {
+  for (const key of ['item-rate-books', 'item-rate-book-assignments']) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)
+    assert.ok(entity, key)
+    assert.equal(entity.featureKey, 'projects', key)
+  }
+})
+
 test('time types independently control field-ticket visibility', () => {
   const timeTypes = SETUP_ENTITY_BY_KEY.get('time-types')
   assert.ok(timeTypes)

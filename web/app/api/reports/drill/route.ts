@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { parseReportDrillTarget } from '../../../../lib/report-drill'
 import { loadReportDrillData } from '../../../../lib/report-drill-data'
 
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
   const requestedPage = Number(url.searchParams.get('page') ?? 1)
   if (!target || !Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 100_000) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
+  }
+  if (target.kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   try {
     return NextResponse.json(await loadReportDrillData(target, gate, requestedPage))

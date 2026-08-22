@@ -6,6 +6,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { can, requirePermission } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
@@ -30,15 +31,20 @@ export default async function Items({
   // as a tab; managing them keeps the admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
+  const [projectsEnabled, inventoryEnabled, revenueRecognitionEnabled] = await Promise.all([
+    isFeatureEnabled(orgId, 'projects'),
+    isFeatureEnabled(orgId, 'inventory'),
+    isFeatureEnabled(orgId, 'revenueRecognition'),
+  ])
 
   const sp = await searchParams
   const itemId = typeof sp.item === 'string' ? sp.item : undefined
-  const view = canSetup && pickString(sp.view) === 'rate-books' ? 'rate-books' : 'catalog'
+  const view = canSetup && projectsEnabled && pickString(sp.view) === 'rate-books' ? 'rate-books' : 'catalog'
   const rateBooksEntity = view === 'rate-books' ? SETUP_ENTITY_BY_KEY.get('item-rate-books') ?? null : null
 
   // Catalog ↔ Rate Books switcher — visible tabs shown on both views when the
   // user can manage configuration, defined once and reused.
-  const viewChips = canSetup ? (
+  const viewChips = canSetup && projectsEnabled ? (
     <ModuleHomeTabs
       tabs={[
         { href: '/items', label: t('list.viewCatalog'), active: view === 'catalog' },
@@ -96,6 +102,9 @@ export default async function Items({
           recognitionRules={pickers[3].rows}
           canManage={canManage}
           basePath={requestedReturn?.startsWith('/items') ? requestedReturn : '/items'}
+          laborPricing={projectsEnabled}
+          inventoryCosting={inventoryEnabled}
+          fairValuePrices={revenueRecognitionEnabled}
         />
       ) : null}
     </>

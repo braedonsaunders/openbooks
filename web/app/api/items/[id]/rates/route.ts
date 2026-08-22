@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -11,7 +11,7 @@ const POLICIES = ['capped_ladder', 'lowest_cost'] as const
 const PRESENTATIONS = ['summary', 'rate_components'] as const
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.read')
+  const gate = await guardFeaturePermission('items.read', 'projects')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -60,7 +60,7 @@ function cleanTierRates(input: Record<string, string> | undefined): string {
 
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
+  const gate = await guardFeaturePermission('items.manage', 'projects')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

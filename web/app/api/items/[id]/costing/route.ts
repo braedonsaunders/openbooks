@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -9,8 +9,9 @@ export const runtime = 'nodejs'
 /**
  * Per-item inventory costing profile (item_inventory_profiles) — one row per
  * item. Re-homed from the Setup workspace onto the item record, so it is gated
- * by the item permissions rather than admin.setup.manage. GET returns the
- * current profile (or null); PUT upserts it.
+ * by the item permissions rather than admin.setup.manage, and by the Inventory
+ * Features switch (same key as the setup entity). GET returns the current
+ * profile (or null); PUT upserts it.
  */
 
 const COSTING_METHODS = ['fifo', 'moving_average', 'standard']
@@ -22,7 +23,7 @@ async function loadItem(id: string, orgId: string) {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.read')
+  const gate = await guardFeaturePermission('items.read', 'inventory')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
@@ -49,7 +50,7 @@ function numeric(value: unknown): string | null {
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
+  const gate = await guardFeaturePermission('items.manage', 'inventory')
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
   const { id } = await params
