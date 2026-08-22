@@ -3,6 +3,7 @@
 // Unit tests for the PURE validation half of governed journal writes — the
 // gate every sandbox-originated ledger write passes before touching the DB.
 
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateJournalInput, JournalWriteError } from "./journal-writes.ts";
@@ -94,6 +95,23 @@ test("4dp rounding keeps a float-noise journal balanced", () => {
     ],
   });
   assert.equal(v.totalDebits, "0.3000");
+});
+
+test("journal-line persist writes amount through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistJournalLineAmount");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistJournalLineAmount helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /JournalWriteError/);
+
+  const start = source.indexOf("export function validateJournalInput");
+  const next = source.indexOf("async function controlDeps");
+  const body = source.slice(start, next);
+  assert.match(body, /persistJournalLineAmount\(l\.amount, i \+ 1\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(l\.amount\)/);
 });
 
 test("line cap is enforced", () => {
