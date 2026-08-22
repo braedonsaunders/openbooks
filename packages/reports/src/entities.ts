@@ -115,14 +115,14 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Journal-line detail joined to entry, account, party and dimensions — the raw GL. One row per posted (or draft) journal line.',
     from: `journal_lines jl
-      JOIN journal_entries je ON je.id = jl.entry_id
-      JOIN accounts a ON a.id = jl.account_id
-      LEFT JOIN parties p ON p.id = jl.party_id
-      LEFT JOIN departments dep ON dep.id = jl.department_id
-      LEFT JOIN projects prj ON prj.id = jl.project_id
-      LEFT JOIN equipment_units eq ON eq.id = jl.equipment_unit_id
-      LEFT JOIN locations loc ON loc.id = jl.location_id
-      LEFT JOIN classes cls ON cls.id = jl.class_id`,
+      JOIN journal_entries je ON je.id = jl.entry_id AND je.org_id = jl.org_id
+      JOIN accounts a ON a.id = jl.account_id AND a.org_id = jl.org_id
+      LEFT JOIN parties p ON p.id = jl.party_id AND p.org_id = jl.org_id
+      LEFT JOIN departments dep ON dep.id = jl.department_id AND dep.org_id = jl.org_id
+      LEFT JOIN projects prj ON prj.id = jl.project_id AND prj.org_id = jl.org_id
+      LEFT JOIN equipment_units eq ON eq.id = jl.equipment_unit_id AND eq.org_id = jl.org_id
+      LEFT JOIN locations loc ON loc.id = jl.location_id AND loc.org_id = jl.org_id
+      LEFT JOIN classes cls ON cls.id = jl.class_id AND cls.org_id = jl.org_id`,
     orgColumn: 'jl.org_id',
     columns: [
       { key: 'posting_date', label: 'Posting date', kind: 'date', expr: 'je.posting_date' },
@@ -162,11 +162,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds.',
     from: `documents d
-      LEFT JOIN parties p ON p.id = d.party_id
-      LEFT JOIN departments dep ON dep.id = d.department_id
-      LEFT JOIN projects prj ON prj.id = d.project_id
-      LEFT JOIN locations loc ON loc.id = d.location_id
-      LEFT JOIN classes cls ON cls.id = d.class_id`,
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
+      LEFT JOIN departments dep ON dep.id = d.department_id AND dep.org_id = d.org_id
+      LEFT JOIN projects prj ON prj.id = d.project_id AND prj.org_id = d.org_id
+      LEFT JOIN locations loc ON loc.id = d.location_id AND loc.org_id = d.org_id
+      LEFT JOIN classes cls ON cls.id = d.class_id AND cls.org_id = d.org_id`,
     orgColumn: 'd.org_id',
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
@@ -203,16 +203,16 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions. The workhorse for job-costing and billing searches.',
     from: `document_lines dl
-      JOIN documents d ON d.id = dl.document_id
-      LEFT JOIN parties p ON p.id = d.party_id
-      LEFT JOIN accounts a ON a.id = dl.account_id
-      LEFT JOIN items it ON it.id = dl.item_id
-      LEFT JOIN parties emp ON emp.id = dl.employee_id
-      LEFT JOIN departments dep ON dep.id = coalesce(dl.department_id, d.department_id)
-      LEFT JOIN projects prj ON prj.id = coalesce(dl.project_id, d.project_id)
-      LEFT JOIN equipment_units eu ON eu.id = dl.equipment_unit_id
-      LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id)
-      LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id)`,
+      JOIN documents d ON d.id = dl.document_id AND d.org_id = dl.org_id
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
+      LEFT JOIN accounts a ON a.id = dl.account_id AND a.org_id = dl.org_id
+      LEFT JOIN items it ON it.id = dl.item_id AND it.org_id = dl.org_id
+      LEFT JOIN parties emp ON emp.id = dl.employee_id AND emp.org_id = dl.org_id
+      LEFT JOIN departments dep ON dep.id = coalesce(dl.department_id, d.department_id) AND dep.org_id = dl.org_id
+      LEFT JOIN projects prj ON prj.id = coalesce(dl.project_id, d.project_id) AND prj.org_id = dl.org_id
+      LEFT JOIN equipment_units eu ON eu.id = dl.equipment_unit_id AND eu.org_id = dl.org_id
+      LEFT JOIN locations loc ON loc.id = coalesce(dl.location_id, d.location_id) AND loc.org_id = dl.org_id
+      LEFT JOIN classes cls ON cls.id = coalesce(dl.class_id, d.class_id) AND cls.org_id = dl.org_id`,
     orgColumn: 'dl.org_id',
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
@@ -274,9 +274,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     category: 'catalog',
     description: 'The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts.',
     from: `items it
-      LEFT JOIN accounts inc ON inc.id = it.income_account_id
-      LEFT JOIN accounts exp ON exp.id = it.expense_account_id
-      LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id`,
+      LEFT JOIN accounts inc ON inc.id = it.income_account_id AND inc.org_id = it.org_id
+      LEFT JOIN accounts exp ON exp.id = it.expense_account_id AND exp.org_id = it.org_id
+      LEFT JOIN accounts rec ON rec.id = it.cost_recovery_account_id AND rec.org_id = it.org_id`,
     orgColumn: 'it.org_id',
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'it.code' },
@@ -304,8 +304,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     featureKey: 'projects',
     description: 'Projects / jobs — status, customer, project type, schedule and PO number.',
     from: `projects prj
-      LEFT JOIN parties cust ON cust.id = prj.customer_id
-      LEFT JOIN parties mgr ON mgr.id = prj.manager_id`,
+      LEFT JOIN parties cust ON cust.id = prj.customer_id AND cust.org_id = prj.org_id
+      LEFT JOIN parties mgr ON mgr.id = prj.manager_id AND mgr.org_id = prj.org_id`,
     orgColumn: 'prj.org_id',
     columns: [
       { key: 'code', label: 'Code', kind: 'text', expr: 'prj.code' },
@@ -330,10 +330,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     featureKey: 'timeTracking',
     description: 'Timesheet entries — employee, date, hours, billable state, project and approval status.',
     from: `time_entries te
-      LEFT JOIN parties emp ON emp.id = te.employee_party_id
-      LEFT JOIN projects prj ON prj.id = te.project_id
-      LEFT JOIN items it ON it.id = te.item_id
-      LEFT JOIN departments dep ON dep.id = te.department_id`,
+      LEFT JOIN parties emp ON emp.id = te.employee_party_id AND emp.org_id = te.org_id
+      LEFT JOIN projects prj ON prj.id = te.project_id AND prj.org_id = te.org_id
+      LEFT JOIN items it ON it.id = te.item_id AND it.org_id = te.org_id
+      LEFT JOIN departments dep ON dep.id = te.department_id AND dep.org_id = te.org_id`,
     orgColumn: 'te.org_id',
     columns: [
       { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
@@ -387,10 +387,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     featureKey: 'fixedAssets',
     description: 'The fixed-asset register — status, acquisition, cost, custodian and dimensions.',
     from: `fixed_assets fa
-      LEFT JOIN asset_categories ac ON ac.id = fa.category_id
-      LEFT JOIN parties cust ON cust.id = fa.custodian_party_id
-      LEFT JOIN projects prj ON prj.id = fa.project_id
-      LEFT JOIN departments dep ON dep.id = fa.department_id`,
+      LEFT JOIN asset_categories ac ON ac.id = fa.category_id AND ac.org_id = fa.org_id
+      LEFT JOIN parties cust ON cust.id = fa.custodian_party_id AND cust.org_id = fa.org_id
+      LEFT JOIN projects prj ON prj.id = fa.project_id AND prj.org_id = fa.org_id
+      LEFT JOIN departments dep ON dep.id = fa.department_id AND dep.org_id = fa.org_id`,
     orgColumn: 'fa.org_id',
     columns: [
       { key: 'asset_number', label: 'Asset #', kind: 'text', expr: 'fa.asset_number' },
@@ -417,10 +417,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     featureKey: 'equipment',
     description: 'Financial equipment register with shared charge items, purchase basis, utilization, cost recovery, billing and return.',
     from: `equipment_units eu
-      LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id
-      LEFT JOIN items it ON it.id = eu.charge_item_id
-      LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id
-      LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id`,
+      LEFT JOIN subsidiaries sub ON sub.id = eu.subsidiary_id AND sub.org_id = eu.org_id
+      LEFT JOIN items it ON it.id = eu.charge_item_id AND it.org_id = eu.org_id
+      LEFT JOIN fixed_assets fa ON fa.id = eu.fixed_asset_id AND fa.org_id = eu.org_id
+      LEFT JOIN item_rate_books rb ON rb.id = eu.rate_book_id AND rb.org_id = eu.org_id`,
     orgColumn: 'eu.org_id',
     columns: [
       { key: 'unit_number', label: 'Equipment #', kind: 'text', expr: 'eu.unit_number' },
@@ -473,9 +473,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Customers, vendors and employees — one row per party with its role flags and employee detail.',
     from: `parties pt
-      LEFT JOIN customer_roles cr ON cr.party_id = pt.id
-      LEFT JOIN vendor_roles vr ON vr.party_id = pt.id
-      LEFT JOIN employee_roles er ON er.party_id = pt.id`,
+      LEFT JOIN customer_roles cr ON cr.party_id = pt.id AND cr.org_id = pt.org_id
+      LEFT JOIN vendor_roles vr ON vr.party_id = pt.id AND vr.org_id = pt.org_id
+      LEFT JOIN employee_roles er ON er.party_id = pt.id AND er.org_id = pt.org_id`,
     orgColumn: 'pt.org_id',
     columns: [
       { key: 'display_name', label: 'Name', kind: 'text', expr: 'pt.display_name' },
@@ -525,10 +525,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'One row per employee per pay run — gross, statutory withholdings, net, and employer cost, with run/schedule context. Wage data: requires the payroll permission.',
     from: `pay_stubs s
-      JOIN pay_runs r ON r.document_id = s.pay_run_document_id
-      JOIN documents d ON d.id = r.document_id
+      JOIN pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
+      JOIN documents d ON d.id = r.document_id AND d.org_id = r.org_id
       JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
-      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id`,
+      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id AND ps.org_id = r.org_id`,
     orgColumn: 's.org_id',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
@@ -578,14 +578,14 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     description:
       'Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. The payroll journal source. Wage data: requires the payroll permission.',
     from: `pay_stub_lines l
-      JOIN pay_stubs s ON s.id = l.stub_id
-      JOIN pay_runs r ON r.document_id = s.pay_run_document_id
-      JOIN documents d ON d.id = r.document_id
+      JOIN pay_stubs s ON s.id = l.stub_id AND s.org_id = l.org_id
+      JOIN pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
+      JOIN documents d ON d.id = r.document_id AND d.org_id = r.org_id
       JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
-      LEFT JOIN pay_components c ON c.id = l.component_id
-      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id
-      LEFT JOIN projects prj ON prj.id = l.project_id
-      LEFT JOIN departments dep ON dep.id = l.department_id`,
+      LEFT JOIN pay_components c ON c.id = l.component_id AND c.org_id = l.org_id
+      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id AND ps.org_id = r.org_id
+      LEFT JOIN projects prj ON prj.id = l.project_id AND prj.org_id = l.org_id
+      LEFT JOIN departments dep ON dep.id = l.department_id AND dep.org_id = l.org_id`,
     orgColumn: 'l.org_id',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
@@ -742,9 +742,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       JOIN entitlement_plans pln ON pln.id = bal.plan_id AND pln.org_id = bal.org_id
       JOIN parties p ON p.id = bal.employee_party_id AND p.org_id = bal.org_id
       LEFT JOIN employee_roles er ON er.party_id = p.id AND er.org_id = p.org_id
-      LEFT JOIN trades trd ON trd.id = er.trade_id
-      LEFT JOIN departments dep ON dep.id = er.department_id
-      LEFT JOIN accounts acc ON acc.id = pln.liability_account_id
+      LEFT JOIN trades trd ON trd.id = er.trade_id AND trd.org_id = er.org_id
+      LEFT JOIN departments dep ON dep.id = er.department_id AND dep.org_id = er.org_id
+      LEFT JOIN accounts acc ON acc.id = pln.liability_account_id AND acc.org_id = pln.org_id
       LEFT JOIN LATERAL (
         SELECT lim.max_balance, lim.notify_balance,
                CASE WHEN lim.employee_party_id IS NOT NULL THEN 'employee'
@@ -829,9 +829,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     from: `entitlement_service_tiers t
       JOIN employee_roles er ON er.org_id = t.org_id AND er.hired_on IS NOT NULL AND er.is_active
       JOIN parties p ON p.id = er.party_id AND p.org_id = er.org_id
-      LEFT JOIN entitlement_plans pln ON pln.id = t.plan_id
-      LEFT JOIN pay_components c ON c.id = t.component_id
-      LEFT JOIN departments dep ON dep.id = er.department_id`,
+      LEFT JOIN entitlement_plans pln ON pln.id = t.plan_id AND pln.org_id = t.org_id
+      LEFT JOIN pay_components c ON c.id = t.component_id AND c.org_id = t.org_id
+      LEFT JOIN departments dep ON dep.id = er.department_id AND dep.org_id = er.org_id`,
     orgColumn: 't.org_id',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
