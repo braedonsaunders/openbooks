@@ -181,6 +181,12 @@ export async function createProjectCharge(
       if (INVENTORY_ITEM_KINDS.has(String(it.kind)) && !inventoryOn) {
         throw new ChargeError('Inventory is disabled')
       }
+      // The charge picker already hides this kind. Turning Equipment off
+      // must also refuse a new equipment_charge line so a crafted POST
+      // cannot write one. Charges that already carry those items stay.
+      if (String(it.kind) === 'equipment_charge' && !equipmentOn) {
+        throw new ChargeError('Equipment is disabled')
+      }
       if (line.equipmentUnitId) {
         // Equipment attribution is a Features-gated write. Turning Equipment
         // off must stop new unit links without touching posted charges.
