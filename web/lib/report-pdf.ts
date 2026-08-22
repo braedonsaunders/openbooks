@@ -621,7 +621,7 @@ export async function renderStatementViewPdf(
  *  formats. Numbers stay raw (unscaled) — a spreadsheet wants real figures. */
 export async function statementViewToXlsx(
   view: StatementView,
-  opts: { company: string; title: string; periodPhrase: string; accountLabel: string; note?: string },
+  opts: { company: string; title: string; periodPhrase: string; accountLabel: string; note?: string; generatedAt?: Date },
 ): Promise<Buffer> {
   return statementSheetToXlsx({
     company: opts.company,
@@ -636,7 +636,7 @@ export async function statementViewToXlsx(
       indent: l.depth,
       values: l.values?.map((v) => v ?? null),
     })),
-  })
+  }, { generatedAt: opts.generatedAt })
 }
 
 /** Flatten a StatementView into ExportData (one table) for XLSX/CSV. Amounts

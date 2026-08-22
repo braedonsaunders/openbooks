@@ -17,3 +17,15 @@ test('statement view PDFs stamp the footer from the org business day', () => {
     /renderStatementViewPdf\(view, branding, page, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
   )
 })
+
+test('statement view xlsx stamps workbook created/modified from the org business day', () => {
+  const office = readFileSync(new URL('../../packages/office/src/index.ts', import.meta.url), 'utf8')
+  assert.match(
+    route,
+    /statementViewToXlsx\(view, \{[\s\S]*?generatedAt: new Date\(`\$\{stamp\}T00:00:00Z`\)/,
+  )
+  assert.match(
+    office,
+    /export async function statementSheetToXlsx\([\s\S]*?const now = opts\.generatedAt \?\? new Date\(\)[\s\S]*?wb\.created = now[\s\S]*?wb\.modified = now/,
+  )
+})

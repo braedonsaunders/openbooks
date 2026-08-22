@@ -91,7 +91,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       }
       if (format === 'xlsx') {
         return xlsxResponse(
-          await statementViewToXlsx(view, { company: branding.orgName, title, periodPhrase, accountLabel: t('export.columns.accountName') }),
+          await statementViewToXlsx(view, {
+            company: branding.orgName,
+            title,
+            periodPhrase,
+            accountLabel: t('export.columns.accountName'),
+            generatedAt: new Date(`${stamp}T00:00:00Z`),
+          }),
           filename,
         )
       }
