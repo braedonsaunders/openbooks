@@ -3601,7 +3601,6 @@ function ChargesSection({
     effectiveFrom: lease.startsOn,
     effectiveTo: lease.endsOn || "",
     incomeAccountId: "",
-    itemId: "",
     taxCodeId: "",
   });
   return (
