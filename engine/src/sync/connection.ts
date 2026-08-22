@@ -490,6 +490,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     // client mints an app token on demand. Start expired so it fetches one.
     const tokens: DynamicsTokens = { accessToken: "", refreshToken: "", expiresAt: "1970-01-01T00:00:00.000Z" };
     return new DynamicsSource(new DynamicsClient(app, String(cfg.environment), String(cfg.companyId), tokens), {
+      orgId: conn.orgId,
       baseCurrency: cfg.baseCurrency,
     });
   }
