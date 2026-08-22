@@ -204,6 +204,7 @@ export async function createScriptJournal(
       values (${orgId}, 'journal', 'JE-')
       on conflict on constraint sequences_org_kind_sub
       do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding`)) as any;
     const s = seq.rows[0]!;
     const documentNumber = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
