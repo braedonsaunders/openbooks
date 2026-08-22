@@ -72,17 +72,18 @@ export async function POST(req: Request) {
       }
       case "import": {
         const provider = body.provider as PspProvider;
+        const fallbackDate = String(body.settlementDate ?? (await businessToday(orgId)));
         let parsed;
         if (provider === "stripe") {
           parsed = parseStripeBalanceTransactions(
             body.transactions ?? [],
             String(body.externalRef ?? body.payoutId ?? ""),
-            String(body.settlementDate ?? (await businessToday(orgId))),
+            fallbackDate,
           );
         } else if (provider === "recurly") {
-          parsed = parseRecurlySettlement(body.payload ?? body);
+          parsed = parseRecurlySettlement(body.payload ?? body, fallbackDate);
         } else if (provider === "chargebee") {
-          parsed = parseChargebeeSettlement(body.payload ?? body);
+          parsed = parseChargebeeSettlement(body.payload ?? body, fallbackDate);
         } else {
           return NextResponse.json(
             { error: "unknown provider" },

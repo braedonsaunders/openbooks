@@ -4095,7 +4095,8 @@ function CamDrawer({
   busy,
   onSave,
 }: any) {
-  const year = new Date().getUTCFullYear();
+  const today = useBusinessToday();
+  const year = Number(today.slice(0, 4));
   const initial = {
     propertyId:
       pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",

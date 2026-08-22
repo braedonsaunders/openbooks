@@ -7,6 +7,7 @@ import {
   type EvalContext,
   type GateData,
 } from "@openbooks/forms-core";
+import { businessToday } from "../business-date.ts";
 import { db, schema } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
 import {
@@ -94,7 +95,14 @@ export async function executeFlowPlan(
   // Strip inherited properties — special keys ("__proto__", …) become plain
   // own data properties before any lookup.
   const values = Object.fromEntries(Object.entries(params.evalCtx.values));
-  const evalCtx: EvalContext = { values, rows: params.evalCtx.rows ?? {} };
+  const evalCtx: EvalContext = {
+    values,
+    rows: params.evalCtx.rows ?? {},
+    requestContext: {
+      ...params.evalCtx.requestContext,
+      today: params.evalCtx.requestContext?.today ?? await businessToday(ctx.orgId),
+    },
+  };
   const targetCtx = { orgId: ctx.orgId, submitterUserId: params.submitterUserId, values };
 
   const completed: string[] = [];
