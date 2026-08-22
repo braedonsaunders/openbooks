@@ -287,6 +287,7 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
             historical_rate = excluded.historical_rate,
             updated_at = now()
         where consolidated_fx_rates.source = 'derived'
+          and consolidated_fx_rates.org_id = ${orgId}
     `);
     written++;
   }
