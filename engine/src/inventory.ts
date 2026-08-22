@@ -3353,11 +3353,12 @@ export async function postLandedCostVoucher(
       input.subsidiaryId,
       tx,
     );
+    const voucherAmount = persistReceiptMoney(input.amount, "landed cost amount");
     const voucher = (await tx.execute<{ id: string }>(sql`
       insert into landed_cost_vouchers
         (org_id, document_number, status, amount, basis, freight_account_id, source_document_line_id,
          subsidiary_id, voucher_date, memo, created_by, updated_by)
-      values (${orgId}, ${documentNumber}, 'draft', ${normalizeMoney(input.amount)}, ${input.basis}, ${input.freightAccountId},
+      values (${orgId}, ${documentNumber}, 'draft', ${voucherAmount}, ${input.basis}, ${input.freightAccountId},
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
