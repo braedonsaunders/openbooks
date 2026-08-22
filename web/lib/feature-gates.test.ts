@@ -568,6 +568,16 @@ test('the surfaces this test was written for are covered', () => {
     'createPlanVersion and change-order add/change component must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
+    'assertCommercialRefs must not persist equipment_charge items when Equipment is off — stored components stay when itemId is omitted',
+  )
+  assert.match(
+    read('../engine/src/advanced-subscriptions.ts'),
+    /AdvancedSubscriptionError\("Equipment is disabled", 404\)/,
+    'createPlanVersion and change-order add/change component must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('app/api/subscriptions/advanced/route.ts'),
     /error instanceof AdvancedSubscriptionError[\s\S]{0,160}status: error\.status/,
     'advanced subscription writes must 404 — not persist inventory/assembly/kit items — when Inventory is off',

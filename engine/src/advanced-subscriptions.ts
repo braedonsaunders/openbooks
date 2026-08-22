@@ -220,7 +220,8 @@ async function assertCommercialRefs(
     if (!row.rows.length) throw new AdvancedSubscriptionError("income account does not belong to this organization");
   }
   // Stored components stay when itemId is omitted. Re-sending the stored item
-  // is allowed. A new inventory / assembly / kit item is Inventory configuration.
+  // is allowed. A new inventory / assembly / kit item is Inventory
+  // configuration. A new equipment_charge item is Equipment configuration.
   if (input.itemId) {
     const row = (await db.execute<{ kind: string }>(sql`
       select kind from items where id = ${input.itemId} and org_id = ${orgId} and is_active`));
@@ -228,6 +229,15 @@ async function assertCommercialRefs(
     if (storedItemId !== input.itemId && !(await inventoryFeatureEnabled(db, orgId))) {
       if (INVENTORY_ITEM_KINDS.has(row.rows[0].kind)) {
         throw new AdvancedSubscriptionError("Inventory is disabled", 404);
+      }
+    }
+    if (storedItemId !== input.itemId) {
+      const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
+        select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
+          from orgs where id = ${orgId}
+      `)).rows[0]?.enabled === true;
+      if (!equipmentOn && row.rows[0].kind === "equipment_charge") {
+        throw new AdvancedSubscriptionError("Equipment is disabled", 404);
       }
     }
   }
