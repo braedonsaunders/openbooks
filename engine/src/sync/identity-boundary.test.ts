@@ -119,6 +119,21 @@ test("time-entry update persist writes hours through canonicalDecimal then norma
   assert.doesNotMatch(body, /normalizeMoney\("0"\)/);
 });
 
+test("item persist writes defaultCost through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistItemDefaultCost");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistItemDefaultCost helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf('if (resource === "items")');
+  const next = loader.indexOf('if (resource === "projects")');
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistItemDefaultCost\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.defaultCost\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);
