@@ -55,7 +55,7 @@ export async function listApps(orgId: string): Promise<AppRow[]> {
            a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
            v.version, v.manifest
       from apps a
-      left join app_versions v on v.id = a.active_version_id
+      left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
      where a.org_id = ${orgId}
      order by a.sort_order, a.name`)
 }
@@ -67,7 +67,7 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
            a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
            v.version, v.manifest
       from apps a
-      left join app_versions v on v.id = a.active_version_id
+      left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
      where a.org_id = ${orgId} and a.key = ${key}
      limit 1`)
   return r[0] ?? null

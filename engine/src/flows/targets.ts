@@ -36,7 +36,7 @@ export async function roleUsers(orgId: string, role: string): Promise<ResolvedUs
     select distinct u.id, u.name, u.email
       from users u
       join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
-      join app_roles ar on ar.id = ra.role_id and ar.org_id = u.org_id
+      join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id and ar.org_id = u.org_id
      where u.org_id = ${orgId} and u.is_active
        and ar.key = ${role}
   `));
@@ -71,7 +71,7 @@ export async function supervisorOf(orgId: string, userId: string | null | undefi
 export async function userRoleKeys(orgId: string, userId: string): Promise<Set<string>> {
   const r = (await db.execute<{ key: string }>(sql`
     select ar.key from role_assignments ra
-      join app_roles ar on ar.id = ra.role_id
+      join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
      where ra.user_id = ${userId} and ra.org_id = ${orgId}
   `));
   return new Set(r.rows.map((x) => x.key));

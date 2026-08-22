@@ -52,7 +52,7 @@ async function userVisibility(orgId: string, userId: string, perms: Set<string>)
     const r = (await db.execute<{ key: string }>(sql`
       select r.key
         from role_assignments a
-        join app_roles r on r.id = a.role_id
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${userId} and a.org_id = ${orgId}
     `))
     roleKeys = r.rows.map((x) => x.key)

@@ -124,7 +124,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     db.execute(sql`
       select r.key, r.name, r.permissions
         from role_assignments a
-        join app_roles r on r.id = a.role_id
+        join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`),
     db.execute(sql`
       select permission, effect
