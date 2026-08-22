@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { CurrencyError, updateFxRate } from "./currencies.ts";
 import { db, schema } from "./db.ts";
 import { fromUnits, isZero, mulPercent, mulRate, neg, sum, toUnits } from "./money.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
@@ -24,6 +25,16 @@ import { loadSubsidiaryContext } from "./subsidiaries.ts";
  */
 
 export class ConsolidationError extends Error {}
+
+function persistDerivedFxRate(value: unknown): string {
+  try {
+    return updateFxRate({ rate: value });
+  } catch (error) {
+    throw new ConsolidationError(
+      error instanceof CurrencyError ? error.message : "derived exchange rate must be an exact decimal",
+    );
+  }
+}
 
 type OwnershipInterest = {
   id: string; subsidiary_id: string; method: "full" | "proportionate" | "equity";
@@ -262,11 +273,14 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
         `no spot rate for ${pair.from}→${pair.to} on or before ${period.ends_on} — load fx_rates first`,
       );
     }
+    const current = persistDerivedFxRate(r.current);
+    const average = persistDerivedFxRate(r.average ?? r.current);
+    const historical = persistDerivedFxRate(r.historical ?? r.current);
     await db.execute(sql`
       insert into consolidated_fx_rates
         (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
       values (${orgId}, ${periodId}, ${pair.from}, ${pair.to},
-              ${r.current}, ${r.average ?? r.current}, ${r.historical ?? r.current}, 'derived')
+              ${current}, ${average}, ${historical}, 'derived')
       on conflict (org_id, period_id, from_currency, to_currency) do update
         set current_rate = excluded.current_rate,
             average_rate = excluded.average_rate,
