@@ -466,7 +466,7 @@ export async function updatePropertyLease(input: {
   const startsOn = validDate(input.startsOn, "Lease start")!;
   const endsOn = validDate(input.endsOn, "Lease end");
   const baseRent = exactMoney(input.baseRent, "Base rent");
-  const deposit = normalizeMoney(input.securityDepositRequired);
+  const deposit = exactMoney(input.securityDepositRequired, "Security deposit");
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
   const lateFeeValue = input.lateFeeType === "none" ? "0.0000" : normalizeMoney(input.lateFeeValue);
   if (!leaseNumber || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number and positive base rent are required");
