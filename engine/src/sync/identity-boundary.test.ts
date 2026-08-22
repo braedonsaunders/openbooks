@@ -39,6 +39,21 @@ test("loaded entities retain canonical source identity alongside the adapter key
   assert.match(loader, /\$\{custom\}::jsonb \|\| parties\.custom/);
 });
 
+test("time type persist writes cost_multiplier through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistTimeTypeCostMultiplier");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistTimeTypeCostMultiplier helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf('if (resource === "time_types")');
+  const next = loader.indexOf('if (resource === "tax_codes")');
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistTimeTypeCostMultiplier\(/);
+  assert.doesNotMatch(body, /normalizeMoney\("1"\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);
