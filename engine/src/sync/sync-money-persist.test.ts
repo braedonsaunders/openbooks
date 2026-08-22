@@ -33,3 +33,14 @@ test("insertImportedLines persists document-line amount, taxAmount, and billAmou
   assert.doesNotMatch(body, /taxAmount: normalizeMoney\(line\.taxAmount\)/);
   assert.doesNotMatch(body, /billAmount: line\.billAmount == null \? null : normalizeMoney\(line\.billAmount\)/);
 });
+
+test("document insert persists subtotal and total through persistSyncLineMoney", () => {
+  const insert = source.indexOf(".insert(schema.documents)");
+  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
+  const body = source.slice(insert, returning > insert ? returning : undefined);
+  assert.match(body, /persistSyncLineMoney\(doc\.subtotal \?\? "0", "subtotal"\)/);
+  assert.match(body, /persistSyncLineMoney\(doc\.total \?\? "0", "total"\)/);
+  assert.match(body, /taxTotal: "0"/);
+  assert.doesNotMatch(body, /normalizeMoney\(doc\.subtotal/);
+  assert.doesNotMatch(body, /normalizeMoney\(doc\.total/);
+});
