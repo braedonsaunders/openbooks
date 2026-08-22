@@ -18,7 +18,7 @@ import { AccountDrawer } from './AccountDrawer'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { segmentRegistry } from '../../../lib/segments'
-import { subsidiaryFeatureEnabled } from '../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { AccountRegisterLink } from '../../../components/account-register-link'
 import { NewAccountButton } from './NewAccountButton'
 import { AccountsHierarchyTable, type HierarchyAccountGroup } from './AccountsHierarchyTable'
@@ -103,27 +103,30 @@ export default async function Accounts({
     }, {}),
   ).map(([value, count]) => ({ value, label: CLASS_KEYS[value] ? t(`classes.${CLASS_KEYS[value]}`) : value, count }))
 
-  const [openAccount, drawerOptions, subsidiaryUiEnabled] = await Promise.all([
+  const [openAccount, subsidiaryUiEnabled, multiCurrencyEnabled] = await Promise.all([
     accountId && isUuid(accountId) ? loadAccount(accountId, authz.user.orgId) : null,
-    accountId || creating
-      ? Promise.all([
-          db.execute(sql`
-            select id, number, name, type from accounts
-             where org_id = ${authz.user.orgId} and is_summary
-             order by number nulls last, name
-          `) as any,
-          db.execute(sql`select code, name from currencies order by code`) as any,
-          db.execute(sql`
-            select id, name from subsidiaries
-             where org_id = ${authz.user.orgId}
-             order by name
-          `) as any,
-          loadFieldDefs('accounts'),
-          segmentRegistry(authz.user.orgId),
-        ])
-      : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
   ])
+  const drawerOptions = accountId || creating
+    ? await Promise.all([
+        db.execute(sql`
+          select id, number, name, type from accounts
+           where org_id = ${authz.user.orgId} and is_summary
+           order by number nulls last, name
+        `) as any,
+        multiCurrencyEnabled
+          ? db.execute(sql`select code, name from currencies order by code`) as any
+          : Promise.resolve({ rows: [] }),
+        db.execute(sql`
+          select id, name from subsidiaries
+           where org_id = ${authz.user.orgId}
+           order by name
+        `) as any,
+        loadFieldDefs('accounts'),
+        segmentRegistry(authz.user.orgId),
+      ])
+    : null
   const requestedReturn = pickString(sp.drawerReturn)
   const closeHref = requestedReturn?.startsWith('/accounts')
     ? requestedReturn
@@ -168,6 +171,7 @@ export default async function Accounts({
       canManage={canManageAccounts}
       closeHref={closeHref}
       createMode={creating}
+      multiCurrency={multiCurrencyEnabled}
     />
   ) : null
 

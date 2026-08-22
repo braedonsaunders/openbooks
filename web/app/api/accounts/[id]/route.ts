@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount } from '../_lib'
@@ -68,6 +69,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existing = existingPayload.account as Record<string, any>
   const parsed = await request.json().catch(() => ({}))
   const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as PatchBody : {}
+  if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
 
   const name = body.name === undefined ? undefined : body.name.trim()
   if (name !== undefined && !name) return bad('name_required', 'name')

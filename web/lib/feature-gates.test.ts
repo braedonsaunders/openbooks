@@ -1107,6 +1107,51 @@ test('the surfaces this test was written for are covered', () => {
     /\{revenueRecognition \? <Card>/,
     'the company form must hide the fair-value range policy when Revenue Recognition is off',
   )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /orgFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'accounts import must refuse currencyRestriction when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('lib/data-io/resources.ts'),
+    /currencyRestriction !== undefined/,
+    'accounts import must refuse — not persist — currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/accounts/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'account PATCH must refuse currencyRestriction when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/accounts/[id]/route.ts'),
+    /currencyRestriction !== undefined[\s\S]{0,200}status: 404/,
+    'account PATCH must 404 — not persist — currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/accounts/route.ts'),
+    /isFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'account POST must refuse currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/accounts/route.ts'),
+    /currencyRestriction !== undefined[\s\S]{0,200}status: 404/,
+    'account POST must 404 — not persist — currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/AccountDrawer.tsx'),
+    /multiCurrency \? \{ currencyRestriction/,
+    'the account drawer must not send currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/AccountDrawer.tsx'),
+    /\{multiCurrency \? \(/,
+    'the account drawer must hide currencyRestriction when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'multiCurrency'\)/,
+    'the accounts page must not load currency pickers when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

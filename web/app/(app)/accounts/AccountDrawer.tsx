@@ -51,6 +51,7 @@ export function AccountDrawer({
   canManage,
   closeHref,
   createMode = false,
+  multiCurrency = false,
 }: {
   payload: AccountPayload
   parents: Option[]
@@ -61,6 +62,7 @@ export function AccountDrawer({
   canManage: boolean
   closeHref: string
   createMode?: boolean
+  multiCurrency?: boolean
 }) {
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
@@ -110,6 +112,7 @@ export function AccountDrawer({
     }
     setBusy(true)
     if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    const { currencyRestriction, ...formRest } = form
     const response = await fetch(createMode ? '/api/accounts' : `/api/accounts/${account.id}`, {
       method: createMode ? 'POST' : 'PATCH',
       headers: {
@@ -117,13 +120,13 @@ export function AccountDrawer({
         ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
       },
       body: JSON.stringify({
-        ...form,
+        ...formRest,
         number: form.number || null,
         description: form.description || null,
         parentId: form.parentId || null,
-        currencyRestriction: form.currencyRestriction || null,
         subsidiaryId: form.subsidiaryId || null,
         monetary: form.monetary === '' ? null : form.monetary === 'true',
+        ...(multiCurrency ? { currencyRestriction: currencyRestriction || null } : {}),
       }),
     })
     const data = await response.json().catch(() => ({}))
@@ -227,12 +230,14 @@ export function AccountDrawer({
               <SearchSelect value={form.parentId} onChange={(v) => set('parentId', v)} options={compatibleParents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
             ) : value(parents.find((option) => option.value === form.parentId)?.label ?? payload.parentName)}
           </div>
+          {multiCurrency ? (
           <div className={fieldClass}>
             <Label>{t('drawer.currencyRestriction')}</Label>
             {editable ? (
               <SearchSelect value={form.currencyRestriction} onChange={(v) => set('currencyRestriction', v)} options={currencies} clearable emptyLabel={t('drawer.anyCurrency')} ariaLabel={t('drawer.currencyRestriction')} />
             ) : value(form.currencyRestriction || t('drawer.anyCurrency'))}
           </div>
+          ) : null}
           <div className={fieldClass}>
             <Label>{t('drawer.monetary')}</Label>
             {editable ? (
