@@ -23,7 +23,7 @@ export async function loadEquipment(id: string, orgId: string) {
         where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted')), 0) as billable,
       coalesce((select sum(dl.amount) from document_lines dl join documents d on d.id = dl.document_id
         where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'), 0) as billed_revenue,
-      coalesce((select sum(jl.amount) from journal_lines jl join journal_entries je on je.id = jl.entry_id
+      coalesce((select sum(jl.amount) from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         left join documents d on d.id = je.source_document_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
         where jl.equipment_unit_id = ${id} and jl.org_id = ${orgId} and je.org_id = ${orgId} and je.status in ('posted', 'reversed')

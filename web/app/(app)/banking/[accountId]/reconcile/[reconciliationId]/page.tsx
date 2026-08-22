@@ -125,7 +125,7 @@ export default async function ReconcilePage({
           select jl.id, je.posting_date, je.entry_number, jl.amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
             left join parties p on p.id = jl.party_id
            where ${glWhere}
            order by ${GL_SORTS[glParams.sort]} ${glParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, jl.line_number
@@ -135,7 +135,7 @@ export default async function ReconcilePage({
       ? Promise.resolve({ rows: [{ n: 0 }] })
       : db.execute<any>(sql`
           select count(*) as n from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id
+            join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where ${glWhere}`),
     db.execute<any>(sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
@@ -145,7 +145,7 @@ export default async function ReconcilePage({
         from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id
         join journal_lines jl on jl.id = m.journal_line_id
-        join journal_entries je on je.id = jl.entry_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where ${mWhere}
        order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
        limit ${mParams.perPage} offset ${(mParams.page - 1) * mParams.perPage}
@@ -154,7 +154,7 @@ export default async function ReconcilePage({
       select count(*) as n from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id
         join journal_lines jl on jl.id = m.journal_line_id
-        join journal_entries je on je.id = jl.entry_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where ${mWhere}`),
   ]))
 

@@ -110,7 +110,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join documents d on d.id = e.source_document_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and d.voided_at is null
@@ -127,7 +127,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
         coalesce(sum(l.amount) filter (where d.kind = 'expense_report'), 0) as expense_amount,
         coalesce(sum(l.amount) filter (where d.kind = 'vendor_bill'), 0) as bill_amount
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join documents d on d.id = e.source_document_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and d.voided_at is null

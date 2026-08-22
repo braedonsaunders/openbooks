@@ -67,7 +67,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         coalesce(sum(l.amount) filter (where a.type in ${COST_SET}), 0) as cost,
         coalesce(-sum(l.amount) filter (where a.type in ${REVENUE_SET}), 0) as revenue
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
     `) as any,
@@ -88,7 +88,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     db.execute(sql`
       select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
         and a.type in ${COST_SET}

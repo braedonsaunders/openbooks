@@ -195,7 +195,7 @@ export async function resolveProjectFinancials(
       select coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
         from journal_lines l
-        join journal_entries e on e.id = l.entry_id
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
     // committedCost — unbilled portion (by line amount) of open (approved)
@@ -297,7 +297,7 @@ export async function resolveProjectFinancials(
            or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))`),
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
-      ? db.execute<any>(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id
+      ? db.execute<any>(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'`)
       : profile.laborCost.source === 'time_rate'
         ? db.execute<any>(sql`select coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as labor from time_entries te
@@ -311,7 +311,7 @@ export async function resolveProjectFinancials(
     profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute<any>(sql`select 0 as overhead`)
       : db.execute<any>(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
-           from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
+           from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
     // project approved labor hours (base for per-hour / rate-engine overhead).
     db.execute<any>(sql`select coalesce(sum(te.hours), 0) as total,
@@ -321,7 +321,7 @@ export async function resolveProjectFinancials(
     // cost by account (for the breakdown subtab) — same cost predicate.
     db.execute<any>(sql`
       select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
-        from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${costPredicate(profile.actualCost, costIds)}
        group by a.id, a.number, a.name, a.type having coalesce(sum(l.amount),0) <> 0 order by amount desc`),

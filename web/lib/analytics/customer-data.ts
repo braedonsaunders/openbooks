@@ -431,7 +431,7 @@ export async function customerData(period: { from: string; to: string; label: st
         join accounts ia on ia.id = il.account_id and ia.type = 'asset_receivable'
         left join applications ap on ap.to_line_id = il.id and ap.unapplied_at is null
         left join journal_lines pl on pl.id = ap.from_line_id
-        left join journal_entries pe on pe.id = pl.entry_id
+        left join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
         where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
           and d.voided_at is null and d.party_id is not null
           and d.posting_date >= ${from} and d.posting_date <= ${to}
