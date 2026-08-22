@@ -17,6 +17,17 @@ function persistSubcontractOriginalCommitment(value: unknown): string {
   }
 }
 
+/** Persist leftover create-path default retainage through exact decimal then ledger money. Fail closed. */
+function persistSubcontractDefaultRetainage(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("default retainage percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("default retainage percent must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -177,7 +188,7 @@ export async function createSubcontract(input: {
   const number = input.number.trim();
   const title = input.title.trim();
   const original = persistSubcontractOriginalCommitment(input.originalCommitment);
-  const retainage = normalizeMoney(input.defaultRetainagePercent ?? "10");
+  const retainage = persistSubcontractDefaultRetainage(input.defaultRetainagePercent ?? "10");
   if (!number || !title || cmp(original, "0") <= 0) {
     throw new SubcontractError("Number, title, and a positive original commitment are required");
   }
