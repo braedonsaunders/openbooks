@@ -206,7 +206,7 @@ export async function vendorData(
         lateSpend: pm ? Number(pm.late_amount) : 0,
       };
     })
-    .filter((r) => r.spend > 0.005 || r.priorSpend > 0.005)
+    .filter((r) => r.spend > 0 || r.priorSpend > 0)
     .sort((a, b) => b.spend - a.spend);
 
   const totalSpend = base.reduce((a, r) => a + r.spend, 0) || 1;

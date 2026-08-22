@@ -68,7 +68,7 @@ export function RatiosTab({ data, defs }: { data: HealthData; defs: Record<strin
 /** the DuPont decomposition: ROE = Net Margin × Asset Turnover × Equity Multiplier. */
 function DuPontPanel({ data }: { data: HealthData }) {
   const f = data.figures
-  if (!data.hasBalanceSheet || Math.abs(f.totalEquity) < 0.005) {
+  if (!data.hasBalanceSheet || Math.abs(f.totalEquity) === 0) {
     return (
       <Panel title="DuPont Analysis" icon={Scale}>
         <p className="py-4 text-center text-xs text-slate-400">Needs balance sheet data (assets & equity) to decompose ROE.</p>

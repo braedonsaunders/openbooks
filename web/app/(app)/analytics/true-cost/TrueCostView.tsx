@@ -546,7 +546,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
       const allocated = a.untaggedAmount * deptShare
       return { a, tagged, allocated, total: tagged + allocated }
     })
-    .filter((x) => Math.abs(x.total) > 0.005)
+    .filter((x) => Math.abs(x.total) > 0)
     .sort((x, y) => y.total - x.total)
   const taggedSum = rows.reduce((s, x) => s + x.tagged, 0)
   const allocatedSum = rows.reduce((s, x) => s + x.allocated, 0)

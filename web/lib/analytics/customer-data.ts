@@ -292,7 +292,7 @@ export async function customerProfitability(period: { from: string; to: string }
     const costs = Number(row.costs);
     const profit = revenue - costs;
     // Skip empty projects (no revenue and no cost).
-    if (Math.abs(revenue) < 0.005 && Math.abs(costs) < 0.005) continue;
+    if (revenue === 0 && costs === 0) continue;
     const job: ProfitJob = {
       jobId: row.job_id,
       jobName: row.job_name,
@@ -439,9 +439,9 @@ export async function customerData(period: { from: string; to: string; label: st
       )
       select party_id as id,
         count(*) as invoice_count,
-        count(*) filter (where applied >= total - 0.005) as paid_count,
-        avg(last_payment - posting_date) filter (where applied >= total - 0.005) as avg_days_to_pay,
-        count(*) filter (where due_date < ${ref} and applied < total - 0.005) as overdue_count
+        count(*) filter (where applied >= total) as paid_count,
+        avg(last_payment - posting_date) filter (where applied >= total) as avg_days_to_pay,
+        count(*) filter (where due_date < ${ref} and applied < total) as overdue_count
       from inv
       group by party_id
     `) as Promise<any>,

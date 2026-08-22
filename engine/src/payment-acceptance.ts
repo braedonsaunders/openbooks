@@ -505,7 +505,7 @@ export async function createPaymentLink(
     if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
     if (doc.status !== "posted") throw new PaymentAcceptanceError("invoice is not posted");
     if (!doc.party_id) throw new PaymentAcceptanceError("invoice has no customer");
-    if (cmp(doc.open_balance, "0.005") <= 0) throw new PaymentAcceptanceError("invoice has no open balance");
+    if (cmp(doc.open_balance, "0") <= 0) throw new PaymentAcceptanceError("invoice has no open balance");
 
     const config = await loadProviderConfig(orgId, input.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) {
@@ -635,7 +635,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
       surchargeAmount: surcharge.amount,
       totalAmount: add(row.openBalance, surcharge.amount),
       currency: link.currency,
-      status: cmp(row.openBalance, "0.005") <= 0 ? "paid" : "active",
+      status: cmp(row.openBalance, "0") <= 0 ? "paid" : "active",
       provider: link.provider,
       publishableKey: config?.publishable_key ?? null,
     };
@@ -657,7 +657,7 @@ export async function createCheckoutSession(
     `));
     if (!doc.rows[0]) throw new PaymentAcceptanceError("invoice not found");
     const openBalance = doc.rows[0].open_balance;
-    if (cmp(openBalance, "0.005") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
+    if (cmp(openBalance, "0") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
 
     const config = await loadProviderConfig(link.orgId, link.provider);
     if (!config?.is_enabled || !config.acceptance_enabled) throw new PaymentAcceptanceError("provider is not configured");
@@ -889,7 +889,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   `));
   const invoice = doc.rows[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
-  if (cmp(invoice.open_balance, "0.005") <= 0) {
+  if (cmp(invoice.open_balance, "0") <= 0) {
     // Paid through another channel meanwhile — nothing to settle.
     await db.execute(sql`
       update payment_attempts set status = 'succeeded', updated_at = now() where id = ${attemptId}
@@ -1036,7 +1036,7 @@ export async function finalizePaymentAcceptanceForDocument(
      returning id
   `));
   if (!closed.rows[0]) return;
-  if (cmp(row.open_balance ?? "0", "0.005") <= 0) {
+  if (cmp(row.open_balance ?? "0", "0") <= 0) {
     await db.execute(sql`
       update payment_links
          set status = 'paid',

@@ -256,7 +256,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         count(distinct d.id) as transaction_count
       ${spendBase(from, to)}
       group by 1, 2, 3, 4, 5, 6
-      having sum(l.amount) > 0.005
+      having sum(l.amount) > 0
     `) as Promise<any>,
     // 2. Monthly vendor/party spend (drill-down).
     db.execute(sql`
@@ -275,7 +275,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         and e.posting_date >= ${from} and e.posting_date <= ${to}
         and d.party_id is not null
       group by 1, 2, 3
-      having sum(l.amount) > 0.005
+      having sum(l.amount) > 0
     `) as Promise<any>,
     // 3. Prior-YEAR monthly totals for YoY.
     db.execute(sql`
@@ -341,7 +341,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(l.amount) filter (where e.posting_date >= ${twoBackFrom} and e.posting_date < ${priorFrom}) as two_back_amount
       ${spendBase(twoBackFrom, to)}
       group by 1, 2
-      having sum(l.amount) > 0.005
+      having sum(l.amount) > 0
     `) as Promise<any>,
   ]);
 

@@ -45,7 +45,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
   const selectedEntries = payable.filter((e) => selected.has(e.id))
   const total = selectedEntries.reduce((a, e) => a + e.amount, 0)
   const cap = props.capacity
-  const overCap = cap !== null && total > cap + 0.005
+  const overCap = cap !== null && total > cap
   const pct = cap && cap > 0 ? Math.min(100, (total / cap) * 100) : total > 0 ? 100 : 0
 
   const toggle = (id: string) =>

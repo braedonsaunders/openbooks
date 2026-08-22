@@ -75,7 +75,7 @@ export async function renderLayout(
      where a.type in ${PNL_TYPES}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimSql}
-     group by a.id having abs(sum(l.amount)) >= 0.005
+     group by a.id having abs(sum(l.amount)) > 0
      order by a.number nulls last, a.name
   `)) as any;
 

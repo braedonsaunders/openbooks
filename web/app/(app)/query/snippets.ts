@@ -55,7 +55,7 @@ having sum(g.debit_total - g.credit_total) <> 0
   from journal_entries e
   join journal_lines l on l.entry_id = e.id
  group by e.id, e.entry_number, e.posting_date
-having abs(sum(l.amount)) > 0.005
+having abs(sum(l.amount)) > 0
  order by abs(sum(l.amount)) desc
  limit 50`,
   },

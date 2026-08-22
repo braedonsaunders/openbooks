@@ -315,11 +315,11 @@ export async function financialHealth(
   const totalEquity = Number(bs.totalEquity);
   const totalDebt = Number(totalOf(bs.liabilities, ["liability_long_term"]));
   const investedCapital = totalEquity + totalDebt;
-  const hasBalanceSheet = Math.abs(totalAssets) > 0.005;
+  const hasBalanceSheet = Math.abs(totalAssets) > 0;
 
   // Derived
   const ebitda = operatingIncome + da;
-  const hasDA = Math.abs(da) > 0.005;
+  const hasDA = Math.abs(da) > 0;
   const hasHeadcount = headcount > 0;
   const nopat = operatingIncome * 0.75;
   const ebitdaMargin = revenue > 0 ? ebitda / revenue : 0;
@@ -327,7 +327,7 @@ export async function financialHealth(
   const rule40 = revenueGrowth * 100 + operatingMargin * 100;
 
   const roa = hasBalanceSheet && totalAssets > 0 ? netIncome / totalAssets : null;
-  const roe = hasBalanceSheet && Math.abs(totalEquity) > 0.005 ? netIncome / totalEquity : null;
+  const roe = hasBalanceSheet && Math.abs(totalEquity) > 0 ? netIncome / totalEquity : null;
   const roic = hasBalanceSheet && investedCapital > 0 ? nopat / investedCapital : null;
   const roce = hasBalanceSheet && investedCapital > 0 ? operatingIncome / investedCapital : null;
   const assetTurnover = hasBalanceSheet && totalAssets > 0 ? revenue / totalAssets : null;
@@ -365,7 +365,7 @@ export async function financialHealth(
     mk("cogs_ratio", revenue > 0 ? cogs / revenue : 0, "pct", 0.6, true, `${M(cogs)} / ${M(revenue)}`),
     mk("opex_ratio", revenue > 0 ? opex / revenue : 0, "pct", 0.25, true, `${M(opex)} / ${M(revenue)}`),
     mk("operating_leverage", operatingLeverage, "num", 1.5, false, `${fmtPct(opIncGrowth)} / ${fmtPct(revenueGrowth)}`),
-    mk("interest_coverage", otherExpense > 0.005 ? operatingIncome / otherExpense : 99, "num", 5.0, false, otherExpense > 0.005 ? `${M(operatingIncome)} / ${M(otherExpense)}` : "No interest expense"),
+    mk("interest_coverage", otherExpense > 0 ? operatingIncome / otherExpense : 99, "num", 5.0, false, otherExpense > 0 ? `${M(operatingIncome)} / ${M(otherExpense)}` : "No interest expense"),
     mk("rule_of_40", rule40, "raw", 40, false, `${fmtPct(revenueGrowth)} + ${fmtPct(operatingMargin)}`),
   ];
 
