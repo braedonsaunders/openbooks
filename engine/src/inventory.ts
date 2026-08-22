@@ -2097,11 +2097,12 @@ export async function buildAssembly(
     const unitCost = isZero(input.quantity)
       ? "0"
       : unitCostPerQuantity(totalCost, input.quantity)!;
+    const buildQuantity = persistReceiptMoney(input.quantity, "assembly build quantity");
     const buildMv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
-              ${normalizeMoney(input.quantity)}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+              ${buildQuantity}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     await addLayerAtCost(
       tx,
