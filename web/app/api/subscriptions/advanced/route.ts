@@ -148,7 +148,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (error) {
-    if (error instanceof AdvancedSubscriptionError) return NextResponse.json({ error: error.message }, { status: 422 });
+    if (error instanceof AdvancedSubscriptionError) return NextResponse.json({ error: error.message }, { status: error.status });
     throw error;
   }
 }

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
+import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, mul, normalizeMoney, toUnits } from "./money.ts";
 import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 
@@ -16,7 +17,14 @@ export type AmendmentType =
   | "renew"
   | "coterm";
 
-export class AdvancedSubscriptionError extends Error {}
+export class AdvancedSubscriptionError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message);
+    this.name = "AdvancedSubscriptionError";
+  }
+}
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 async function assertEnabled(orgId: string): Promise<void> {
   const result = await db.execute<{ enabled: boolean }>(sql`
@@ -202,14 +210,26 @@ async function ownedPlan(orgId: string, planId: string) {
   return row;
 }
 
-async function assertCommercialRefs(orgId: string, input: { incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<void> {
+async function assertCommercialRefs(
+  orgId: string,
+  input: { incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null },
+  storedItemId?: string | null,
+): Promise<void> {
   if (input.incomeAccountId) {
     const row = (await db.execute(sql`select 1 from accounts where id = ${input.incomeAccountId} and org_id = ${orgId} and type in ('income','income_other') and is_active`));
     if (!row.rows.length) throw new AdvancedSubscriptionError("income account does not belong to this organization");
   }
+  // Stored components stay when itemId is omitted. Re-sending the stored item
+  // is allowed. A new inventory / assembly / kit item is Inventory configuration.
   if (input.itemId) {
-    const row = (await db.execute(sql`select 1 from items where id = ${input.itemId} and org_id = ${orgId} and is_active`));
-    if (!row.rows.length) throw new AdvancedSubscriptionError("item does not belong to this organization");
+    const row = (await db.execute<{ kind: string }>(sql`
+      select kind from items where id = ${input.itemId} and org_id = ${orgId} and is_active`));
+    if (!row.rows[0]) throw new AdvancedSubscriptionError("item does not belong to this organization");
+    if (storedItemId !== input.itemId && !(await inventoryFeatureEnabled(db, orgId))) {
+      if (INVENTORY_ITEM_KINDS.has(row.rows[0].kind)) {
+        throw new AdvancedSubscriptionError("Inventory is disabled", 404);
+      }
+    }
   }
   if (input.taxCodeId) {
     const row = (await db.execute(sql`select 1 from tax_codes where id = ${input.taxCodeId} and org_id = ${orgId} and is_active`));
@@ -406,7 +426,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
       await assertCommercialRefs(orgId, request);
     }
     if (request.type === "change_component") {
-      await assertCommercialRefs(orgId, request);
+      await assertCommercialRefs(orgId, request, currentComponent?.itemId);
     }
     if (request.type === "change_timing" && !["advance", "arrears"].includes(request.billingTiming ?? "")) {
       throw new AdvancedSubscriptionError("billing timing must be advance or arrears");
