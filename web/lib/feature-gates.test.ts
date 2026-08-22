@@ -425,6 +425,21 @@ test('the surfaces this test was written for are covered', () => {
     /Inventory is disabled[\s\S]{0,200}status: 404/,
     'invoice generate must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
+  assert.match(
+    read('lib/wip-billing.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'prebill convert must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('lib/wip-billing.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}Inventory is disabled/,
+    'convertPrebill must not copy inventory/assembly/kit lines when Inventory is off — stored prebill lines and existing invoices stay',
+  )
+  assert.match(
+    read('lib/wip-billing.ts'),
+    /WipBillingError\('Inventory is disabled', 404\)/,
+    'convertPrebill must 404 — not persist inventory/assembly/kit — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(

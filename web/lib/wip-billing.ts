@@ -11,6 +11,7 @@ import {
   persistLineTaxComponents,
 } from '@openbooks/engine/src/tax-persist.ts'
 import { nextDocumentNumber } from './bills'
+import { isFeatureEnabled } from './features'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {
   capWipSources,
@@ -29,6 +30,8 @@ export class WipBillingError extends Error {
     this.name = 'WipBillingError'
   }
 }
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function persistMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4)
@@ -899,7 +902,6 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
         throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity ?? '0.0000'}`)
       }
     }
-    const invoiceNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', worksheet.subsidiary_id)
 
     const lines = (await tx.execute<Record<string, any>>(sql`
       select line.*,
@@ -916,6 +918,22 @@ export async function convertPrebill(orgId: string, actorId: string, id: string)
     `))
     if (lines.rows.length === 0) throw new WipBillingError('The prebill has no billable lines')
     if (lines.rows.some((line) => line.actively_held)) throw new WipBillingError('Release all billing holds before conversion')
+    // Stored prebill lines and existing invoices stay. Turning Inventory off
+    // must refuse a convert that would persist inventory / assembly / kit.
+    if (!(await isFeatureEnabled(orgId, 'inventory'))) {
+      const itemIds = [...new Set(
+        lines.rows.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          throw new WipBillingError('Inventory is disabled', 404)
+        }
+      }
+    }
+
+    const invoiceNumber = await nextDocumentNumber(orgId, 'customer_invoice', 'INV-', worksheet.subsidiary_id)
 
     const defaultIncome = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${orgId} and type in ('income', 'income_other') and is_active
