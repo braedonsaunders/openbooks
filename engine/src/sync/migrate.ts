@@ -106,6 +106,17 @@ function persistTimeEntryHours(value: unknown): string {
   }
 }
 
+/** Persist leftover migrated payment-term discount through exact decimal then ledger money. Fail closed. */
+function persistPaymentTermDiscountPercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("payment-term discount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("payment-term discount must be an exact decimal");
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -551,7 +562,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
-      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${moneyOrNull(f.discountPercent)}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 
