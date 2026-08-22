@@ -72,6 +72,7 @@ export async function payVendor(
     payment.id,
     { allocations, bankAccountId: world.accounts.bank },
     actorId,
+    world.orgId,
   );
   await releaseDraftIfUngated(world, payment.id, actorId);
   await postPaymentWithApplications(payment.id, undefined, actorId);
@@ -106,7 +107,7 @@ export async function reimburseEmployee(
     currency: world.currency,
     memo: `Expense reimbursement ${documentDate}`,
   });
-  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actorId);
+  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actorId, world.orgId);
   await releaseDraftIfUngated(world, payment.id, actorId);
   await postPaymentWithApplications(payment.id, undefined, actorId);
   return { paymentId: payment.id, paid: sum(items.map((i) => i.open)) };
@@ -136,6 +137,7 @@ export async function applyReceipt(
     paymentDocId,
     { allocations: built, bankAccountId: world.accounts.bank },
     actorId,
+    world.orgId,
   );
   await releaseDraftIfUngated(world, paymentDocId, actorId);
   const { entryId } = await postPaymentWithApplications(paymentDocId, undefined, actorId);

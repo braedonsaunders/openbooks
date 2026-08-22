@@ -60,7 +60,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
         settlementRateReference: "BANK-SETTLEMENT-42",
       }],
       bankAccountId: org.accounts.bank,
-    }, userId);
+    }, userId, org.orgId);
     await db.execute(sql`
       update documents
          set status = 'approved', submitted_by = ${userId}, submitted_at = now()

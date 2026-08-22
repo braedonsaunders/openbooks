@@ -124,7 +124,7 @@ export async function updatePayment(
     request: { documentId: input.documentId, patch: input.patch },
     execute: async () => {
       try {
-        await updateDraftPayment(input.documentId, input.patch, context.authz.user.id);
+        await updateDraftPayment(input.documentId, input.patch, context.authz.user.id, context.authz.user.orgId);
         return await loadPaymentDocument(input.documentId, header.kind, context.authz.user.orgId);
       } catch (error) {
         paymentFailure(error);

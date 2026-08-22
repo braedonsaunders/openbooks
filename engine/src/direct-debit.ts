@@ -55,7 +55,7 @@ export async function createDirectDebitRun(opts: {
       const total = sum(allocations.map((a) => a.sourceTransactionAmount));
       const receipt = await createPaymentDocument({ orgId: opts.orgId, kind: "customer_payment", createdBy: opts.createdBy, partyId: first.party_id, bankAccountId: profile.bank_account_id, subsidiaryId: first.subsidiary_id, currency: profile.currency, fxRate: first.fx_rate, memo: `Collection run ${runNumber}` });
       createdReceiptIds.push(receipt.id);
-      await updateDraftPayment(receipt.id, { partyId: first.party_id, bankAccountId: profile.bank_account_id, allocations, controlAccountId: first.control_account_id }, opts.createdBy);
+      await updateDraftPayment(receipt.id, { partyId: first.party_id, bankAccountId: profile.bank_account_id, allocations, controlAccountId: first.control_account_id }, opts.createdBy, opts.orgId);
       const [instruction] = await db.insert(schema.paymentInstructions).values({ orgId: opts.orgId, paymentRunId: run.id, payeePartyId: first.party_id, payeeBankAccountId: first.party_bank_account_id, mandateId: first.mandate_id, amount: total, currency: profile.currency, paymentDocumentId: receipt.id, status: "pending", createdBy: opts.createdBy }).returning({ id: schema.paymentInstructions.id });
       await db.insert(schema.paymentRunItems).values(invoices.map((i) => ({ orgId: opts.orgId, paymentRunId: run.id, paymentInstructionId: instruction.id, sourceDocumentId: i.document_id, sourceOpenLineId: i.open_line_id, kind: "receivable" as const, grossAmount: i.open, discountAmount: "0", creditAmount: "0", paymentAmount: i.open, currency: i.currency, fxRate: i.fx_rate, status: "selected" as const, createdBy: opts.createdBy })));
     }

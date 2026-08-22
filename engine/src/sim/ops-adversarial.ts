@@ -140,6 +140,7 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
         payment.id,
         { allocations: [sameCurrencyAllocation(item.lineId, add(item.open, "0.01"))], bankAccountId: world.accounts.bank },
         world.actors.arClerk,
+        world.orgId,
       );
       await releaseDraftIfUngated(world, payment.id, world.actors.arClerk);
       await postPaymentWithApplications(payment.id, undefined, world.actors.arClerk);
