@@ -11,6 +11,7 @@ import {
   getRecordType,
   isCustomFieldKey,
   customFieldDefKey,
+  recordTypeForFeatureState,
   type FilterClause,
   type FilterOperator,
   type ListViewConfig,
@@ -61,6 +62,7 @@ export function ListViewDesigner({
   userId,
   showInListDefs,
   filterOptions,
+  inventoryEnabled,
 }: {
   recordType: string
   def: ViewDef | null
@@ -68,13 +70,17 @@ export function ListViewDesigner({
   userId: string
   showInListDefs: CustomFieldDefClient[]
   filterOptions: Record<string, { value: string; label: string }[]>
+  inventoryEnabled: boolean
 }) {
   const t = useTranslations('customization')
   const tCommon = useTranslations('common')
   const tRoot = useTranslations()
   const router = useRouter()
   const creating = !def?.id
-  const meta = getRecordType(recordType)
+  const catalog = getRecordType(recordType)
+  const meta = catalog
+    ? recordTypeForFeatureState(catalog, { inventory: inventoryEnabled })
+    : catalog
 
   const initial = useMemo<ListViewConfig>(() => {
     const base = (def?.config as ListViewConfig | undefined) ?? defaultListView(recordType)
