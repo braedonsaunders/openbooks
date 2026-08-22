@@ -121,3 +121,22 @@ test("changeSubscription and prorateFirstInvoice serialize on the subscription r
     "must not treat the create-state schedule as already-prorated",
   );
 });
+
+test("changeSubscription persists quantity and priceOverride through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistSubscriptionMoney");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubscriptionMoney helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /must be an exact decimal/);
+
+  const fn = source.indexOf("export async function changeSubscription");
+  const next = source.indexOf("export async function prorateFirstInvoice");
+  const body = source.slice(fn, next);
+  assert.match(body, /persistSubscriptionMoney\(changes\.quantity \?\? oldQty, "quantity"\)/);
+  assert.match(body, /persistSubscriptionMoney\(changes\.priceOverride, "price override"\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(changes\.quantity/);
+  assert.doesNotMatch(body, /normalizeMoney\(changes\.priceOverride\)/);
+});

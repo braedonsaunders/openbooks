@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { add, mul, mulRatio, neg, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
@@ -30,6 +31,17 @@ export class SubscriptionError extends Error {
   constructor(message: string, readonly status = 422) {
     super(message);
     this.name = "SubscriptionError";
+  }
+}
+
+/** Persist a subscription quantity or price through exact decimal then ledger money. Fail closed. */
+function persistSubscriptionMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubscriptionError(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubscriptionError(`${label} must be an exact decimal`);
   }
 }
 
@@ -600,9 +612,12 @@ export async function changeSubscription(
 
     const oldQty = row.quantity;
     const oldPrice = row.priceOverride ?? row.planAmount;
-    const newQty = normalizeMoney(changes.quantity ?? oldQty);
+    const newQty = persistSubscriptionMoney(changes.quantity ?? oldQty, "quantity");
+    const persistedPriceOverride = changes.priceOverride == null
+      ? null
+      : persistSubscriptionMoney(changes.priceOverride, "price override");
     const newPrice = changes.priceOverride !== undefined
-      ? (changes.priceOverride == null ? row.planAmount : normalizeMoney(changes.priceOverride))
+      ? (persistedPriceOverride ?? row.planAmount)
       : oldPrice;
     const oldFull = mul(oldQty, oldPrice);
     const newFull = mul(newQty, newPrice);
@@ -640,7 +655,7 @@ export async function changeSubscription(
 
     await db.execute(sql`
       update subscriptions set quantity = ${newQty},
-             price_override = ${changes.priceOverride !== undefined ? (changes.priceOverride == null ? null : normalizeMoney(changes.priceOverride)) : row.priceOverride},
+             price_override = ${changes.priceOverride !== undefined ? persistedPriceOverride : row.priceOverride},
              last_invoice_id = coalesce(${invoiceId}, last_invoice_id), updated_at = now()
        where id = ${subscriptionId} and org_id = ${orgId}
     `);
