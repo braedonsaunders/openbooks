@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, schema, withOrg, withOrgContext } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money.ts";
 import { postDocument } from "../posting.ts";
 import { buildNativeContext } from "./native.ts";
 import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
@@ -537,11 +537,11 @@ export async function syncNetSuiteFixedAssets(
         postingPeriodId: document.postingPeriodId ?? null,
         dueDate: document.dueDate,
         currency: document.currency ?? source.baseCurrency,
-        fxRate: document.fxRate ?? "1",
+        fxRate: normalizeDecimal(document.fxRate ?? "1", 10),
         status: "approved",
-        subtotal: document.subtotal ?? "0",
+        subtotal: normalizeMoney(document.subtotal ?? "0"),
         taxTotal: "0",
-        total: document.total ?? "0",
+        total: normalizeMoney(document.total ?? "0"),
         memo: document.memo,
         referenceNumber: document.referenceNumber,
         custom: document.controlAccountId
@@ -557,9 +557,9 @@ export async function syncNetSuiteFixedAssets(
         lineNumber: line.lineNumber,
         accountId: line.accountId,
         itemId: line.itemId,
-        amount: line.amount,
+        amount: normalizeMoney(line.amount),
         taxCodeId: line.taxCodeId,
-        taxAmount: line.taxAmount,
+        taxAmount: normalizeMoney(line.taxAmount),
         taxOverridden: line.taxOverridden,
         partyId: line.partyId ?? null,
         departmentId: line.departmentId,
