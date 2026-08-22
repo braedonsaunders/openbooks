@@ -2317,8 +2317,9 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
       individualName: r.payee,
     };
   });
-  const effectiveDate = new Date(`${run.scheduledFor ?? await businessToday(orgId)}T00:00:00`);
-  const content = buildNachaFile({ settings: settings.settings, effectiveDate, creationDate: new Date(), entries });
+  const today = await businessToday(orgId);
+  const effectiveDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
+  const content = buildNachaFile({ settings: settings.settings, effectiveDate, creationDate: new Date(`${today}T00:00:00`), entries });
   return { filename: `NACHA-${run.runNumber}.ach`, content, runNumber: run.runNumber };
 }
 
