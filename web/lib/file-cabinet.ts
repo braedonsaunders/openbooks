@@ -332,6 +332,7 @@ export async function setGrant(input: {
             ${input.principalId}, ${input.access}, ${input.actorId}, ${input.actorId}, now(), now())
     on conflict (org_id, resource_type, resource_id, principal_type, principal_id)
     do update set access = ${input.access}, updated_by = ${input.actorId}, updated_at = now()
+    where resource_grants.org_id = ${input.orgId}
   `)
 }
 
