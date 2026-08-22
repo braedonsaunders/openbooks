@@ -8,6 +8,7 @@ import {
   markEmailSent,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/email-config.ts'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { mergeAndPrintPdf } from './render'
@@ -78,7 +79,8 @@ export async function sendRecordPdfEmail(args: {
 
   const orgName = (typeof v.org_name === 'string' && v.org_name) || 'OpenBooks'
   const partyName = typeof v.party_name === 'string' && v.party_name ? v.party_name : undefined
-  const attachmentName = `${meta.docTitle}-${record.reference}.pdf`.replace(/\s+/g, '-')
+  const stamp = await businessToday(args.orgId)
+  const attachmentName = `${meta.docTitle}-${record.reference}-${stamp}.pdf`.replace(/\s+/g, '-')
   const rendered = await mergeAndPrintPdf(tpl, record.values)
   const pdf = args.encrypt ? await args.encrypt(rendered) : rendered
   // When the invoice has an active hosted payment link, include it as a
