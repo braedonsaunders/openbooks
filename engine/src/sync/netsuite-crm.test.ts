@@ -51,6 +51,21 @@ test('classifies calls and notes while excluding email activity', () => {
   assert.equal(normalizeNetSuiteRecentActivityNote({ id: '4', typecode: 'Note : 9', subdetails: 'Site visit after an email introduction.' })?.kind, 'event')
 })
 
+test('opportunity insert persists projected_amount through canonicalDecimal then normalizeMoney', () => {
+  const helperStart = crmSource.indexOf('function persistSyncLineMoney')
+  const helperEnd = crmSource.indexOf('\n}', helperStart)
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'persistSyncLineMoney helper is defined')
+  const helper = crmSource.slice(helperStart, helperEnd + 2)
+  assert.match(helper, /canonicalDecimal\(value, 4\)/)
+  assert.match(helper, /normalizeMoney\(exact\)/)
+  assert.match(helper, /must be an exact decimal/)
+
+  const insert = crmSource.indexOf('insert into crm_opportunities')
+  const body = crmSource.slice(insert, insert + 900)
+  assert.match(body, /persistSyncLineMoney\(opportunity\.foreigntotal \|\| '0', 'projected_amount'\)/)
+  assert.doesNotMatch(body, /normalizeMoney\(opportunity\.foreigntotal/)
+})
+
 test('resolves opportunity currencies through configured ISO currencies', () => {
   const sourceCurrencies = new Map([['1', 'CAD'], ['2', 'USD']])
   const configuredCurrencies = new Set(['CAD', 'USD'])

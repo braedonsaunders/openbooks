@@ -4,6 +4,7 @@ import { db } from '../db.ts'
 import { unsealJson } from '../secrets.ts'
 import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../netsuite.ts'
 import { ensureCrmDefaults } from '../crm.ts'
+import { canonicalDecimal } from '../../../web/lib/exact-decimal.ts'
 import { normalizeMoney } from '../money.ts'
 
 export interface CrmImportReport {
@@ -44,6 +45,17 @@ export interface NormalizedNetSuiteRecentActivityNote {
 const sourceText = (value: unknown): string | null => {
   const valueText = value == null ? '' : String(value).trim()
   return valueText || null
+}
+
+/** Persist a NetSuite CRM opportunity amount through exact decimal then ledger money. Fail closed. */
+function persistSyncLineMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new Error(`${label} must be an exact decimal`)
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    throw new Error(`${label} must be an exact decimal`)
+  }
 }
 
 function sourceTimestamp(dateValue: unknown, timeValue?: unknown): string | null {
@@ -336,7 +348,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
       report.warnings.push(`Opportunity ${opportunity.tranid || opportunity.id} was skipped because source currency ${opportunity.currency ?? '(blank)'} does not resolve to a configured ISO currency.`)
       continue
     }
-    await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${date(opportunity.duedate)},${currency},${normalizeMoney(opportunity.foreigntotal || '0')},${normalizeMoney(0)},${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId}`)
+    await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${date(opportunity.duedate)},${currency},${persistSyncLineMoney(opportunity.foreigntotal || '0', 'projected_amount')},${normalizeMoney(0)},${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId}`)
     report.opportunities++
   }
   await importRecentActivityNotes(orgId, actorId, creds, report)
