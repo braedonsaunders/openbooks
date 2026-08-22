@@ -285,9 +285,14 @@ export function normalizeOpeningComponents(
       );
     }
     if (raw === undefined || raw === null || String(raw).trim() === "") continue;
+    const cleaned = String(raw).trim().replace(/[,$]/g, "");
+    const exact = canonicalDecimal(cleaned, 4);
+    if (exact === null) {
+      throw new PayrollError(`${component.name} year-to-date is not an amount: "${String(raw)}"`);
+    }
     let value: string;
     try {
-      value = normalizeMoney(String(raw).trim().replace(/[,$]/g, ""));
+      value = normalizeMoney(exact);
     } catch {
       throw new PayrollError(`${component.name} year-to-date is not an amount: "${String(raw)}"`);
     }
