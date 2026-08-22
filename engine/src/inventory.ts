@@ -2956,10 +2956,11 @@ export async function createTransferOrder(
     const id = order.rows[0].id;
     for (let i = 0; i < input.lines.length; i++) {
       const line = input.lines[i];
+      const lineQuantity = persistReceiptMoney(line.quantity, "transfer order line quantity");
       await tx.execute(sql`
         insert into transfer_order_lines
           (org_id, transfer_order_id, line_number, item_id, quantity, lot_id, serial_id, created_by, updated_by)
-        values (${orgId}, ${id}, ${i + 1}, ${line.itemId}, ${normalizeMoney(line.quantity)},
+        values (${orgId}, ${id}, ${i + 1}, ${line.itemId}, ${lineQuantity},
                 ${line.lotId ?? null}, ${line.serialId ?? null}, ${actorId}, ${actorId})`);
     }
     return { id, documentNumber };
