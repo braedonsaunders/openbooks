@@ -167,14 +167,16 @@ export function controlLineIsOpenItem(
 async function resolveDeferralAccounts(
   runner: Pick<typeof db, "execute">,
   documentId: string,
+  orgId: string,
 ): Promise<Map<string, string>> {
   const r = (await runner.execute<{ line_id: string; deferred_account_id: string }>(sql`
     select dl.id as line_id,
            coalesce(it.deferred_account_id, r.deferred_account_id) as deferred_account_id
       from document_lines dl
-      join items it on it.id = dl.item_id and it.recognition_rule_id is not null
-      join recognition_rules r on r.id = it.recognition_rule_id
+      join items it on it.id = dl.item_id and it.org_id = dl.org_id and it.recognition_rule_id is not null
+      join recognition_rules r on r.id = it.recognition_rule_id and r.org_id = it.org_id
      where dl.document_id = ${documentId}
+       and dl.org_id = ${orgId}
        and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`));
   const map = new Map<string, string>();
   for (const row of r.rows) map.set(row.line_id, row.deferred_account_id);
@@ -206,6 +208,7 @@ async function resolveTaxAccounts(
 async function resolveTaxComponents(
   runner: Pick<typeof db, "execute">,
   documentId: string,
+  orgId: string,
 ): Promise<Map<string, TaxPostingComponent[]>> {
   const result = (await runner.execute<Record<string, any>>(sql`
     select c.document_line_id, c.tax_code_id, c.sequence, c.tax_amount::text,
@@ -213,8 +216,9 @@ async function resolveTaxComponents(
            c.calculation_type, c.collected_account_id, c.paid_account_id,
            c.withholding_account_id
       from document_line_tax_components c
-      join document_lines dl on dl.id = c.document_line_id
+      join document_lines dl on dl.id = c.document_line_id and dl.org_id = c.org_id
      where dl.document_id = ${documentId}
+       and dl.org_id = ${orgId}
      order by c.document_line_id, c.sequence
   `));
   const byLine = new Map<string, TaxPostingComponent[]>();
@@ -1207,13 +1211,13 @@ export async function postDocument(
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
     deps = {
       ...deps,
-      taxComponentsByLine: await resolveTaxComponents(db, doc.id),
+      taxComponentsByLine: await resolveTaxComponents(db, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
-      deferralAccountByLine: await resolveDeferralAccounts(db, doc.id),
+      deferralAccountByLine: await resolveDeferralAccounts(db, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
@@ -1817,13 +1821,13 @@ export async function regenerateGlImpactTx(
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
     deps = {
       ...deps,
-      taxComponentsByLine: await resolveTaxComponents(tx, doc.id),
+      taxComponentsByLine: await resolveTaxComponents(tx, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
     deps = {
       ...deps,
-      deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id),
+      deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id, doc.orgId),
     };
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
