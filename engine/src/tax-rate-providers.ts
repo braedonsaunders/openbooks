@@ -539,7 +539,7 @@ export async function provisionLocaleDepth(
       bandsCreated++;
       await db.execute(sql`
         insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-        values (${orgId}, ${codeId}, ${b.ratePercent}, '2000-01-01', ${actorId}, ${actorId})
+        values (${orgId}, ${codeId}, ${normalizeMoney(b.ratePercent)}, '2000-01-01', ${actorId}, ${actorId})
       `);
     } else {
       const existing = (await db.execute<{ id: string }>(sql`
@@ -553,7 +553,7 @@ export async function provisionLocaleDepth(
         if (!has.rows.length) {
           await db.execute(sql`
             insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, created_by, updated_by)
-            values (${orgId}, ${id}, ${b.ratePercent}, '2000-01-01', ${actorId}, ${actorId})
+            values (${orgId}, ${id}, ${normalizeMoney(b.ratePercent)}, '2000-01-01', ${actorId}, ${actorId})
           `);
         }
       }

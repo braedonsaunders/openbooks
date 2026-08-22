@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg, type SqlExecutor } from "../db.ts";
 import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
+import { normalizeMoney } from "../money.ts";
 import type {
   EntityStream,
   MigrationSource,
@@ -65,6 +66,10 @@ const ref = (m: Map<string, string>, v: unknown): string | null =>
 const str = (v: unknown): string | null => {
   const t = v == null ? "" : String(v);
   return t.trim() === "" ? null : t;
+};
+const moneyOrNull = (v: unknown): string | null => {
+  if (v == null || v === "") return null;
+  return normalizeMoney(v as string | number);
 };
 
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
@@ -503,20 +508,20 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const netDays = Number(f.netDays ?? 30);
     if (id) {
       await db.execute(sql`update payment_terms set name=${name}, net_days=${netDays}, discount_days=${(f.discountDays as number) ?? null},
-        discount_percent=${(f.discountPercent as string) ?? null},
+        discount_percent=${moneyOrNull(f.discountPercent)},
         custom=(${custom}::jsonb || payment_terms.custom)
           || jsonb_build_object(${refKey}, ${rec.sourceRef})
         where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
-      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${(f.discountPercent as string) ?? null}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${moneyOrNull(f.discountPercent)}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 
   if (resource === "time_types") {
     const name = String(f.name ?? `Time type ${rec.sourceRef}`);
-    const mult = String(f.costMultiplier ?? "1");
+    const mult = moneyOrNull(f.costMultiplier) ?? normalizeMoney("1");
     const id = await findByRef("time_types", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
     const ins = (await db.execute(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
@@ -530,7 +535,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const code = String(f.code ?? `TAX-${rec.sourceRef}`);
     const name = String(f.name ?? code);
     const appliesTo = String(f.appliesTo ?? "both");
-    const rate = String(f.ratePercent ?? "0");
+    const rate = moneyOrNull(f.ratePercent) ?? normalizeMoney("0");
     const taxCustom = JSON.stringify({
       [refKey]: rec.sourceRef,
       source: { system: ctx.sourceName, externalId: rec.sourceRef },
@@ -574,8 +579,8 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
 
   if (resource === "items") {
     const name = String(f.name ?? `Item ${rec.sourceRef}`);
-    const defaultCost = typeof f.defaultCost === "string" ? f.defaultCost : null;
-    const defaultRate = typeof f.defaultRate === "string" ? f.defaultRate : null;
+    const defaultCost = moneyOrNull(f.defaultCost);
+    const defaultRate = moneyOrNull(f.defaultRate);
     const unit = str(f.unit);
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
@@ -595,7 +600,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       manager: ref(ctx.maps.parties, f.managerRef), po: str(f.customerPoNumber),
       starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
     };
-    const contractValue = typeof f.contractValue === "string" ? f.contractValue : null;
+    const contractValue = moneyOrNull(f.contractValue);
     const id = await findProjectByRef(orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
@@ -811,9 +816,9 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     const values = b.map((rec) => {
       const f = rec.fields;
       return sql`(${orgId}, ${ref(ctx.maps.parties, f.employeeRef)!}, ${str(f.workedOn) ?? "1970-01-01"},
-        ${str(f.hours) ?? "0"}, ${ref(ctx.maps.time_types, f.timeTypeRef)}, ${ref(ctx.maps.items, f.itemRef)},
+        ${moneyOrNull(f.hours) ?? normalizeMoney("0")}, ${ref(ctx.maps.time_types, f.timeTypeRef)}, ${ref(ctx.maps.items, f.itemRef)},
         ${ref(ctx.maps.projects, f.projectRef)}, ${ref(ctx.maps.departments, f.departmentRef)},
-        ${!!f.isBillable}, ${str(f.costRate)}, ${str(f.billRate)}, 'approved',
+        ${!!f.isBillable}, ${moneyOrNull(f.costRate)}, ${moneyOrNull(f.billRate)}, 'approved',
         ${str(f.billingStatus) === "billed" ? "billed" : "unbilled"},
         ${str(f.costingBasis) === "estimated" ? "estimated" : "actual"},
         ${JSON.stringify({
@@ -897,10 +902,10 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         effectiveBillingStatus !== prior.billingStatus;
       const costingChanged = sourceCostingBasis !== prior.costingBasis;
       const update = (tx: SqlExecutor) =>
-        tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
+        tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${moneyOrNull(f.hours) ?? normalizeMoney("0")},
           time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
           project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
-          is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)},
+          is_billable=${!!f.isBillable}, cost_rate=${moneyOrNull(f.costRate)}, bill_rate=${moneyOrNull(f.billRate)},
           billing_status=${effectiveBillingStatus},
           costing_basis=${sourceCostingBasis},
           custom = custom || ${JSON.stringify({
