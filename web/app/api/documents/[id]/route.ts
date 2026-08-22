@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, can } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { isUuid } from '../../../../lib/list-params'
 import {
   applyDocumentEdit,
   DocumentEditError,
@@ -17,6 +19,8 @@ import {
 } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await getAuthz()
@@ -100,6 +104,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = (await req.json()) as DocumentEditInput
+  // Stored inventory / assembly / kit lines stay. Turning Inventory off must
+  // 404 a write that would persist a new one of those kinds.
+  if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
+    const stored = (await db.execute<{ item_id: string }>(sql`
+      select item_id from document_lines
+       where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
+    const storedIds = new Set(stored.rows.map((row) => row.item_id))
+    for (const line of body.lines) {
+      if (!line.itemId || !isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  }
   try {
     await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: 'ui' })
   } catch (e) {

@@ -18,6 +18,7 @@ import type { OrderKind } from '../lib/order-kinds'
 import { can, type Authz } from '../lib/authz'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveFormLayout } from '../lib/customization/resolve'
+import { isFeatureEnabled } from '../lib/features'
 import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
 import {
   DOC_KINDS,
@@ -26,7 +27,6 @@ import {
   cardOptions,
   createPermission,
   dimensionOptions,
-  itemOptions,
   isDocKindEnabled,
   loadDocument,
   partyOptions,
@@ -78,6 +78,7 @@ export async function loadRelatedTransactionDrawerData({
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
   if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   if (projectId) {
     const related = (await db.execute<{ id: string }>(sql`
       select d.id
@@ -164,7 +165,17 @@ export async function loadRelatedTransactionDrawerData({
     const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, subsidiaries, resolvedForm] = await Promise.all([
       db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
-      db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+      db.execute(sql`
+        select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items
+         where org_id = ${authz.user.orgId} and is_active
+           and (
+             ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+             or id in (
+               select item_id from document_lines
+                where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
+             )
+           )
+         order by name limit 2000`) as any,
       taxCodeOptions(),
       taxGroupOptions(),
       db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
@@ -304,7 +315,17 @@ export async function loadRelatedTransactionDrawerData({
     accountOptions(config),
     config.hasTax ? taxCodeOptions() : Promise.resolve(undefined),
     dimensionOptions(),
-    itemOptions(),
+    db.execute(sql`
+      select id, code, name from items
+       where org_id = ${authz.user.orgId} and is_active
+         and (
+           ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+           or id in (
+             select item_id from document_lines
+              where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
+           )
+         )
+       order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
     config.fundingSource === 'card' ? cardOptions() : Promise.resolve(undefined),
     config.fundingSource === 'bank' || kind === 'transfer' ? bankAccountOptions() : Promise.resolve(undefined),
     visibleSubsidiaries(authz),

@@ -1,8 +1,11 @@
 import { getTranslations } from 'next-intl/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { RecordListView } from '../../../../components/record-list-view'
 import { requirePermission, can } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { buildListDrawerHref, pickString } from '../../../../lib/list-params'
 import {
   BANK_KINDS,
@@ -11,7 +14,6 @@ import {
   bankAccountOptions,
   cardOptions,
   dimensionOptions,
-  itemOptions,
   loadDocument,
   taxCodeOptions,
   taxGroupOptions,
@@ -45,6 +47,7 @@ export default async function BankingTransactions({
 }) {
   const authz = await requirePermission('banking.read')
   const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const sp = await searchParams
@@ -65,7 +68,17 @@ export default async function BankingTransactions({
         taxCodeOptions(),
         taxGroupOptions(),
         dimensionOptions(),
-        itemOptions(),
+        db.execute(sql`
+          select id, code, name from items
+           where org_id = ${authz.user.orgId} and is_active
+             and (
+               ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+               or id in (
+                 select item_id from document_lines
+                  where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
+               )
+             )
+           order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
         cardOptions(),
         bankAccountOptions(),
         loadFieldDefs('documents', openKind!),

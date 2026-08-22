@@ -1,6 +1,8 @@
 import { getTranslations } from 'next-intl/server'
 import Link from 'next/link'
 import { ScanLine } from 'lucide-react'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { RecordListView } from '../../../../components/record-list-view'
@@ -14,13 +16,13 @@ import {
   DOC_KINDS,
   accountOptions,
   dimensionOptions,
-  itemOptions,
   loadDocument,
   partyOptions,
   taxCodeOptions,
   taxGroupOptions,
 } from '../../../../lib/documents'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 
@@ -45,6 +47,7 @@ export default async function ApBills({
 }) {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
+  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const t = await getTranslations('ap')
   const tCommon = await getTranslations('common')
   const sp = await searchParams
@@ -92,7 +95,17 @@ export default async function ApBills({
           taxCodeOptions(),
           taxGroupOptions(),
           dimensionOptions(),
-          itemOptions(),
+          db.execute(sql`
+            select id, code, name from items
+             where org_id = ${authz.user.orgId} and is_active
+               and (
+                 ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+                 or id in (
+                   select item_id from document_lines
+                    where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null
+                 )
+               )
+             order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
