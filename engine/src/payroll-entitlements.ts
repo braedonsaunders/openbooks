@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import {
@@ -1262,9 +1263,15 @@ export async function saveEntitlementOpenings(input: {
           continue;
         }
 
+        const cleaned = String(raw ?? "").trim().replace(/[,$]/g, "") || "0";
+        const exact = canonicalDecimal(cleaned, 4);
+        if (exact === null) {
+          fail(`${plan.code} carry-in is not an amount: "${String(raw)}"`);
+          continue;
+        }
         let value: string;
         try {
-          value = normalizeMoney(String(raw ?? "").trim().replace(/[,$]/g, "") || "0");
+          value = normalizeMoney(exact);
         } catch {
           fail(`${plan.code} carry-in is not an amount: "${String(raw)}"`);
           continue;
