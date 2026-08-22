@@ -1505,9 +1505,9 @@ export async function runSync(
                 currency: doc.currency ?? source.baseCurrency,
                 fxRate: normalizeDecimal(doc.fxRate ?? "1", 10),
                 status: "draft",
-                subtotal: normalizeMoney(doc.subtotal ?? "0"),
+                subtotal: persistSyncLineMoney(doc.subtotal ?? "0", "subtotal"),
                 taxTotal: "0",
-                total: normalizeMoney(doc.total ?? "0"),
+                total: persistSyncLineMoney(doc.total ?? "0", "total"),
                 memo: doc.memo,
                 referenceNumber: doc.referenceNumber,
                 custom: doc.controlAccountId
