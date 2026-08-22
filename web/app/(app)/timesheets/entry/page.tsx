@@ -31,7 +31,7 @@ export default async function TimesheetEntry({
   let employeeId = employeeParam && isUuid(employeeParam) ? employeeParam : null
   if (!employeeId) employeeId = await userEmployeeId(authz.user.orgId, authz.user.id)
 
-  const week = weekParam && isIsoDate(weekParam) ? weekStart(weekParam) : currentWeekStart()
+  const week = weekParam && isIsoDate(weekParam) ? weekStart(weekParam) : await currentWeekStart(authz.user.orgId)
 
   redirect(employeeId ? `/timesheets?timesheet=${employeeId}:${week}` : '/timesheets')
 }

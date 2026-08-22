@@ -48,7 +48,7 @@ export default async function Timesheets({
   const myEmployee = canManage ? await userEmployeeId(orgId, authz.user.id) : null
   const newTarget = myEmployee ?? employees.rows[0]?.id ?? null
   const newHref = newTarget
-    ? (`/timesheets?timesheet=${newTarget}:${currentWeekStart()}` as const)
+    ? (`/timesheets?timesheet=${newTarget}:${await currentWeekStart(orgId)}` as const)
     : ('/timesheets' as const)
 
   // Flyout: ?timesheet=<employeeId>:<weekStart>, the id the list emits.

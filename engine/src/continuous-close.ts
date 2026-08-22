@@ -310,7 +310,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
            (r.statement_balance - coalesce((
              select sum(jl.amount)
                from journal_lines jl
-               join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
+               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
               where jl.org_id = r.org_id and jl.account_id = r.account_id
                 and (jl.reconciled_at is not null or exists (
                   select 1 from reconciliation_matches m

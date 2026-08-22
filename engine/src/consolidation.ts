@@ -120,7 +120,7 @@ export async function runOwnershipConsolidation(
         select oce.interest_id, je.id, je.entry_number
           from ownership_consolidation_entries oce
           join ownership_consolidation_runs r on r.id=oce.run_id and r.period_id=${periodId}
-          join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
+          join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
          where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
            and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted')
       `));
@@ -133,8 +133,8 @@ export async function runOwnershipConsolidation(
         const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
           select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
                  coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
-           from journal_lines l join journal_entries e on e.id=l.entry_id
-            join accounts a on a.id=l.account_id
+           from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
+            join accounts a on a.id=l.account_id and a.org_id=l.org_id
            where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
              and e.period_id=${periodId}
         `));
@@ -144,14 +144,14 @@ export async function runOwnershipConsolidation(
         if (interest.method === "full") {
           const acquisitionExists = (await tx.execute(sql`
             select 1 from ownership_consolidation_entries oce
-             join journal_entries je on je.id=oce.journal_entry_id and je.status='posted'
+             join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
             where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
               and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.status='posted') limit 1
           `));
           if (!acquisitionExists.rows[0] && interest.acquisition_date <= period.ends_on) {
             const equity = (await tx.execute<{ account_id: string; amount: string }>(sql`
               select l.account_id,coalesce(sum(l.amount),0)::text as amount
-                from journal_lines l join journal_entries e on e.id=l.entry_id
+                from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
                 join accounts a on a.id=l.account_id and a.type='equity'
                where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
                  and e.posting_date <= ${interest.acquisition_date}
@@ -317,8 +317,8 @@ export async function runAutoElimination(
            bool_or(source_sub.base_currency <> ${elim.baseCurrency}
                    and consolidated.current_rate is null) as "missingRate"
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id
-      join accounts a on a.id = l.account_id
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join subsidiaries source_sub on source_sub.id = l.subsidiary_id
       left join consolidated_fx_rates consolidated
         on consolidated.org_id = e.org_id

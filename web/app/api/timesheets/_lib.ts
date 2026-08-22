@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add } from '@openbooks/engine/src/money.ts'
 import {
@@ -46,10 +47,9 @@ export function weekStart(iso: string): string {
   return toIso(d)
 }
 
-/** The current week's Sunday, as an ISO date string. */
-export function currentWeekStart(): string {
-  const now = new Date()
-  return weekStart(toIso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 12))))
+/** The current week's Sunday on the org business calendar. */
+export async function currentWeekStart(orgId: string): Promise<string> {
+  return weekStart(await businessToday(orgId))
 }
 
 /** The seven ISO dates Sun…Sat for the week that `sundayIso` starts. */

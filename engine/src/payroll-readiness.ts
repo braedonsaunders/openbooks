@@ -1131,7 +1131,7 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
       left join lateral (
         select sum(jl.amount) as amount
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
          where jl.org_id = a.org_id and jl.account_id = a.id) bal on true
      where a.org_id = ${orgId} and a.is_active and not a.is_summary and a.type = 'asset_bank'
      order by a.number nulls last, a.name

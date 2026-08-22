@@ -835,7 +835,7 @@ async function periodFingerprint(
       (select count(*) from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entries,
       (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as entry_changed,
       (select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text
-         from journal_lines l join journal_entries e on e.id = l.entry_id
+         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as debits,
       (select count(*) from documents d
        where d.org_id = ${orgId}
@@ -1111,13 +1111,13 @@ async function readinessChecks(
                 and bsl.posted_on between ${ctx.starts_on} and ${ctx.ends_on}
            )
            or exists (
-             select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id
+             select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
               where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
                 and je.book_id=${ctx.book_id} and je.status in ('posted','reversed')
            )
            or coalesce((
              select sum(jl.amount) from journal_lines jl
-             join journal_entries je on je.id=jl.entry_id
+             join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
              join accounting_periods jp on jp.id=je.period_id
               where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
                 and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
@@ -1138,7 +1138,7 @@ async function readinessChecks(
       select count(*) as count
         from (
           select distinct l.currency
-            from journal_lines l join journal_entries e on e.id = l.entry_id
+            from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id}
              and l.currency <> ${ctx.base_currency}
         ) c
@@ -1150,7 +1150,7 @@ async function readinessChecks(
       select count(*) as count from (
         select l.subsidiary_id, l.currency
           from journal_lines l
-          join journal_entries e on e.id = l.entry_id
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounting_periods ep on ep.id = e.period_id and ep.org_id = e.org_id
           join accounts a on a.id = l.account_id
           join subsidiaries s on s.id = l.subsidiary_id
@@ -1184,7 +1184,7 @@ async function readinessChecks(
       select count(*) as count from (
         select a.id
           from journal_lines l
-          join journal_entries e on e.id = l.entry_id
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           join accounts a on a.id = l.account_id and a.eliminate
          where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
          group by a.id
@@ -1203,7 +1203,7 @@ async function readinessChecks(
   const variances = (await db.execute<{ count: string }>(sql`
     with current_activity as (
       select l.account_id, sum(l.amount) as amount
-        from journal_lines l join journal_entries e on e.id = l.entry_id
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
        group by l.account_id
     ), prior_period as (
@@ -1212,7 +1212,7 @@ async function readinessChecks(
        order by p2.ends_on desc limit 1
     ), prior_activity as (
       select l.account_id, sum(l.amount) as amount
-        from journal_lines l join journal_entries e on e.id = l.entry_id
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = (select id from prior_period)
          and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
        group by l.account_id

@@ -506,7 +506,7 @@ export async function loadPaymentTraces(args: {
            -- non-open-item legs so cheques, EFT and card runs all measure alike.
            coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as cash
       from documents d
-      join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id
      where d.org_id = ${args.orgId} and d.kind = 'vendor_payment' and d.status = 'posted'
        and d.document_date between ${from} and ${to}
@@ -525,16 +525,16 @@ export async function loadPaymentTraces(args: {
     with paid as (
       select d.id as payment_id, jl.id as line_id
         from documents d
-        join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+        join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.is_open_item
        where d.org_id = ${args.orgId} and d.id = any(${`{${paymentIds.join(',')}}`}::uuid[])
     )
     select paid.payment_id, bill.id as bill_id, sum(a.amount) as applied
       from paid
       join applications a on a.from_line_id = paid.line_id and a.unapplied_at is null
-      join journal_lines target on target.id = a.to_line_id
-      join journal_entries bje on bje.id = target.entry_id
-      join documents bill on bill.id = bje.source_document_id
+      join journal_lines target on target.id = a.to_line_id and target.org_id = a.org_id
+      join journal_entries bje on bje.id = target.entry_id and bje.org_id = target.org_id
+      join documents bill on bill.id = bje.source_document_id and bill.org_id = bje.org_id
      where a.org_id = ${args.orgId}
      group by paid.payment_id, bill.id
   `));
