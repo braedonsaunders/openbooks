@@ -1187,7 +1187,7 @@ export async function payRunChanges(orgId: string, documentId: string): Promise<
       select distinct on (s.employee_party_id)
              s.employee_party_id, s.id, s.gross, s.net_pay, s.pay_date::text as pay_date
         from pay_stubs s
-        join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
        where s.org_id = ${orgId} and s.pay_run_document_id <> ${documentId}
        order by s.employee_party_id, s.pay_date desc, s.id desc
     )
