@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { addCalendarDays, businessToday } from "./business-date.ts";
+import { addCalendarDays, businessToday, parseIsoDate } from "./business-date.ts";
 import { db, schema, withBypassContext, withOrg, withOrgContext } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
@@ -263,6 +263,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
           threshold,
           oldestDate: row.oldest_date,
           count: Number(row.line_count),
+          now: parseIsoDate(today),
           criticalAgeDays: unmatchedPolicy.parameters.criticalAgeDays,
           criticalItemCount: unmatchedPolicy.parameters.criticalItemCount,
           criticalMaterialityMultiple: unmatchedPolicy.parameters.criticalMaterialityMultiple,
