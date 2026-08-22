@@ -181,6 +181,23 @@ test("releaseVendorRetainage persists amount through canonicalDecimal then norma
   assert.doesNotMatch(body, /normalizeMoney\(input\.amount\)/);
 });
 
+test("createSubcontractPaymentControl persists amountLimit through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistSubcontractPaymentControlAmountLimit");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractPaymentControlAmountLimit helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export async function createSubcontractPaymentControl");
+  const next = source.indexOf("export async function releaseSubcontractPaymentControl");
+  const body = source.slice(start, next);
+  assert.match(body, /persistSubcontractPaymentControlAmountLimit\(input\.amountLimit\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.amountLimit\)/);
+});
+
 test("deductive change cannot erase earned work", () => {
   assert.equal(revisedSubcontractSovValue("1000", "-200", "750"), "800.0000");
   assert.throws(
