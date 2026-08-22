@@ -1,6 +1,7 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sendVia } from '@openbooks/emails'
 import {
@@ -68,7 +69,8 @@ export async function sendTicketForSignature(args: {
     `</div>`
   const text = `${orgName} — field ticket ${row.document_number}\n\n${args.message ?? ''}\n\nReview and sign: ${signUrl}\n(The link is valid for 14 days.)`
 
-  const attachmentName = `Field-Ticket-${row.document_number}.pdf`
+  const stamp = await businessToday(args.orgId)
+  const attachmentName = `Field-Ticket-${row.document_number}-${stamp}.pdf`
   const pdf = await mergeAndPrintPdf(tpl, record.values)
 
   const logId = await insertEmailLog({
