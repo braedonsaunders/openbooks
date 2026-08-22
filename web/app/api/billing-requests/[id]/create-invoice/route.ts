@@ -18,6 +18,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const result = await generateInvoiceFromBillingRequest(gate.user.orgId, gate.user.id, id)
     return NextResponse.json({ documentId: result.id, documentNumber: result.documentNumber })
   } catch (e) {
+    if (e instanceof BillingError && e.message === 'Inventory is disabled') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     const status = e instanceof BillingError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
