@@ -110,20 +110,20 @@ export function validateCustomValues(
         break
       }
       case 'number': {
-        const n = Number(raw)
-        if (Number.isNaN(n)) {
-          errors[def.key] = `${def.label} must be a number`
+        const exact = canonicalDecimal(raw, 4)
+        if (exact === null) {
+          errors[def.key] = `${def.label} must be an exact decimal`
           break
         }
-        if (def.config.min != null && n < def.config.min) {
+        if (def.config.min != null && compareDecimal(exact, String(def.config.min)) < 0) {
           errors[def.key] = `${def.label} must be ≥ ${def.config.min}`
           break
         }
-        if (def.config.max != null && n > def.config.max) {
+        if (def.config.max != null && compareDecimal(exact, String(def.config.max)) > 0) {
           errors[def.key] = `${def.label} must be ≤ ${def.config.max}`
           break
         }
-        cleaned[def.key] = n
+        cleaned[def.key] = exact
         break
       }
       case 'date': {
