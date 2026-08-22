@@ -29,6 +29,22 @@ test("project financial adjustments are immutable controlled evidence", () => {
   assert.match(service, /evidence_matches/i);
 });
 
+test("recordProjectFinancialAdjustment persists amount through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = service.indexOf("function persistProjectFinancialAdjustmentAmount");
+  const helperEnd = service.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistProjectFinancialAdjustmentAmount helper is defined");
+  const helper = service.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /must be an exact decimal/);
+
+  const start = service.indexOf("export async function recordProjectFinancialAdjustment");
+  const next = service.indexOf("export async function reverseProjectFinancialAdjustment");
+  const body = service.slice(start, next);
+  assert.match(body, /persistProjectFinancialAdjustmentAmount\(input\.amount\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.amount\)/);
+});
+
 test("project financial adjustments preserve explicit derived reconciliation", () => {
   assert.match(resolver, /from project_financial_adjustments/i);
   assert.match(resolver, /actual_cost_adjustment/)

@@ -1,8 +1,20 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db } from "./db.ts";
 import { isZero, neg, normalizeMoney } from "./money.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Persist leftover project-financial-adjustment amounts through exact decimal then ledger money. Fail closed. */
+function persistProjectFinancialAdjustmentAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("project financial adjustment amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("project financial adjustment amount must be an exact decimal");
+  }
+}
 const MEASURES = new Set([
   "actual_cost",
   "invoiced_to_date",
@@ -56,7 +68,7 @@ export async function recordProjectFinancialAdjustment(
   if (!MEASURES.has(input.measure)) {
     throw new Error("unsupported project financial adjustment measure");
   }
-  const amount = normalizeMoney(input.amount);
+  const amount = persistProjectFinancialAdjustmentAmount(input.amount);
   if (isZero(amount)) {
     throw new Error("project financial adjustment cannot be zero");
   }
