@@ -752,6 +752,46 @@ test('the surfaces this test was written for are covered', () => {
     /status: 404/,
     'recurring run-now must 404 — not mint — when the template kind is off',
   )
+  assert.match(
+    read('lib/api/registry-data.ts'),
+    /ITEM_REVENUE_RECOGNITION_COLUMNS/,
+    'REST/MCP items catalog must name the revenue-recognition columns the Features switch hides',
+  )
+  assert.match(
+    read('lib/api/schema-registry.ts'),
+    /revenueRecognitionOn[\s\S]{0,200}ITEM_REVENUE_RECOGNITION_COLUMNS/,
+    'REST/MCP items catalog must hide revenue-recognition columns when the feature is off',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /refuseDisabledItemRevenueRecognition\(/,
+    'REST/MCP item writes must refuse revenue-recognition columns when the feature is off',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /isFeatureEnabled\(user\.orgId, 'revenueRecognition'\)/,
+    'item catalog PATCH must refuse revenue-recognition fields when the feature is off',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /status: 404/,
+    'item catalog PATCH must 404 — not persist — revenue-recognition fields when the feature is off',
+  )
+  assert.match(
+    read('app/(app)/items/page.tsx'),
+    /revenueRecognitionEnabled\s*\?\s*[\s\S]{0,160}recognition_rules/,
+    'the items page must not load recognition rules when Revenue Recognition is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /fairValuePrices[\s\S]{0,120}recognitionRuleId/,
+    'the item drawer must not send revenue-recognition fields when Revenue Recognition is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /\{fairValuePrices \? <section/,
+    'the item drawer must hide the revenue-recognition section when the feature is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

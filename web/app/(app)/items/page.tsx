@@ -81,9 +81,11 @@ export default async function Items({
             sql`select id, code, name from tax_codes where org_id = ${orgId} and is_active order by code`,
           ) as any,
           loadFieldDefs('items'),
-          db.execute(
-            sql`select id, code, name from recognition_rules where org_id = ${orgId} and is_active and not is_forecast order by code`,
-          ) as any,
+          revenueRecognitionEnabled
+            ? db.execute(
+                sql`select id, code, name from recognition_rules where org_id = ${orgId} and is_active and not is_forecast order by code`,
+              ) as any
+            : Promise.resolve({ rows: [] }),
         ])
       : null,
   ])
