@@ -114,8 +114,8 @@ export async function loadRelatedTransactionDrawerData({
 
     const side = PAYMENT_KIND_SIDE[paymentKind]
     const partyFilter = side === 'ap'
-      ? sql`exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.is_active)`
-      : sql`exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.is_active)`
+      ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
+      : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
     const [parties, banks, resolvedForm] = await Promise.all([
       db.execute(sql`
         select id, display_name from parties p
@@ -159,8 +159,8 @@ export async function loadRelatedTransactionDrawerData({
     const order = await loadOrder(id, authz.user.orgId, orderKind)
     if (!order || !canSeeDocument(order.doc as Record<string, any>, partyId, authz)) return null
     const roleCondition = orderKind === 'purchase_order'
-      ? sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active)`
-      : sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active)`
+      ? sql`exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
+      : sql`exists (select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
     const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, subsidiaries, resolvedForm] = await Promise.all([
       db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
@@ -212,7 +212,7 @@ export async function loadRelatedTransactionDrawerData({
       db.execute(sql`
         select p.id, p.display_name from parties p
          where p.org_id = ${authz.user.orgId} and p.is_active
-           and exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active)
+           and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
          order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`) as any,
       taxCodeOptions(),
