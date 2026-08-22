@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db, schema, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
@@ -51,6 +52,19 @@ export class JournalWriteError extends Error {
   readonly name = "JournalWriteError";
 }
 
+/** Persist leftover journal-line amounts through exact decimal then ledger money. Fail closed. */
+function persistJournalLineAmount(value: unknown, line: number): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new JournalWriteError(`line ${line}: amount must be a nonzero number with at most 4 decimal places`);
+  }
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new JournalWriteError(`line ${line}: amount must be a nonzero number with at most 4 decimal places`);
+  }
+}
+
 const MAX_LINES = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -85,12 +99,7 @@ export function validateJournalInput(input: ScriptJournalInput): {
   const amounts: string[] = [];
   const debits: string[] = [];
   const lines = input.lines.map((l, i) => {
-    let amount: string;
-    try {
-      amount = normalizeMoney(l.amount);
-    } catch {
-      throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number with at most 4 decimal places`);
-    }
+    const amount = persistJournalLineAmount(l.amount, i + 1);
     if (isZero(amount)) throw new JournalWriteError(`line ${i + 1}: amount must be a nonzero number`);
     if (cmp(abs(amount), "10000000000000.0000") > 0) throw new JournalWriteError(`line ${i + 1}: amount out of range`);
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
