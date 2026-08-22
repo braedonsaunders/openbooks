@@ -726,7 +726,8 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
   await db.execute(sql`
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})
-    on conflict (party_id) do update set ${sql.join(setList, sql`, `)}`);
+    on conflict (party_id) do update set ${sql.join(setList, sql`, `)}
+    where org_id = ${orgId}`);
 }
 
 async function auditTimeBillingChange(

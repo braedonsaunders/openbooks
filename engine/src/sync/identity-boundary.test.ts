@@ -23,6 +23,13 @@ test("connector identity is adapter-scoped and has no cross-source fallback", ()
   assert.doesNotMatch(loader, /findPartyByRef[\s\S]{0,500}custom->'source'/);
 });
 
+test("role upserts pin the known tenant on the party_id conflict write", () => {
+  assert.match(
+    loader,
+    /on conflict \(party_id\) do update set[\s\S]*?where org_id = \$\{orgId\}/,
+  );
+});
+
 test("loaded entities retain canonical source identity alongside the adapter key", () => {
   assert.match(loader, /\[refKey\]: rec\.sourceRef/);
   assert.match(
