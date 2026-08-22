@@ -103,8 +103,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       docType: (kind) =>
         accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
     })
+    const stamp = await businessToday(gate.user.orgId)
     const filename = safeName(
-      `${result.account.number ?? result.account.name}-register-${await businessToday(gate.user.orgId)}`,
+      `${result.account.number ?? result.account.name}-register-${stamp}`,
     )
     const format = requestedFormat as AccountRegisterExportFormat
     if (format === 'csv') {
@@ -127,7 +128,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       marginMm: 12,
       density: 'compact',
     })
-    return pdfResponse(await exportDataToPdf(data, branding, page), filename)
+    return pdfResponse(await exportDataToPdf(data, branding, page, {
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    }), filename)
   }
 
   const result = await accountRegister(
