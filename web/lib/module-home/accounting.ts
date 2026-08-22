@@ -45,7 +45,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
         left join lateral (
           select count(*) as total,
                  count(*) filter (where ct.status in ('complete', 'approved')) as done
-            from close_run_tasks ct where ct.run_id = r.id) t on true
+            from close_run_tasks ct where ct.run_id = r.id and ct.org_id = r.org_id) t on true
        where r.org_id = ${orgId}
        order by r.created_at desc
        limit 1
