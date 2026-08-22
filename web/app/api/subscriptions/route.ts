@@ -116,8 +116,14 @@ export async function POST(req: Request) {
         // firstBillOn is when the first FULL cycle bills; if it's after the start
         // and proration is requested, we bill the partial [start, firstBillOn] now.
         const firstBillOn = body.firstBillOn || startOn;
-        const quantity = canonicalDecimal(body.quantity ?? "1", 4);
-        if (quantity === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+        const quantityRaw = canonicalDecimal(body.quantity ?? "1", 4);
+        if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+        let quantity: string;
+        try {
+          quantity = normalizeMoney(quantityRaw);
+        } catch {
+          return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+        }
         const priceOverride =
           body.priceOverride != null && body.priceOverride !== ""
             ? canonicalDecimal(body.priceOverride, 4)
