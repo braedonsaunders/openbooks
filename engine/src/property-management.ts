@@ -349,7 +349,7 @@ export async function deleteManagedProperty(orgId: string, actorId: string, prop
 
 export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
-  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : normalizeMoney(input.rentableArea);
+  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : exactMoney(input.rentableArea, "Rentable area");
   if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
