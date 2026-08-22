@@ -174,7 +174,18 @@ export async function POST(req: Request) {
     if (rateRaw === null || compareDecimal(rateRaw, '0') < 0) return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
     const rate = normalizeMoney(rateRaw)
     const basis = body.basis === 'year' ? 'year' : 'hour'
-    const annualHours = Number(body.annualHours) > 0 ? Number(body.annualHours) : 2080
+    const annualHoursRaw = body.annualHours == null || body.annualHours === ''
+      ? '2080'
+      : canonicalDecimal(body.annualHours, 4)
+    if (annualHoursRaw === null || compareDecimal(annualHoursRaw, '0') <= 0) {
+      return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+    }
+    let annualHours: string
+    try {
+      annualHours = normalizeMoney(annualHoursRaw)
+    } catch {
+      return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+    }
     const effectiveFrom = body.effectiveFrom
     if (!DATE_RE.test(effectiveFrom ?? '')) return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
 
