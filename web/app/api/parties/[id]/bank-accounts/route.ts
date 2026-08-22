@@ -175,6 +175,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
              error = null,
              finished_at = now()
        where id = any(${`{${runIds.join(',')}}`}::uuid[])
+         and org_id = ${user.orgId}
          and status = 'waiting'
     `)
   }
