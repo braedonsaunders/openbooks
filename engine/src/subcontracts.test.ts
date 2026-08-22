@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   SubcontractError,
@@ -50,6 +51,24 @@ test("vendor application prevents stored-material double pay and overbilling", (
     materialsStoredCurrent: "0",
     retainagePercent: "10",
   }]), /exceeds the revised SOV value/);
+});
+
+test("createSubcontract persists originalCommitment through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistSubcontractOriginalCommitment");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractOriginalCommitment helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export async function createSubcontract");
+  const next = source.indexOf("export async function updateDraftSubcontract");
+  const body = source.slice(start, next);
+  assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.originalCommitment\)/);
+  assert.match(body, /normalizeMoney\(input\.defaultRetainagePercent \?\? "10"\)/);
 });
 
 test("deductive change cannot erase earned work", () => {

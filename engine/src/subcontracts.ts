@@ -1,9 +1,21 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { businessToday } from "./business-date.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "./money.ts";
 
 export class SubcontractError extends Error {}
+
+/** Persist leftover create-path original commitment through exact decimal then ledger money. Fail closed. */
+function persistSubcontractOriginalCommitment(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("original commitment must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("original commitment must be an exact decimal");
+  }
+}
 
 export interface VendorApplicationLineInput {
   sovLineId: string;
@@ -164,7 +176,7 @@ export async function createSubcontract(input: {
 }): Promise<{ id: string }> {
   const number = input.number.trim();
   const title = input.title.trim();
-  const original = normalizeMoney(input.originalCommitment);
+  const original = persistSubcontractOriginalCommitment(input.originalCommitment);
   const retainage = normalizeMoney(input.defaultRetainagePercent ?? "10");
   if (!number || !title || cmp(original, "0") <= 0) {
     throw new SubcontractError("Number, title, and a positive original commitment are required");
