@@ -460,13 +460,13 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   async function addItemLine() {
     if (!lineItem) return toast.error(t('editor.lines.itemRequired'))
-    if (!Number.isInteger(Number(lineQty)) || Number(lineQty) < 1) return
+    if (!/^[1-9]\d*$/.test(String(lineQty).trim())) return
     // The quote uses the selected project and period. Persist that context
     // before stamping the identical rate-unit snapshot on the new line.
     if (headerDirty && !(await saveHeader())) return
     if (await call(
       'POST',
-      { action: 'add-line', itemId: lineItem, quantity: Number(lineQty), rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null,
+      { action: 'add-line', itemId: lineItem, quantity: lineQty, rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null,
         employeeId: (lineEquipment && lineOperator) || null },
       { preserveDraft: true },
     )) {

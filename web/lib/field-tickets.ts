@@ -258,6 +258,22 @@ function exactTicketHours(value: unknown): string | null {
   return hours
 }
 
+/** Exact numeric(19,4) quantity for a ticket item line. Whole units only. */
+function exactTicketQuantity(value: unknown): string {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) throw new FieldTicketError('Quantity must be a positive whole number')
+  let quantity: string
+  try {
+    quantity = normalizeMoney(exact)
+  } catch {
+    throw new FieldTicketError('Quantity must be a positive whole number')
+  }
+  if (cmp(quantity, '0') <= 0 || !quantity.endsWith('.0000')) {
+    throw new FieldTicketError('Quantity must be a positive whole number')
+  }
+  return quantity
+}
+
 /**
  * Sync the crew grid onto time_entries: one row per employee × item × time
  * type × day. Upserts changed hours, deletes cleared cells. Draft tickets only.
@@ -343,7 +359,7 @@ export async function addTicketLine(
   userId: string,
   ticketId: string,
   input: {
-    itemId: string; quantity: number; rateUnitCode?: string | null; equipmentUnitId?: string | null
+    itemId: string; quantity: string | number; rateUnitCode?: string | null; equipmentUnitId?: string | null
     /** The crew member who ran this unit. See ChargeLineInput.employeeId — the
      * ticket is where somebody actually knows, because they are standing in
      * front of the machine while they fill it in. */
@@ -356,8 +372,7 @@ export async function addTicketLine(
   const item = (await db.execute<{ id: string; name: string; unit: string | null; default_rate: string | null; default_cost: string | null }>(sql`
     select id, name, unit, default_rate, default_cost from items where id = ${input.itemId} and org_id = ${orgId}`))
   if (!item.rows[0]) throw new FieldTicketError('Item not found')
-  const qty = Number(input.quantity)
-  if (!Number.isInteger(qty) || qty <= 0) throw new FieldTicketError('Quantity must be a positive whole number')
+  const quantity = exactTicketQuantity(input.quantity)
 
   if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
   if (input.equipmentUnitId) {
@@ -390,7 +405,6 @@ export async function addTicketLine(
     if (!crew.rows[0]) throw new FieldTicketError('The operator must be on this ticket’s crew')
   }
 
-  const quantity = String(qty)
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>
   try {
     resolved = await resolveItemRate({
