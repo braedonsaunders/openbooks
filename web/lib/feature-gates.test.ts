@@ -893,6 +893,36 @@ test('the surfaces this test was written for are covered', () => {
     'the item drawer must hide show-on-timesheet when Time Tracking is off',
   )
   assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /kind !== undefined[\s\S]{0,80}inventory/,
+    'item catalog PATCH must refuse inventory kinds when Inventory is off — existing kinds stay',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS[\s\S]{0,200}status: 404/,
+    'item catalog PATCH must 404 — not persist — inventory kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /inventoryCosting \|\| !INVENTORY_KINDS\.has\(kind\)/,
+    'the item drawer must not send inventory kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /inventoryCosting \|\| !INVENTORY_KINDS\.has\(k\)/,
+    'the item drawer must hide inventory kinds when Inventory is off',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /refuseDisabledItemInventoryKind\(/,
+    'REST/MCP item writes must refuse inventory kinds when Inventory is off — existing kinds stay',
+  )
+  assert.match(
+    read('lib/api/writers.ts'),
+    /async function refuseDisabledItemInventoryKind[\s\S]{0,500}err\(404/,
+    'REST/MCP item writes must 404 — not persist — inventory kinds when Inventory is off',
+  )
+  assert.match(
     read('app/api/equipment/[id]/capitalize/route.ts'),
     /isFeatureEnabled\([^,]+, 'fixedAssets'\)/,
     'equipment capitalize must not write fixed-asset rows when Fixed Assets is off — existing units stay',

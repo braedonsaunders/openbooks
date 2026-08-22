@@ -258,14 +258,39 @@ async function refuseDisabledItemTimeTracking(
   return err(404, "not found");
 }
 
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+async function refuseDisabledItemInventoryKind(
+  orgId: string,
+  table: string,
+  columns: Record<string, unknown>,
+  itemId?: string,
+): Promise<WriteResult | null> {
+  if (table !== "items" || columns.kind === undefined) return null;
+  if (await isFeatureEnabled(orgId, "inventory")) return null;
+  const nextKind = String(columns.kind);
+  if (INVENTORY_ITEM_KINDS.has(nextKind)) return err(404, "not found");
+  if (!itemId) return null;
+  const existing = (await db.execute<{ kind: string }>(sql`
+    select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
+  `)) as { rows: Array<{ kind: string }> };
+  const storedKind = existing.rows[0]?.kind;
+  if (storedKind && INVENTORY_ITEM_KINDS.has(storedKind) && nextKind !== storedKind) {
+    return err(404, "not found");
+  }
+  return null;
+}
+
 async function refuseDisabledItemFeatureColumns(
   orgId: string,
   table: string,
   columns: Record<string, unknown>,
+  itemId?: string,
 ): Promise<WriteResult | null> {
   return (
     (await refuseDisabledItemRevenueRecognition(orgId, table, columns)) ??
-    (await refuseDisabledItemTimeTracking(orgId, table, columns))
+    (await refuseDisabledItemTimeTracking(orgId, table, columns)) ??
+    (await refuseDisabledItemInventoryKind(orgId, table, columns, itemId))
   );
 }
 
@@ -325,7 +350,7 @@ async function updateEntity(
     select custom from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`)) as any;
   if (!existing.rows[0]) return err(404, "not found");
 
-  const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body);
+  const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body, id);
   if (gated) return gated;
   const v = validateEntityBody(fields, body, { stage: "update" });
   if (!v.ok) return err(422, v.errors[0]!.message, { fieldErrors: v.errors });
