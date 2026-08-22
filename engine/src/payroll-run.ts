@@ -2437,7 +2437,7 @@ async function calculateStub(
       const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
         select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
           from pay_stubs s
-          join pay_runs r on r.document_id = s.pay_run_document_id
+          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
            and s.tax_year = ${taxYear}
            and (r.run_status in ('calculated', 'committed')
