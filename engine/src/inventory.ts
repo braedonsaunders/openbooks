@@ -3370,11 +3370,13 @@ export async function postLandedCostVoucher(
       const r = resolved[i];
       const share = shares[i];
       const shareAmount = fromUnits(share);
+      const manualAmount =
+        r.manualAmount == null ? null : persistReceiptMoney(r.manualAmount, "landed cost target amount");
       await tx.execute(sql`
         insert into landed_cost_voucher_targets
           (org_id, voucher_id, item_id, stock_location_id, manual_amount, allocated_amount, created_by, updated_by)
         values (${orgId}, ${voucherId}, ${r.target.itemId}, ${r.target.stockLocationId},
-                ${r.manualAmount == null ? null : normalizeMoney(r.manualAmount)}, ${shareAmount}, ${actorId}, ${actorId})`);
+                ${manualAmount}, ${shareAmount}, ${actorId}, ${actorId})`);
       if (share === 0n) continue;
 
       // Sub-apportion the share across the target's own layers on the same basis.
