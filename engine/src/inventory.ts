@@ -25,6 +25,7 @@ import {
   validateSubsidiaryRestrictions,
 } from "./subsidiaries.ts";
 import { businessToday } from "./business-date.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 
 /**
  * Inventory subledger. Quantity and value move ONLY through this engine:
@@ -85,6 +86,16 @@ export interface InventoryProfile extends InventoryAccounts {
 }
 
 export class InventoryError extends Error {}
+
+function persistReceiptMoney(value: unknown, label: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new InventoryError(`${label} must be an exact decimal`);
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new InventoryError(`${label} must be an exact decimal`);
+  }
+}
 
 async function resolveProfile(
   orgId: string,
@@ -610,12 +621,14 @@ export async function receiveInventory(
         })
       : (input.linkEntryId ?? null);
 
+    const receiptQuantity = persistReceiptMoney(input.quantity, "receipt quantity");
+    const receiptUnitCost = persistReceiptMoney(layerUnitCost, "receipt unit cost");
     const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
-              ${input.serialId ?? null}, ${normalizeMoney(input.quantity)}, ${normalizeMoney(layerUnitCost)}, ${assetDelta},
+              ${input.serialId ?? null}, ${receiptQuantity}, ${receiptUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0].id;
