@@ -19,6 +19,8 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
+import { useBusinessToday } from '../../../components/business-date-provider'
+import { exportCsv } from '../analytics/_ui/exportCsv'
 import { ResultsGrid, resultToCsv, type QueryResult } from './ResultsGrid'
 import { SchemaBrowser, type SchemaTable } from './SchemaBrowser'
 import { queryResponseError, readQueryResponse } from './query-response'
@@ -55,6 +57,7 @@ type RailTab = 'schema' | 'snippets' | 'history'
 
 export default function QueryConsole() {
   const t = useTranslations('query')
+  const today = useBusinessToday()
   const [sqlText, setSqlText] = useState(STARTER)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -246,13 +249,18 @@ export default function QueryConsole() {
 
   function downloadCsv() {
     if (!result) return
-    const blob = new Blob([resultToCsv(result)], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `query-${result.rowCount}rows.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    const cell = (v: unknown): string | number | null => {
+      if (v === null || v === undefined) return null
+      if (typeof v === 'number') return v
+      if (typeof v === 'object') return JSON.stringify(v)
+      return String(v)
+    }
+    exportCsv(
+      `query-${result.rowCount}rows`,
+      result.columns,
+      result.rows.map((row) => result.columns.map((col) => cell(row[col]))),
+      today,
+    )
   }
 
   function clearHistory() {
