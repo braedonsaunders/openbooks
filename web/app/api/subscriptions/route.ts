@@ -21,7 +21,9 @@ const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /** Stored plans stay when item_id is omitted. A new inventory / assembly / kit
- *  item is Inventory configuration — refuse it when that switch is off. */
+ *  item is Inventory configuration — refuse it when that switch is off. A new
+ *  equipment_charge item is Equipment configuration — refuse it when that
+ *  switch is off. */
 async function refuseInventoryPlanItem(
   orgId: string,
   itemId: unknown,
@@ -30,11 +32,17 @@ async function refuseInventoryPlanItem(
   if (itemId === undefined || itemId === null || itemId === "") return null;
   const nextId = String(itemId);
   if (storedItemId && nextId === storedItemId) return null;
-  if (await isFeatureEnabled(orgId, "inventory")) return null;
   const item = (await db.execute<{ kind: string }>(sql`
     select kind from items where id = ${nextId} and org_id = ${orgId}`));
-  if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isFeatureEnabled(orgId, "inventory"))) {
+    if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+  }
+  if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+    if (!(await isFeatureEnabled(orgId, "equipment"))) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
   }
   return null;
 }
