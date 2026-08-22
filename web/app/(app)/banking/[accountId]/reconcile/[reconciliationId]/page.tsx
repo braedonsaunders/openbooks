@@ -89,7 +89,7 @@ export default async function ReconcilePage({
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
     and je.status = 'posted' and je.posting_date <= ${recon.through_date}
     and jl.reconciled_at is null
-    and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
+    and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
     ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
 
   // -- matched this session (prefix m*) ---------------------------------------
@@ -108,7 +108,7 @@ export default async function ReconcilePage({
       : db.execute<any>(sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
             from bank_statement_lines l
-            join bank_statements s on s.id = l.statement_id
+            join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
            where ${stmtWhere}
            order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, l.line_number
            limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
@@ -117,7 +117,7 @@ export default async function ReconcilePage({
       ? Promise.resolve({ rows: [{ n: 0 }] })
       : db.execute<any>(sql`
           select count(*) as n from bank_statement_lines l
-            join bank_statements s on s.id = l.statement_id
+            join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
            where ${stmtWhere}`),
     signedOff
       ? Promise.resolve({ rows: [] })
@@ -143,8 +143,8 @@ export default async function ReconcilePage({
              je.entry_number, je.posting_date as gl_date, jl.amount as gl_amount,
              coalesce(jl.memo, je.memo) as gl_memo
         from reconciliation_matches m
-        join bank_statement_lines sl on sl.id = m.statement_line_id
-        join journal_lines jl on jl.id = m.journal_line_id
+        join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
+        join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where ${mWhere}
        order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
@@ -152,8 +152,8 @@ export default async function ReconcilePage({
     `),
     db.execute<any>(sql`
       select count(*) as n from reconciliation_matches m
-        join bank_statement_lines sl on sl.id = m.statement_line_id
-        join journal_lines jl on jl.id = m.journal_line_id
+        join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
+        join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where ${mWhere}`),
   ]))

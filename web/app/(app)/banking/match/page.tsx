@@ -32,8 +32,8 @@ export default async function MatchBankData({
     db.execute<any>(sql`
       select a.id, a.number, a.name,
              coalesce((select count(*) from bank_statement_lines l
-                         join bank_statements s on s.id = l.statement_id
-                        where s.account_id = a.id and l.match_status = 'unmatched'), 0) as unmatched
+                         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+                        where s.account_id = a.id and s.org_id = a.org_id and l.org_id = a.org_id and l.match_status = 'unmatched'), 0) as unmatched
         from accounts a
        where a.org_id = ${orgId} and a.reconcilable and not a.is_summary and a.is_active
        order by a.number nulls last
@@ -101,10 +101,10 @@ export default async function MatchBankData({
     const [stmt, stmtC, gl, glC, review, ex, exC] = (await Promise.all([
       db.execute<any>(sql`
         select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
-          from bank_statement_lines l join bank_statements s on s.id = l.statement_id
+          from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where ${stmtWhere} order by l.posted_on, l.line_number
          limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`),
-      db.execute<any>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id where ${stmtWhere}`),
+      db.execute<any>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`),
       db.execute<any>(sql`
         select jl.id, je.posting_date, je.entry_number, jl.amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
@@ -118,18 +118,18 @@ export default async function MatchBankData({
                sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
                je.entry_number, jl.amount as gl_amount, coalesce(jl.memo, je.memo) as gl_memo
           from reconciliation_matches m
-          join bank_statement_lines sl on sl.id = m.statement_line_id
-          join journal_lines jl on jl.id = m.journal_line_id
+          join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
+          join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
            and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7
          order by m.confidence asc, sl.posted_on limit 50`),
       db.execute<any>(sql`
         select l.id, l.posted_on, l.amount, l.description
-          from bank_statement_lines l join bank_statements s on s.id = l.statement_id
+          from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where ${exWhere} order by l.posted_on, l.line_number
          limit ${exParams.perPage} offset ${(exParams.page - 1) * exParams.perPage}`),
-      db.execute<any>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id where ${exWhere}`),
+      db.execute<any>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`),
     ]))
 
     data = {

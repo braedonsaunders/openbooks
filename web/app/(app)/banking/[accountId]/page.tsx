@@ -59,6 +59,7 @@ export default async function BankingAccount({
     RECON_STATUS_KEYS.includes(status) ? t(`reconStatus.${status}`) : String(status).replace(/_/g, ' ')
   const { accountId } = await params
   if (!isUuid(accountId)) notFound()
+  const orgId = authz.user.orgId
   const sp = await searchParams
   const basePath = `/banking/${accountId}`
 
@@ -66,17 +67,17 @@ export default async function BankingAccount({
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
                       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
-                     where jl.account_id = a.id), 0) as balance,
+                     where jl.account_id = a.id and jl.org_id = a.org_id), 0) as balance,
            (select max(r.through_date) from reconciliations r
-             where r.account_id = a.id and r.status = 'signed_off') as reconciled_through,
+             where r.account_id = a.id and r.org_id = a.org_id and r.status = 'signed_off') as reconciled_through,
            (select count(*) from bank_statement_lines l
-             join bank_statements s on s.id = l.statement_id
-            where s.account_id = a.id and l.match_status = 'unmatched') as unmatched_lines,
+             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+            where s.account_id = a.id and l.org_id = a.org_id and l.match_status = 'unmatched') as unmatched_lines,
            (select r.id from reconciliations r
-             where r.account_id = a.id and r.status <> 'signed_off'
+             where r.account_id = a.id and r.org_id = a.org_id and r.status <> 'signed_off'
              order by r.created_at desc limit 1) as open_reconciliation_id
       from accounts a
-     where a.id = ${accountId} and a.reconcilable
+     where a.id = ${accountId} and a.org_id = ${orgId} and a.reconcilable
   `))
   const account = accountRes.rows[0]
   if (!account) notFound()
@@ -89,7 +90,7 @@ export default async function BankingAccount({
     allowedSorts: ['date', 'source', 'lines', 'imported'] as const,
   })
   const source = pickString(sp.source)
-  const stmtWhere = sql`s.account_id = ${accountId}
+  const stmtWhere = sql`s.account_id = ${accountId} and s.org_id = ${orgId}
     ${source ? sql` and s.source = ${source}` : sql``}
     ${stmtParams.q ? sql` and (s.statement_date::text ilike ${'%' + stmtParams.q + '%'} or s.source ilike ${'%' + stmtParams.q + '%'})` : sql``}`
 
@@ -101,7 +102,7 @@ export default async function BankingAccount({
     allowedSorts: ['through', 'balance', 'status', 'created'] as const,
   })
   const reconStatus = pickString(sp.reconStatus)
-  const reconWhere = sql`r.account_id = ${accountId}
+  const reconWhere = sql`r.account_id = ${accountId} and r.org_id = ${orgId}
     ${reconStatus ? sql` and r.status = ${reconStatus}` : sql``}
     ${reconParams.q ? sql` and (r.through_date::text ilike ${'%' + reconParams.q + '%'} or r.statement_balance::text ilike ${'%' + reconParams.q + '%'})` : sql``}`
 
@@ -114,13 +115,13 @@ export default async function BankingAccount({
         from bank_statements s
         left join lateral (
           select count(*) as n, count(*) filter (where l.match_status = 'unmatched') as unmatched
-            from bank_statement_lines l where l.statement_id = s.id) lc on true
+            from bank_statement_lines l where l.statement_id = s.id and l.org_id = s.org_id) lc on true
        where ${stmtWhere}
        order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
     `),
     db.execute<any>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
-    db.execute<any>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} group by s.source order by s.source`),
+    db.execute<any>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
     db.execute<any>(sql`
       select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at
         from reconciliations r
@@ -129,7 +130,7 @@ export default async function BankingAccount({
        limit ${reconParams.perPage} offset ${(reconParams.page - 1) * reconParams.perPage}
     `),
     db.execute<any>(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
-    db.execute<any>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} group by r.status`),
+    db.execute<any>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} and r.org_id = ${orgId} group by r.status`),
   ]))
 
   // -- statement drawer (?statement=<id>) ------------------------------------
@@ -137,7 +138,7 @@ export default async function BankingAccount({
   if (openStatementId && isUuid(openStatementId)) {
     const s = (await db.execute<any>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
-        from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId}
+        from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
     `))
     if (s.rows[0]) {
       const lineParams = parsePrefixedListParams(sp, 'sl', {
@@ -147,7 +148,7 @@ export default async function BankingAccount({
         allowedSorts: ['line', 'date', 'amount'] as const,
       })
       const lineSorts = { line: sql`l.line_number`, date: sql`l.posted_on`, amount: sql`l.amount` } as const
-      const lineWhere = sql`l.statement_id = ${openStatementId}
+      const lineWhere = sql`l.statement_id = ${openStatementId} and l.org_id = ${orgId}
         ${lineParams.q ? sql` and (l.description ilike ${'%' + lineParams.q + '%'} or l.counterparty_ref ilike ${'%' + lineParams.q + '%'})` : sql``}`
       const [lines, lineCount] = (await Promise.all([
         db.execute<any>(sql`
