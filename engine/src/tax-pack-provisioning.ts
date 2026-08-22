@@ -493,6 +493,7 @@ async function provisionTaxPacksInTenant(
           set name = excluded.name,
               parent_id = coalesce(tax_jurisdictions.parent_id, excluded.parent_id),
               updated_at = now(), updated_by = ${actorId}
+        where tax_jurisdictions.org_id = ${orgId}
         returning id, (xmax = 0) as inserted`));
       const jurisdictionId = jur.rows[0]?.id ?? null;
       if (jur.rows[0]?.inserted) {
