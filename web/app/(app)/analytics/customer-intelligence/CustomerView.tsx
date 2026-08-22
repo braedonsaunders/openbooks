@@ -195,9 +195,18 @@ function RetentionBadge({ v }: { v: number }) {
 }
 
 /* -------------------------------------------------------------------- view */
-export function CustomerView({ data, profitability }: { data: CustomerData; profitability: Profitability }) {
+export function CustomerView({
+  data,
+  profitability,
+  projectsEnabled = true,
+}: {
+  data: CustomerData
+  profitability: Profitability
+  projectsEnabled?: boolean
+}) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const tabs = projectsEnabled ? TABS : TABS.filter((key) => key !== 'profitability')
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
@@ -221,7 +230,7 @@ export function CustomerView({ data, profitability }: { data: CustomerData; prof
       {/* Tabs */}
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
-          {TABS.map((key) => (
+          {tabs.map((key) => (
             <button
               key={key}
               type="button"
@@ -241,10 +250,10 @@ export function CustomerView({ data, profitability }: { data: CustomerData; prof
         {tab === 'overview' ? <OverviewTab data={data} /> : null}
         {tab === 'health' ? <HealthTab data={data} onDrill={openCustomer} /> : null}
         {tab === 'segmentation' ? <SegmentationTab data={data} /> : null}
-        {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} /> : null}
+        {tab === 'lifetime' ? <LifetimeTab data={data} profitability={profitability} projectsEnabled={projectsEnabled} /> : null}
         {tab === 'churn' ? <ChurnTab data={data} /> : null}
         {tab === 'growth' ? <GrowthTab data={data} /> : null}
-        {tab === 'profitability' ? <ProfitabilityTab p={profitability} /> : null}
+        {tab === 'profitability' && projectsEnabled ? <ProfitabilityTab p={profitability} /> : null}
         {tab === 'configuration' ? <ConfigurationTab data={data} /> : null}
       </div>
 
@@ -624,7 +633,15 @@ function SegmentationTab({ data }: { data: CustomerData }) {
 }
 
 /* --------------------------------------------------------- Lifetime Value */
-function LifetimeTab({ data, profitability }: { data: CustomerData; profitability: Profitability }) {
+function LifetimeTab({
+  data,
+  profitability,
+  projectsEnabled,
+}: {
+  data: CustomerData
+  profitability: Profitability
+  projectsEnabled: boolean
+}) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
@@ -637,11 +654,15 @@ function LifetimeTab({ data, profitability }: { data: CustomerData; profitabilit
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className={projectsEnabled ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-2 gap-3'}>
         <KpiCard icon={Gem} accent="violet" label="Total Projected CLV" value={money(k.projectedClv)} sub={`avg ${money(k.avgClv)} / customer`} />
         <KpiCard icon={DollarSign} accent="emerald" label="Period Revenue" value={money(k.totalRevenue)} sub="historical CLV base" />
-        <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label="Gross Profit" value={money(profitability.summary.totalGrossProfit)} sub={`${profitability.summary.avgMarginPct.toFixed(1)}% margin`} />
-        <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label="Profit Leaks" value={String(k.fakeChampions)} sub="high revenue, <15% margin" tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
+        {projectsEnabled ? (
+          <>
+            <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label="Gross Profit" value={money(profitability.summary.totalGrossProfit)} sub={`${profitability.summary.avgMarginPct.toFixed(1)}% margin`} />
+            <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label="Profit Leaks" value={String(k.fakeChampions)} sub="high revenue, <15% margin" tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
+          </>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

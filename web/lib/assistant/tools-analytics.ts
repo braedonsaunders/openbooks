@@ -183,8 +183,12 @@ const customerIntelligenceTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const orgId = authz.user.orgId;
+    const projectsOn = await isFeatureEnabled(orgId, "projects");
     const [r, prof] = await withOrg(orgId, () =>
-      Promise.all([customerData(period, orgId), customerProfitability(period, orgId)]),
+      Promise.all([
+        customerData(period, orgId),
+        projectsOn ? customerProfitability(period, orgId) : Promise.resolve(null),
+      ]),
     );
     return {
       ok: true,
@@ -224,30 +228,32 @@ const customerIntelligenceTool: AssistantToolDef = {
             avgDaysToPay: c.avgDaysToPay,
             sharePct: c.sharePct,
             concentrationRisk: c.concentrationRisk,
-            marginPct: c.marginPct,
-            isFakeChampion: c.isFakeChampion,
+            marginPct: projectsOn ? c.marginPct : null,
+            isFakeChampion: projectsOn ? c.isFakeChampion : false,
             healthScore: c.healthScore,
             healthGrade: c.healthGrade,
             recommendation: c.recommendation,
           })),
           50,
         ),
-        profitability: {
-          summary: prof.summary,
-          customers: capList(
-            prof.customers.map((c) => ({
-              customerId: c.customerId,
-              customerName: c.customerName,
-              totalRevenue: num(c.totalRevenue),
-              totalCost: num(c.totalCost),
-              grossProfit: num(c.grossProfit),
-              marginPct: c.marginPct,
-              profitTier: c.profitTier,
-              isFakeChampion: c.isFakeChampion,
-            })),
-            50,
-          ),
-        },
+        profitability: projectsOn && prof
+          ? {
+              summary: prof.summary,
+              customers: capList(
+                prof.customers.map((c) => ({
+                  customerId: c.customerId,
+                  customerName: c.customerName,
+                  totalRevenue: num(c.totalRevenue),
+                  totalCost: num(c.totalCost),
+                  grossProfit: num(c.grossProfit),
+                  marginPct: c.marginPct,
+                  profitTier: c.profitTier,
+                  isFakeChampion: c.isFakeChampion,
+                })),
+                50,
+              ),
+            }
+          : null,
         href: "/analytics/customer-intelligence",
       },
     };

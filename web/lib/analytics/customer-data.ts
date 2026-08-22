@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { isFeatureEnabled } from "../features";
 
 /**
  * Customer Intelligence — the data behind /analytics/customer-intelligence.
@@ -256,7 +257,26 @@ function profitTierOf(marginPct: number): ProfitTier {
   return "loss";
 }
 
+function emptyProfitability(): Profitability {
+  return {
+    customers: [],
+    summary: {
+      totalRevenue: 0,
+      totalCost: 0,
+      totalGrossProfit: 0,
+      avgMarginPct: 0,
+      customerCount: 0,
+      totalJobs: 0,
+      fakeChampions: 0,
+      tierBreakdown: { high: 0, medium: 0, low: 0, marginal: 0, loss: 0 },
+    },
+  };
+}
+
 export async function customerProfitability(period: { from: string; to: string }, orgId?: string): Promise<Profitability> {
+  // Job-costed margins join `projects`. When Projects is off that register is
+  // not a live module — an empty result is not "no jobs this period".
+  if (!orgId || !(await isFeatureEnabled(orgId, "projects"))) return emptyProfitability();
   const { from, to } = period;
   const orgFilter = orgId ? sql`and l.org_id = ${orgId}` : sql``;
   // The entry window materializes first. Joined inline, the planner drives

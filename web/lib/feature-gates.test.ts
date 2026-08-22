@@ -303,6 +303,16 @@ test('the surfaces this test was written for are covered', () => {
     'financial health must omit budget variance when Budgets is off',
   )
   assert.match(
+    read('lib/assistant/tools-analytics.ts'),
+    /const projectsOn = await isFeatureEnabled\(orgId, "projects"\)/,
+    'customer intelligence must omit job-costed profitability when Projects is off',
+  )
+  assert.match(
+    read('lib/assistant/tools-payroll.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "payroll"\)/,
+    'payroll tools must refuse when Payroll is off',
+  )
+  assert.match(
     read('lib/custom-reports.ts'),
     /reportEntityFeatureKey\(query\)/,
     'executeReport must refuse optional-module entities when the Features switch is off',
@@ -358,6 +368,21 @@ test('the surfaces this test was written for are covered', () => {
     read('lib/analytics/health-data.ts'),
     /isFeatureEnabled\(orgId, "budgets"\)/,
     'financial-health must not load budget variance when Budgets is off',
+  )
+  assert.match(
+    read('lib/analytics/customer-data.ts'),
+    /isFeatureEnabled\(orgId, "projects"\)/,
+    'job-costed customer profitability must not load when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/customer-intelligence/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'projects'\)/,
+    'customer-intelligence must hide job-costed profitability when Projects is off',
+  )
+  assert.match(
+    read('app/(app)/analytics/customer-intelligence/CustomerView.tsx'),
+    /projectsEnabled/,
+    'customer-intelligence profitability tab must not render when Projects is off',
   )
   assert.match(
     read('app/api/analytics/true-cost/config/route.ts'),
