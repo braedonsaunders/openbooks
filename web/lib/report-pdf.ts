@@ -171,7 +171,7 @@ export function exportDataToPdfInput(
   }
 }
 
-export async function exportDataToPdf(data: ExportData, branding: PdfBranding, page: PdfPageSetup, opts?: { showSummary?: boolean }): Promise<Buffer> {
+export async function exportDataToPdf(data: ExportData, branding: PdfBranding, page: PdfPageSetup, opts?: { showSummary?: boolean; generatedAt?: Date }): Promise<Buffer> {
   const locale = await resolveLocale()
   return renderPdfDocument(exportDataToPdfInput(data, branding, page, { ...opts, locale }))
 }
