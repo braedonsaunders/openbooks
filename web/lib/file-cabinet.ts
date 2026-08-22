@@ -687,7 +687,7 @@ export async function restoreFolder(orgId: string, id: string): Promise<boolean>
   if (!folder) return false
   await db.transaction(async (tx) => {
     const descendants = FOLDER_DESCENDANTS(orgId, id)
-    await tx.execute(sql`update folders set is_inactive = false, updated_at = now() where id in (${descendants})`)
+    await tx.execute(sql`update folders set is_inactive = false, updated_at = now() where id in (${descendants}) and org_id = ${orgId}`)
     await tx.execute(sql`update files set is_inactive = false, updated_at = now() where folder_id in (${descendants}) and org_id = ${orgId}`)
   })
   return true
