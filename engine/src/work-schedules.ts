@@ -425,7 +425,7 @@ export async function loadWorkSchedules(
              (select json_agg(json_build_object('dayIndex', d.day_index, 'hours', d.hours::text)
                               order by d.day_index)
                 from work_schedule_days d
-               where d.schedule_id = s.id),
+               where d.org_id = s.org_id and d.schedule_id = s.id),
              '[]'::json) as days
       from work_schedules s
      where s.org_id = ${orgId}
