@@ -545,6 +545,21 @@ test('the surfaces this test was written for are covered', () => {
     /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'AP capture PATCH must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
   )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /\["inventory", "assembly", "kit"\]/,
+    'labor rate-card line writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /storedIds\.has\(line\.itemId\)/,
+    'labor rate-card save must keep stored item_id when omitted',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'labor rate-card save must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
