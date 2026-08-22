@@ -12,6 +12,8 @@ import { canonicalDecimal } from './exact-decimal'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 /**
  * Project charges / resource usage — the native replacement for source platform's
  * SO(price)+PO(cost) workaround. A project_charge allocates a pooled,
@@ -112,7 +114,10 @@ export async function createProjectCharge(
   opts: { post?: boolean } = { post: true },
 ): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
-  const equipmentOn = await isFeatureEnabled(orgId, 'equipment')
+  const [equipmentOn, inventoryOn] = await Promise.all([
+    isFeatureEnabled(orgId, 'equipment'),
+    isFeatureEnabled(orgId, 'inventory'),
+  ])
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await inDbTransaction(async (tx) => {
@@ -170,6 +175,12 @@ export async function createProjectCharge(
       `))
       const it = item.rows[0]
       if (!it) throw new ChargeError('Item not found')
+      // The charge picker already hides these kinds. Turning Inventory off
+      // must also refuse a new inventory / assembly / kit line so a crafted
+      // POST cannot write one. Charges that already carry those items stay.
+      if (INVENTORY_ITEM_KINDS.has(String(it.kind)) && !inventoryOn) {
+        throw new ChargeError('Inventory is disabled')
+      }
       if (line.equipmentUnitId) {
         // Equipment attribution is a Features-gated write. Turning Equipment
         // off must stop new unit links without touching posted charges.

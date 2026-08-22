@@ -1103,6 +1103,31 @@ test('the surfaces this test was written for are covered', () => {
     'project-charge POST must 404 — not persist — equipment_unit_id when Equipment is off',
   )
   assert.match(
+    read('lib/project-charges.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'project-charge writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('lib/project-charges.ts'),
+    /INVENTORY_ITEM_KINDS\.has\([^)]+\)[\s\S]{0,80}!inventoryOn/,
+    'project-charge lines must not store inventory/assembly/kit items when Inventory is off — existing charges stay',
+  )
+  assert.match(
+    read('app/api/project-charges/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,200}status: 404/,
+    'project-charge POST must 404 — not persist inventory/assembly/kit items — when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/projects/_cockpit-data.ts'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'project cockpit must not offer inventory/assembly/kit items when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/projects/_cockpit-data.ts'),
+    /kind not in \('inventory', 'assembly', 'kit'\)/,
+    'project charge picker must drop inventory/assembly/kit when Inventory is off — stored charges stay',
+  )
+  assert.match(
     read('app/(app)/projects/tabs/ChargesSection.tsx'),
     /equipmentEnabled \? \{[\s\S]{0,80}equipmentUnitId/,
     'the charge form must not send equipment_unit_id when Equipment is off',

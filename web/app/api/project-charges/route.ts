@@ -11,6 +11,8 @@ import { guardProjectsFeature } from '../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 function moneyOrNull(v: unknown): string | null | 'invalid' {
   if (v === null || v === undefined || v === '') return null
   const exact = canonicalDecimal(v, 4)
@@ -90,6 +92,16 @@ export async function POST(req: Request) {
   }
   if (lines.some((line) => line.equipmentUnitId) && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+    for (const line of lines) {
+      if (!isUuid(String(line.itemId ?? ''))) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
   }
   try {
     const created = await createProjectCharge(gate.user.orgId, gate.user.id, {

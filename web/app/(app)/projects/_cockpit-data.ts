@@ -21,10 +21,11 @@ export async function loadProjectCockpit(
   projectId: string,
   options: { includeApplicationBilling?: boolean } = {},
 ): Promise<ProjectCockpitData> {
-  const [projectType, fieldTicketsEnabled, equipmentEnabled, today] = await Promise.all([
+  const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
     isFeatureEnabled(orgId, 'equipment'),
+    isFeatureEnabled(orgId, 'inventory'),
     businessToday(orgId),
   ])
   const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
@@ -45,7 +46,9 @@ export async function loadProjectCockpit(
        group by d.id order by d.document_date desc, d.document_number desc`),
     db.execute(sql`
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
-        from items where org_id = ${orgId} and is_active order by name limit 2000`),
+        from items where org_id = ${orgId} and is_active
+         ${inventoryEnabled ? sql`` : sql`and kind not in ('inventory', 'assembly', 'kit')`}
+       order by name limit 2000`),
     equipmentEnabled
       ? db.execute(sql`
       select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
