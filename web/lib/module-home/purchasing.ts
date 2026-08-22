@@ -167,7 +167,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago30}) as spend_30d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
-          and exists (select 1 from vendor_roles vr where vr.org_id = ${orgId} and vr.party_id = p.id and vr.is_active)
+          and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as vendors
     `),
   ]))
