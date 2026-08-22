@@ -1,8 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { resolveInvoicingPreference } from './invoicing-preference.ts'
 import { loadProjectType } from './project-type'
+import { canonicalDecimal } from './exact-decimal'
 import { isFeatureEnabled } from './features'
 
 /** CRUD for project billing requests + milestone schedules. */
@@ -139,6 +141,17 @@ export async function createBillingRequest(orgId: string, userId: string, input:
       }
     }
 
+    let drawAmount: string | null = null
+    if (input.drawAmount != null && input.drawAmount !== '') {
+      const exact = canonicalDecimal(input.drawAmount, 4)
+      if (exact === null) throw new Error('Draw amount must be an exact decimal')
+      try {
+        drawAmount = normalizeMoney(exact)
+      } catch {
+        throw new Error('Draw amount must be an exact decimal')
+      }
+    }
+
     const row = (await tx.execute<{ id: string; request_number: string }>(sql`
       insert into billing_requests (
         org_id, project_id, request_number, invoice_type, basis, draw_amount, start_date, cutoff_date,
@@ -146,7 +159,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
         selected_time_entry_ids, notes, status, created_by, updated_by)
       values (
         ${orgId}, ${input.projectId}, ${requestNumber}, ${input.invoiceType ?? 'progress'}, ${basis},
-        ${input.drawAmount ?? null}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
+        ${drawAmount}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
         ${input.invoiceDescription ?? null}, ${input.customerPo ?? proj.rows[0].customer_po_number},
         ${projectType.billingMethod}, ${backupRequired}, ${backupType},
         ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
