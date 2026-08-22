@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
-import { add, mul, mulRatio, neg, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
+import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
@@ -276,8 +276,8 @@ export async function createSubscriptionInvoice(
     taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
   }> = [];
   for (const input of invoiceLines) {
-    const quantity = normalizeDecimal(input.quantity, 8);
-    const unitPrice = normalizeDecimal(input.unitPrice, 8);
+    const quantity = persistSubscriptionMoney(input.quantity, "quantity");
+    const unitPrice = persistSubscriptionMoney(input.unitPrice, "unit price");
     const amount = mul(quantity, unitPrice);
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";

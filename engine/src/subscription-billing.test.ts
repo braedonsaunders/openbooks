@@ -140,3 +140,15 @@ test("changeSubscription persists quantity and priceOverride through canonicalDe
   assert.doesNotMatch(body, /normalizeMoney\(changes\.quantity/);
   assert.doesNotMatch(body, /normalizeMoney\(changes\.priceOverride\)/);
 });
+
+test("createSubscriptionInvoice persists line quantity and unitPrice through persistSubscriptionMoney", () => {
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const fn = source.indexOf("export async function createSubscriptionInvoice");
+  const next = source.indexOf("async function billOne");
+  const body = source.slice(fn, next);
+  assert.ok(fn >= 0 && next > fn, "createSubscriptionInvoice precedes billOne");
+  assert.match(body, /persistSubscriptionMoney\(input\.quantity, "quantity"\)/);
+  assert.match(body, /persistSubscriptionMoney\(input\.unitPrice, "unit price"\)/);
+  assert.doesNotMatch(body, /normalizeDecimal\(input\.quantity/);
+  assert.doesNotMatch(body, /normalizeDecimal\(input\.unitPrice/);
+});
