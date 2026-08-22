@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
+
+function optionalCoverageMoney(value: unknown): string | null | 'invalid' {
+  if (value == null || value === '') return null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  return normalizeMoney(exact)
+}
 
 /**
  * Compliance evidence (certificates of insurance, W-9s, licences, bonds).
@@ -66,6 +75,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'this requirement needs an expiry date' }, { status: 422 })
   }
 
+  const coverageAmount = optionalCoverageMoney(body.coverageAmount)
+  const aggregateAmount = optionalCoverageMoney(body.aggregateAmount)
+  if (coverageAmount === 'invalid') {
+    return NextResponse.json({ error: 'coverage amount must be a number with no more than four decimal places' }, { status: 422 })
+  }
+  if (aggregateAmount === 'invalid') {
+    return NextResponse.json({ error: 'aggregate amount must be a number with no more than four decimal places' }, { status: 422 })
+  }
+
   try {
     const id = await db.transaction(async (tx) => {
       const inserted = (await tx.execute<{ id: string }>(sql`
@@ -77,7 +95,7 @@ export async function POST(req: Request) {
         values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
                 'pending_review', ${body.issuerName ?? null}, ${body.policyNumber ?? null},
                 ${body.effectiveFrom}, ${body.expiresOn ?? null},
-                ${body.coverageAmount ?? null}, ${body.aggregateAmount ?? null},
+                ${coverageAmount}, ${aggregateAmount},
                 ${body.coverageCurrency ?? null},
                 ${body.additionalInsured === true}, ${body.waiverOfSubrogation === true},
                 ${body.primaryNoncontributory === true}, ${body.notes ?? null},

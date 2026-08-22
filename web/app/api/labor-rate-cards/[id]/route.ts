@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { cmp } from "@openbooks/engine/src/money.ts";
+import { cmp, normalizeDecimal, normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { guardProjectsFeature } from "../../../../lib/projects-gate";
 import { isUuid } from "../../../../lib/list-params";
@@ -9,6 +9,7 @@ import {
   loadFieldDefs,
   validateCustomValues,
 } from "../../../../lib/custom-fields";
+import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
 
@@ -129,10 +130,24 @@ function error(errorCode: string, status = 422) {
 function date(value: unknown) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
-function nonnegative(value: unknown, nullable = false) {
-  if ((value == null || value === "") && nullable) return true;
+function nonnegativeMoney(value: unknown, nullable = false): string | null | false {
+  if ((value == null || value === "") && nullable) return null;
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return false;
   try {
-    return typeof value === "string" && value !== "" && cmp(value, "0") >= 0;
+    const money = normalizeMoney(exact);
+    return cmp(money, "0") >= 0 ? money : false;
+  } catch {
+    return false;
+  }
+}
+
+function nonnegativeDecimal(value: unknown, scale: number, nullable = false): string | null | false {
+  if ((value == null || value === "") && nullable) return null;
+  const exact = canonicalDecimal(value, scale);
+  if (exact === null || compareDecimal(exact, "0") < 0) return false;
+  try {
+    return normalizeDecimal(exact, scale);
   } catch {
     return false;
   }
@@ -192,19 +207,22 @@ export async function PUT(
   const lineIds = new Set<string>(),
     itemIds = new Set<string>();
   for (const line of lines) {
-    if (
-      !line.itemId ||
-      !isUuid(line.itemId) ||
-      !nonnegative(line.regular, true)
-    )
+    const regular = nonnegativeMoney(line.regular, true);
+    if (!line.itemId || !isUuid(line.itemId) || regular === false)
       return error("item");
+    line.regular = regular;
     itemIds.add(line.itemId);
     if (line.id) {
       if (!isUuid(line.id) || lineIds.has(line.id)) return error("item");
       lineIds.add(line.id);
     }
-    for (const value of Object.values(line.timeTypeRates ?? {}))
-      if (!nonnegative(value, true)) return error("value");
+    const timeTypeRates: Record<string, string> = {};
+    for (const [key, value] of Object.entries(line.timeTypeRates ?? {})) {
+      const rate = nonnegativeMoney(value, true);
+      if (rate === false) return error("value");
+      if (rate != null) timeTypeRates[key] = rate;
+    }
+    line.timeTypeRates = timeTypeRates;
   }
   const adjustmentCodes = new Set<string>();
   for (const adjustment of adjustments) {
@@ -218,8 +236,16 @@ export async function PUT(
       return error("calculation");
     if (!PRESENTATIONS.includes(adjustment.presentation as never))
       return error("presentation");
-    if (adjustment.calculation !== "text" && !nonnegative(adjustment.value))
-      return error("value");
+    if (adjustment.calculation !== "text") {
+      const value = nonnegativeDecimal(adjustment.value, 10);
+      if (value === false) return error("value");
+      adjustment.value = value;
+    }
+    if (adjustment.threshold != null && adjustment.threshold !== "") {
+      const threshold = nonnegativeMoney(adjustment.threshold, true);
+      if (threshold === false) return error("value");
+      adjustment.threshold = threshold;
+    }
     if (!Array.isArray(adjustment.targets)) return error("target");
     const targetKeys = new Set<string>();
     for (const target of adjustment.targets) {

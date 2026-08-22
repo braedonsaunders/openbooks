@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { cmp, div, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
+import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
@@ -162,8 +162,8 @@ export async function createProjectCharge(
       // unit rate to derive, so fall back to the entered rate rather than
       // dividing by zero — which divRate reported as an invalid FX rate.
       const canDerive = resolved != null && !isZero(String(line.quantity))
-      const costRate = canDerive ? div(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0')
-      const billRate = canDerive ? div(billAmount, String(line.quantity)) : String(line.billRate ?? it.default_rate ?? costRate)
+      const costRate = normalizeMoney(canDerive ? div(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0'))
+      const billRate = normalizeMoney(canDerive ? div(billAmount, String(line.quantity)) : String(line.billRate ?? it.default_rate ?? costRate))
       const accountId = line.accountId ?? it.expense_account_id
       if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {

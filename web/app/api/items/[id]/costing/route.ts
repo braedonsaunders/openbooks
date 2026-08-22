@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -43,10 +45,11 @@ function accountRef(value: unknown): string | null {
   return value && isUuid(String(value)) ? String(value) : null
 }
 
-function numeric(value: unknown): string | null {
+function moneyOrNull(value: unknown): string | null | 'invalid' {
   if (value === null || value === undefined || String(value).trim() === '') return null
-  const text = String(value).trim()
-  return /^\+?(?:\d+(?:\.\d{0,4})?|\.\d{1,4})$/.test(text) ? text.replace(/^\+/, '') : null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  return normalizeMoney(exact)
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -70,14 +73,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const adjustmentAccountId = accountRef(body.adjustmentAccountId)
   const varianceAccountId = accountRef(body.varianceAccountId)
   const receivedNotBilledAccountId = accountRef(body.receivedNotBilledAccountId)
-  const standardCost = numeric(body.standardCost)
-  const reorderPoint = numeric(body.reorderPoint)
-  const preferredStockLevel = numeric(body.preferredStockLevel)
+  const standardCost = moneyOrNull(body.standardCost)
+  const reorderPoint = moneyOrNull(body.reorderPoint)
+  const preferredStockLevel = moneyOrNull(body.preferredStockLevel)
   const allowNegativeInventory = body.allowNegativeInventory === true
   const negativeCostBasis = ['last_receipt', 'standard', 'configured'].includes(String(body.negativeCostBasis))
     ? String(body.negativeCostBasis)
     : 'last_receipt'
-  const provisionalUnitCost = numeric(body.provisionalUnitCost)
+  const provisionalUnitCost = moneyOrNull(body.provisionalUnitCost)
+  if (
+    standardCost === 'invalid'
+    || reorderPoint === 'invalid'
+    || preferredStockLevel === 'invalid'
+    || provisionalUnitCost === 'invalid'
+  ) {
+    return NextResponse.json({ error: 'Costs and stock levels must be numbers with no more than four decimal places' }, { status: 422 })
+  }
   if (allowNegativeInventory && negativeCostBasis === 'configured' && provisionalUnitCost == null) {
     return NextResponse.json({ error: 'A configured provisional cost is required for negative inventory' }, { status: 400 })
   }
