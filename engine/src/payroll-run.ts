@@ -1578,7 +1578,8 @@ async function calculateStub(
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
   const employeePartyId = emp.party_id!;
   const schedule = (await tx.execute<{ periods_per_year: number }>(sql`
-    select periods_per_year from pay_schedules where id = ${run.pay_schedule_id}
+    select periods_per_year from pay_schedules
+     where org_id = ${orgId} and id = ${run.pay_schedule_id}
   `));
   const P = schedule.rows[0]!.periods_per_year;
   // Every one of these comes from the resolved context, not from re-reading
