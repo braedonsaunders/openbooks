@@ -47,9 +47,11 @@ import { MD_WITHHOLDING } from "./md.ts";
 import { DETROIT_WITHHOLDING, MI_WITHHOLDING } from "./mi.ts";
 import { MN_WITHHOLDING } from "./mn.ts";
 import { MO_WITHHOLDING } from "./mo.ts";
+import { MS_WITHHOLDING } from "./ms.ts";
 import { MT_WITHHOLDING } from "./mt.ts";
 import { NC_WITHHOLDING } from "./nc.ts";
 import { ND_WITHHOLDING } from "./nd.ts";
+import { NE_WITHHOLDING } from "./ne.ts";
 import { NJ_WITHHOLDING } from "./nj.ts";
 import { NY_WITHHOLDING, NYC_WITHHOLDING, YONKERS_WITHHOLDING } from "./ny.ts";
 import { OH_WITHHOLDING } from "./oh.ts";
@@ -125,6 +127,8 @@ const REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
   MT_WITHHOLDING,
   ND_WITHHOLDING,
   OK_WITHHOLDING,
+  MS_WITHHOLDING,
+  NE_WITHHOLDING,
 ];
 
 const SUB_REGION_ENGINES: readonly UsStateWithholdingEngine[] = [
@@ -149,8 +153,6 @@ const BY_STATE = new Map<string, UsStateWithholdingEngine>(
  */
 const PUBLICATIONS: Readonly<Record<string, string>> = {
   DC: "District of Columbia FR-230, Income Tax Withholding Instructions and Tables",
-  MS: "Mississippi Computer Payroll Accounting Withholding Formula",
-  NE: "Nebraska Circular EN, Income Tax Withholding",
   NM: "New Mexico FYI-104, Wage Withholding Tax",
 };
 
@@ -256,7 +258,9 @@ export { KS_WITHHOLDING, KS_RATES_2026 } from "./ks.ts";
 export { LA_WITHHOLDING, LA_RATES_2026 } from "./la.ts";
 export { MO_WITHHOLDING, MO_RATES_2026 } from "./mo.ts";
 export { MT_WITHHOLDING, MT_RATES_2026 } from "./mt.ts";
+export { MS_WITHHOLDING, MS_RATES_2026 } from "./ms.ts";
 export { ND_WITHHOLDING, ND_RATES_2026 } from "./nd.ts";
+export { NE_WITHHOLDING, NE_RATES_2026 } from "./ne.ts";
 export { OK_WITHHOLDING, OK_RATES_2026 } from "./ok.ts";
 export {
   MA_WITHHOLDING, MA_RATES_2026, maAnnualTax, maExemptionFactor, maSupplementalWithholding,

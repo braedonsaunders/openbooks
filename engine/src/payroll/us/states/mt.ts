@@ -226,6 +226,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (!period || !MT_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
     refuseUnprintedPeriod(MT_WITHHOLDING, input.periodsPerYear);
   }
+  const published = period as MtPeriod;
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
@@ -239,7 +240,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   trace("MT_GROSS", wages);
 
-  const raw = mtPeriodTax(wages, period, status, rates);
+  const raw = mtPeriodTax(wages, published, status, rates);
   trace("MT_UNROUNDED", raw);
   const periodTax = mtRoundToDollar(raw);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");

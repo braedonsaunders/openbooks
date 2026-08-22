@@ -235,6 +235,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   if (!period || !VT_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
     refuseUnprintedPeriod(VT_WITHHOLDING, input.periodsPerYear);
   }
+  const published = period as VtPeriod;
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
@@ -249,12 +250,12 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   trace("VT_WAGES", wages);
 
-  const allowance = U(VT_TABLES_2026[period].allowance) * BigInt(allowances);
+  const allowance = U(VT_TABLES_2026[published].allowance) * BigInt(allowances);
   trace("VT_ALLOWANCE", allowance);
   const taxable = max0(wages - allowance);
   trace("VT_TAXABLE", taxable);
 
-  const periodTax = vtPeriodTax(taxable, period, married);
+  const periodTax = vtPeriodTax(taxable, published, married);
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   const total = periodTax + extra;
   trace("VT_WITHHELD", total);
