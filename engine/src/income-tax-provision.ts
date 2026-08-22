@@ -904,7 +904,7 @@ export async function postProvisionRun(
       `);
       await db.execute(sql`
         update tax_provision_runs set status = 'superseded', updated_at = now(), updated_by = ${actorId}
-         where id = ${priorPosted.rows[0].id}
+         where id = ${priorPosted.rows[0].id} and org_id = ${orgId}
       `);
       await db.execute(sql`
         insert into audit_log

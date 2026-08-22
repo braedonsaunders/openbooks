@@ -1121,7 +1121,7 @@ export async function createMatch(
     await tx.execute(sql`
       update bank_statement_lines
          set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
-         where id = ${opts.statementLineId}
+         where id = ${opts.statementLineId} and org_id = ${ctx.orgId}
     `);
     return refreshStatus(recon, ctx, tx);
   });

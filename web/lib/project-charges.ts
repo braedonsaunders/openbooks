@@ -204,7 +204,7 @@ export async function createProjectCharge(
       lineNo++
     }
     const subtotal = sum(amounts)
-    await tx.execute(sql`update documents set subtotal = ${subtotal}, total = ${subtotal} where id = ${docId}`)
+    await tx.execute(sql`update documents set subtotal = ${subtotal}, total = ${subtotal} where id = ${docId} and org_id = ${orgId}`)
     return { id: docId, documentNumber, totalCost: subtotal }
   })
 

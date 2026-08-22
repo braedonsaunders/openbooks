@@ -97,7 +97,7 @@ export async function appendMessage(
     `);
     await tx.execute(sql`
       update ai_conversations set updated_at = now(), updated_by = ${authz.user.id}
-       where id = ${args.conversationId}
+       where id = ${args.conversationId} and org_id = ${authz.user.orgId}
     `);
   });
 }

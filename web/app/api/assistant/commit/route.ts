@@ -78,7 +78,7 @@ export async function POST(req: Request) {
         subtotal = ${totalDebits},
         total = ${totalDebits},
         updated_at = now(), updated_by = ${user.id}
-      where id = ${doc.id}
+      where id = ${doc.id} and org_id = ${user.orgId}
     `);
   });
 

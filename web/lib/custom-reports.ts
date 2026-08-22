@@ -283,7 +283,7 @@ export async function recordReportRun(args: {
     await db.execute(sql`
       update report_runs set status = 'succeeded', row_count = ${result.rowCount},
              result_csv = ${csv}, finished_at = now(), updated_at = now()
-       where id = ${runId}
+       where id = ${runId} and org_id = ${args.orgId}
     `)
     return { runId, result, error: null }
   } catch (err) {
@@ -291,7 +291,7 @@ export async function recordReportRun(args: {
     await db.execute(sql`
       update report_runs set status = 'failed', error = ${message},
              finished_at = now(), updated_at = now()
-       where id = ${runId}
+       where id = ${runId} and org_id = ${args.orgId}
     `)
     return { runId, result: null, error: message }
   }

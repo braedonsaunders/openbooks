@@ -352,7 +352,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
     const claimed = await withBypass(async () =>
       (await db.execute<{ id: string }>(sql`
         update bank_feed_connections set next_sync_at = ${nextSync}
-         where id = ${row.id}
+         where id = ${row.id} and org_id = ${row.orgId}
            and (next_sync_at is null and ${row.nextSyncAt === null} or next_sync_at = ${row.nextSyncAt})
         returning id
       `)),

@@ -93,7 +93,7 @@ export async function executeIdempotent<T>(args: {
       update application_idempotency_keys
          set response = ${JSON.stringify(serializable)}::jsonb,
              completed_at = now()
-       where id = ${inserted.rows[0]!.id}
+       where id = ${inserted.rows[0]!.id} and org_id = ${context.authz.user.orgId}
     `);
     return { replayed: false, value };
   });

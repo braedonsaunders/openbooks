@@ -965,7 +965,7 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
     const claim = await withBypassContext(() =>
       db.execute<{ id: string }>(sql`
       update ai_agent_policies set next_run_at = ${next}, updated_at = now()
-       where id = ${policy.id} and next_run_at = ${policy.next_run_at}
+       where id = ${policy.id} and org_id = ${policy.org_id} and next_run_at = ${policy.next_run_at}
       returning id
     `));
     if (claim.rows.length === 0) continue;

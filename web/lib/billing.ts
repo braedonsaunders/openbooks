@@ -684,7 +684,7 @@ export async function generateInvoiceFromBillingRequest(
     const subtotal = sum(amounts)
     await tx.execute(sql`
       update documents set subtotal = ${subtotal}, tax_total = '0', total = ${add(subtotal, '0')}, updated_by = ${userId}
-      where id = ${invoiceId}
+      where id = ${invoiceId} and org_id = ${orgId}
     `)
 
     // Match the order-cycle architecture: preserve a document-level edge from
@@ -710,7 +710,7 @@ export async function generateInvoiceFromBillingRequest(
 
     await tx.execute(sql`
       update billing_requests set status = 'invoiced', invoice_document_id = ${invoiceId}, updated_by = ${userId}
-      where id = ${requestId}
+      where id = ${requestId} and org_id = ${orgId}
     `)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

@@ -1357,19 +1357,19 @@ export async function cancelRevenueRecognitionForInvoice(input: {
              set status = 'posted', posted_at = now(),
                  posted_by = ${input.actorId}, updated_at = now(),
                  updated_by = ${input.actorId}
-           where id = ${reversalId}
+           where id = ${reversalId} and org_id = ${input.orgId}
         `);
         await tx.execute(sql`
           update journal_entries
              set status = 'reversed', updated_at = now(),
                  updated_by = ${input.actorId}
-           where id = ${source.journal_entry_id}
+           where id = ${source.journal_entry_id} and org_id = ${input.orgId}
         `);
         await tx.execute(sql`
           update recognition_schedule_lines
              set reversal_journal_entry_id = ${reversalId},
                  updated_at = now(), updated_by = ${input.actorId}
-           where id = ${source.line_id}
+           where id = ${source.line_id} and org_id = ${input.orgId}
         `);
         reversalIds.push(reversalId);
       }
@@ -1382,6 +1382,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
                cancelled_by = coalesce(cancelled_by, ${input.actorId}),
                updated_at = now(), updated_by = ${input.actorId}
          where id = any(${`{${obligationIds.join(",")}}`}::uuid[])
+           and org_id = ${input.orgId}
            and status <> 'cancelled'
       `);
       await tx.execute(sql`
@@ -1390,6 +1391,7 @@ export async function cancelRevenueRecognitionForInvoice(input: {
                updated_by = ${input.actorId}
          where obligation_id =
            any(${`{${obligationIds.join(",")}}`}::uuid[])
+           and org_id = ${input.orgId}
            and status <> 'cancelled'
       `);
       const contractIds = [...new Set(obligations.rows.map((row) => row.contract_id))];
@@ -1398,10 +1400,12 @@ export async function cancelRevenueRecognitionForInvoice(input: {
            set status = 'cancelled', updated_at = now(),
                updated_by = ${input.actorId}
          where contract.id = any(${`{${contractIds.join(",")}}`}::uuid[])
+           and contract.org_id = ${input.orgId}
            and not exists (
              select 1
                from performance_obligations obligation
               where obligation.contract_id = contract.id
+                and obligation.org_id = contract.org_id
                 and obligation.status <> 'cancelled'
            )
       `);
