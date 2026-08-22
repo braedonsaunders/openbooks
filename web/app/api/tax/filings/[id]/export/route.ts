@@ -53,5 +53,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (format === 'xlsx') return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel }), filename)
   const branding = await orgBranding(gate.user.orgId)
   const { page, showSummary } = resolveLayout(null)
-  return pdfResponse(await exportDataToPdf(data, branding, page, { showSummary }), filename)
+  return pdfResponse(await exportDataToPdf(data, branding, page, {
+    showSummary,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  }), filename)
 }
