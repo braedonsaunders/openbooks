@@ -538,6 +538,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           hired_on = excluded.hired_on,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
+        where employee_roles.org_id = ${user.orgId}
       `)
     }
   }
