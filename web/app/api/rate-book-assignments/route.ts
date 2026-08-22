@@ -61,34 +61,34 @@ export async function GET(req: Request) {
     db.execute(sql`
       select b.id, b.name, b.currency, b.is_default,
              (select v.id from item_rate_versions v
-               join labor_rate_version_policies p on p.version_id = v.id
+               join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id
               where v.rate_book_id = b.id and v.org_id = ${orgId}
               order by (v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})) desc,
                        v.effective_from desc limit 1) as latest_version_id
         from item_rate_books b
        where b.org_id = ${orgId} and b.is_active
-         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id where v.rate_book_id = b.id)
+         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
        order by b.is_default desc, b.name`) as any,
     db.execute(sql`
       select a.id, a.rate_book_id, b.name as rate_book_name, b.currency,
              a.effective_from, a.effective_to, a.date_basis, a.is_active,
              coalesce(a.rate_version_id,
                (select v.id from item_rate_versions v
-                 join labor_rate_version_policies p on p.version_id = v.id
+                 join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id
                 where v.rate_book_id = b.id and v.org_id = ${orgId}
                 order by (v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})) desc,
                          v.effective_from desc limit 1)) as rate_version_id
         from item_rate_book_assignments a
-        join item_rate_books b on b.id = a.rate_book_id
+        join item_rate_books b on b.id = a.rate_book_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
-         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id where v.rate_book_id = b.id)
+         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
        order by a.is_active desc, a.effective_from desc nulls last, b.name
        limit ${perPage} offset ${(page - 1) * perPage}`) as any,
     db.execute(sql`
       select count(*)::int as n
-        from item_rate_book_assignments a join item_rate_books b on b.id = a.rate_book_id
+        from item_rate_book_assignments a join item_rate_books b on b.id = a.rate_book_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
-         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id where v.rate_book_id = b.id)`) as any,
+         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)`) as any,
   ])
   return NextResponse.json({
     rateBooks: rateBooks.rows,
@@ -127,7 +127,7 @@ async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: str
   const refs = (await db.execute(sql`
     select
       exists(select 1 from item_rate_books b where b.id = ${rateBookId} and b.org_id = ${orgId}
-        and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id where v.rate_book_id = b.id)) as book_ok,
+        and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)) as book_ok,
       ${customerId ? sql`exists(select 1 from customer_roles where party_id = ${customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
       ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`)) as any
   if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) return { errorCode: 'references' } as const

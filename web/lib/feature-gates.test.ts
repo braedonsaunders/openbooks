@@ -219,6 +219,21 @@ test('the surfaces this test was written for are covered', () => {
     /isFeatureEnabled\(context\.authz\.user\.orgId, "flows"\)/,
     'MCP/assistant approvals must disappear when Flows is off',
   )
+  assert.match(
+    read('lib/assistant/tools.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "budgets"\)/,
+    'budget_vs_actual must refuse when Budgets is off',
+  )
+  assert.match(
+    read('lib/assistant/tools.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "continuousClose"\)/,
+    'continuous-close findings must refuse when Continuous Close is off',
+  )
+  assert.match(
+    read('lib/assistant/tools-reports.ts'),
+    /isFeatureEnabled\(authz\.user\.orgId, "budgets"\)/,
+    'budget scenario tools must refuse when Budgets is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

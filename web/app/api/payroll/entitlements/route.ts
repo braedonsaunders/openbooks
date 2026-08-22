@@ -44,7 +44,7 @@ export async function GET(req: Request) {
            l.movement_date, l.amount, l.hours, l.kind, l.note,
            d.document_number as run_number, l.pay_run_document_id
       from entitlement_ledger l
-      join entitlement_plans pl on pl.id = l.plan_id
+      join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id
       left join documents d on d.id = l.pay_run_document_id and d.org_id = l.org_id
      where l.org_id = ${orgId} and l.employee_party_id = ${employee}
      order by l.movement_date desc, l.created_at desc

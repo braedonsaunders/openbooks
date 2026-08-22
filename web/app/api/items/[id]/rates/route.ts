@@ -28,8 +28,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
                'timeTypeBillRates', l.time_type_bill_rates
              ) order by l.base_quantity) filter (where l.id is not null), '[]'::jsonb) as tiers
         from item_rate_versions v
-        join item_rate_books b on b.id = v.rate_book_id
-        join item_rate_lines l on l.version_id = v.id and l.item_id = ${id}
+        join item_rate_books b on b.id = v.rate_book_id and b.org_id = v.org_id
+        join item_rate_lines l on l.version_id = v.id and l.item_id = ${id} and l.org_id = v.org_id
        where v.org_id = ${gate.user.orgId}
        group by v.id, b.name
        order by v.effective_from desc
