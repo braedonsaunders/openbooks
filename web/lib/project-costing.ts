@@ -58,7 +58,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     // project custom (contract value) + task cost budget
     db.execute(sql`
       select coalesce(p.contract_value, 0) as contract_value,
-             coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
+             coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
         from projects p where p.id = ${projectId} and p.org_id = ${orgId}
     `) as any,
     // posted actuals split into cost vs revenue

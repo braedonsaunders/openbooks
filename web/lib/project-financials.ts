@@ -138,7 +138,7 @@ export async function resolveProjectFinancials(
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
            coalesce(pt.key, 'time_and_materials') as project_type,
-           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
+           coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}

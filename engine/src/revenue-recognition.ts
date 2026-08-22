@@ -668,7 +668,7 @@ export async function buildRecognitionSchedule(
 
     const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
       select period_id, planned_amount, sequence from recognition_schedule_lines
-       where schedule_id = ${scheduleId} and journal_entry_id is not null`));
+       where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
     const postedPeriods = new Set(posted.rows.map((r) => r.period_id));
     const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
     const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
@@ -689,7 +689,7 @@ export async function buildRecognitionSchedule(
     });
 
     await tx.execute(sql`
-      delete from recognition_schedule_lines where schedule_id = ${scheduleId} and journal_entry_id is null`);
+      delete from recognition_schedule_lines where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is null`);
 
     const skippedMonths: string[] = [];
     let lineCount = 0;
@@ -1275,8 +1275,10 @@ export async function cancelRevenueRecognitionForInvoice(input: {
           from recognition_schedule_lines schedule_line
           join recognition_schedules schedule
             on schedule.id = schedule_line.schedule_id
+           and schedule.org_id = schedule_line.org_id
           join journal_entries entry
             on entry.id = schedule_line.journal_entry_id
+           and entry.org_id = schedule_line.org_id
          where schedule_line.org_id = ${input.orgId}
            and schedule.obligation_id =
              any(${`{${obligationIds.join(",")}}`}::uuid[])
