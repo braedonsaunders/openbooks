@@ -39,6 +39,7 @@ import {
   Textarea,
   cn,
 } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../components/business-date-provider";
 import { useMoney } from "../../../../components/money-provider";
 import { HomeStatTile } from "../../../../components/module-home/client";
 import type {
@@ -64,9 +65,6 @@ const STATUS_VARIANT = {
   void: "outline",
 } as const;
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 async function requestJson(url: string, init?: RequestInit) {
   const response = await fetch(url, init);
@@ -135,10 +133,11 @@ export function WipBillingWorkspace({
 }) {
   const router = useRouter();
   const { money } = useMoney();
+  const today = useBusinessToday();
   const [creating, setCreating] = useState(false);
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState(today());
+  const [periodEnd, setPeriodEnd] = useState(today);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [workflowAction, setWorkflowAction] = useState<

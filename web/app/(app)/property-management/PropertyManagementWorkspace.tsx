@@ -40,6 +40,7 @@ import {
   type HeaderFieldPlacement,
   type ListViewConfig,
 } from "@openbooks/customization";
+import { useBusinessToday } from "@/components/business-date-provider";
 import { useMoney } from "@/components/money-provider";
 import { CustomFieldInput } from "../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
@@ -188,7 +189,7 @@ export function PropertyManagementWorkspace({
   const activeLeases = data.leases.filter((lease) =>
     ["active", "notice"].includes(lease.status),
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useBusinessToday();
   const occupied = data.units.filter(
     (unit) => unit.status === "occupied",
   ).length;
@@ -1598,7 +1599,7 @@ function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
   const [query, setQuery] = useState("");
   const [propertyId, setPropertyId] = useState("all");
   const [status, setStatus] = useState("all");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useBusinessToday();
   const operatingLeases = data.leases.filter((lease: any) =>
     ["active", "notice"].includes(lease.status),
   );
@@ -1946,7 +1947,7 @@ function DepositTable({ deposits, leases, money, onReverse }: any) {
 }
 
 function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
-  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
+  const [asOf, setAsOf] = useState(useBusinessToday());
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -2854,7 +2855,7 @@ function unitForm(unit: any) {
 }
 
 function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: any) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useBusinessToday();
   const initial = {
     propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
     unitId: initialUnitId ?? "",
@@ -3117,12 +3118,13 @@ function LeaseRecordDrawer({
   money,
   onSave,
 }: any) {
+  const today = useBusinessToday();
   const [tab, setTab] = useState<LeaseTab>("overview");
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [actionsOpen, setActionsOpen] = useState(false);
   const [terminationOpen, setTerminationOpen] = useState(false);
   const [termination, setTermination] = useState({
-    terminatedOn: new Date().toISOString().slice(0, 10),
+    terminatedOn: today,
     reason: "",
   });
   const [form, setForm] = useState(() => leaseForm(lease ?? {}));
@@ -3853,7 +3855,7 @@ function DepositSection({
   act,
   money,
 }: any) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = useBusinessToday();
   const [form, setForm] = useState({
     kind: "received",
     occurredOn: today,

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { PackageX } from 'lucide-react'
 import { Button, Input, Label, Popover, Select } from '@openbooks/ui'
+import { useBusinessToday } from '../../../components/business-date-provider'
 
 type AccountOpt = { value: string; label: string }
 
@@ -19,7 +20,7 @@ export function DisposeButton({ assetId, accountOptions }: { assetId: string; ac
   const [writeOff, setWriteOff] = useState(false)
   const [proceeds, setProceeds] = useState('')
   const [account, setAccount] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(useBusinessToday())
   const [busy, setBusy] = useState(false)
 
   async function submit() {

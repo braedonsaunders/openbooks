@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Button, Card, Input, Label, PageHeader, Select } from "@openbooks/ui";
+import { useBusinessToday } from "../../../../components/business-date-provider";
 import {
   ListPageLayout,
   PageContainer,
@@ -15,19 +16,16 @@ import {
  */
 export default function PspSettlementsPage() {
   const t = useTranslations("banking.pspSettlements");
+  const today = useBusinessToday();
   const [batches, setBatches] = useState<any[]>([]);
   const [provider, setProvider] = useState("stripe");
   const [externalRef, setExternalRef] = useState("");
-  const [settlementDate, setSettlementDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [settlementDate, setSettlementDate] = useState(today);
   const [payload, setPayload] = useState("[]");
   const [bankAccountId, setBankAccountId] = useState("");
   const [feeAccountId, setFeeAccountId] = useState("");
   const [clearingAccountId, setClearingAccountId] = useState("");
-  const [reversalDate, setReversalDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [reversalDate, setReversalDate] = useState(today);
   const [reversalReason, setReversalReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);

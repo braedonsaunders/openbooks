@@ -1,5 +1,6 @@
 'use client'
 
+import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import Link from 'next/link'
@@ -82,6 +83,7 @@ export function RunDrawer({
   paymentBasePath?: '/payments' | '/receipts'
 }) {
   const { money } = useMoney()
+  const today = useBusinessToday()
   const t = useTranslations('payments')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -95,7 +97,7 @@ export function RunDrawer({
   const [reason, setReason] = useState('')
   const [outcomeInstruction, setOutcomeInstruction] = useState<Record<string, any> | null>(null)
   const [outcomeStatus, setOutcomeStatus] = useState<'settled' | 'returned' | 'rejected'>('settled')
-  const [effectiveOn, setEffectiveOn] = useState(new Date().toISOString().slice(0, 10))
+  const [effectiveOn, setEffectiveOn] = useState(today)
   const [bankReference, setBankReference] = useState('')
   const [returnCode, setReturnCode] = useState('')
   const [returnReason, setReturnReason] = useState('')
@@ -359,7 +361,7 @@ export function RunDrawer({
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{money(i.amount)}</td>
-                  <td className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? new Date().toISOString().slice(0, 10)); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</td>
+                  <td className="px-3 py-2 text-right">{['sent', 'settled'].includes(i.status) ? <Button size="sm" variant="outline" onClick={() => { setOutcomeInstruction(i); setOutcomeStatus(i.status === 'settled' ? 'settled' : 'settled'); setEffectiveOn(i.settlement_effective_on ?? today); setBankReference(i.bank_reference ?? ''); setReturnCode(i.return_code ?? ''); setReturnReason(i.return_reason ?? '') }}>{t('runDrawer.recordOutcome')}</Button> : null}</td>
                 </tr>
               ))}
             </tbody>

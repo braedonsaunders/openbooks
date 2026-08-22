@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Scale } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
+import { useBusinessToday } from '../../../components/business-date-provider'
 
 /** Revalue / impair an asset to a new carrying value (posts the adjustment and
  *  rebuilds the remaining schedule). Shown in the asset drawer for in-service assets. */
@@ -15,7 +16,7 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [date, setDate] = useState(useBusinessToday())
   const [busy, setBusy] = useState(false)
 
   async function submit() {

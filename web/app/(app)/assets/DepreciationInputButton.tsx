@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Gauge, ListPlus } from 'lucide-react'
 import { Button, Input, Label, Popover, SearchSelect, Select } from '@openbooks/ui'
+import { useBusinessToday } from '../../../components/business-date-provider'
 
 export function DepreciationInputButton({
   assetId,
@@ -17,7 +18,7 @@ export function DepreciationInputButton({
   const t = useTranslations('assets.depreciationInput')
   const router = useRouter()
   const [open, setOpen] = useState(false)
-  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
+  const [effectiveDate, setEffectiveDate] = useState(useBusinessToday())
   const [value, setValue] = useState('')
   const [memo, setMemo] = useState('')
   const [bookId, setBookId] = useState(schedules[0]?.bookId ?? '')

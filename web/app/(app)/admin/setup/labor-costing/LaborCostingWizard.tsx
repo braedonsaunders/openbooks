@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
+import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 
 /**
@@ -25,6 +26,7 @@ export function LaborCostingWizard(props: {
   annualHours: number
 }) {
   const { money } = useMoney()
+  const today = useBusinessToday()
   const t = useTranslations('admin.setup.laborCosting.wizard')
   const tc = useTranslations('admin.setup.laborCosting.components')
   const router = useRouter()
@@ -86,7 +88,6 @@ export function LaborCostingWizard(props: {
 
   async function finish() {
     setBusy(true)
-    const today = new Date().toISOString().slice(0, 10)
     try {
       const call = async (method: string, body: Record<string, unknown>) => {
         const res = await fetch('/api/admin/setup/labor-costing', {

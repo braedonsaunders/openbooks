@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { BookOpen, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../../components/business-date-provider'
 import type { FinancialProfile, InvoicingProfile, BackupProfile } from '@openbooks/schema'
 
 export interface ProjectTypeRow {
@@ -158,11 +159,12 @@ export function ProjectTypesWorkspace({
   const tCommon = useTranslations('common')
   const tMeasures = useTranslations('projects.measures')
   const router = useRouter()
+  const today = useBusinessToday()
   const [list, setList] = useState(types)
   const [selId, setSelId] = useState<string>(types[0]?.id ?? 'new')
   const [sub, setSub] = useState<SubTab>('general')
   const [busy, setBusy] = useState(false)
-  const [financialEffectiveFrom, setFinancialEffectiveFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [financialEffectiveFrom, setFinancialEffectiveFrom] = useState(today)
   const [financialChangeReason, setFinancialChangeReason] = useState('')
 
   const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName'), t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0], [selId, list, t])
@@ -172,7 +174,7 @@ export function ProjectTypesWorkspace({
   if (lastSel !== selId) {
     setLastSel(selId)
     setDraft(selected)
-    setFinancialEffectiveFrom(new Date().toISOString().slice(0, 10))
+    setFinancialEffectiveFrom(today)
     setFinancialChangeReason('')
   }
 
@@ -220,7 +222,7 @@ export function ProjectTypesWorkspace({
       const created = {
         ...draft,
         id: data.id as string,
-        financialProfileEffectiveFrom: new Date().toISOString().slice(0, 10),
+        financialProfileEffectiveFrom: today,
       }
       setList([...list, created])
       setDraft(created)
@@ -313,7 +315,7 @@ export function ProjectTypesWorkspace({
                         <Label>{t('financialEffectiveFrom')}</Label>
                         <Input
                           type="date"
-                          min={new Date().toISOString().slice(0, 10)}
+                          min={today}
                           value={financialEffectiveFrom}
                           onChange={(e) => setFinancialEffectiveFrom(e.target.value)}
                         />

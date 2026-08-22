@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { Play, Scale } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
+import { useBusinessToday } from '../../../../components/business-date-provider'
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -28,7 +29,7 @@ export function StartReconciliationButton({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [throughDate, setThroughDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [throughDate, setThroughDate] = useState(useBusinessToday())
   const [statementBalance, setStatementBalance] = useState('')
 
   if (openReconciliationId) {
