@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { AnalyticsHeader } from '../_ui/AnalyticsHeader'
 import { requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { customerData, customerProfitability } from '../../../../lib/analytics/customer-data'
@@ -27,9 +28,10 @@ export default async function CustomerIntelligencePage({
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
-  const [data, profitability] = await Promise.all([
+  const [data, profitability, projectsEnabled] = await Promise.all([
     customerData({ from: period.from, to: period.to, label: period.label }, authz.user.orgId),
     customerProfitability({ from: period.from, to: period.to }, authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'projects'),
   ])
 
   return (
@@ -40,7 +42,7 @@ export default async function CustomerIntelligencePage({
         </AnalyticsHeader>
       }
     >
-      <CustomerView data={data} profitability={profitability} />
+      <CustomerView data={data} profitability={profitability} projectsEnabled={projectsEnabled} />
     </ListPageLayout>
   )
 }
