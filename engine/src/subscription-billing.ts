@@ -439,7 +439,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
 
     try {
       const sub = await withOrg(row.orgId, async () => {
-        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} limit 1`));
+        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`));
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart);
@@ -529,7 +529,7 @@ async function loadSubOrgId(subscriptionId: string): Promise<string> {
  * transaction (see withOrg) — mutation paths call this after taking the
  * subscription row lock so they price from locked, current state.
  */
-async function loadSubRow(subscriptionId: string): Promise<SubDetail> {
+async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDetail> {
   const r = (await db.execute<SubDetail>(sql`
     select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
            s.price_override as "priceOverride", s.auto_post as "autoPost",
@@ -544,7 +544,7 @@ async function loadSubRow(subscriptionId: string): Promise<SubDetail> {
       from subscriptions s
       join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
       join orgs o on o.id = s.org_id
-     where s.id = ${subscriptionId} limit 1
+     where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1
   `));
   const d = r.rows[0];
   if (!d) throw new SubscriptionError("subscription not found");
@@ -572,7 +572,7 @@ export async function changeSubscription(
   // together or not at all.
   return withOrg(orgId, async () => {
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
-    const row = await loadSubRow(subscriptionId);
+    const row = await loadSubRow(subscriptionId, orgId);
     if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");
     if (row.advancedLifecycle) throw new SubscriptionError("use an advanced contract amendment to change subscription components");
 
@@ -643,7 +643,7 @@ export async function prorateFirstInvoice(
   // must not cut two prorated first invoices from the same pre-bill state.
   return withOrg(orgId, async () => {
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
-    const row = await loadSubRow(subscriptionId);
+    const row = await loadSubRow(subscriptionId, orgId);
     // Single-fire: create inserts next_bill_on = firstBillOn and
     // current_period_start = startOn — the same two columns a successful
     // proration writes. The real post-proration evidence is the invoice

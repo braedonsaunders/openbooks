@@ -143,7 +143,7 @@ export async function validateSubsidiaryRestrictions(
       select p.display_name as name, p.subsidiary_id as "subsidiaryId",
              coalesce(json_agg(ps.subsidiary_id) filter (where ps.subsidiary_id is not null), '[]') as extra
         from parties p left join party_subsidiaries ps on ps.party_id = p.id
-       where p.id = ${opts.partyId}
+       where p.id = ${opts.partyId} and p.org_id = ${opts.orgId}
        group by p.id`));
     const p = r.rows[0];
     if (p) {
