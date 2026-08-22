@@ -43,10 +43,13 @@ export async function POST(req: Request) {
   const cols = selected.length > 0 ? selected : columns
 
   const title = safeName(resource.descriptor.label || resource.descriptor.key)
-  const filename = `${title}-${await businessToday(authz.user.orgId)}`
+  const stamp = await businessToday(authz.user.orgId)
+  const filename = `${title}-${stamp}`
 
   if (format === 'csv') return csvResponse(toCsv(title, cols, rows), filename)
-  if (format === 'xlsx') return xlsxResponse(await toXlsx(title, cols, rows), filename)
+  if (format === 'xlsx') {
+    return xlsxResponse(await toXlsx(title, cols, rows, new Date(`${stamp}T00:00:00Z`)), filename)
+  }
   // json
   return new NextResponse(new TextEncoder().encode(toJson(cols, rows)), {
     status: 200,
