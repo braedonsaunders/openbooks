@@ -474,7 +474,7 @@ async function ensureOpenBooksEmployeeAndCard(
     const existing = (await db.execute<{ id: string }>(sql`
       select p.id
         from parties p
-        join employee_roles er on er.party_id = p.id
+        join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
        where p.org_id = ${manifest.openbooks.orgId}
          and p.display_name = 'Parity Employee'
        limit 1
