@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
@@ -36,11 +37,18 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
   return v
 }
 
-/** Parse an hours cell → non-negative 4dp string, or null (blank/zero). */
+/** Parse an hours cell → non-negative money string, or null (blank/zero). */
 function hoursOrNull(v: unknown): string | null | 'invalid' {
   if (v == null || v === '') return null
-  const hours = canonicalDecimal(v, 4)
-  if (hours === null || compareDecimal(hours, '0') < 0) return 'invalid'
+  const exact = canonicalDecimal(v, 4)
+  if (exact === null) return 'invalid'
+  let hours: string
+  try {
+    hours = normalizeMoney(exact)
+  } catch {
+    return 'invalid'
+  }
+  if (compareDecimal(hours, '0') < 0) return 'invalid'
   if (compareDecimal(hours, '0') === 0) return null
   return hours
 }
