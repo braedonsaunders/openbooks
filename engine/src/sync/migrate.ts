@@ -128,6 +128,17 @@ function persistItemDefaultCost(value: unknown): string {
   }
 }
 
+/** Persist leftover migrated item default rate through exact decimal then ledger money. Fail closed. */
+function persistItemDefaultRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("item default rate must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("item default rate must be an exact decimal");
+  }
+}
+
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
   const rows = (await db.execute(sql`
@@ -642,7 +653,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
   if (resource === "items") {
     const name = String(f.name ?? `Item ${rec.sourceRef}`);
     const defaultCost = f.defaultCost == null || f.defaultCost === "" ? null : persistItemDefaultCost(f.defaultCost);
-    const defaultRate = moneyOrNull(f.defaultRate);
+    const defaultRate = f.defaultRate == null || f.defaultRate === "" ? null : persistItemDefaultRate(f.defaultRate);
     const unit = str(f.unit);
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
