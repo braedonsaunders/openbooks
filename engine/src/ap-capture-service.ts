@@ -265,7 +265,7 @@ export async function resolveAndValidateCapture(input: {
      where ci.org_id = ${input.orgId} and ci.id <> ${input.captureItemId}
        and ci.status not in ('rejected','failed')
        and (
-         ci.content_hash = (select content_hash from ap_capture_items where id = ${input.captureItemId})
+         ci.content_hash = (select content_hash from ap_capture_items where id = ${input.captureItemId} and org_id = ${input.orgId})
          or (${vendorId}::uuid is not null and ci.vendor_candidate_id = ${vendorId}
              and regexp_replace(lower(nullif(ci.normalized->>'invoiceNumber','')), '[^a-z0-9]', '', 'g')
                  = regexp_replace(lower(${normalized.invoiceNumber}), '[^a-z0-9]', '', 'g'))
@@ -508,7 +508,7 @@ export async function materializeCapture(input: {
              and dl.quantity_billed + ${line.quantity} <= dl.quantity
              and (dl.item_id is null or exists (
                select 1 from items i
-                where i.id = dl.item_id
+                where i.id = dl.item_id and i.org_id = ${input.orgId}
                   and (i.kind = 'service' or dl.quantity_fulfilled - dl.quantity_billed >= ${line.quantity})
              ))
           returning id
