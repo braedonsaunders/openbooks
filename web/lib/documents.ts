@@ -148,7 +148,7 @@ export async function createPostedCorrectionDraft(
         updatedAt: schema.documents.updatedAt,
       })
       .from(schema.documents)
-      .where(sql`${schema.documents.id} = ${replacement.id}`)
+      .where(sql`${schema.documents.id} = ${replacement.id} and ${schema.documents.orgId} = ${ctx.orgId}`)
     await applyDocumentEdit(replacement.id, {
       ...current,
       updatedAt: current.updatedAt?.toISOString(),
@@ -200,17 +200,18 @@ export async function createPostedCorrectionDraft(
   } catch (error) {
     await db.execute(sql`
       delete from document_links
-       where from_document_id = ${replacement.id}
-          or to_document_id = ${replacement.id}
+       where org_id = ${ctx.orgId}
+         and (from_document_id = ${replacement.id} or to_document_id = ${replacement.id})
     `)
     await db.execute(sql`
       delete from document_line_tax_components
-       where document_line_id in (
-         select id from document_lines where document_id = ${replacement.id}
+       where org_id = ${ctx.orgId}
+         and document_line_id in (
+         select id from document_lines where document_id = ${replacement.id} and org_id = ${ctx.orgId}
        )
     `)
-    await db.execute(sql`delete from document_lines where document_id = ${replacement.id}`)
-    await db.execute(sql`delete from documents where id = ${replacement.id}`)
+    await db.execute(sql`delete from document_lines where document_id = ${replacement.id} and org_id = ${ctx.orgId}`)
+    await db.execute(sql`delete from documents where id = ${replacement.id} and org_id = ${ctx.orgId}`)
     throw error
   }
 }

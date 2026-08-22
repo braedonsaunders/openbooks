@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
@@ -53,7 +53,7 @@ export async function requestDocumentVoid(input: {
   // aware instant, not the server's UTC day.
   const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
   return withOrg(input.orgId, async () => {
-    const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, input.documentId));
+    const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, input.documentId), eq(schema.documents.orgId, input.orgId)));
     if (!doc) throw new DocumentVoidError("document not found");
     if (!["approved", "posted"].includes(doc.status)) {
       throw new DocumentVoidError(
@@ -68,7 +68,7 @@ export async function requestDocumentVoid(input: {
     const lines = await db
       .select()
       .from(schema.documentLines)
-      .where(eq(schema.documentLines.documentId, doc.id));
+      .where(and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)));
     if (!org) throw new DocumentVoidError("organization not found");
     const scriptCtx: ScriptContext = {
       trigger: "before_void",
