@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import type {
   ScheduleData,
   ScheduleDependency,
@@ -8,6 +9,7 @@ import type {
   ScheduleTaskPatchInput,
 } from '@appkit/scheduling'
 import { wouldCreateDependencyCycle } from '@appkit/scheduling'
+import { canonicalDecimal } from './exact-decimal'
 
 /**
  * Project schedule persistence.
@@ -471,6 +473,13 @@ export async function deleteScheduleCalendar(orgId: string, calendarId: string) 
   })
 }
 
+function optionalCostRate(value: unknown): string | null | 'invalid' {
+  if (value == null || value === '') return null
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return 'invalid'
+  return normalizeMoney(exact)
+}
+
 export async function upsertScheduleResource(
   orgId: string,
   projectId: string,
@@ -482,10 +491,16 @@ export async function upsertScheduleResource(
     calendarId?: string | null
     defaultUnits?: number
     capacityPerDay?: number
-    costRate?: number
+    costRate?: string | number | null
   },
   userId: string | null,
 ) {
+  const costRate = input.costRate === undefined
+    ? undefined
+    : optionalCostRate(input.costRate)
+  if (costRate === 'invalid') {
+    throw new ScheduleError('cost rate must be a number with no more than four decimal places', 422)
+  }
   if (input.id) {
     await db.execute(sql`
       update schedule_resources
@@ -495,7 +510,7 @@ export async function upsertScheduleResource(
              calendar_id = ${input.calendarId === undefined ? sql`calendar_id` : input.calendarId},
              default_units = coalesce(${input.defaultUnits ?? null}, default_units),
              capacity_per_day = coalesce(${input.capacityPerDay ?? null}, capacity_per_day),
-             cost_rate = coalesce(${input.costRate ?? null}, cost_rate),
+             cost_rate = ${costRate === undefined ? sql`cost_rate` : sql`${costRate}`},
              updated_at = now(), updated_by = ${userId}
        where id = ${input.id} and org_id = ${orgId}`)
     return input.id
@@ -507,7 +522,7 @@ export async function upsertScheduleResource(
             ${input.role ?? null}, ${input.kind ?? 'crew'},
             ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
             ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
-            ${input.costRate ?? null}, ${userId}, ${userId})
+            ${costRate ?? null}, ${userId}, ${userId})
     returning id`))
   return created.rows[0]?.id ?? null
 }

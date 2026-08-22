@@ -10,6 +10,7 @@ import {
   payrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -272,14 +273,15 @@ export async function POST(req: Request) {
     if (value === null || compareDecimal(value, '0') < 0) {
       return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     }
-    money[key] = value
+    money[key] = normalizeMoney(value)
   }
   let vacationPercent: string | null = null
   if (body.vacationPercent !== null && body.vacationPercent !== undefined && body.vacationPercent !== '') {
-    vacationPercent = canonicalDecimal(body.vacationPercent, 4)
-    if (vacationPercent === null || compareDecimal(vacationPercent, '0') < 0) {
+    const vacationRaw = canonicalDecimal(body.vacationPercent, 4)
+    if (vacationRaw === null || compareDecimal(vacationRaw, '0') < 0) {
       return NextResponse.json({ error: 'invalid vacationPercent' }, { status: 422 })
     }
+    vacationPercent = normalizeMoney(vacationRaw)
   }
 
   const refs = (await Promise.all([

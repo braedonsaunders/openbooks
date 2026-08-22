@@ -9,6 +9,7 @@ import {
   postPayrollVariance,
   type LaborCostComponent,
 } from '@openbooks/engine/src/labor-costing.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
@@ -169,8 +170,9 @@ export async function POST(req: Request) {
     const currencies = await configuredCurrencies(orgId)
     const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
     if (!currencies.includes(currency)) return NextResponse.json({ error: 'currency is not configured for this organization' }, { status: 422 })
-    const rate = canonicalDecimal(body.rate, 4)
-    if (rate === null || compareDecimal(rate, '0') < 0) return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
+    const rateRaw = canonicalDecimal(body.rate, 4)
+    if (rateRaw === null || compareDecimal(rateRaw, '0') < 0) return NextResponse.json({ error: 'invalid rate' }, { status: 422 })
+    const rate = normalizeMoney(rateRaw)
     const basis = body.basis === 'year' ? 'year' : 'hour'
     const annualHours = Number(body.annualHours) > 0 ? Number(body.annualHours) : 2080
     const effectiveFrom = body.effectiveFrom

@@ -5,6 +5,7 @@ import { nextNumber } from '@openbooks/engine/src/payments.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { isUuid, pickString } from '@/lib/list-params'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
     currency = body.currency ?? row.currency
   }
   if (amount === null) return NextResponse.json({ error: 'amount is required' }, { status: 400 })
+  amount = normalizeMoney(amount)
 
   try {
     const waiverNumber = await nextNumber(orgId, 'lien_waiver', 'LW-')
