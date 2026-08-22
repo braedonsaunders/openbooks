@@ -825,6 +825,7 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
       name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
+    where app_listings.publisher_org_id = ${orgId}
     returning id`))
   return { id: r.rows[0]!.id }
 }
