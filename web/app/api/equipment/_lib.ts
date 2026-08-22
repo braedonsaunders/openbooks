@@ -25,9 +25,9 @@ export async function loadEquipment(id: string, orgId: string) {
         where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'), 0) as billed_revenue,
       coalesce((select sum(jl.amount) from journal_lines jl join journal_entries je on je.id = jl.entry_id
         left join documents d on d.id = je.source_document_id
-        join accounts a on a.id = jl.account_id
+        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
         where jl.equipment_unit_id = ${id} and jl.org_id = ${orgId} and je.org_id = ${orgId} and je.status in ('posted', 'reversed')
-          and a.type in ('expense','expense_other','expense_cogs') and coalesce(d.kind, '') <> 'project_charge' and jl.amount > 0), 0) as direct_costs,
+          and a.type in ('expense','expense_other','cogs') and coalesce(d.kind, '') <> 'project_charge' and jl.amount > 0), 0) as direct_costs,
       coalesce((select sum(dsl.posted_amount) from equipment_units eu
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
-import { currentUser } from "../../../../../lib/auth";
+import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -15,8 +15,9 @@ export const runtime = "nodejs";
  * +10 no overdue / −15 if >50% of open items overdue.
  */
 export async function GET(req: Request) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await guardPermission("reports.read");
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
   const url = new URL(req.url);
   const party = url.searchParams.get("party");
   const side = url.searchParams.get("side") === "ap" ? "ap" : "ar";
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount
       from documents d
-      left join journal_entries je on je.source_document_id = d.id
+      left join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and d.kind in (${side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`})
       order by coalesce(d.document_date, d.posting_date) desc

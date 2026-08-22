@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { currentUser } from "../../../../../lib/auth";
+import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -14,8 +14,9 @@ const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", 
  * the transactions behind it. Capped at 500 detail rows with the true count.
  */
 export async function GET(req: Request) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await guardPermission("reports.read");
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
   const url = new URL(req.url);
   const digit = Number(url.searchParams.get("digit"));
   const dim = url.searchParams.get("dim") === "2d" ? "2d" : "1d";

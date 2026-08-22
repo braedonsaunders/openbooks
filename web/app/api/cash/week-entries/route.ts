@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { currentUser } from "../../../../lib/auth";
+import { guardPermission } from "../../../../lib/authz";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { analyticsConfig } from "../../../../lib/analytics/config";
 
@@ -15,8 +15,9 @@ export const runtime = "nodejs";
  * supplies the rows behind whichever week is actually opened.
  */
 export async function GET(req: Request) {
-  const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const gate = await guardPermission("reports.read");
+  if (gate instanceof NextResponse) return gate;
+  const user = gate.user;
 
   const url = new URL(req.url);
   const weekStart = url.searchParams.get("week");

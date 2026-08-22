@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { importStatement, type ParsedStatementLine } from "./banking.ts";
+import { addCalendarDays, businessToday } from "./business-date.ts";
 import { neg, normalizeMoney } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 
@@ -31,6 +32,7 @@ export interface BankFeedAdapter {
     creds: Record<string, string>,
     externalAccountId: string,
     sinceIso: string,
+    untilIso: string,
   ): Promise<FeedFetchResult>;
 }
 
@@ -73,11 +75,11 @@ const gocardless: BankFeedAdapter = {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso) {
     if (!externalAccountId) throw new FeedError("GoCardless account id required");
     const token = await gocardlessToken(creds);
     const res = await fetch(
-      `${GOCARDLESS_BASE}/accounts/${encodeURIComponent(externalAccountId)}/transactions/?date_from=${sinceIso}`,
+      `${GOCARDLESS_BASE}/accounts/${encodeURIComponent(externalAccountId)}/transactions/?date_from=${sinceIso}&date_to=${untilIso}`,
       { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } },
     );
     const body = await asJson(res);
@@ -155,9 +157,9 @@ const plaid: BankFeedAdapter = {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso) {
     const env = creds.env || "production";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = untilIso;
     const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
     const transactions = await plaidFetchAllTransactions(async (offset) => {
       const res = await fetch(`https://${env}.plaid.com/transactions/get`, {
@@ -209,9 +211,9 @@ const truelayer: BankFeedAdapter = {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }
   },
-  async fetch(creds, externalAccountId, sinceIso) {
+  async fetch(creds, externalAccountId, sinceIso, untilIso) {
     if (!externalAccountId) throw new FeedError("TrueLayer account id required");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = untilIso;
     const res = await fetch(
       `https://api.truelayer.com/data/v1/accounts/${encodeURIComponent(externalAccountId)}/transactions?from=${sinceIso}T00:00:00Z&to=${today}T23:59:59Z`,
       { headers: { Authorization: `Bearer ${creds.accessToken}` } },
@@ -263,17 +265,14 @@ function cadenceIntervalMs(cadence: string): number {
   return cadence === "hourly" ? 3_600_000 : 86_400_000;
 }
 
-function sinceFor(lastSyncAt: Date | string | null): string {
+function sinceFor(lastSyncAt: Date | string | null, today: string): string {
   if (!lastSyncAt) {
     // Cold start: pull the last 90 days so the first sync has history.
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 90);
-    return d.toISOString().slice(0, 10);
+    return addCalendarDays(today, -90);
   }
-  const d = new Date(lastSyncAt);
+  const synced = (lastSyncAt instanceof Date ? lastSyncAt : new Date(lastSyncAt)).toISOString().slice(0, 10);
   // Re-pull a two-day overlap; importStatement dedupes on the provider txn id.
-  d.setUTCDate(d.getUTCDate() - 2);
-  return d.toISOString().slice(0, 10);
+  return addCalendarDays(synced, -2);
 }
 
 export interface FeedSyncOutcome {
@@ -295,8 +294,9 @@ async function syncOne(row: {
   const adapter = getBankFeedAdapter(row.provider);
   if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
   const creds = unsealJson<Record<string, string>>(row.credentials) ?? {};
-  const since = sinceFor(row.lastSyncAt);
-  const { lines, currency } = await adapter.fetch(creds, row.externalAccountId ?? "", since);
+  const until = await businessToday(row.orgId);
+  const since = sinceFor(row.lastSyncAt, until);
+  const { lines, currency } = await adapter.fetch(creds, row.externalAccountId ?? "", since, until);
 
   let imported = 0;
   let duplicates = 0;
