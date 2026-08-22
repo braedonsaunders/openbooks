@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, pool, schema } from "./db.ts";
 import { postDocument, PostingError, type PostingDeps } from "./posting.ts";
 import { ensureReadRole, runUserSql } from "./sqlapi.ts";
@@ -95,7 +95,7 @@ async function main() {
 
   // -- 3. add the memo, post ------------------------------------------------
   await db.update(schema.documents).set({ memo: "Annual consumables stock-up, PO-4471, approved by KL" })
-    .where(eq(schema.documents.id, doc.id));
+    .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, orgId)));
   console.log("== attempt 2: post with memo");
   const entryId = await postDocument(doc.id, deps);
   const [posted] = await db.select().from(schema.documents).where(eq(schema.documents.id, doc.id));
