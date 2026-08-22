@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { loadWorkSchedules } from '@openbooks/engine/src/work-schedules.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
@@ -131,8 +132,14 @@ export async function POST(request: Request) {
       const raw = entry as Record<string, unknown>
       const dayIndex = Number(raw.dayIndex)
       if (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= cycleDays) continue
-      const hours = canonicalDecimal(raw.hours, 4)
-      if (hours === null) return bad(`"${String(raw.hours)}" is not a number of hours`)
+      const exact = canonicalDecimal(raw.hours, 4)
+      if (exact === null) return bad(`"${String(raw.hours)}" is not a number of hours`)
+      let hours: string
+      try {
+        hours = normalizeMoney(exact)
+      } catch {
+        return bad(`"${String(raw.hours)}" is not a number of hours`)
+      }
       if (compareDecimal(hours, '0') < 0 || compareDecimal(hours, '24') > 0) {
         return bad('a day holds between 0 and 24 hours')
       }
