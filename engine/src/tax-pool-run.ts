@@ -201,7 +201,8 @@ export async function runTaxPool(
           allowance = excluded.allowance, closing_balance = excluded.closing_balance,
           recapture = excluded.recapture, terminal_loss = excluded.terminal_loss,
           short_year_factor = excluded.short_year_factor, enhanced_multiplier = excluded.enhanced_multiplier,
-          updated_at = now(), updated_by = ${opts.actorId}`);
+          updated_at = now(), updated_by = ${opts.actorId}
+        where tax_pool_periods.org_id = ${orgId}`);
       await tx.execute(sql`
         update tax_depreciation_pools set opening_balance = ${result.closingBalance}, updated_at = now(), updated_by = ${opts.actorId}
          where id = ${pool.id} and org_id = ${orgId}`);
@@ -334,7 +335,8 @@ async function runMacrs(
           opening_balance=excluded.opening_balance, additions=excluded.additions, dispositions=excluded.dispositions,
           net_additions=excluded.net_additions, immediate_expense=excluded.immediate_expense, base=excluded.base,
           allowance=excluded.allowance, closing_balance=excluded.closing_balance, recapture=0, terminal_loss=0,
-          short_year_factor=excluded.short_year_factor, updated_at=now(), updated_by=${opts.actorId}`);
+          short_year_factor=excluded.short_year_factor, updated_at=now(), updated_by=${opts.actorId}
+        where tax_pool_periods.org_id = ${orgId}`);
       await tx.execute(sql`update tax_depreciation_pools set opening_balance=${values.closingBalance}, updated_at=now(), updated_by=${opts.actorId} where id=${pool.id} and org_id=${orgId}`);
     });
     lines.push({ classCode, className: group.def.name, openingBalance: values.openingBalance, additions: values.additions, dispositions: values.dispositions, allowance: values.allowance, closingBalance: values.closingBalance, recapture: "0.00", terminalLoss: "0.00" });
