@@ -86,7 +86,7 @@ export async function tick(): Promise<void> {
           db.execute<{ id: string }>(sql`
           update backup_runs
              set status = 'completed', error = null, completed_at = now(), updated_at = now()
-           where id = ${run.id} and status = 'running'
+           where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
            returning id`));
         if (finalized.rows[0]) {
@@ -108,7 +108,7 @@ export async function tick(): Promise<void> {
              set status = 'failed', object_key = null,
                  error = 'worker stopped before the upload could be verified',
                  completed_at = now(), updated_at = now()
-           where id = ${run.id} and status = 'running'
+           where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'`));
       }
     }
@@ -116,8 +116,8 @@ export async function tick(): Promise<void> {
     // A synchronous cleanup may have failed after a known failed run. Retry
     // those deterministic keys until no hidden object remains.
     const failedUploads = await withBypassContext(() =>
-      db.execute<{ id: string; object_key: string }>(sql`
-      select id, object_key from backup_runs
+      db.execute<{ id: string; org_id: string; object_key: string }>(sql`
+      select id, org_id, object_key from backup_runs
        where status = 'failed' and object_key is not null and purged_at is null
        limit 25`));
     for (const run of failedUploads.rows) {
@@ -126,7 +126,7 @@ export async function tick(): Promise<void> {
         await withBypassContext(() =>
           db.execute(sql`
           update backup_runs set object_key = null, updated_at = now()
-           where id = ${run.id} and status = 'failed' and object_key = ${run.object_key}`));
+           where id = ${run.id} and org_id = ${run.org_id} and status = 'failed' and object_key = ${run.object_key}`));
       } catch (error) {
         console.error(`[backup-scheduler] orphan cleanup failed for ${run.object_key}:`, (error as Error).message);
       }
