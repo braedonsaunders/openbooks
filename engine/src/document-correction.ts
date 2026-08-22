@@ -175,7 +175,7 @@ export async function createDocumentCorrectionDraft(input: {
       const sourceLines = await tx
         .select()
         .from(schema.documentLines)
-        .where(eq(schema.documentLines.documentId, source.id));
+        .where(and(eq(schema.documentLines.documentId, source.id), eq(schema.documentLines.orgId, input.orgId)));
       const lineIds = new Map<string, string>();
       for (const line of sourceLines) {
         const lineId = randomUUID();
