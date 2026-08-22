@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { addCalendarDays, businessToday } from "./business-date.ts";
 import { db, schema, withBypassContext, withOrg, withOrgContext } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
@@ -219,6 +220,7 @@ export function classifyPeriodPerformance(args: { currentRevenue: string; priorR
 }
 
 async function accountingFindings(orgId: string, agentThreshold: string, detectors: ContinuousCloseDetectorPolicy[]): Promise<Finding[]> {
+  const today = await businessToday(orgId);
   const findings: Finding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
   const unmatchedPolicy = byKey.get("unmatched_bank_activity");
@@ -237,7 +239,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
         join accounts a on a.id = s.account_id and a.org_id = s.org_id
-       where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= current_date
+       where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= ${today}
        group by a.id, a.number, a.name
     `));
 
@@ -247,7 +249,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         from bank_statement_lines l
         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
        where l.org_id = ${orgId} and s.account_id = ${row.account_id}
-         and l.match_status = 'unmatched' and l.posted_on <= current_date
+         and l.match_status = 'unmatched' and l.posted_on <= ${today}
        order by abs(l.amount) desc, l.posted_on
        limit 10
     `));
@@ -360,6 +362,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
   if (stalePolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(stalePolicy, agentThreshold);
     const staleAfterDays = stalePolicy.parameters.staleAfterDays;
+    const staleOnOrBefore = addCalendarDays(today, -staleAfterDays);
     const stale = (await db.execute<{
         document_count: number;
         oldest_date: string | null;
@@ -369,7 +372,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
              coalesce(sum(abs(total)), 0)::text as materiality
         from documents
        where org_id = ${orgId} and status in ('draft','pending_approval')
-         and document_date <= current_date - (${staleAfterDays} * interval '1 day')
+         and document_date <= ${staleOnOrBefore}
          and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
     `));
     const staleRow = stale.rows[0];
@@ -378,7 +381,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         select id, kind, document_number, document_date, status, total::text
           from documents
          where org_id = ${orgId} and status in ('draft','pending_approval')
-           and document_date <= current_date - (${staleAfterDays} * interval '1 day')
+           and document_date <= ${staleOnOrBefore}
            and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','expense_report','journal')
          order by document_date, abs(total) desc limit 10
       `));
@@ -416,6 +419,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
 }
 
 async function financeFindings(orgId: string, agentThreshold: string, detectors: ContinuousCloseDetectorPolicy[]): Promise<Finding[]> {
+  const today = await businessToday(orgId);
   const findings: Finding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
   const missingBudgetPolicy = byKey.get("missing_approved_budget");
@@ -430,12 +434,12 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
         ends_on: string;
       }>(sql`
       select bs.id, bs.book_id, bs.name, bs.fiscal_year,
-             min(p.starts_on) as starts_on, least(current_date, max(p.ends_on)) as ends_on
+             min(p.starts_on) as starts_on, least(${today}::date, max(p.ends_on)) as ends_on
       from budget_scenarios bs
       join budget_lines bl on bl.scenario_id = bs.id and bl.org_id = bs.org_id
       join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
      where bs.org_id = ${orgId} and bs.kind = 'budget' and bs.status = 'approved'
-       and p.starts_on <= current_date
+       and p.starts_on <= ${today}
        group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
        order by bs.fiscal_year desc, bs.updated_at desc
        limit 1
@@ -556,7 +560,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
-       and not p.is_adjustment and p.ends_on < current_date
+       and not p.is_adjustment and p.ends_on < ${today}
      order by p.ends_on desc limit 2
     `));
     if (periods.rows.length === 2) {
