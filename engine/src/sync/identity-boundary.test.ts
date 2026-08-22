@@ -70,6 +70,21 @@ test("tax-code persist writes ratePercent through canonicalDecimal then normaliz
   assert.doesNotMatch(body, /normalizeMoney\("0"\)/);
 });
 
+test("payment-term insert persist writes discountPercent through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = loader.indexOf("function persistPaymentTermDiscountPercent");
+  const helperEnd = loader.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistPaymentTermDiscountPercent helper is defined");
+  const helper = loader.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = loader.indexOf("insert into payment_terms");
+  const next = loader.indexOf('if (resource === "time_types")');
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.match(body, /persistPaymentTermDiscountPercent\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.discountPercent\)/);
+});
+
 test("time-entry insert persist writes hours through canonicalDecimal then normalizeMoney", () => {
   const helperStart = loader.indexOf("function persistTimeEntryHours");
   const helperEnd = loader.indexOf("\n}", helperStart);
