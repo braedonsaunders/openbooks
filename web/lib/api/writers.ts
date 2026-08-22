@@ -444,6 +444,9 @@ async function createDocument(
   source: "api" | "mcp" | "assistant",
 ): Promise<WriteResult> {
   if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
+  if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, "multiCurrency"))) {
+    return err(404, "not found");
+  }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
   const current: DocumentEditCurrent = {
     kind: docKind,
@@ -480,6 +483,9 @@ async function updateDocument(
   const row = owned.rows[0];
   if (!row) return err(404, "not found");
   if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
+  if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, "multiCurrency"))) {
+    return err(404, "not found");
+  }
   if (row.status === "voided") return err(422, "a voided document cannot be edited");
   try {
     await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source });

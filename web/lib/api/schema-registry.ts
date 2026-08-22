@@ -105,6 +105,7 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
 
   const revenueRecognitionOn = await isFeatureEnabled(orgId, "revenueRecognition");
   const timeTrackingOn = await isFeatureEnabled(orgId, "timeTracking");
+  const multiCurrencyOn = await isFeatureEnabled(orgId, "multiCurrency");
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
     const physical = (byTable.get(t.table!) ?? [])
@@ -114,7 +115,8 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
         name: c.column_name,
         type: pgTypeToOpenApi(c.data_type),
         required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
-        writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom",
+        writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom"
+          && (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
         description: null,
         custom: false,
       }));
