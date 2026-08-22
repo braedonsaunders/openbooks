@@ -55,6 +55,34 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
 
 export class ConversionError extends Error {}
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
+/** True when converting `sourceId` would copy an inventory / assembly / kit line. */
+export async function conversionWouldCopyInventoryKinds(orgId: string, sourceId: string): Promise<boolean> {
+  if (await isFeatureEnabled(orgId, 'inventory')) return false
+  const lines = (await db.execute<{
+    item_id: string | null
+    kind: string | null
+    quantity: string
+    quantity_billed: string
+    unit_price: string
+    tax_amount: string
+  }>(sql`
+    select line.item_id, i.kind, line.quantity, line.quantity_billed, line.unit_price, line.tax_amount
+      from document_lines line
+      left join items i on i.id = line.item_id and i.org_id = line.org_id
+     where line.org_id = ${orgId} and line.document_id = ${sourceId}`))
+  return lines.rows.some((line) => {
+    if (!line.item_id || !line.kind || !INVENTORY_ITEM_KINDS.has(line.kind)) return false
+    return remainingOrderLine({
+      quantity: String(line.quantity),
+      quantityBilled: String(line.quantity_billed),
+      unitPrice: String(line.unit_price),
+      taxAmount: String(line.tax_amount),
+    }) !== null
+  })
+}
+
 interface ConvertResult {
   id: string
   documentNumber: string
@@ -108,6 +136,20 @@ export async function convertOrder(
       }))
       .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
+    // Source lines stay. Turning Inventory off must refuse a conversion that
+    // would copy inventory / assembly / kit onto the new document.
+    if (!(await isFeatureEnabled(orgId, 'inventory'))) {
+      const itemIds = [...new Set(
+        remaining.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          throw new ConversionError('Inventory is disabled')
+        }
+      }
+    }
 
     const documentNumber = await nextDocumentNumber(orgId, target.kind, target.prefix, doc.subsidiary_id)
     const isOrder = ORDER_KINDS.includes(target.kind as OrderKind)
