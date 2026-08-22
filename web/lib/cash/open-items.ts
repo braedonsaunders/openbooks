@@ -42,7 +42,7 @@ export async function openItems(
         from documents d
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
          and je.posting_date <= ${asOf}
-        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and ${signFilter}
+        join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${signFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
          and d.open_balance > 0${subScope(sql`jl.subsidiary_id`, subIds)}

@@ -24,8 +24,8 @@ export interface EntityAdhoc {
 
 /** Customer role and CRM lifecycle data for the canonical party row. */
 export const CUSTOMER_BASE_JOINS = sql`
-  join customer_roles cr on cr.party_id = p.id and cr.is_active
-  left join crm_account_profiles cap on cap.party_id = p.id and cap.is_active`
+  join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
+  left join crm_account_profiles cap on cap.party_id = p.id and cap.org_id = p.org_id and cap.is_active`
 
 export const CUSTOMER_STATUS_EXPR = sql`coalesce(cap.lifecycle_stage, 'customer')`
 
@@ -356,7 +356,7 @@ export const CRM_ACCOUNT_BASE_JOINS = sql`
   join parties p on p.id = cp.party_id and p.org_id = cp.org_id
   left join crm_account_statuses s on s.id = cp.status_id and s.org_id = cp.org_id
   left join users u on u.id = cp.owner_user_id
-  left join crm_sales_territories territory on territory.id = cp.territory_id`
+  left join crm_sales_territories territory on territory.id = cp.territory_id and territory.org_id = cp.org_id`
 
 export const CRM_ACCOUNT_BUILT_IN_EXPR: Record<string, SQL> = {
   account_name: sql`p.display_name`,
@@ -1073,13 +1073,13 @@ export function revenueContractWhere(view: ListViewConfig, adhoc: EntityAdhoc, o
 /* ------------------------------------------------------------------ */
 
 export const EQUIPMENT_BASE_JOINS = sql`
-  left join items equipment_item on equipment_item.id=eu.charge_item_id
+  left join items equipment_item on equipment_item.id=eu.charge_item_id and equipment_item.org_id=eu.org_id
   left join lateral (
     select coalesce(sum(dl.cost_amount) filter (where d.status in ('approved','posted')), 0) as recovery,
            coalesce(sum(dl.bill_amount) filter (where d.status in ('approved','posted')), 0) as billable
       from document_lines dl
-      join documents d on d.id=dl.document_id and d.kind='project_charge'
-     where dl.equipment_unit_id=eu.id
+      join documents d on d.id=dl.document_id and d.org_id=dl.org_id and d.kind='project_charge'
+     where dl.equipment_unit_id=eu.id and dl.org_id=eu.org_id
   ) equipment_metrics on true`
 
 export const EQUIPMENT_BUILT_IN_EXPR: Record<string, SQL> = {

@@ -410,7 +410,7 @@ const SOURCES: Record<string, EntityListSource> = {
     idExpr: sql`oh.item_id::text || ':' || oh.stock_location_id::text`,
     customFieldTable: 'items',
     customFieldAlias: 'it',
-    baseJoins: sql`join items it on it.id=oh.item_id join stock_locations sl on sl.id=oh.stock_location_id`,
+    baseJoins: sql`join items it on it.id=oh.item_id and it.org_id=oh.org_id join stock_locations sl on sl.id=oh.stock_location_id and sl.org_id=oh.org_id`,
     builtInExpr: INVENTORY_ONHAND_BUILT_IN_EXPR,
     sorts: INVENTORY_ONHAND_SORTS,
     defaultSort: sql`it.name`,

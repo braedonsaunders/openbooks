@@ -27,7 +27,7 @@ export async function GET(req: Request) {
            count(dl.*) as lines,
            bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
       from documents d
-      left join document_lines dl on dl.document_id = d.id
+      left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
      where d.org_id = ${gate.user.orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
      group by d.id
      order by d.document_date desc, d.document_number desc

@@ -29,8 +29,8 @@ export async function loadEquipment(id: string, orgId: string) {
         where jl.equipment_unit_id = ${id} and jl.org_id = ${orgId} and je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and a.type in ('expense','expense_other','cogs') and coalesce(d.kind, '') <> 'project_charge' and jl.amount > 0), 0) as direct_costs,
       coalesce((select sum(dsl.posted_amount) from equipment_units eu
-        join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id
-        join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id
+        join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id and ds.org_id = eu.org_id
+        join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id and dsl.org_id = ds.org_id
         where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
   `)) as any
   return { unit: unit.rows[0], metrics: metrics.rows[0] }

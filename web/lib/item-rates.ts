@@ -64,7 +64,7 @@ export async function resolveItemRate(input: {
            coalesce(s.base_currency,o.base_currency) as target_currency,
            (select rate_book_id from equipment_units
              where id = ${input.equipmentUnitId ?? null} and org_id = ${input.orgId}) as unit_rate_book_id
-      from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
+      from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
   `))
   const ctx = context.rows[0]
@@ -110,7 +110,7 @@ export async function resolveItemRate(input: {
     const version = (await db.execute<{ id: string;currency:string }>(sql`
       select v.id,b.currency
         from item_rate_versions v
-        join item_rate_books b on b.id = v.rate_book_id and b.is_active
+        join item_rate_books b on b.id = v.rate_book_id and b.org_id = v.org_id and b.is_active
        where v.org_id = ${input.orgId} and v.rate_book_id = ${candidate.rate_book_id}
          and v.status = 'active' and (( ${candidate.rate_version_id}::uuid is not null and v.id=${candidate.rate_version_id}) or
            (${candidate.rate_version_id}::uuid is null and v.effective_from <= ${input.onDate} and (v.effective_to is null or v.effective_to >= ${input.onDate})))
@@ -218,31 +218,31 @@ export async function snapshotTimeBillRates(
         select a.rate_book_id,a.rate_version_id, 1 as priority, a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active and a.project_id = ${te.project_id}
-           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
-           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
         union all
         select a.rate_book_id,a.rate_version_id, 2, a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active
-           and a.customer_id = (select customer_id from projects where id = ${te.project_id})
-           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
-           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and a.customer_id = (select customer_id from projects where id = ${te.project_id} and org_id = ${orgId})
+           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
         union all
         select a.rate_book_id,a.rate_version_id, 3, a.effective_from
           from item_rate_book_assignments a
          where a.org_id = ${orgId} and a.is_active and a.project_id is null and a.customer_id is null
-           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
-           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
+           and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then coalesce((select starts_on from projects where id = ${te.project_id} and org_id = ${orgId}), ${te.worked_on}::date) else ${te.worked_on}::date end)
         union all select b.id,null::uuid, 4, null::date from item_rate_books b
          where b.org_id = ${orgId} and b.is_default and b.is_active
       )
       select l.id as rate_line_id,l.bill_rate,l.time_type_bill_rates,
              v.id as rate_version_id,c.rate_book_id,b.currency as source_currency
         from candidates c
-        join item_rate_versions v on v.rate_book_id = c.rate_book_id and v.status = 'active'
+        join item_rate_versions v on v.rate_book_id = c.rate_book_id and v.org_id = ${orgId} and v.status = 'active'
          and ((c.rate_version_id is not null and v.id=c.rate_version_id) or (c.rate_version_id is null and v.effective_from <= ${te.worked_on} and (v.effective_to is null or v.effective_to >= ${te.worked_on})))
-        join item_rate_lines l on l.version_id = v.id and l.item_id = ${te.item_id}
-        join item_rate_books b on b.id=c.rate_book_id and b.is_active
+        join item_rate_lines l on l.version_id = v.id and l.org_id = v.org_id and l.item_id = ${te.item_id}
+        join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
        order by c.priority, c.effective_from desc nulls last, v.effective_from desc,
                 case when l.unit_code = 'hour' then 0 else 1 end, l.base_quantity
        limit 1`))

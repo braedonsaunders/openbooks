@@ -121,14 +121,14 @@ export async function vendorData(
     // probes the entry primary key once per journal line in the tenant.
     db.execute(sql`
       with ew as materialized (
-        select id, posting_date from journal_entries
+        select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
       )
       select p.id, coalesce(p.display_name, 'Unknown') as name,
         sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as spend,
         sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_spend
       from ew e
-      join journal_lines l on l.entry_id = e.id
+      join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join parties p on p.id = l.party_id and p.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
@@ -143,12 +143,12 @@ export async function vendorData(
     `) as Promise<any>,
     db.execute(sql`
       with ew as materialized (
-        select id, posting_date from journal_entries
+        select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
       )
       select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as spend
       from ew e
-      join journal_lines l on l.entry_id = e.id
+      join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and a.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred')

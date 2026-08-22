@@ -217,7 +217,7 @@ export async function assembleInvoiceBackup(
       const sources = (await db.execute<{ document_id: string }>(sql`
         select distinct src.document_id
           from document_lines inv_line
-          join document_lines src on src.billed_by_line_id = inv_line.id
+          join document_lines src on src.billed_by_line_id = inv_line.id and src.org_id = inv_line.org_id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
       `))
       for (const s of sources.rows) {

@@ -87,8 +87,8 @@ export default async function LaborPricingPage({
              (select count(*)::int from item_rate_lines l where l.version_id=v.id) as line_count,
              (select count(*)::int from item_rate_book_assignments a where a.rate_book_id=b.id and a.is_active) as assignment_count
         from item_rate_versions v
-        join item_rate_books b on b.id=v.rate_book_id
-        join labor_rate_version_policies p on p.version_id=v.id
+        join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
+        join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
        where v.org_id=${orgId}
          ${effectiveFilter} ${scopeFilter}
          ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}
@@ -96,8 +96,8 @@ export default async function LaborPricingPage({
        limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
     db.execute(sql`
       select count(*)::int n from item_rate_versions v
-      join item_rate_books b on b.id=v.rate_book_id
-      join labor_rate_version_policies p on p.version_id=v.id
+      join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
+      join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.org_id=${orgId}
         ${effectiveFilter} ${scopeFilter}
         ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`),
@@ -136,10 +136,10 @@ export default async function LaborPricingPage({
               end)) order by at.created_at) from labor_rate_adjustment_targets at where at.adjustment_id=a.id),'[]'::jsonb))
           order by a.sort_order,a.id) from labor_rate_adjustments a where a.version_id=v.id and a.is_active),'[]'::jsonb) adjustments,
         coalesce((select jsonb_agg(jsonb_build_object('id',t.id,'code',t.code,'label',t.label,'content',t.content,'placement',t.placement) order by t.sort_order,t.id) from labor_rate_terms t where t.version_id=v.id),'[]'::jsonb) terms,
-        coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'itemId',l.item_id,'itemName',i.name,'regular',l.bill_rate,'timeTypeRates',l.time_type_bill_rates) order by l.sort_order,l.id) from item_rate_lines l join items i on i.id=l.item_id where l.version_id=v.id),'[]'::jsonb) lines
+        coalesce((select jsonb_agg(jsonb_build_object('id',l.id,'itemId',l.item_id,'itemName',i.name,'regular',l.bill_rate,'timeTypeRates',l.time_type_bill_rates) order by l.sort_order,l.id) from item_rate_lines l join items i on i.id=l.item_id and i.org_id=l.org_id where l.version_id=v.id and l.org_id=v.org_id),'[]'::jsonb) lines
       from item_rate_versions v
-      join item_rate_books b on b.id=v.rate_book_id
-      join labor_rate_version_policies p on p.version_id=v.id
+      join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
+      join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.id=${selectedId} and v.org_id=${orgId}`)
       : Promise.resolve({ rows: [] }),
     db.execute(
