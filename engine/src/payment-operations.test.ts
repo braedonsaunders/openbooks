@@ -13,6 +13,13 @@ test("settlement upserts pin the known tenant on the payment_instruction_id conf
   );
 });
 
+test("built-in payment format upserts pin the known tenant on the org_id/code conflict write", () => {
+  assert.match(
+    paymentOperationsSource,
+    /insert into payment_formats[\s\S]*?on conflict \(org_id, code\) do update set[\s\S]*?where payment_formats\.org_id = \$\{orgId\}/,
+  );
+});
+
 /**
  * A debit profile's originator settings arrive as decrypted tenant JSON, so the
  * debit rails have to hold the same line the credit rails hold in
