@@ -21,6 +21,30 @@ test("tax depreciation packs persist rates through canonicalDecimal then normali
   assert.match(source, /persistPackFxRate\(classDef\.recoveryPeriodYears\)/);
 });
 
+test("tax depreciation packs persist costCap through canonicalDecimal then normalizeMoney", () => {
+  const helperStart = source.indexOf("function persistPackCostCap");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistPackCostCap helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /cost cap must be an exact decimal/);
+  assert.doesNotMatch(helper, /normalizeMoney\(classDef\.costCap\)/);
+  assert.match(source, /persistPackCostCap\(classDef\.costCap\)/);
+});
+
+test("every shipped tax depreciation pack costCap is an exact ledger decimal", () => {
+  for (const regime of Object.values(TAX_DEPRECIATION_REGIMES)) {
+    for (const classDef of Object.values(regime.classes)) {
+      if (classDef.costCap == null) continue;
+      assert.ok(
+        canonicalDecimal(classDef.costCap, 4),
+        `${regime.code}/${classDef.code} costCap`,
+      );
+    }
+  }
+});
+
 test("every shipped tax depreciation pack rate is an exact FX-scale decimal", () => {
   for (const regime of Object.values(TAX_DEPRECIATION_REGIMES)) {
     for (const classDef of Object.values(regime.classes)) {

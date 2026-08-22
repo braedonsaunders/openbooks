@@ -15,6 +15,17 @@ function persistPackFxRate(rate: string | number): string {
   }
 }
 
+/** Persist a pack JSON cost cap through exact decimal then ledger money. Fail closed. */
+function persistPackCostCap(value: string | number): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("cost cap must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("cost cap must be an exact decimal");
+  }
+}
+
 export interface TaxDepreciationPack {
   code: string;
   countryCode: string;
@@ -58,7 +69,7 @@ export async function installTaxDepreciationPack(orgId: string, code: string, ac
            macrs_method, recovery_period_years, convention, is_active, created_by, updated_by)
         values (${orgId}, ${regime.code}, ${classDef.code}, ${classDef.name}, ${persistPackFxRate(classDef.rate)}, ${classDef.method},
                 ${persistPackFxRate(classDef.firstYearFraction)}, ${classDef.allowRecapture}, ${classDef.allowTerminalLoss},
-                ${classDef.costCap == null ? null : normalizeMoney(classDef.costCap)}, ${classDef.depreciationSystem ?? null}, ${classDef.macrsMethod ?? null},
+                ${classDef.costCap == null ? null : persistPackCostCap(classDef.costCap)}, ${classDef.depreciationSystem ?? null}, ${classDef.macrsMethod ?? null},
                 ${classDef.recoveryPeriodYears == null ? null : persistPackFxRate(classDef.recoveryPeriodYears)}, ${classDef.convention ?? null}, true, ${actorId}, ${actorId})
         on conflict (org_id, regime, class_code) do nothing returning id`));
       classesCreated += inserted.rows.length;
