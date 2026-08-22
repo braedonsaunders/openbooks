@@ -177,6 +177,8 @@ export interface ApiField {
   writable: boolean;
   description: string | null;
   custom: boolean;
+  /** Closed set advertised to REST/MCP. Omitted values are hidden, not unknown. */
+  enum?: string[];
 }
 
 export interface ApiRecordTypeSchema extends ApiRecordType {
@@ -204,6 +206,26 @@ export const ITEM_REVENUE_RECOGNITION_COLUMNS = new Set<string>([
  * REST/MCP and refuse writes. Existing flags stay on the row.
  */
 export const ITEM_TIME_TRACKING_COLUMNS = new Set<string>(["show_on_timesheet"]);
+
+/**
+ * Item `kind` values. The items catalog stays available when Inventory is
+ * off; inventory / assembly / kit must still disappear from REST/MCP so the
+ * catalog does not advertise writes the Features switch already 404s.
+ */
+export const ITEM_KIND_VALUES = [
+  "service",
+  "non_inventory",
+  "inventory",
+  "assembly",
+  "kit",
+  "other_charge",
+  "equipment_charge",
+  "labor",
+  "absence",
+  "discount",
+] as const;
+
+export const ITEM_INVENTORY_KINDS = new Set<string>(["inventory", "assembly", "kit"]);
 
 /**
  * Columns that are never writable through the API — identity, tenant scope,

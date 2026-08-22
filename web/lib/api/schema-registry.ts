@@ -6,6 +6,8 @@ import { normalizeSectionsInput } from "../record-schema";
 import {
   API_RECORD_TYPES,
   RECORD_TYPE_BY_KEY,
+  ITEM_INVENTORY_KINDS,
+  ITEM_KIND_VALUES,
   ITEM_REVENUE_RECOGNITION_COLUMNS,
   ITEM_TIME_TRACKING_COLUMNS,
   READONLY_COLUMNS,
@@ -106,6 +108,8 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   const revenueRecognitionOn = await isFeatureEnabled(orgId, "revenueRecognition");
   const timeTrackingOn = await isFeatureEnabled(orgId, "timeTracking");
   const multiCurrencyOn = await isFeatureEnabled(orgId, "multiCurrency");
+  const inventoryOn = await isFeatureEnabled(orgId, "inventory");
+  const itemKinds = ITEM_KIND_VALUES.filter((kind) => inventoryOn || !ITEM_INVENTORY_KINDS.has(kind));
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
     const physical = (byTable.get(t.table!) ?? [])
@@ -119,6 +123,7 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
           && (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
         description: null,
         custom: false,
+        ...(t.key === "items" && c.column_name === "kind" ? { enum: itemKinds } : {}),
       }));
     return {
       ...t,

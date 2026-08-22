@@ -77,6 +77,7 @@ export function buildOpenApiSpec(
         type,
         ...(format ? { format: format.replace(")", "") } : {}),
         ...(f.description ? { description: f.description } : {}),
+        ...(f.enum ? { enum: f.enum } : {}),
       };
       properties[f.name] = prop;
       if (f.required) required.push(f.name);
