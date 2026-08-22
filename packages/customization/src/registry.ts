@@ -1692,6 +1692,31 @@ export function getRecordType(key: string): RecordTypeMeta | undefined {
   return RECORD_TYPE_BY_KEY[key];
 }
 
+/** Item kinds that belong to the Inventory Features switch. The item catalog
+ *  itself stays available; these values must not appear as list-filter options
+ *  while that switch is off. */
+export const ITEM_INVENTORY_KIND_VALUES = ["inventory", "assembly", "kit"] as const;
+
+/** Apply Features-gated list-filter options. The registry stays static. */
+export function recordTypeForFeatureState(
+  meta: RecordTypeMeta,
+  features: { inventory: boolean },
+): RecordTypeMeta {
+  if (features.inventory || meta.key !== "item") return meta;
+  return {
+    ...meta,
+    listFilters: meta.listFilters.map((filter) => {
+      if (filter.key !== "kind" || !filter.options?.length) return filter;
+      return {
+        ...filter,
+        options: filter.options.filter((option) =>
+          !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option.value),
+        ),
+      };
+    }),
+  };
+}
+
 /** Features switch this record type follows, if any. Core types return null. */
 export function recordTypeFeatureKey(recordType: string): string | null {
   return RECORD_TYPE_BY_KEY[recordType]?.featureKey ?? null;

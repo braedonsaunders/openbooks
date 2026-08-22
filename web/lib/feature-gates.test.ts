@@ -569,6 +569,21 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),
+    /ITEM_INVENTORY_KIND_VALUES/,
+    'item list-filter options must name the inventory kinds the Features switch hides',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /function recordTypeForFeatureState[\s\S]{0,400}ITEM_INVENTORY_KIND_VALUES/,
+    'item list-filter options must drop inventory/assembly/kit when Inventory is off',
+  )
+  assert.match(
+    read('components/entity-list-view.tsx'),
+    /recordTypeForFeatureState\([\s\S]{0,120}inventory/,
+    'the entity list must hide inventory item-kind chips when Inventory is off',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
     /key: "budget_scenario"[\s\S]{0,200}featureKey: "budgets"/,
     'budget-scenario list views must follow the Budgets switch',
   )

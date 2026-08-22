@@ -7,7 +7,7 @@ import {
   mergeRegisteredFieldsIntoLayout,
   resolveFormTabs,
 } from './schema.ts'
-import { getRecordType } from './registry.ts'
+import { getRecordType, recordTypeForFeatureState } from './registry.ts'
 
 test('the default project form composes complete four-column rows', () => {
   const layout = defaultFormLayout('project')
@@ -335,4 +335,15 @@ test('optional-module record types declare a Features switch', () => {
   for (const key of ['item', 'vendor_bill', 'customer', 'bank_transaction', 'bank_reconciliation', 'bank_statement', 'bank_rule', 'journal', 'account']) {
     assert.equal(getRecordType(key)?.featureKey, undefined, key)
   }
+})
+
+test('item list-filter options drop inventory kinds when Inventory is off', () => {
+  const item = getRecordType('item')
+  assert.ok(item)
+  const hidden = recordTypeForFeatureState(item, { inventory: false })
+    .listFilters.find((filter) => filter.key === 'kind')?.options?.map((option) => option.value) ?? []
+  assert.deepEqual(hidden.filter((value) => ['inventory', 'assembly', 'kit'].includes(value)), [])
+  const shown = recordTypeForFeatureState(item, { inventory: true })
+    .listFilters.find((filter) => filter.key === 'kind')?.options?.map((option) => option.value) ?? []
+  assert.ok(shown.includes('inventory') && shown.includes('assembly') && shown.includes('kit'))
 })
