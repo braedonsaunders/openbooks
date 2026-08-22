@@ -619,7 +619,7 @@ export async function terminatePropertyLease(orgId: string, actorId: string, lea
 
 export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string }): Promise<{ id: string }> {
   const effectiveOn = validDate(input.effectiveOn, "Escalation date")!;
-  const value = normalizeMoney(input.value);
+  const value = exactMoney(input.value, "Escalation value");
   if (cmp(value, "0") <= 0) throw new PropertyManagementError("Escalation value must be positive");
   await assertEnabled(db, input.orgId);
   const result = (await db.execute<{ id: string }>(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
