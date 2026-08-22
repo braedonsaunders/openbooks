@@ -33,6 +33,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     values (${authz.user.orgId}, ${id}, ${authz.user.id}, ${rating}, ${comment})
     on conflict (work_item_id, user_id) do update set
       rating = excluded.rating, comment = excluded.comment, updated_at = now()
+    where ai_work_item_feedback.org_id = ${authz.user.orgId}
   `);
   return NextResponse.json({ ok: true, rating });
 }
