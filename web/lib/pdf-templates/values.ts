@@ -160,8 +160,8 @@ async function loadDocumentValues(
     total: money(total),
     balance_due: doc.balance_due === null || doc.balance_due === undefined ? '' : money(String(doc.balance_due)),
     org_name: org.name,
-    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
-    lines: lines.rows.map((l) => ({
+    printed_date: fmtDate(await businessToday(orgId), locale),
+    lines: lines.rows.map((l) => ({)
       line_number: String(l.line_number ?? ''),
       item_name: l.item_name ?? '',
       account_name: l.account_name ?? '',
