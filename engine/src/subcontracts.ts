@@ -61,6 +61,17 @@ function persistSubcontractChangeOrderAmount(value: unknown): string {
   }
 }
 
+/** Persist leftover retainage-release amount through exact decimal then ledger money. Fail closed. */
+function persistSubcontractRetainageReleaseAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("retainage release amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("retainage release amount must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -719,7 +730,7 @@ export async function releaseVendorRetainage(input: {
   amount: string;
   memo?: string | null;
 }): Promise<{ vendorBillDocumentId: string; documentNumber: string; amount: string }> {
-  const amount = normalizeMoney(input.amount);
+  const amount = persistSubcontractRetainageReleaseAmount(input.amount);
   if (cmp(amount, "0") <= 0) throw new SubcontractError("Release amount must be positive");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
