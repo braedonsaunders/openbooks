@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -46,7 +47,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     boxes: row.boxes.map((box) => ({ ...box, pdfField: null })),
   }
   const data = taxReturnExportData(result, t)
-  const filename = safeName(`${row.form_code}-${row.period_from}-${row.period_to}-v${row.version}`)
+  const stamp = await businessToday(gate.user.orgId)
+  const filename = safeName(`${row.form_code}-${row.period_from}-${row.period_to}-v${row.version}-${stamp}`)
   if (format === 'csv') return csvResponse(exportDataToCsv(data, { sectionHeader: data.title }), filename)
   if (format === 'xlsx') return xlsxResponse(await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel }), filename)
   const branding = await orgBranding(gate.user.orgId)
