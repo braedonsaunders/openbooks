@@ -683,6 +683,7 @@ async function persistFinding(orgId: string, runId: string, finding: Finding): P
       resolved_at = case when ai_work_items.status = 'resolved' then null else ai_work_items.resolved_at end,
       resolved_by = case when ai_work_items.status = 'resolved' then null else ai_work_items.resolved_by end,
       updated_at = now()
+    where ai_work_items.org_id = ${orgId}
     returning id
   `));
   const itemId = result.rows[0]!.id;
