@@ -1323,7 +1323,7 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'accounting' && (!role || role === 'vendor') ? (
-          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
+          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
         ) : null}
 
         {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
@@ -1335,7 +1335,7 @@ export function PartyDrawer({
             <EmployeeEntitlementBalances partyId={String(p.id)} />
             {/* Direct deposit: the same approval-gated bank accounts the AP
                 side uses — the pay-run bank file only pays approved accounts. */}
-            <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
+            <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
           </div>
         ) : null}
       </div>
@@ -1637,10 +1637,12 @@ function BankAccountsPanel({
   partyId,
   initialAccounts,
   canManage,
+  multiCurrency = false,
 }: {
   partyId: string
   initialAccounts: Record<string, any>[]
   canManage: boolean
+  multiCurrency?: boolean
 }) {
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
@@ -1718,7 +1720,7 @@ function BankAccountsPanel({
     }
     const body = {
       bankName: draft.bankName.trim(), country: draft.country.trim() || null,
-      currency: draft.currency.trim().toUpperCase() || null, routing,
+      ...(multiCurrency ? { currency: draft.currency.trim().toUpperCase() || null } : {}), routing,
       ...(draft.accountNumber.trim() ? { accountNumber: draft.accountNumber.trim() } : {}),
       ...(draft.id ? { expectedUpdatedAt: draft.updatedAt, changeReason } : {}),
     }
@@ -1807,7 +1809,7 @@ function BankAccountsPanel({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
             <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
-            <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></div>
+            {multiCurrency ? <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></div> : null}
             <div className={field}><Label>{t('routingNumber')}</Label><Input className="font-mono" value={draft.routingNumber} onChange={(event) => setDraft({ ...draft, routingNumber: event.target.value })} /></div>
             <div className={field}><Label>{t('branchNumber')}</Label><Input className="font-mono" value={draft.branchNumber} onChange={(event) => setDraft({ ...draft, branchNumber: event.target.value })} /></div>
             <div className={field}>

@@ -5,6 +5,7 @@ import { encryptAccountNumber } from '@openbooks/engine/src/payments.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 
@@ -64,6 +65,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (owned.rows.length === 0) return NextResponse.json({ error: 'party not found' }, { status: 404 })
 
   const body = (await req.json().catch(() => ({}))) as Body
+  // Party bank-account currency is Multi-currency configuration. Turning that
+  // switch off must refuse a new write; omitting currency keeps the create
+  // path and stored accounts with a null currency.
+  if (
+    body.currency !== undefined &&
+    !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
+  ) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const validationError = validateBody(body, true)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
   const accountNumber = (body.accountNumber ?? '').trim()
@@ -78,7 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
        account_number_encrypted, account_last_four, approval_status, is_active,
        approved_at, approved_by, submitted_by, submitted_at, created_by)
     values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
-            ${body.currency?.trim().toUpperCase() || null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
+            ${body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
             ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
             'pending', false, null, null, ${user.id}, now(), ${user.id})
     returning id
