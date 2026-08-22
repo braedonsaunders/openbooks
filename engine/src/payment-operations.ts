@@ -649,7 +649,7 @@ export async function generatePaymentFileArtifact(
   const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
   const parentId = opts?.reprocessFileId ?? null;
   const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
-    select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id}
+    select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id} and org_id = ${orgId}
   `));
   const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
   const total = sum(ctx.payments.map((p) => p.amount));

@@ -314,7 +314,7 @@ export async function runScheduleNow(
     await db.execute(sql`
       update recurring_schedules
          set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
-       where id = ${scheduleId}
+       where id = ${scheduleId} and org_id = ${row.orgId}
     `);
   });
   return gen;
