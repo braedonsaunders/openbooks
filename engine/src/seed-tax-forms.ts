@@ -105,6 +105,7 @@ async function installTaxReturnPackWith(
           submission_url = excluded.submission_url,
           watermark = excluded.watermark, is_active = true,
           updated_at = now(), updated_by = ${actorId}
+    where tax_return_forms.org_id = ${orgId}
     returning id, (xmax = 0) as inserted`));
 
   await tx.execute(sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`);
