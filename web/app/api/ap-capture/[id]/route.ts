@@ -70,13 +70,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
-      from ap_capture_items ci join files f on f.id = ci.file_id
+      from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
      where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
   `))
   if (!result.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const [fields, events] = await Promise.all([
     db.execute(sql`
-      select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id
+      select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
        where af.org_id = ${gate.user.orgId} and ar.capture_item_id = ${id}
        order by ar.attempt desc, af.field_key, af.line_index nulls first
     `),

@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   if (resource === 'schedules') {
     const rows = await db.execute(sql`
       select s.*, p.name as profile_name
-        from payment_schedules s join payment_bank_profiles p on p.id = s.payment_bank_profile_id
+        from payment_schedules s join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.org_id = s.org_id
        where s.org_id = ${gate.user.orgId} order by s.is_active desc, s.name
     `)
     return NextResponse.json({ rows: rows.rows })

@@ -102,7 +102,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping, sc.created_by,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
-      join sftp_servers sv on sv.id = sc.sftp_server_id and sv.is_active
+      join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id and sv.is_active
       join orgs o on o.id = sc.org_id
      where sc.is_active
        and o.env_kind = 'production'
@@ -118,7 +118,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
     runs.push(run);
     await withOrgContext(s.org_id, () =>
       db.execute(sql`
-      update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id}
+      update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id} and org_id = ${s.org_id}
     `));
   }
   return runs;
@@ -128,14 +128,14 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
 export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
   const svr = (await db.execute<{ backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
     select s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
-      from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id
+      from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
       join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
        and (p.sftp_server_id is null or p.sftp_server_id = s.id)
   `));
   if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
-  const approval = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`));
+  const approval = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id} and org_id = ${orgId}`));
   if (!approval.rows[0] || !["approved", "delivered"].includes(approval.rows[0].status)) {
     throw new Error("the generated payment file requires approval before SFTP delivery");
   }

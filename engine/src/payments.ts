@@ -1769,7 +1769,7 @@ export async function postPaymentRun(
       await db
         .update(schema.paymentInstructions)
         .set({ status: "sent", updatedAt: new Date(), updatedBy: userId })
-        .where(eq(schema.paymentInstructions.id, ins.id));
+        .where(and(eq(schema.paymentInstructions.id, ins.id), eq(schema.paymentInstructions.orgId, orgId)));
       try {
         await queueAutomaticRemittance(ins.id, orgId, userId);
       } catch (error) {

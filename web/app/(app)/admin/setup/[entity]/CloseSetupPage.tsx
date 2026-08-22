@@ -185,8 +185,8 @@ export async function CloseSetupPage({
       select s.*,
              coalesce(jsonb_agg(dep.key order by dep.key) filter (where dep.id is not null), '[]'::jsonb) as depends_on
         from close_blueprint_steps s
-        left join close_blueprint_dependencies d on d.step_id = s.id
-        left join close_blueprint_steps dep on dep.id = d.depends_on_step_id
+        left join close_blueprint_dependencies d on d.step_id = s.id and d.org_id = s.org_id
+        left join close_blueprint_steps dep on dep.id = d.depends_on_step_id and dep.org_id = s.org_id
        where s.org_id = ${orgId}
          and s.blueprint_id in (
            select id from close_blueprints

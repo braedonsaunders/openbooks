@@ -380,7 +380,7 @@ async function storeBankFileBytes(
     returning id
   `));
   const versionId = version.rows[0]!.id;
-  await tx.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId}`);
+  await tx.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}`);
   // Same ordering as the cabinet: the object-store put happens inside the
   // transaction, so a failed upload rolls the metadata back and never leaves
   // an artifact row pointing at bytes that do not exist.

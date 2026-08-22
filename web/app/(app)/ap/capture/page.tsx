@@ -89,7 +89,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
     const selected = (await db.execute<CaptureDetail>(sql`
       select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
              vendor.display_name as "resolvedVendor", po.document_number as "purchaseOrderNumber"
-        from ap_capture_items ci join files f on f.id = ci.file_id
+        from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
         left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${authz.user.orgId} and ci.id = ${selectedId}
@@ -109,7 +109,7 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
           : sql`and (d.subsidiary_id is null or d.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
       const [vendors, accounts, purchaseOrders, evidence] = await Promise.all([
         db.execute(sql`
-          select p.id, p.display_name as label from parties p join vendor_roles vr on vr.party_id = p.id
+          select p.id, p.display_name as label from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
            where p.org_id = ${authz.user.orgId} and p.is_active and vr.is_active ${vendorScope}
            order by p.display_name limit 2000
         `),
@@ -125,9 +125,9 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
         db.execute(sql`
           select af.field_key as "fieldKey", af.line_index as "lineIndex", af.confidence,
                  af.page_number as "pageNumber", af.polygon
-            from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id
+            from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
            where af.org_id = ${authz.user.orgId} and ar.capture_item_id = ${selectedId}
-             and ar.attempt = (select max(attempt) from ap_capture_runs where capture_item_id = ${selectedId})
+             and ar.attempt = (select max(attempt) from ap_capture_runs where capture_item_id = ${selectedId} and org_id = ${authz.user.orgId})
         `),
       ])
       detail.evidence = (evidence as any).rows

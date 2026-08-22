@@ -74,7 +74,7 @@ export default async function PaymentOperationsSetupPage({
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
         select x.*, p.name as profile_name
-          from payment_schedules x join payment_bank_profiles p on p.id = x.payment_bank_profile_id
+          from payment_schedules x join payment_bank_profiles p on p.id = x.payment_bank_profile_id and p.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or p.name ilike ${q}) ${stateWhere}
          order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
       db.execute(sql`select count(*)::int as n from payment_schedules x where x.org_id = ${orgId} and x.name ilike ${q} ${stateWhere}`),

@@ -93,9 +93,9 @@ async function gateNodeData(flowId: string, nodeId: string): Promise<GateData | 
 }
 
 /** Recompute a run's status once gates move: waiting | completed | failed. */
-async function finalizeRunStatus(runId: string, hadFailure: boolean, error?: string | null): Promise<void> {
+async function finalizeRunStatus(runId: string, orgId: string, hadFailure: boolean, error?: string | null): Promise<void> {
   const pending = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from flow_gates where run_id = ${runId} and status in ('pending', 'escalated')
+    select count(*)::int as n from flow_gates where run_id = ${runId} and org_id = ${orgId} and status in ('pending', 'escalated')
   `));
   const stillWaiting = (pending.rows[0]?.n ?? 0) > 0;
   const status = hadFailure ? "failed" : stillWaiting ? "waiting" : "completed";
@@ -106,7 +106,7 @@ async function finalizeRunStatus(runId: string, hadFailure: boolean, error?: str
       error: hadFailure ? error ?? "gate branch failed" : null,
       finishedAt: status === "waiting" ? null : new Date(),
     })
-    .where(eq(schema.flowRuns.id, runId));
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId)));
 }
 
 export interface DecideGateResult {
@@ -204,7 +204,7 @@ export async function decideGate(args: {
         onBehalfOfUserId: onBehalfOf?.id ?? null,
         updatedAt: new Date(),
       })
-      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.status, "pending")))
+      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, pre.orgId), eq(schema.flowGates.status, "pending")))
       .returning({ id: schema.flowGates.id });
     if (decided.length === 0) throw new GateError("this approval was already resolved");
 
@@ -213,7 +213,7 @@ export async function decideGate(args: {
       .select({ id: schema.flowGates.id, status: schema.flowGates.status })
       .from(schema.flowGates)
       .where(
-        and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.groupKey, gate.groupKey)),
+        and(eq(schema.flowGates.runId, gate.runId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.groupKey, gate.groupKey)),
       )) as SiblingGate[];
     const outcome = resolveQuorumOutcome(gate.quorum, decision, siblings);
 
@@ -224,6 +224,7 @@ export async function decideGate(args: {
         .where(
           and(
             inArray(schema.flowGates.id, outcome.cancelIds),
+            eq(schema.flowGates.orgId, gate.orgId),
             inArray(schema.flowGates.status, ["pending", "escalated"]),
           ),
         );
@@ -238,12 +239,12 @@ export async function decideGate(args: {
     const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, gate.flowId));
     const adapter = getFlowAdapter(gate.subjectKind);
     if (!flow || !adapter) {
-      await finalizeRunStatus(gate.runId, true, "flow definition or subject adapter is unavailable");
+      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow definition or subject adapter is unavailable");
       return { ok: true, resumed: outcome.resume, runStatus: "failed" };
     }
     const graph = parseFlowGraph(flow.id, flow.graph);
     if (!graph) {
-      await finalizeRunStatus(gate.runId, true, "flow graph failed validation");
+      await finalizeRunStatus(gate.runId, gate.orgId, true, "flow graph failed validation");
       return { ok: true, resumed: outcome.resume, runStatus: "failed" };
     }
 
@@ -283,6 +284,7 @@ export async function decideGate(args: {
       } catch (e) {
         await finalizeRunStatus(
           gate.runId,
+          gate.orgId,
           true,
           e instanceof Error ? e.message : String(e),
         );
@@ -339,10 +341,10 @@ export async function decideGate(args: {
       }
     }
 
-    await finalizeRunStatus(gate.runId, hadFailure, error);
+    await finalizeRunStatus(gate.runId, gate.orgId, hadFailure, error);
     const runStatus = hadFailure
       ? "failed"
-      : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(eq(schema.flowRuns.id, gate.runId)))[0]
+      : ((await db.select({ status: schema.flowRuns.status }).from(schema.flowRuns).where(and(eq(schema.flowRuns.id, gate.runId), eq(schema.flowRuns.orgId, gate.orgId))))[0]
           ?.status as "waiting" | "completed" | "failed") ?? "completed";
     return { ok: true, resumed: outcome.resume, runStatus };
   });
@@ -389,7 +391,7 @@ async function cancelSubjectApprovals(
     await db
       .update(schema.flowRuns)
       .set({ status: "cancelled", finishedAt: new Date() })
-      .where(and(eq(schema.flowRuns.id, runId), inArray(schema.flowRuns.status, ["running", "waiting"])));
+      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, orgId), inArray(schema.flowRuns.status, ["running", "waiting"])));
   }
 }
 
@@ -633,7 +635,7 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
         updatedBy: fromUserId,
         updatedAt: new Date(),
       })
-      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.status, "pending")));
+      .where(and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, gate.orgId), eq(schema.flowGates.status, "pending")));
   } catch (e) {
     // unique (run_id, node_id, assignee_user_id): the target already holds a
     // sibling row of this gate.
