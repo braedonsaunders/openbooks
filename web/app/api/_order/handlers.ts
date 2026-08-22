@@ -361,7 +361,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
       return NextResponse.json(res)
     } catch (e) {
       if (e instanceof ConversionError) {
-        return NextResponse.json({ error: e.message }, { status: 422 })
+        return NextResponse.json({ error: e.message }, { status: e.status })
       }
       return NextResponse.json({ error: (e as Error).message }, { status: 500 })
     }

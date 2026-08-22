@@ -53,7 +53,12 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
   return row.rows[0]!
 }
 
-export class ConversionError extends Error {}
+export class ConversionError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message)
+    this.name = 'ConversionError'
+  }
+}
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -147,6 +152,20 @@ export async function convertOrder(
           select kind from items where id = ${itemId} and org_id = ${orgId}`))
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
           throw new ConversionError('Inventory is disabled')
+        }
+      }
+    }
+    // Source lines stay. Turning Equipment off must refuse a conversion that
+    // would copy equipment_charge onto the new document.
+    if (!(await isFeatureEnabled(orgId, 'equipment'))) {
+      const itemIds = [...new Set(
+        remaining.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+      )]
+      for (const itemId of itemIds) {
+        const item = (await tx.execute<{ kind: string }>(sql`
+          select kind from items where id = ${itemId} and org_id = ${orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          throw new ConversionError('Equipment is disabled', 404)
         }
       }
     }
