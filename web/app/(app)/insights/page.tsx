@@ -20,6 +20,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
+import { isFeatureEnabled } from '../../../lib/features'
 import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadCard } from '../../api/insights/_lib'
 import { InsightsTabs } from './InsightsTabs'
@@ -64,7 +65,7 @@ export default async function InsightsCards({
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}
     ${status ? sql` and status = ${status}` : sql``}`
 
-  const [cards, counts] = await Promise.all([
+  const [cards, counts, inventoryEnabled] = await Promise.all([
     db.execute(sql`
       select id, name, description, viz_type, status, query, updated_at
         from insight_cards
@@ -78,6 +79,7 @@ export default async function InsightsCards({
              count(*) filter (where status = 'published') as published
         from insight_cards where org_id = ${orgId}
     `) as any,
+    isFeatureEnabled(orgId, 'inventory'),
   ])
   const c = counts.rows[0]
   const total = Number(c.total)
@@ -179,6 +181,7 @@ export default async function InsightsCards({
           card={openCard}
           canCreate={canCreate}
           canPublish={canPublish}
+          inventoryEnabled={inventoryEnabled}
           sourceKeys={allowedSources((permission) => can(authz, permission)).map((s) => s.key)}
         />
       ) : null}

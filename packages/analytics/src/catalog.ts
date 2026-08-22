@@ -14,6 +14,7 @@
 // parameters.
 
 import {
+  ITEM_INVENTORY_KIND_VALUES,
   REPORT_ENTITIES,
   defaultColumnsFor,
   type ReportColumnKind,
@@ -82,6 +83,26 @@ export const INSIGHT_SOURCE_MAP: Record<string, AnalyticsSource> = Object.fromEn
 
 export function getSource(key: string): AnalyticsSource | null {
   return INSIGHT_SOURCE_MAP[key] ?? null
+}
+
+/** Apply Features-gated enum options. The insight catalog stays static. */
+export function insightSourceForFeatureState(
+  source: AnalyticsSource,
+  features: { inventory: boolean },
+): AnalyticsSource {
+  if (features.inventory || source.key !== 'items') return source
+  return {
+    ...source,
+    fields: source.fields.map((field) => {
+      if (field.key !== 'kind' || !field.options?.length) return field
+      return {
+        ...field,
+        options: field.options.filter(
+          (option) => !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option),
+        ),
+      }
+    }),
+  }
 }
 
 /** The permission a caller needs to run a query against `sourceKey`, or null

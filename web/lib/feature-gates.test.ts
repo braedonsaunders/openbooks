@@ -608,6 +608,21 @@ test('the surfaces this test was written for are covered', () => {
     'the view studio must read the Inventory switch before offering item kinds',
   )
   assert.match(
+    read('../packages/analytics/src/catalog.ts'),
+    /function insightSourceForFeatureState[\s\S]{0,400}ITEM_INVENTORY_KIND_VALUES/,
+    'items insight kind options must drop inventory/assembly/kit when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/insights/CardStudio.tsx'),
+    /insightSourceForFeatureState\([\s\S]{0,120}inventory/,
+    'the insight card filter picker must hide inventory item kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/insights/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'the insight card studio must read the Inventory switch before offering item kinds',
+  )
+  assert.match(
     read('../packages/customization/src/registry.ts'),
     /key: "budget_scenario"[\s\S]{0,200}featureKey: "budgets"/,
     'budget-scenario list views must follow the Budgets switch',

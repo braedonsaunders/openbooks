@@ -9,6 +9,7 @@ import {
   AGG_FUNCTIONS,
   FILTER_OPERATOR_MAP,
   getSource,
+  insightSourceForFeatureState,
   operatorsForType,
   type AggFn,
   type DateBin,
@@ -61,6 +62,7 @@ export function CardStudio({
   canCreate,
   canPublish,
   sourceKeys,
+  inventoryEnabled,
 }: {
   card: CardRow
   canCreate: boolean
@@ -68,6 +70,7 @@ export function CardStudio({
   /** Catalog sources this user may query, in catalog order — the server drops
    *  the ones whose permission they lack (payroll wages). */
   sourceKeys: string[]
+  inventoryEnabled: boolean
 }) {
   const t = useTranslations('insights')
   const tCatalog = useTranslations('reports')
@@ -98,7 +101,10 @@ export function CardStudio({
   const [vizSettings, setVizSettings] = useState<VizSettings>(card.viz_settings ?? {})
   const [status, setStatus] = useState(card.status)
 
-  const source = getSource(sourceKey)
+  const source = useMemo(() => {
+    const catalog = getSource(sourceKey)
+    return catalog ? insightSourceForFeatureState(catalog, { inventory: inventoryEnabled }) : null
+  }, [sourceKey, inventoryEnabled])
   const sources = useMemo(
     () => sourceKeys.map((k) => getSource(k)).filter((x): x is NonNullable<typeof x> => x !== null),
     [sourceKeys],
