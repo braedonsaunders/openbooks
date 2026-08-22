@@ -2469,6 +2469,7 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
         select *
           from close_reopen_requests
          where id = ${row.id}
+           and org_id = ${row.org_id}
            and status = 'approved'
            and expires_at <= now()
          for update`));
