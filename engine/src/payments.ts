@@ -2115,7 +2115,8 @@ export async function loadCpa005RunFile(
   `));
   if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
 
-  const fundsDate = new Date(`${run.scheduledFor ?? await businessToday(orgId)}T00:00:00`);
+  const today = await businessToday(orgId);
+  const fundsDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
   const payments: Cpa005Payment[] = rows.rows.map((r) => {
     const units = toUnits(r.amount);
     if (units % 100n !== 0n) {
@@ -2138,7 +2139,7 @@ export async function loadCpa005RunFile(
   const content = buildCpa005File({
     settings: eft.settings,
     fileCreationNumber,
-    fileCreationDate: new Date(),
+    fileCreationDate: new Date(`${today}T00:00:00`),
     payments,
   });
   return { filename: `CPA005-${run.runNumber}.txt`, content, runNumber: run.runNumber };
