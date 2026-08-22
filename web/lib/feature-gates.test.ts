@@ -1267,6 +1267,36 @@ test('the surfaces this test was written for are covered', () => {
     /multiSubsidiary=\{subsidiaryUiEnabled\}/,
     'the accounts page must not load the eliminate control when Multi-subsidiary is off',
   )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'opportunity PATCH must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /currency !== undefined[\s\S]{0,200}status: 404/,
+    'opportunity PATCH must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /body\.currency === undefined \? current\.currency/,
+    'opportunity PATCH must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
+    read('app/(app)/crm/opportunities/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'the opportunities page must not load the currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/crm/OpportunityDrawer.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the opportunity form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/crm/OpportunityDrawer.tsx'),
+    /\{multiCurrency \? <Field label=\{t\('fields\.currency'\)\}>/,
+    'the opportunity form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
