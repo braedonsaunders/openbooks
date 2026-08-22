@@ -154,7 +154,7 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
     // Provision declared objects (record types + custom fields). May create
     // new objects or upgrade ones THIS app provisioned before; a key collision
     // with a user-authored object aborts the whole install transaction.
-    const prevRes = (await tx.execute<{ provisioned: { recordTypes?: string[]; customFields?: string[] } }>(sql`select provisioned from apps where id = ${appId}`))
+    const prevRes = (await tx.execute<{ provisioned: { recordTypes?: string[]; customFields?: string[] } }>(sql`select provisioned from apps where id = ${appId} and org_id = ${orgId}`))
     const prev = prevRes.rows[0]?.provisioned ?? {}
     const provisioned = await provisionObjects(tx, orgId, userId, objects, {
       recordTypes: new Set(prev.recordTypes ?? []),

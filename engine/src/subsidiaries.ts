@@ -126,6 +126,7 @@ export async function validateSubsidiaryRestrictions(
       select id, name, subsidiary_id as "subsidiaryId",
              subsidiary_include_children as "includeChildren"
         from accounts where id = any(${uuidArray(accountIds)}::uuid[])
+         and org_id = ${opts.orgId}
          and subsidiary_id is not null`));
     const restricted = new Map(r.rows.map((a) => [a.id, a]));
     for (const l of lines) {
@@ -170,6 +171,7 @@ export async function validateSubsidiaryRestrictions(
              subsidiary_include_children as "includeChildren"
         from ${sql.raw(d.table)}
        where id = any(${uuidArray(ids)}::uuid[])
+         and org_id = ${opts.orgId}
          and subsidiary_id is not null`));
     const restricted = new Map(r.rows.map((row) => [row.id, row]));
     for (const line of lines) {
