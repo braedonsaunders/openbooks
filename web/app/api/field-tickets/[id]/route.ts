@@ -17,6 +17,8 @@ import { sendTicketForSignature } from '../../../../lib/field-ticket-signing'
 
 export const runtime = 'nodejs'
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+
 function fail(e: unknown) {
   const status = e instanceof FieldTicketError ? 422 : 500
   return NextResponse.json({ error: (e as Error).message }, { status })
@@ -94,7 +96,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
-        if (item.rows[0]?.kind === 'inventory') {
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
           return NextResponse.json({ error: 'not found' }, { status: 404 })
         }
       }
