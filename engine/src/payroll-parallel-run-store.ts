@@ -229,6 +229,7 @@ export async function upsertPriorRegister(
       source_file_name = coalesce(excluded.source_file_name, payroll_prior_registers.source_file_name),
       updated_at = now(),
       updated_by = excluded.updated_by
+    where payroll_prior_registers.org_id = ${input.orgId}
     returning id`));
   const id = result.rows[0]?.id;
   if (!id) throw new ParallelRunStoreError("the prior register could not be saved");
