@@ -214,7 +214,7 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
            updated_at=now(),updated_by=${actorId}
       from (
         select l.subject_id party_id,max(a.starts_at) latest
-          from crm_activity_links l join crm_activities a on a.id=l.activity_id
+          from crm_activity_links l join crm_activities a on a.id=l.activity_id and a.org_id=l.org_id
          where l.org_id=${orgId} and l.subject_kind='account'
            and a.custom->'netsuite'->>'recordType'='recentActivityNote' and a.starts_at is not null
          group by l.subject_id
@@ -245,7 +245,7 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
         const status = statusText.includes('complete') ? 'completed' : statusText.includes('cancel') ? 'cancelled' : 'planned'
         const existing = (await db.execute<{ id: string }>(sql`select id from crm_activities where org_id=${orgId} and custom->'netsuite'->>'id'=${nsId} and custom->'netsuite'->>'recordType'=${source.type}`))
         const result = existing.rows[0]
-          ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${subject || body!.slice(0,120)},body=${body},starts_at=${date(record.startDate ?? record.start)},ends_at=${date(record.endDate ?? record.end)},due_at=${date(record.dueDate)},completed_at=${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},updated_at=now(),updated_by=${actorId} where id=${existing.rows[0].id} returning id`)
+          ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${subject || body!.slice(0,120)},body=${body},starts_at=${date(record.startDate ?? record.start)},ends_at=${date(record.endDate ?? record.end)},due_at=${date(record.dueDate)},completed_at=${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},updated_at=now(),updated_by=${actorId} where id=${existing.rows[0].id} and org_id=${orgId} returning id`)
           : await db.execute(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${subject || body!.slice(0,120)},${body},${date(record.startDate ?? record.start)},${date(record.endDate ?? record.end)},${date(record.dueDate)},${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},${JSON.stringify({ netsuite: { id: nsId, recordType: source.type } })}::jsonb,${actorId},${actorId}) returning id`)
         const activityId = (result as unknown as { rows: { id: string }[] }).rows[0]!.id
         if (party) await db.execute(sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values(${orgId},${activityId},'account',${party.id},${actorId},${actorId}) on conflict(activity_id,subject_kind,subject_id) do nothing`)

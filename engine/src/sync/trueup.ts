@@ -256,7 +256,7 @@ export async function trueUpResidualGl(
            set status = 'posted', posted_at = now(),
                posted_by = ${control.actorId ?? null},
                updated_at = now(), updated_by = ${control.actorId ?? null}
-         where id = ${entryId}
+         where id = ${entryId} and org_id = ${orgId}
       `);
       await db.execute(sql`
         insert into audit_log
