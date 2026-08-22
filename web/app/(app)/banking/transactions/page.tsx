@@ -47,7 +47,10 @@ export default async function BankingTransactions({
 }) {
   const authz = await requirePermission('banking.read')
   const canCreate = can(authz, 'ap.create') || can(authz, 'gl.post')
-  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
+  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
+    isFeatureEnabled(authz.user.orgId, 'inventory'),
+    isFeatureEnabled(authz.user.orgId, 'equipment'),
+  ])
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const sp = await searchParams
@@ -73,6 +76,7 @@ export default async function BankingTransactions({
            where org_id = ${authz.user.orgId} and is_active
              and (
                ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+               ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
                or id in (
                  select item_id from document_lines
                   where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null

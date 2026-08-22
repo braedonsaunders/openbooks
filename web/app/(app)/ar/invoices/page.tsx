@@ -45,9 +45,10 @@ export default async function ArInvoices({
 }) {
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
-  const [featureState, inventoryEnabled] = await Promise.all([
+  const [featureState, inventoryEnabled, equipmentEnabled] = await Promise.all([
     resolvedFeatureState(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'inventory'),
+    isFeatureEnabled(authz.user.orgId, 'equipment'),
   ])
   const onlinePaymentsEnabled = featureEnabled(featureState, 'onlinePayments')
   const t = await getTranslations('ar')
@@ -94,6 +95,7 @@ export default async function ArInvoices({
              where org_id = ${authz.user.orgId} and is_active
                and (
                  ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+                 ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
                  or id in (
                    select item_id from document_lines
                     where org_id = ${authz.user.orgId} and document_id = ${docId} and item_id is not null

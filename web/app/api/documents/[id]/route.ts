@@ -120,6 +120,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
   }
+  // Stored equipment_charge lines stay. Turning Equipment off must
+  // 404 a write that would persist a new one of those kinds.
+  if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
+    const stored = (await db.execute<{ item_id: string }>(sql`
+      select item_id from document_lines
+       where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
+    const storedIds = new Set(stored.rows.map((row) => row.item_id))
+    for (const line of body.lines) {
+      if (!line.itemId || !isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
+      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  }
   try {
     await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: 'ui' })
   } catch (e) {

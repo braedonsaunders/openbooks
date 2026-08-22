@@ -78,7 +78,10 @@ export async function loadRelatedTransactionDrawerData({
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
   if (!(await isDocKindEnabled(authz.user.orgId, kind))) return null
-  const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
+  const [inventoryEnabled, equipmentEnabled] = await Promise.all([
+    isFeatureEnabled(authz.user.orgId, 'inventory'),
+    isFeatureEnabled(authz.user.orgId, 'equipment'),
+  ])
   if (projectId) {
     const related = (await db.execute<{ id: string }>(sql`
       select d.id
@@ -170,6 +173,7 @@ export async function loadRelatedTransactionDrawerData({
          where org_id = ${authz.user.orgId} and is_active
            and (
              ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+             ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
              or id in (
                select item_id from document_lines
                 where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
@@ -320,6 +324,7 @@ export async function loadRelatedTransactionDrawerData({
        where org_id = ${authz.user.orgId} and is_active
          and (
            ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+           ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
            or id in (
              select item_id from document_lines
               where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
