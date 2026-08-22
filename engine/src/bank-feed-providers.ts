@@ -3,6 +3,7 @@ import { db, withBypass, withOrg } from "./db.ts";
 import { importStatement, type ParsedStatementLine } from "./banking.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { neg, normalizeMoney } from "./money.ts";
+import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 
 /**
@@ -37,6 +38,21 @@ export interface BankFeedAdapter {
 }
 
 class FeedError extends Error {}
+
+/** Provider amounts persist onto statement lines. Reject anything that is
+ *  not an exact decimal at ledger scale — String() would otherwise let
+ *  IEEE-754 noise through into importStatement. */
+function exactFeedAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new FeedError("feed amount must be an exact decimal with at most four places");
+  }
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new FeedError("feed amount must be an exact decimal with at most four places");
+  }
+}
 
 async function asJson(res: Response): Promise<any> {
   const text = await res.text();
@@ -91,7 +107,7 @@ const gocardless: BankFeedAdapter = {
       currency ??= t?.transactionAmount?.currency ?? null;
       return {
         postedOn: (t.bookingDate || t.valueDate || sinceIso).slice(0, 10),
-        amount: String(t?.transactionAmount?.amount ?? "0"),
+        amount: exactFeedAmount(t?.transactionAmount?.amount),
         description:
           t.remittanceInformationUnstructured ||
           (Array.isArray(t.remittanceInformationUnstructuredArray)
@@ -180,7 +196,7 @@ const plaid: BankFeedAdapter = {
     const lines: ParsedStatementLine[] = transactions.map((t: any) => {
       currency ??= t.iso_currency_code ?? null;
       // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
-      const signed = t.amount != null ? neg(normalizeMoney(String(t.amount))) : "0.0000";
+      const signed = neg(exactFeedAmount(t.amount));
       return {
         postedOn: (t.date || sinceIso).slice(0, 10),
         amount: signed,
@@ -224,7 +240,7 @@ const truelayer: BankFeedAdapter = {
       currency ??= t.currency ?? null;
       return {
         postedOn: (t.timestamp || sinceIso).slice(0, 10),
-        amount: t.amount != null ? String(t.amount) : "0",
+        amount: exactFeedAmount(t.amount),
         description: t.description || t.merchant_name || null,
         counterpartyRef: t.merchant_name || null,
         bankTransactionId: t.transaction_id || t.normalised_provider_transaction_id || null,
