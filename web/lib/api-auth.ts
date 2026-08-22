@@ -170,7 +170,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
 
   // Best-effort last-used update — fire and forget, never blocks the request.
   void db
-    .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id}`)
+    .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id} and org_id = ${keyRow.org_id}`)
     .catch(() => {});
 
   return {
@@ -201,7 +201,7 @@ export async function enforceRateLimit(
              when rate_window_start = date_trunc('minute', now()) then rate_window_count + 1
              else 1 end,
            rate_window_start = date_trunc('minute', now())
-     where id = ${auth.keyId}
+     where id = ${auth.keyId} and org_id = ${auth.user.orgId}
      returning rate_window_count as count`)) as any;
   const count = Number(r.rows[0]?.count ?? 1);
   if (count <= auth.rateLimitPerMin) return null;

@@ -160,11 +160,11 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
       recordTypes: new Set(prev.recordTypes ?? []),
       customFields: new Set(prev.customFields ?? []),
     })
-    await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId}`)
+    await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`)
 
     // Supersede the previous active version, then activate the new one.
-    await tx.execute(sql`update app_versions set status = 'superseded' where app_id = ${appId} and id <> ${versionId} and status = 'active'`)
-    await tx.execute(sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId}`)
+    await tx.execute(sql`update app_versions set status = 'superseded' where app_id = ${appId} and org_id = ${orgId} and id <> ${versionId} and status = 'active'`)
+    await tx.execute(sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId} and org_id = ${orgId}`)
   })
 
   return { key: manifest.key }
@@ -194,7 +194,7 @@ async function provisionObjects(
            set name = ${rt.name}, plural_name = ${rt.pluralName}, icon_key = ${rt.iconKey},
                fields = ${JSON.stringify(rt.fields)}::jsonb, show_in_nav = ${rt.showInNav},
                updated_at = now(), updated_by = ${userId}
-         where id = ${existing.rows[0].id}`)
+         where id = ${existing.rows[0].id} and org_id = ${orgId}`)
     } else {
       await tx.execute(sql`
         insert into custom_record_types (org_id, key, name, plural_name, icon_key, fields, status, show_in_nav, created_by, updated_by)
@@ -219,7 +219,7 @@ async function provisionObjects(
            set label = ${cf.label}, field_type = ${cf.fieldType}, target_kind = ${cf.targetKind},
                config = ${JSON.stringify(cf.config)}::jsonb, is_required = ${cf.isRequired},
                is_active = true, updated_at = now(), updated_by = ${userId}
-         where id = ${existing.rows[0].id}`)
+         where id = ${existing.rows[0].id} and org_id = ${orgId}`)
     } else {
       await tx.execute(sql`
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, created_by, updated_by)
@@ -653,10 +653,10 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
     }
     await tx.execute(sql`
       update app_versions set manifest = ${JSON.stringify(manifest)}::jsonb, updated_at = now(), updated_by = ${userId}
-      where id = ${app.activeVersionId}`)
+      where id = ${app.activeVersionId} and org_id = ${orgId}`)
     // Re-classify kinds so new/changed endpoints load their backend files.
     for (const p of paths) {
-      await tx.execute(sql`update app_files set kind = ${vb.kinds[p]} where version_id = ${app.activeVersionId} and path = ${p}`)
+      await tx.execute(sql`update app_files set kind = ${vb.kinds[p]} where version_id = ${app.activeVersionId} and org_id = ${orgId} and path = ${p}`)
     }
   })
 }

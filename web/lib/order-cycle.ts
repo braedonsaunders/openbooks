@@ -215,7 +215,7 @@ export async function convertOrder(
       // advance billed qty on the source line
       await tx.execute(sql`
         update document_lines set quantity_billed = quantity_billed + ${r.remainder.quantity}, updated_by = ${userId}
-        where id = ${l.id}
+        where id = ${l.id} and org_id = ${orgId}
       `)
       lineNo++
     }
@@ -223,7 +223,7 @@ export async function convertOrder(
     await tx.execute(sql`
       update documents set subtotal = ${sum(convertedAmounts)}, tax_total = ${sum(convertedTaxes)},
              total = ${add(sum(convertedAmounts), sum(convertedTaxes))}, updated_by = ${userId}
-      where id = ${newId}
+      where id = ${newId} and org_id = ${orgId}
     `)
 
     await tx.execute(sql`

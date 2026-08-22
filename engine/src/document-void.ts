@@ -133,7 +133,7 @@ export async function requestDocumentVoid(input: {
            set void_requested_at = null, void_requested_by = null,
                void_reversal_date = null, void_reason = null,
                updated_at = now(), updated_by = ${input.actorId}
-         where id = ${doc.id}
+         where id = ${doc.id} and org_id = ${input.orgId}
       `);
       throw new DocumentVoidError("void approval routing failed; the document was not voided");
     }
