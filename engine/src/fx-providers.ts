@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { businessToday } from "./business-date.ts";
 import { db, withBypassContext, withOrgContext } from "./db.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
@@ -187,8 +188,7 @@ function addDays(date: string, days: number): string {
   return isoDate(d);
 }
 
-function syncRange(config: FxProviderConfigRow, now = new Date()): { from: string; to: string } {
-  const to = isoDate(now);
+function syncRange(config: FxProviderConfigRow, to: string): { from: string; to: string } {
   const lookbackStart = addDays(to, -(config.lookbackDays - 1));
   const revisionStart = config.lastObservationDate ? addDays(config.lastObservationDate, -2) : lookbackStart;
   return { from: revisionStart > lookbackStart ? revisionStart : lookbackStart, to };
@@ -383,9 +383,10 @@ export async function runFxProvider(
   } catch {
     throw new FxProviderError("FX providers cannot contact external services from a sandbox");
   }
+  const today = await businessToday(orgId);
   const range = trigger === "test"
-    ? { from: addDays(isoDate(now), -6), to: isoDate(now) }
-    : syncRange(config, now);
+    ? { from: addDays(today, -6), to: today }
+    : syncRange(config, today);
   const runId = await createRun(config, trigger, range.from, range.to, actorId);
   await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`);
   try {
