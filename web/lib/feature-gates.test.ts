@@ -1926,6 +1926,31 @@ test('the surfaces this test was written for are covered', () => {
     /body\.currency === undefined \? undefined/,
     'subscription plan-version writes must keep the stored currency when Multi-currency is off and the field is omitted',
   )
+  assert.match(
+    read('app/api/subcontracts/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,80}multiCurrency/,
+    'subcontract create must refuse currency when Multi-currency is off — existing values stay',
+  )
+  assert.match(
+    read('app/api/subcontracts/route.ts'),
+    /body\.currency !== undefined[\s\S]{0,200}status: 404/,
+    'subcontract create must 404 — not persist — currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/subcontracts/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]multiCurrency['"]\)/,
+    'the subcontracts page must not load the currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/subcontracts/SubcontractsWorkspace.tsx'),
+    /multiCurrency \? \{[\s\S]{0,80}currency/,
+    'the subcontract form must not send currency when Multi-currency is off',
+  )
+  assert.match(
+    read('app/(app)/subcontracts/SubcontractsWorkspace.tsx'),
+    /\{multiCurrency \? <Field label="Currency">/,
+    'the subcontract form must hide the currency picker when Multi-currency is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {
