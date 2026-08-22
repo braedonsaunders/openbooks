@@ -128,7 +128,7 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
   const predicate = scope === 'voided'
     ? sql`d.status = 'voided'`
     : scope === 'converted'
-      ? sql`exists (select 1 from document_links dl where dl.from_document_id = d.id)`
+      ? sql`exists (select 1 from document_links dl where dl.from_document_id = d.id and dl.org_id = d.org_id)`
       : scope === 'conversion'
         ? sql`d.status <> 'voided'`
         : sql`d.status <> 'voided'`
