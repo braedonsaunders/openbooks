@@ -651,6 +651,7 @@ export async function ensureCloseDefaults(
         on conflict (blueprint_id, key) do update set
           title = excluded.title, description = excluded.description,
           sort_order = excluded.sort_order, updated_at = now()
+        where close_blueprint_steps.org_id = ${orgId}
         returning id`));
         stepIds.set(step.key, inserted.rows[0].id);
       }
