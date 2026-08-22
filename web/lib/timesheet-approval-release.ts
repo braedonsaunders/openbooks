@@ -23,7 +23,7 @@ export async function releaseTimesheetWeekApproval(
   outcome: 'approved' | 'rejected',
   comment?: string | null,
 ): Promise<void> {
-  const parsed = await resolveTimesheetWeek(subjectId)
+  const parsed = await resolveTimesheetWeek(subjectId, orgId)
   if (!parsed) throw new Error(`unknown timesheet week: ${subjectId}`)
   const from = parsed.weekStart
   const to = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`))

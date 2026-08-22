@@ -70,11 +70,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** The employee + week a header row identifies, or null when it is gone. */
 export async function resolveTimesheetWeek(
   subjectId: string,
+  orgId?: string,
 ): Promise<{ employeePartyId: string; weekStart: string; orgId: string } | null> {
   if (!UUID_RE.test(subjectId)) return null;
   const result = (await db.execute<{ org_id: string; employee_party_id: string; week_start: string }>(sql`
     select org_id, employee_party_id, week_start::text as week_start
-      from timesheet_weeks where id = ${subjectId}
+      from timesheet_weeks
+     where id = ${subjectId}
+       ${orgId ? sql`and org_id = ${orgId}` : sql``}
   `));
   const row = result.rows[0];
   if (!row) return null;
@@ -86,6 +89,7 @@ export async function resolveTimesheetWeek(
 }
 
 type WeekRow = {
+  org_id: string;
   employee_name: string | null;
   employee_party_id: string;
   week_start: string;
@@ -104,7 +108,8 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
   // Status comes from the header — the record's own lifecycle — while the
   // measures aggregate the hours the header covers.
   const result = (await db.execute<WeekRow>(sql`
-    select employee.display_name as employee_name,
+    select tw.org_id,
+           employee.display_name as employee_name,
            tw.employee_party_id as employee_party_id,
            tw.week_start::text as week_start,
            (tw.week_start + 6)::text as week_end,
@@ -124,7 +129,7 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
        and te.worked_on >= tw.week_start
        and te.worked_on <= tw.week_start + 6
      where tw.id = ${subjectId}
-     group by employee.display_name, tw.employee_party_id, tw.week_start,
+     group by tw.org_id, employee.display_name, tw.employee_party_id, tw.week_start,
               tw.status, tw.submitted_by, tw.created_by
   `));
   return result.rows[0] ?? null;
@@ -151,7 +156,8 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
         from time_entries te
         left join projects project
           on project.id = te.project_id and project.org_id = te.org_id
-       where te.employee_party_id = ${week.employee_party_id}
+       where te.org_id = ${week.org_id}
+         and te.employee_party_id = ${week.employee_party_id}
          and te.worked_on >= ${week.week_start}::date
          and te.worked_on <= ${week.week_start}::date + 6
        order by te.worked_on, te.id

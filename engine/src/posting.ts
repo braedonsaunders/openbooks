@@ -1934,7 +1934,7 @@ export async function regenerateGlImpactTx(
         select 1 from reconciliation_matches match
          where match.org_id = ${doc.orgId}
            and match.journal_line_id in (
-             select id from journal_lines where entry_id = ${entry.id}
+             select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
            )
       ) as reconciled,
       exists (
@@ -1943,10 +1943,10 @@ export async function regenerateGlImpactTx(
            and application.unapplied_at is null
            and (
              application.from_line_id in (
-               select id from journal_lines where entry_id = ${entry.id}
+               select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
              )
              or application.to_line_id in (
-               select id from journal_lines where entry_id = ${entry.id}
+               select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
              )
            )
       ) as applied,
@@ -1954,14 +1954,14 @@ export async function regenerateGlImpactTx(
         select 1 from inventory_movements movement
          where movement.org_id = ${doc.orgId}
            and movement.document_line_id in (
-             select id from document_lines where document_id = ${doc.id}
+             select id from document_lines where document_id = ${doc.id} and org_id = ${doc.orgId}
            )
       ) as inventory,
       exists (
         select 1 from performance_obligations obligation
          where obligation.org_id = ${doc.orgId}
            and obligation.document_line_id in (
-             select id from document_lines where document_id = ${doc.id}
+             select id from document_lines where document_id = ${doc.id} and org_id = ${doc.orgId}
            )
            and obligation.status <> 'cancelled'
       ) as revenue,
@@ -2013,10 +2013,10 @@ export async function regenerateGlImpactTx(
       and ${schema.applications.unappliedAt} is null
       and (
         ${schema.applications.fromLineId} in (
-          select id from journal_lines where entry_id = ${entry.id}
+          select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
         )
         or ${schema.applications.toLineId} in (
-          select id from journal_lines where entry_id = ${entry.id}
+          select id from journal_lines where entry_id = ${entry.id} and org_id = ${doc.orgId}
         )
       )
     `);

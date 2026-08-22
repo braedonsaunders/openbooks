@@ -66,7 +66,7 @@ async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
            p.is_adjustment, r.book_id, b.name as book_name, bp.name as blueprint_name,
            r.status, r.readiness_score, r.target_close_date, r.started_by,
            (select count(*)::int from close_exceptions x
-             where x.run_id = r.id and x.status = 'open') as open_exception_count
+             where x.run_id = r.id and x.org_id = r.org_id and x.status = 'open') as open_exception_count
       from close_runs r
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id

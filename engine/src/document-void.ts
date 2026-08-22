@@ -195,8 +195,9 @@ export async function completeRequestedDocumentVoid(
         const reconciled = (await tx.execute(sql`
           select 1
             from reconciliation_matches rm
-           where rm.journal_line_id in (
-             select id from journal_lines where entry_id = ${entryId}
+           where rm.org_id = ${orgId}
+             and rm.journal_line_id in (
+             select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
            )
            limit 1
         `));
@@ -208,9 +209,9 @@ export async function completeRequestedDocumentVoid(
         const incoming = (await tx.execute(sql`
           select 1
             from applications a
-           where a.unapplied_at is null
+           where a.org_id = ${orgId} and a.unapplied_at is null
              and a.to_line_id in (
-               select id from journal_lines where entry_id = ${entryId}
+               select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
            limit 1
         `));
@@ -223,7 +224,7 @@ export async function completeRequestedDocumentVoid(
           select d2.document_number
             from document_links dl
             join documents d2 on d2.id = dl.to_document_id and d2.org_id = dl.org_id
-           where dl.from_document_id = ${documentId}
+           where dl.from_document_id = ${documentId} and dl.org_id = ${orgId}
              and d2.status in ('approved', 'posted')
              and dl.link_type <> 'pays'
            limit 1
@@ -238,15 +239,17 @@ export async function completeRequestedDocumentVoid(
             exists (
               select 1
                 from inventory_movements movement
-               where movement.document_line_id in (
-                 select id from document_lines where document_id = ${documentId}
+               where movement.org_id = ${orgId}
+                 and movement.document_line_id in (
+                 select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
                )
             ) as inventory,
             exists (
               select 1
                 from performance_obligations obligation
-               where obligation.document_line_id in (
-                 select id from document_lines where document_id = ${documentId}
+               where obligation.org_id = ${orgId}
+                 and obligation.document_line_id in (
+                 select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
                )
                  and obligation.status <> 'cancelled'
             ) as revenue
@@ -301,19 +304,19 @@ export async function completeRequestedDocumentVoid(
         const outgoingFx = (await tx.execute<{ id: string }>(sql`
           select distinct a.fx_gain_loss_entry_id as id
             from applications a
-           where a.unapplied_at is null
+           where a.org_id = ${orgId} and a.unapplied_at is null
              and a.fx_gain_loss_entry_id is not null
              and a.from_line_id in (
-               select id from journal_lines where entry_id = ${entryId}
+               select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
         `));
         await tx.execute(sql`
           update applications
              set unapplied_at = now(), updated_at = now(),
                  updated_by = ${String(doc.void_requested_by)}
-           where unapplied_at is null
+           where org_id = ${orgId} and unapplied_at is null
              and from_line_id in (
-               select id from journal_lines where entry_id = ${entryId}
+               select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
         `);
 

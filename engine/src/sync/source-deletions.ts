@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
 import { neg } from "../money.ts";
 import {
@@ -105,7 +105,7 @@ export async function mirrorSourceDeletion(input: {
       const [entry] = await tx
         .select()
         .from(schema.journalEntries)
-        .where(eq(schema.journalEntries.id, document.posted_entry_id));
+        .where(and(eq(schema.journalEntries.id, document.posted_entry_id), eq(schema.journalEntries.orgId, input.orgId)));
       if (!entry || entry.status !== "posted") {
         throw new SourceDeletionResolutionError(
           "source-deleted document's posted journal is missing or not posted",
@@ -114,7 +114,7 @@ export async function mirrorSourceDeletion(input: {
       const lines = await tx
         .select()
         .from(schema.journalLines)
-        .where(eq(schema.journalLines.entryId, entry.id));
+        .where(and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, input.orgId)));
       if (lines.length === 0) {
         throw new SourceDeletionResolutionError(
           "source-deleted document's posted journal has no lines",
@@ -134,12 +134,12 @@ export async function mirrorSourceDeletion(input: {
       await tx.execute(sql`
         update applications a
            set unapplied_at = now(), updated_at = now()
-         where a.unapplied_at is null and (
+         where a.org_id = ${input.orgId} and a.unapplied_at is null and (
            a.from_line_id in (
-             select id from journal_lines where entry_id = ${entry.id}
+             select id from journal_lines where entry_id = ${entry.id} and org_id = ${input.orgId}
            )
            or a.to_line_id in (
-             select id from journal_lines where entry_id = ${entry.id}
+             select id from journal_lines where entry_id = ${entry.id} and org_id = ${input.orgId}
            )
          )`);
 
@@ -287,9 +287,9 @@ export async function resolveSourceDeletion(input: {
         const applications = (await db.execute(sql`
           select 1
             from applications a
-           where a.unapplied_at is null and (
-             exists (select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${document.posted_entry_id})
-             or exists (select 1 from journal_lines jl where jl.id = a.to_line_id and jl.entry_id = ${document.posted_entry_id})
+           where a.org_id = ${input.orgId} and a.unapplied_at is null and (
+             exists (select 1 from journal_lines jl where jl.id = a.from_line_id and jl.org_id = a.org_id and jl.entry_id = ${document.posted_entry_id})
+             or exists (select 1 from journal_lines jl where jl.id = a.to_line_id and jl.org_id = a.org_id and jl.entry_id = ${document.posted_entry_id})
            ) limit 1`));
         if (applications.rows.length > 0) {
           throw new SourceDeletionResolutionError(
@@ -300,7 +300,7 @@ export async function resolveSourceDeletion(input: {
         const [entry] = await db
           .select()
           .from(schema.journalEntries)
-          .where(eq(schema.journalEntries.id, document.posted_entry_id));
+          .where(and(eq(schema.journalEntries.id, document.posted_entry_id), eq(schema.journalEntries.orgId, input.orgId)));
         if (!entry || entry.status !== "posted") {
           throw new SourceDeletionResolutionError(
             "the document's posted journal is missing or already reversed",
@@ -309,7 +309,7 @@ export async function resolveSourceDeletion(input: {
         const lines = await db
           .select()
           .from(schema.journalLines)
-          .where(eq(schema.journalLines.entryId, entry.id));
+          .where(and(eq(schema.journalLines.entryId, entry.id), eq(schema.journalLines.orgId, input.orgId)));
         // Preserve the source transaction's accounting-period allocation.
         // If that period is controller-closed, the correction must stop for a
         // controlled reopen or explicit adjusting-entry decision; silently
