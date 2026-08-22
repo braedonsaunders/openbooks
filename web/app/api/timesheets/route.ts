@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
 import { isUuid } from '../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
@@ -10,6 +11,8 @@ import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { isIsoDate, loadWeek, pinTimesheetEmployee, pinTimesheetLineRefs, weekStart, weekWindow } from './_lib'
 
 export const runtime = 'nodejs'
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
@@ -161,6 +164,27 @@ async function save(req: Request) {
         memo,
         custom,
       })
+    }
+  }
+
+  // Stored time entries stay. Turning Inventory off must 404 a write that
+  // would persist a new inventory / assembly / kit item. Amendments that only
+  // reverse an existing locked row copy the original item and are not refused.
+  if (!(await isFeatureEnabled(orgId, 'inventory'))) {
+    const stored = (await db.execute<{ item_id: string }>(sql`
+      select item_id from time_entries
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and item_id is not null`))
+    const storedIds = new Set(stored.rows.map((row) => row.item_id))
+    for (const p of toPersist) {
+      if (!p.itemId || storedIds.has(p.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`))
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
     }
   }
 
