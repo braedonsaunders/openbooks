@@ -478,9 +478,10 @@ function nachaDebit(ctx: FormatContext, now: Date): { filename: string; content:
   const yymmdd = (d: Date) => `${String(d.getUTCFullYear() % 100).padStart(2, "0")}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
   const hhmm = (d: Date) => `${String(d.getUTCHours()).padStart(2, "0")}${String(d.getUTCMinutes()).padStart(2, "0")}`;
   const odfi8 = s.odfiRouting.slice(0, 8);
+  const created = new Date(String(ctx.businessDate) + "T00:00:00Z");
   const effective = new Date(String(ctx.run.scheduled_for ?? ctx.businessDate) + "T00:00:00Z");
   const lines = [
-    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(now) + hhmm(now) + "A094101" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
+    "1" + "01" + field(s.immediateDestination, 10, true) + field(s.immediateOrigin, 10, true) + yymmdd(created) + hhmm(now) + "A094101" + field(s.destinationName, 23) + field(s.originName, 23) + field("", 8),
     "5" + "225" + field(s.companyName, 16) + field("", 20) + field(s.companyId, 10) + field(s.entryClassCode ?? "CCD", 3) + field(s.entryDescription ?? "COLLECT", 10) + field("", 6) + yymmdd(effective) + field("", 3) + "1" + odfi8 + "0000001",
   ];
   let hash = 0n;
