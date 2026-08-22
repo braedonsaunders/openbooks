@@ -85,6 +85,16 @@ test("time-entry insert persist writes hours through canonicalDecimal then norma
   assert.doesNotMatch(body, /moneyOrNull\(f\.hours\)/);
 });
 
+test("time-entry update persist writes hours through canonicalDecimal then normalizeMoney", () => {
+  const start = loader.indexOf("update time_entries set worked_on=");
+  const next = loader.indexOf("if (billingChanged || costingChanged)", start);
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.ok(start >= 0 && next > start, "time-entry hours UPDATE persist is defined");
+  assert.match(body, /persistTimeEntryHours\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.hours\)/);
+  assert.doesNotMatch(body, /normalizeMoney\("0"\)/);
+});
+
 test("connector field-ticket imports require an explicit source namespace", () => {
   assert.match(fieldTicketImporter, /--source-system is required/);
   assert.match(fieldTicketImporter, /select base_currency from orgs/);
