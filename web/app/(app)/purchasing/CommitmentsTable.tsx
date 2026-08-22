@@ -12,7 +12,13 @@ import type { VendorExposureRow } from '../../../lib/module-home/purchasing'
  * with in-place document drill). Same drawer the AP cockpit and cash flyout
  * use, so the drill feels identical everywhere.
  */
-export function CommitmentsTable({ rows }: { rows: VendorExposureRow[] }) {
+export function CommitmentsTable({
+  rows,
+  showPurchaseOrders = true,
+}: {
+  rows: VendorExposureRow[]
+  showPurchaseOrders?: boolean
+}) {
   const { money, moneyCompact } = useMoney()
   const t = useTranslations('purchasing')
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
@@ -23,7 +29,7 @@ export function CommitmentsTable({ rows }: { rows: VendorExposureRow[] }) {
         <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
           <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
             <th className="px-4 py-2 text-left font-medium">{t('home.hero.vendor')}</th>
-            <th className="px-3 py-2 text-right font-medium">{t('home.hero.openPos')}</th>
+            {showPurchaseOrders ? <th className="px-3 py-2 text-right font-medium">{t('home.hero.openPos')}</th> : null}
             <th className="px-3 py-2 text-center font-medium">{t('home.hero.openBills')}</th>
             <th className="px-3 py-2 text-right font-medium">{t('home.hero.oldestDue')}</th>
             <th className="px-3 py-2 text-right font-medium">{t('home.hero.overdue')}</th>
@@ -38,6 +44,7 @@ export function CommitmentsTable({ rows }: { rows: VendorExposureRow[] }) {
               className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${r.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
             >
               <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">{r.name}</td>
+              {showPurchaseOrders ? (
               <td className="px-3 py-2.5 text-right tabular-nums">
                 {r.openPos > 0 ? (
                   <span className="text-violet-600 dark:text-violet-400">
@@ -48,6 +55,7 @@ export function CommitmentsTable({ rows }: { rows: VendorExposureRow[] }) {
                   <span className="text-slate-300 dark:text-slate-600">—</span>
                 )}
               </td>
+              ) : null}
               <td className="px-3 py-2.5 text-center text-xs tabular-nums text-slate-500 dark:text-slate-400">
                 {r.openBills > 0 ? r.openBills : '—'}
               </td>

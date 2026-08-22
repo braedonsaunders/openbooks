@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { moduleDrawerHref } from './txn-links'
 import type { Authz } from './authz'
 import { can } from './authz'
+import { disabledDocKinds } from './documents'
 import { isFeatureEnabled } from './features'
 
 /**
@@ -159,12 +160,17 @@ async function searchTransactions(
   // leg is a bounded scan by design: numeric_eq is not LEAKPROOF, so under
   // RLS a numeric predicate can never become a btree index condition — an
   // (org_id, amount) index cannot help any tenant-scoped query.
+  const hiddenKinds = await disabledDocKinds(orgId)
+  const hiddenKindFilter = hiddenKinds.length
+    ? sql`and d.kind not in (${sql.join(hiddenKinds.map((value) => sql`${value}`), sql`, `)})`
+    : sql``
   const amtLeg =
     num != null
       ? sql`
         union
         (select dl.document_id as id from document_lines dl
-          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num})
+          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${hiddenKindFilter}
           limit 200)`
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
@@ -172,13 +178,13 @@ async function searchTransactions(
   const r = (await db.execute(sql`
     with cand as (
       (select d.id from documents d
-        where d.org_id = ${orgId}
+        where d.org_id = ${orgId} ${hiddenKindFilter}
           and (d.document_number % ${q} or d.document_number ilike ${like}
                or d.reference_number ilike ${like} or d.memo ilike ${like})
         order by d.created_at desc limit 200)
       union
       (select d.id from documents d
-        where d.org_id = ${orgId} and d.party_id in (
+        where d.org_id = ${orgId} ${hiddenKindFilter} and d.party_id in (
           select p.id from parties p where p.org_id = ${orgId} and p.display_name % ${q})
         order by d.created_at desc limit 200)${amtLeg}
     )
@@ -192,6 +198,7 @@ async function searchTransactions(
       from documents d
       join cand on cand.id = d.id
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id
+     where true ${hiddenKindFilter}
      order by ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`)) as any
   return r.rows.map((row: any): SearchHit => {

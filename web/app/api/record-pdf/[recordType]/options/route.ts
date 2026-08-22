@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
+import { isDocKindEnabled } from "../../../../../lib/documents";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { listPdfTemplates } from "../../../../../lib/pdf-templates/store";
 
@@ -15,6 +16,9 @@ export async function GET(
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   const gate = await guardPermission(meta.readPermission);
   if (gate instanceof NextResponse) return gate;
+  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const rows = await listPdfTemplates(gate.user.orgId, recordType);
   return NextResponse.json({
     rows: rows

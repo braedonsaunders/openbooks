@@ -93,7 +93,12 @@ export default async function PurchasingHomePage({
     .filter((i) => i.href !== '/purchasing' && i.href !== '/ap')
     .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
 
-  const attention = needsAttention(data.topExposure, data.badges.unpostedExpenses, t, moneyCompact)
+  const attention = needsAttention(
+    data.topExposure,
+    data.expensesEnabled ? data.badges.unpostedExpenses : 0,
+    t,
+    moneyCompact,
+  )
   const trendLabels = data.trend.map((w) => weekLabel(w.weekStart))
 
   return (
@@ -127,6 +132,7 @@ export default async function PurchasingHomePage({
             label={t('home.vitals.activeVendors')}
             value={String(data.badges.vendors)}
           />
+          {data.ordersEnabled ? (
           <HomeStatTile
             icon="clipboard"
             accent="violet"
@@ -134,6 +140,7 @@ export default async function PurchasingHomePage({
             value={moneyCompact(data.openPoValue)}
             sub={t('home.vitals.openPosSub', { count: data.openPos })}
           />
+          ) : null}
           <HomeStatTile
             icon="trending-up"
             accent="sky"
@@ -149,6 +156,7 @@ export default async function PurchasingHomePage({
             sub={t('home.vitals.paymentsWeekSub', { count: data.badges.payments7d })}
             tone="positive"
           />
+          {data.expensesEnabled ? (
           <HomeStatTile
             icon="triangle-alert"
             accent="amber"
@@ -157,6 +165,7 @@ export default async function PurchasingHomePage({
             sub={t('home.vitals.unpostedSub')}
             tone={data.badges.unpostedExpenses > 0 ? 'warning' : 'positive'}
           />
+          ) : null}
         </div>
 
         {/* Commitments hero + supporting rail */}
@@ -171,7 +180,7 @@ export default async function PurchasingHomePage({
             {data.topExposure.length === 0 ? (
               <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{t('home.hero.empty')}</p>
             ) : (
-              <CommitmentsTable rows={data.topExposure} />
+              <CommitmentsTable rows={data.topExposure} showPurchaseOrders={data.ordersEnabled} />
             )}
           </HomePanel>
 

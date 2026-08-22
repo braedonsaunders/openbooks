@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../../lib/authz'
+import { isDocKindEnabled } from '../../../../../lib/documents'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog'
 import { getPdfTemplate } from '../../../../../lib/pdf-templates/store'
 import { customMergeFields } from '../../../../../lib/pdf-templates/values'
@@ -24,6 +25,7 @@ export default async function PdfTemplateEditorPage({
   if (!row) notFound()
   const meta = PDF_RECORD_TYPE_BY_KEY[row.recordType]
   if (!meta) notFound()
+  if (!(await isDocKindEnabled(authz.user.orgId, row.recordType))) notFound()
 
   const custom = await customMergeFields(row.recordType, authz.user.orgId)
   const mergeFields = [...meta.fields, ...custom].map((f) => ({ key: f.key, label: f.label }))

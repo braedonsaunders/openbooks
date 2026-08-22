@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
+import { isDocKindEnabled } from "../../../../../lib/documents";
 import { pdfResponse, safeName } from "../../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
@@ -23,6 +24,9 @@ export async function GET(
   const gate = await guardPermission(meta.readPermission);
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
+  if (!(await isDocKindEnabled(user.orgId, recordType))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   const templateId = new URL(req.url).searchParams.get("template");
   const [tpl, record] = await Promise.all([

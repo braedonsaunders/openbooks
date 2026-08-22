@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../../lib/authz";
+import { isDocKindEnabled } from "../../../../lib/documents";
 import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../lib/pdf-templates/render";
@@ -29,6 +30,9 @@ export async function POST(req: Request) {
   };
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  if (!(await isDocKindEnabled(user.orgId, meta.key))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
 
   let compiledHtml: string;
   let header: string;

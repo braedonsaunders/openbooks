@@ -7,7 +7,7 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { DOC_KINDS, DOC_KIND_FEATURE, docKindConfig, type DocKindConfig } from './document-kinds'
-import { isFeatureEnabled } from './features'
+import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
@@ -51,6 +51,14 @@ export async function isDocKindEnabled(orgId: string, kind: string): Promise<boo
   const feature = DOC_KIND_FEATURE[kind]
   if (!feature) return true
   return isFeatureEnabled(orgId, feature)
+}
+
+/** Optional-module kinds whose Features switch is off. Historical rows stay. */
+export async function disabledDocKinds(orgId: string): Promise<string[]> {
+  const state = await orgFeatureState(orgId)
+  return Object.entries(DOC_KIND_FEATURE).flatMap(([kind, feature]) =>
+    feature && !featureEnabled(state, feature) ? [kind] : [],
+  )
 }
 
 // ---------------------------------------------------------------------------

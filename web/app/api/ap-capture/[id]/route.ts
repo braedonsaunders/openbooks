@@ -5,6 +5,7 @@ import { getDocumentCaptureSettings } from '@openbooks/engine/src/ap-capture-con
 import { normalizeCapturedDecimal, type CaptureLine, type NormalizedCapture } from '@openbooks/engine/src/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/ap-capture-service.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isDocKindEnabled } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
 
@@ -107,6 +108,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
     return NextResponse.json({ error: 'not_editable' }, { status: 409 })
   }
+  const nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
+  if (
+    nextPurchaseOrderId
+    && nextPurchaseOrderId !== current.rows[0].purchase_order_id
+    && !(await isDocKindEnabled(gate.user.orgId, 'purchase_order'))
+  ) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const settings = await getDocumentCaptureSettings(gate.user.orgId)
   const resolved = await resolveAndValidateCapture({
     orgId: gate.user.orgId,
@@ -114,7 +123,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     normalized,
     confidenceThreshold: settings.confidenceThreshold,
     vendorId: body.vendorId === undefined ? undefined : optionalUuid(body.vendorId),
-    purchaseOrderId: body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId),
+    purchaseOrderId: nextPurchaseOrderId,
   })
   const kind = body.documentKind === 'vendor_credit' ? 'vendor_credit' : 'vendor_bill'
   try {

@@ -38,7 +38,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'ou
   ready: 'success', materialized: 'success', needs_review: 'warning', duplicate: 'warning', failed: 'destructive', extracting: 'secondary', queued: 'secondary', rejected: 'outline',
 }
 
-export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders, canCreate }: { initial: CaptureDetail; vendors: Option[]; accounts: Option[]; purchaseOrders: Option[]; canCreate: boolean }) {
+export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders, canLookupPurchaseOrders = true, canCreate }: { initial: CaptureDetail; vendors: Option[]; accounts: Option[]; purchaseOrders: Option[]; canLookupPurchaseOrders?: boolean; canCreate: boolean }) {
   const t = useTranslations('ap.capture')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -181,7 +181,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
                 <Field label={t('fields.invoiceDate')} badge={confidence('invoiceDate')}>{editable ? <Input type="date" value={form.invoiceDate ?? ''} onChange={(event) => update({ ...form, invoiceDate: event.target.value })} /> : <ReadOnlyValue value={form.invoiceDate} />}</Field>
                 <Field label={t('fields.dueDate')} badge={confidence('dueDate')}>{editable ? <Input type="date" value={form.dueDate ?? ''} onChange={(event) => update({ ...form, dueDate: event.target.value || null })} /> : <ReadOnlyValue value={form.dueDate} />}</Field>
                 <Field label={t('fields.currency')} badge={confidence('currency')}>{editable ? <Input value={form.currency ?? ''} maxLength={3} onChange={(event) => update({ ...form, currency: event.target.value.toUpperCase() })} /> : <ReadOnlyValue value={form.currency} className="font-mono" />}</Field>
-                <div className="space-y-1.5 sm:col-span-2"><div className="flex items-center justify-between"><Label>{t('fields.purchaseOrder')}</Label>{confidence('purchaseOrderNumber')}</div>{editable ? <SearchSelect value={purchaseOrderId} onChange={(value) => { setPurchaseOrderId(value); setDirty(true) }} options={options(purchaseOrders)} clearable placeholder={t('fields.purchaseOrderPlaceholder')} sheetTitle={t('fields.purchaseOrder')} ariaLabel={t('fields.purchaseOrder')} /> : <ReadOnlyValue value={optionLabel(purchaseOrders, purchaseOrderId) || initial.purchaseOrderNumber} />}</div>
+                <div className="space-y-1.5 sm:col-span-2"><div className="flex items-center justify-between"><Label>{t('fields.purchaseOrder')}</Label>{confidence('purchaseOrderNumber')}</div>{editable && canLookupPurchaseOrders ? <SearchSelect value={purchaseOrderId} onChange={(value) => { setPurchaseOrderId(value); setDirty(true) }} options={options(purchaseOrders)} clearable placeholder={t('fields.purchaseOrderPlaceholder')} sheetTitle={t('fields.purchaseOrder')} ariaLabel={t('fields.purchaseOrder')} /> : <ReadOnlyValue value={optionLabel(purchaseOrders, purchaseOrderId) || initial.purchaseOrderNumber} />}</div>
                 <div className="space-y-1.5 sm:col-span-2"><Label>{t('fields.memo')}</Label>{editable ? <Textarea value={form.memo ?? ''} onChange={(event) => update({ ...form, memo: event.target.value || null })} rows={2} /> : <ReadOnlyValue value={form.memo} className="whitespace-pre-wrap" />}</div>
               </div>
               <div className="space-y-2">
