@@ -583,6 +583,16 @@ test('the surfaces this test was written for are covered', () => {
     'the entity list must hide inventory item-kind chips when Inventory is off',
   )
   assert.match(
+    read('app/(app)/admin/customization/ListViewDesigner.tsx'),
+    /recordTypeForFeatureState\([\s\S]{0,120}inventory/,
+    'the list view designer must hide inventory item kinds when Inventory is off',
+  )
+  assert.match(
+    read('app/(app)/admin/customization/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'inventory'\)/,
+    'the list view designer must read the Inventory switch before offering item kinds',
+  )
+  assert.match(
     read('../packages/reports/src/entities.ts'),
     /ITEM_INVENTORY_KIND_VALUES/,
     'items report kind options must name the inventory kinds the Features switch hides',

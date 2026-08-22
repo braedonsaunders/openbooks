@@ -16,7 +16,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
 import { disabledRecordTypes } from '../../../../lib/customization/gates'
-import { subsidiaryFeatureEnabled } from '../../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,10 @@ export default async function CustomizationPage({
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageOrg = can(authz, 'admin.customization.manage')
-  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(authz.user.orgId)
+  const [subsidiaryUiEnabled, inventoryEnabled] = await Promise.all([
+    subsidiaryFeatureEnabled(authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'inventory'),
+  ])
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
@@ -338,7 +341,7 @@ export default async function CustomizationPage({
       )}
 
       {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} subsidiaryEnabled={subsidiaryUiEnabled} /> : null}
-      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as any} filterOptions={listFilterOptions} /> : null}
+      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as any} filterOptions={listFilterOptions} inventoryEnabled={inventoryEnabled} /> : null}
     </ListPageLayout>
   )
 }
