@@ -2516,7 +2516,7 @@ async function calculateStub(
         const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
           select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
             from pay_stubs s
-            join pay_runs r on r.document_id = s.pay_run_document_id
+            join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${province}
              and (r.run_status in ('calculated', 'committed')
                   or s.pay_run_document_id = ${documentId})
