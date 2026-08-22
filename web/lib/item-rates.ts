@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cmp, mul } from '@openbooks/engine/src/money.ts'
+import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money.ts'
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/item-rate-pricing.ts'
 import { convertBillRate } from './item-rate-currency'
 
@@ -268,7 +268,7 @@ export async function snapshotTimeBillRates(
     if (!opts.dryRun) {
       await db.execute(sql`
         update time_entries set bill_rate=${rate},bill_rate_source_rate=${sourceRate},
-          bill_rate_source_currency=${sourceCurrency},bill_rate_fx_rate=${fxRate},bill_rate_currency=${te.target_currency},
+          bill_rate_source_currency=${sourceCurrency},bill_rate_fx_rate=${normalizeDecimal(fxRate, 10)},bill_rate_currency=${te.target_currency},
           bill_rate_book_id=${hit?.rate_book_id??null},bill_rate_version_id=${hit?.rate_version_id??null},bill_rate_line_id=${hit?.rate_line_id??null}
         where id = ${te.id} and org_id = ${orgId} and bill_rate is null`)
     }
