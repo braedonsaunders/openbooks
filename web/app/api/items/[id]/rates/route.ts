@@ -3,11 +3,13 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const POLICIES = ['capped_ladder', 'lowest_cost'] as const
 const PRESENTATIONS = ['summary', 'rate_components'] as const
 
@@ -62,6 +64,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Stored rate lines stay. Turning Inventory off must 404 a save that would
+  // persist new rates on an inventory / assembly / kit item.
+  if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+    const existing = (await db.execute<{ kind: string }>(sql`
+      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
+    if (existing.rows[0] && INVENTORY_ITEM_KINDS.has(existing.rows[0].kind)) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
   const body = await req.json() as {
     rateBookId?: string | null; effectiveFrom?: string; baseUnit?: string;
     pricingPolicy?: string; invoicePresentation?: string; tiers?: TierInput[]

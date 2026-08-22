@@ -570,6 +570,16 @@ test('the surfaces this test was written for are covered', () => {
     /storedTargetIds\.has\(target\.targetValueId\)[\s\S]{0,280}INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'labor rate-card adjustment item targets must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
   )
+  assert.match(
+    read('app/api/items/[id]/rates/route.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'item rate save must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/items/[id]/rates/route.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'item rate save must 404 — not persist inventory/assembly/kit rate lines — when Inventory is off — stored rate lines stay',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
