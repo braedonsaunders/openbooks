@@ -37,8 +37,12 @@ export class GateError extends Error {}
 /** Roles that may act on any gate in the org (matches web admin semantics). */
 const GATE_ADMIN_ROLE = "admin";
 
-async function loadGate(gateId: string): Promise<GateRow | null> {
-  const [gate] = await db.select().from(schema.flowGates).where(eq(schema.flowGates.id, gateId));
+async function loadGate(gateId: string, orgId?: string): Promise<GateRow | null> {
+  const [gate] = await db.select().from(schema.flowGates).where(
+    orgId
+      ? and(eq(schema.flowGates.id, gateId), eq(schema.flowGates.orgId, orgId))
+      : eq(schema.flowGates.id, gateId),
+  );
   return gate ?? null;
 }
 
@@ -185,7 +189,7 @@ export async function decideGate(args: {
   return withOrg(pre.orgId, async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
 
-    const gate = await loadGate(gateId);
+    const gate = await loadGate(gateId, pre.orgId);
     if (!gate || gate.status !== "pending") {
       throw new GateError("this approval was already resolved");
     }
@@ -822,7 +826,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   // decision that resolves the node first leaves nothing here to escalate).
   return withOrg(pre.orgId, async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
-    const gate = await loadGate(gateId);
+    const gate = await loadGate(gateId, pre.orgId);
     if (!gate || gate.status !== "pending") return false;
 
     const adapter = getFlowAdapter(gate.subjectKind);
@@ -908,6 +912,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     .from(schema.flowGates)
     .where(
       and(
+        eq(schema.flowGates.orgId, gate.orgId),
         eq(schema.flowGates.runId, gate.runId),
         eq(schema.flowGates.nodeId, gate.nodeId),
         eq(schema.flowGates.status, "pending"),
