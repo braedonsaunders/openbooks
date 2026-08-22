@@ -208,14 +208,16 @@ export async function createProjectCharge(
             equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: quantity,
           })
         : null)
-      const costAmount = exactMoney(resolved?.cost.amount ?? mul(quantity, String(enteredCostRate ?? it.default_cost ?? '0')), 'Cost amount')
-      const billAmount = exactMoney(resolved?.bill.amount ?? mul(quantity, String(enteredBillRate ?? it.default_rate ?? enteredCostRate ?? it.default_cost ?? '0')), 'Bill amount')
+      const fallbackCostRate = exactMoney(enteredCostRate ?? it.default_cost ?? '0', 'Cost rate')
+      const fallbackBillRate = exactMoney(enteredBillRate ?? it.default_rate ?? fallbackCostRate, 'Bill rate')
+      const costAmount = exactMoney(resolved?.cost.amount ?? mul(quantity, fallbackCostRate), 'Cost amount')
+      const billAmount = exactMoney(resolved?.bill.amount ?? mul(quantity, fallbackBillRate), 'Bill amount')
       // Unit rate back out of a resolved amount. A zero-quantity line has no
       // unit rate to derive, so fall back to the entered rate rather than
       // dividing by zero — which divRate reported as an invalid FX rate.
       const canDerive = resolved != null && !isZero(quantity)
-      const costRate = normalizeMoney(canDerive ? div(costAmount, quantity) : String(enteredCostRate ?? it.default_cost ?? '0'))
-      const billRate = normalizeMoney(canDerive ? div(billAmount, quantity) : String(enteredBillRate ?? it.default_rate ?? costRate))
+      const costRate = exactMoney(canDerive ? div(costAmount, quantity) : fallbackCostRate, 'Cost rate')
+      const billRate = exactMoney(canDerive ? div(billAmount, quantity) : fallbackBillRate, 'Bill rate')
       const accountId = line.accountId ?? it.expense_account_id
       if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
