@@ -943,7 +943,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         effectiveBillingStatus !== prior.billingStatus;
       const costingChanged = sourceCostingBasis !== prior.costingBasis;
       const update = (tx: SqlExecutor) =>
-        tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${moneyOrNull(f.hours) ?? normalizeMoney("0")},
+        tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${persistTimeEntryHours(f.hours == null || f.hours === "" ? "0" : f.hours)},
           time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
           project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
           is_billable=${!!f.isBillable}, cost_rate=${moneyOrNull(f.costRate)}, bill_rate=${moneyOrNull(f.billRate)},
