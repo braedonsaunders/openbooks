@@ -523,6 +523,16 @@ test('the surfaces this test was written for are covered', () => {
     'createSubscriptionInvoice must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/subscription-billing.ts'),
+    /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
+    'createSubscriptionInvoice must not persist equipment_charge lines when Equipment is off — stored subscriptions and existing invoices stay',
+  )
+  assert.match(
+    read('../engine/src/subscription-billing.ts'),
+    /SubscriptionError\("Equipment is disabled", 404\)/,
+    'createSubscriptionInvoice must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('app/api/subscriptions/route.ts'),
     /e instanceof SubscriptionError[\s\S]{0,120}status: e\.status/,
     'subscription bill-now must 404 — not persist inventory/assembly/kit — when Inventory is off',

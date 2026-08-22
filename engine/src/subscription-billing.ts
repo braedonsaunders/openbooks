@@ -266,6 +266,24 @@ export async function createSubscriptionInvoice(
       }
     }
   }
+  // Stored subscriptions and existing invoices stay. Turning Equipment off
+  // must refuse a generate that would persist equipment_charge.
+  const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
+      from orgs where id = ${spec.orgId}
+  `)).rows[0]?.enabled === true;
+  if (!equipmentOn) {
+    const itemIds = [...new Set(
+      invoiceLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+    )];
+    for (const itemId of itemIds) {
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`));
+      if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+        throw new SubscriptionError("Equipment is disabled", 404);
+      }
+    }
+  }
   let netAmount = "0.0000";
   let taxTotal = "0.0000";
   const prepared: Array<{
