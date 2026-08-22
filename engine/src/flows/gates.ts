@@ -685,6 +685,7 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
        and gate.reminded_at is null and organization.env_kind = 'production'
+       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
      order by gate.remind_at
      limit 200
   `));
@@ -732,6 +733,7 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
        and organization.env_kind = 'production'
+       and coalesce((organization.settings->'features'->>'flows')::boolean, true)
      order by gate.escalate_at
      limit 100
   `));
