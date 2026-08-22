@@ -85,6 +85,7 @@ export async function lockRecord(args: {
         updatedAt: new Date(),
         updatedBy: args.userId ?? null,
       },
+      setWhere: eq(schema.flowLocks.orgId, args.orgId),
     });
 }
 
