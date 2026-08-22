@@ -53,17 +53,17 @@ export function hostKeyFingerprint(hostKeyPem: string): string {
   const pub = (parsed as { getPublicSSH(): Buffer }).getPublicSSH();
   return "SHA256:" + createHash("sha256").update(pub).digest("base64").replace(/=+$/, "");
 }
-type ServerRow = { id: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null };
+type ServerRow = { id: string; orgId: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null };
 
 async function loadServer(username: string): Promise<ServerRow | null> {
   const r = (await db.execute<ServerRow>(sql`
-    select id, username, backend, bucket, root_prefix, password_encrypted, authorized_keys
+    select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys
       from sftp_servers where username = ${username} and is_active limit 1
   `));
   return r.rows[0] ?? null;
 }
-async function touch(id: string) {
-  await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${id}`);
+async function touch(row: ServerRow) {
+  await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
 }
 const asConfig = (row: ServerRow) => ({ id: row.id, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
 
@@ -74,7 +74,7 @@ export const dbResolver: SftpResolver = {
     let expected: string;
     try { expected = decryptSecret(row.password_encrypted); } catch { return null; }
     if (!constantTimeEqual(password, expected)) return null;
-    await touch(row.id);
+    await touch(row);
     return asConfig(row);
   },
   async publicKey(username, keyAlgo, keyData) {
@@ -88,7 +88,7 @@ export const dbResolver: SftpResolver = {
       if (parsed instanceof Error) continue;
       const pub = parsed as { type: string; getPublicSSH(): Buffer };
       if (pub.type === keyAlgo && pub.getPublicSSH().equals(keyData)) {
-        await touch(row.id);
+        await touch(row);
         return asConfig(row);
       }
     }

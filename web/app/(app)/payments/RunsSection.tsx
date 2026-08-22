@@ -80,7 +80,7 @@ export async function RunsSection({
     return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
   }
   const profileCount = (await db.execute(sql`
-    select count(*)::int as n from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.is_active
+    select count(*)::int as n from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
      where p.org_id = ${orgId} and p.is_active
        and (${collections} = false or (f.direction <> 'credit' and f.rail in ('nacha_debit', 'sepa_debit', 'custom')))
        and (${collections} = true or f.direction <> 'debit')

@@ -440,7 +440,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     // Refreshed tokens re-seal onto the connection, preserving the app creds.
     const onRefresh = async (t: QboTokens) => {
       const merged: QboSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
-      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id}`);
+      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
     };
     return new QboSource(new QboClient(app, String(cfg.realmId), tokens, onRefresh), { baseCurrency: cfg.baseCurrency });
   }
@@ -463,7 +463,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
     // Xero refresh tokens ROTATE — re-sealing on refresh is load-bearing.
     const onRefresh = async (t: XeroTokens) => {
       const merged: XeroSecrets = { clientId: secret.clientId, clientSecret: secret.clientSecret, ...t };
-      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id}`);
+      await db.execute(sql`update connections set secrets = ${sealJson(merged)}, updated_at = now() where id = ${conn.id} and org_id = ${conn.orgId}`);
     };
     return new XeroSource(new XeroClient(app, String(cfg.tenantId), tokens, onRefresh), { baseCurrency: cfg.baseCurrency });
   }

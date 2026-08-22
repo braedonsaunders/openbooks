@@ -16,7 +16,7 @@ export async function createDirectDebitRun(opts: {
   const asOf = opts.scheduledFor ?? await businessToday(opts.orgId);
   const profileResult = (await db.execute<{ id: string; bank_account_id: string; subsidiary_id: string | null; currency: string; rail: string; direction: string }>(sql`
     select p.id, p.bank_account_id, p.subsidiary_id, p.currency, f.rail, f.direction
-      from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.is_active
+      from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
       join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id and a.type = 'asset_bank' and a.is_active and not a.is_summary
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
   `));
