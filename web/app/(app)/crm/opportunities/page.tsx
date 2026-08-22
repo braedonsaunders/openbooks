@@ -41,9 +41,10 @@ export default async function Opportunities({
 
   let drawer: React.ReactNode = null
   if (openId && isUuid(openId)) {
-    const [multiCurrency, inventoryEnabled] = await Promise.all([
+    const [multiCurrency, inventoryEnabled, equipmentEnabled] = await Promise.all([
       isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
       isFeatureEnabled(authz.user.orgId, 'inventory'),
+      isFeatureEnabled(authz.user.orgId, 'equipment'),
     ])
     const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId),
@@ -58,6 +59,7 @@ export default async function Opportunities({
          where org_id = ${authz.user.orgId} and is_active
            and (
              ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
+             ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
              or id in (
                select item_id from crm_opportunity_lines
                 where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null

@@ -2082,6 +2082,16 @@ test('the surfaces this test was written for are covered', () => {
     'opportunity PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
   )
   assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'opportunity PATCH must refuse equipment_charge when Equipment is off — stored lines stay',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'opportunity PATCH must 404 — not persist equipment_charge lines — when Equipment is off',
+  )
+  assert.match(
     read('app/(app)/crm/opportunities/page.tsx'),
     /isFeatureEnabled\([^,]+, ['"]inventory['"]\)/,
     'the opportunities page must not offer inventory/assembly/kit items when Inventory is off',
@@ -2090,6 +2100,16 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/crm/opportunities/page.tsx'),
     /kind not in \('inventory', 'assembly', 'kit'\)/,
     'the opportunity item picker must drop inventory/assembly/kit when Inventory is off — stored lines stay',
+  )
+  assert.match(
+    read('app/(app)/crm/opportunities/page.tsx'),
+    /isFeatureEnabled\([^,]+, ['"]equipment['"]\)/,
+    'the opportunities page must not offer equipment_charge items when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/crm/opportunities/page.tsx'),
+    /kind <> 'equipment_charge'/,
+    'the opportunity item picker must drop equipment_charge when Equipment is off — stored lines stay',
   )
   assert.match(
     read('app/(app)/crm/opportunities/page.tsx'),

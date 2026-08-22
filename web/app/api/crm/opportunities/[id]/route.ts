@@ -130,6 +130,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
     }
+    // Stored equipment_charge lines stay. Turning Equipment off must
+    // 404 a write that would persist a new one of those kinds.
+    if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
+      const stored = (await db.execute<{ item_id: string }>(sql`
+        select item_id from crm_opportunity_lines
+         where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`))
+      const storedIds = new Set(stored.rows.map((row) => row.item_id))
+      for (const line of lines) {
+        if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          return NextResponse.json({ error: 'not found' }, { status: 404 })
+        }
+      }
+    }
   }
   const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined
   const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
