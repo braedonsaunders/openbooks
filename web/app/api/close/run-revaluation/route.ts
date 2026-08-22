@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -15,9 +15,11 @@ interface Body {
  * rate, booking the unrealized gain/loss (origin='revaluation') and a mirror
  * reversal on the first day of the next period. Idempotent — an already-revalued
  * subsidiary is skipped. Requires orgs.settings.controlAccounts.fxUnrealizedGainLoss.
+ * The multiCurrency feature must also be on — a disabled FX module cannot
+ * still post unrealized gain/loss through this close action.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('close.run')
+  const gate = await guardFeaturePermission('close.run', 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
