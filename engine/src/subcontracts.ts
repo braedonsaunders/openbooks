@@ -251,7 +251,7 @@ export async function updateDraftSubcontract(input: {
 }): Promise<void> {
   const title = input.title.trim();
   const original = persistSubcontractOriginalCommitment(input.originalCommitment);
-  const retainage = normalizeMoney(input.defaultRetainagePercent);
+  const retainage = persistSubcontractDefaultRetainage(input.defaultRetainagePercent);
   if (!title || cmp(original, "0") <= 0) throw new SubcontractError("Title and a positive commitment are required");
   if (cmp(retainage, "0") < 0 || cmp(retainage, "100") > 0) throw new SubcontractError("Retainage percent must be between 0 and 100");
   await db.transaction(async (tx) => {
