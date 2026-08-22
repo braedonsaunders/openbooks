@@ -86,6 +86,7 @@ async function installTaxReturnPackWith(
       set name = excluded.name, country = excluded.country, region = excluded.region,
           level = excluded.level, tax_type = excluded.tax_type, is_active = true,
           updated_at = now(), updated_by = ${actorId}
+    where tax_jurisdictions.org_id = ${orgId}
     returning id`));
   const jurisdictionId = jurRes.rows[0]?.id ?? null;
 
