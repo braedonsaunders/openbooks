@@ -112,6 +112,24 @@ test("updateDraftSubcontract persists defaultRetainagePercent through canonicalD
   assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
 });
 
+test("addSubcontractSovLine persists scheduledValue through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistSubcontractSovScheduledValue");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractSovScheduledValue helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export async function addSubcontractSovLine");
+  const next = source.indexOf("export async function removeSubcontractSovLine");
+  const body = source.slice(start, next);
+  assert.match(body, /persistSubcontractSovScheduledValue\(input\.scheduledValue\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.scheduledValue\)/);
+  assert.match(body, /normalizeMoney\(input\.retainagePercent\)/);
+});
+
 test("deductive change cannot erase earned work", () => {
   assert.equal(revisedSubcontractSovValue("1000", "-200", "750"), "800.0000");
   assert.throws(
