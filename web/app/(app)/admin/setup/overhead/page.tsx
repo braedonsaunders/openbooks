@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { BookOpen } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
+import { businessToday, parseIsoDate } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
@@ -44,11 +45,11 @@ export default async function OverheadModelSetup({
   const view: OverheadView = (VIEWS as readonly string[]).includes(rawView) ? (rawView as OverheadView) : 'model'
   const rowParam = typeof sp.row === 'string' ? sp.row : null
 
-  const to = new Date()
-  const from = new Date(to)
-  from.setFullYear(from.getFullYear() - 1)
-  const iso = (d: Date) => d.toISOString().slice(0, 10)
-  const data = await trueCostData(authz.user.orgId, { from: iso(from), to: iso(to), label: 'TTM' })
+  const today = await businessToday(authz.user.orgId)
+  const fromDate = parseIsoDate(today)
+  fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
+  const from = fromDate.toISOString().slice(0, 10)
+  const data = await trueCostData(authz.user.orgId, { from, to: today, label: 'TTM' })
   const typesRes = (await db.execute<{ id: string; name: string; overhead: { method?: string; ratePercent?: number; ratePerHour?: number } | null }>(sql`
     select pt.id, pt.name,
            version.financial_profile->'overhead' as overhead
@@ -58,8 +59,8 @@ export default async function OverheadModelSetup({
           from project_financial_profile_versions v
          where v.org_id = pt.org_id
            and v.project_type_id = pt.id
-           and v.effective_from <= current_date
-           and (v.effective_to is null or v.effective_to >= current_date)
+           and v.effective_from <= ${today}
+           and (v.effective_to is null or v.effective_to >= ${today})
          order by v.effective_from desc
          limit 1
       ) version on true
@@ -68,7 +69,7 @@ export default async function OverheadModelSetup({
   const cardRes = (await db.execute<{ n: number; from_date: string | null }>(sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= current_date)`))
+       and (effective_to is null or effective_to >= ${today})`))
   const card = cardRes.rows[0] ?? { n: 0, from_date: null }
   const lifecycleRes = (await db.execute<{ c: { mode?: string; cadence?: string } | null }>(sql`
     select settings->'overheadRateLifecycle' as c from orgs where id = ${authz.user.orgId}`))

@@ -98,6 +98,7 @@ export async function PATCH(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
+  const today = await businessToday(orgId)
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
   const b = (await req.json().catch(() => ({}))) as any
@@ -135,8 +136,8 @@ export async function PATCH(req: Request) {
               from project_financial_profile_versions v
              where v.org_id = pt.org_id
                and v.project_type_id = pt.id
-               and v.effective_from <= current_date
-               and (v.effective_to is null or v.effective_to >= current_date)
+               and v.effective_from <= ${today}
+               and (v.effective_to is null or v.effective_to >= ${today})
              order by v.effective_from desc
              limit 1
           ) version on true

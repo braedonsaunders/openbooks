@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { BookOpen, Sparkles } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { requirePermission } from '../../../../../lib/authz'
@@ -32,6 +33,7 @@ type RateScope = (typeof RATE_SCOPES)[number]
 export default async function LaborCostingSetup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
+  const today = await businessToday(orgId)
   await requireProjectsFeature(orgId)
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
   const t = await getTranslations('admin')
@@ -53,13 +55,13 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
 
   const statusFilter =
     rateStatus === 'current'
-      ? sql`and r.effective_from <= current_date and (r.effective_to is null or r.effective_to >= current_date)`
+      ? sql`and r.effective_from <= ${today} and (r.effective_to is null or r.effective_to >= ${today})`
       : rateStatus === 'scheduled'
-        ? sql`and r.effective_from > current_date and (r.effective_to is null or r.effective_to >= r.effective_from)`
+        ? sql`and r.effective_from > ${today} and (r.effective_to is null or r.effective_to >= r.effective_from)`
         : rateStatus === 'ended'
-          ? sql`and r.effective_to < current_date`
+          ? sql`and r.effective_to < ${today}`
           : rateStatus === 'active'
-            ? sql`and (r.effective_to is null or r.effective_to >= current_date)`
+            ? sql`and (r.effective_to is null or r.effective_to >= ${today})`
             : sql``
   const scopeFilter = rateScope === 'job_title' ? sql`and r.job_title is not null`
     : rateScope === 'trade' ? sql`and r.trade_id is not null`
@@ -112,8 +114,8 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
       ),
       current_rates as (
         select employee_party_id, job_title, trade_id, department_id, subsidiary_id from labor_cost_rates
-         where org_id = ${orgId} and is_active and effective_from <= current_date
-           and (effective_to is null or effective_to >= current_date)
+         where org_id = ${orgId} and is_active and effective_from <= ${today}
+           and (effective_to is null or effective_to >= ${today})
       )
       select
         (select count(*) from active_emp) as employees,

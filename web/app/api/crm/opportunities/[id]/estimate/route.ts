@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -12,6 +13,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const today = await businessToday(user.orgId)
   const result = await db.transaction(async (tx) => {
     const opportunity = (await tx.execute<any>(sql`
       select * from crm_opportunities where id = ${id} and org_id = ${user.orgId} and is_active for update`))
@@ -29,7 +31,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         (org_id, kind, document_number, party_id, subsidiary_id, document_date, due_date, currency,
          status, department_id, location_id, class_id, extra_dims, memo, subtotal, tax_total, total,
          created_by, updated_by)
-      values (${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, current_date,
+      values (${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, ${today},
               ${op.expected_close_date}, ${op.currency}, 'draft', ${op.department_id}, ${op.location_id},
               ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${op.projected_amount},
               0, ${op.projected_amount}, ${user.id}, ${user.id}) returning id`))

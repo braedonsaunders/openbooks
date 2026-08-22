@@ -5,6 +5,7 @@ import { runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
 import { can, guardPermission } from '../../../../lib/authz'
 import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { normalizeQuery } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -51,7 +52,9 @@ export async function POST(req: Request) {
 
   try {
     // Column labels compile in the caller's locale (results are never persisted).
-    const result = await runInsightQuery(pool, query, gate.user.orgId, await insightLabelResolver())
+    const result = await runInsightQuery(
+      pool, query, gate.user.orgId, await insightLabelResolver(), await businessToday(gate.user.orgId),
+    )
     return NextResponse.json(result)
   } catch (e) {
     if (e instanceof InsightCompileError) {

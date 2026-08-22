@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { BookOpen } from "lucide-react";
 import { Button } from "@openbooks/ui";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, requirePermission } from "../../../../../lib/authz";
 import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
@@ -30,6 +31,7 @@ export default async function LaborPricingPage({
   const authz = await requirePermission("admin.setup.manage");
   await requireProjectsFeature(authz.user.orgId);
   const orgId = authz.user.orgId;
+  const today = await businessToday(orgId);
   const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId);
   const sp = await searchParams;
   const t = await getTranslations("laborPricing");
@@ -48,11 +50,11 @@ export default async function LaborPricingPage({
   const dimensionTypes = ["department", ...(subsidiaryUiEnabled ? ["subsidiary"] : []), "location", "class", "trade", "job_title", "other"] as const;
   const dimensionFilter = dimensionParam === "unscoped" || (dimensionTypes as readonly string[]).includes(dimensionParam ?? "") ? dimensionParam! : "all";
   const effectiveFilter = timeFilter === "active"
-    ? sql`and v.status = 'active' and v.effective_from <= current_date and (v.effective_to is null or v.effective_to >= current_date)`
+    ? sql`and v.status = 'active' and v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})`
     : timeFilter === "scheduled"
-      ? sql`and v.status <> 'retired' and v.effective_from > current_date`
+      ? sql`and v.status <> 'retired' and v.effective_from > ${today}`
       : timeFilter === "expired"
-        ? sql`and (v.status = 'retired' or v.effective_to < current_date)`
+        ? sql`and (v.status = 'retired' or v.effective_to < ${today})`
         : sql``;
   const scopeFilter = dimensionFilter === "all"
     ? sql``

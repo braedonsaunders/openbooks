@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
   const gate = await projectGate('projects.read')
   if (gate instanceof NextResponse) return gate
   const { orgId } = gate.user
+  const today = await businessToday(orgId)
   const url = new URL(req.url)
   const customerId = url.searchParams.get('customerId')
   const projectId = url.searchParams.get('projectId')
@@ -61,7 +63,7 @@ export async function GET(req: Request) {
              (select v.id from item_rate_versions v
                join labor_rate_version_policies p on p.version_id = v.id
               where v.rate_book_id = b.id and v.org_id = ${orgId}
-              order by (v.effective_from <= current_date and (v.effective_to is null or v.effective_to >= current_date)) desc,
+              order by (v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})) desc,
                        v.effective_from desc limit 1) as latest_version_id
         from item_rate_books b
        where b.org_id = ${orgId} and b.is_active
@@ -74,7 +76,7 @@ export async function GET(req: Request) {
                (select v.id from item_rate_versions v
                  join labor_rate_version_policies p on p.version_id = v.id
                 where v.rate_book_id = b.id and v.org_id = ${orgId}
-                order by (v.effective_from <= current_date and (v.effective_to is null or v.effective_to >= current_date)) desc,
+                order by (v.effective_from <= ${today} and (v.effective_to is null or v.effective_to >= ${today})) desc,
                          v.effective_from desc limit 1)) as rate_version_id
         from item_rate_book_assignments a
         join item_rate_books b on b.id = a.rate_book_id
