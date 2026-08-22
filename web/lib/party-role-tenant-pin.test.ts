@@ -10,3 +10,10 @@ test('customer-role upserts pin the known tenant on the party_id conflict write'
     /insert into customer_roles[\s\S]*?on conflict \(party_id\) do update set[\s\S]*?where customer_roles\.org_id = \$\{user\.orgId\}/,
   )
 })
+
+test('vendor-role upserts pin the known tenant on the party_id conflict write', () => {
+  assert.match(
+    route,
+    /insert into vendor_roles[\s\S]*?on conflict \(party_id\) do update set[\s\S]*?where vendor_roles\.org_id = \$\{user\.orgId\}/,
+  )
+})
