@@ -124,10 +124,26 @@ export async function PUT(req: Request) {
   } catch {
     return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
   }
+  const annualHoursRaw = s.annualHours == null || s.annualHours === ''
+    ? '2080'
+    : canonicalDecimal(s.annualHours, 4)
+  if (
+    annualHoursRaw === null ||
+    compareDecimal(annualHoursRaw, '0') <= 0 ||
+    compareDecimal(annualHoursRaw, '8784') > 0
+  ) {
+    return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+  }
+  let annualHours: string
+  try {
+    annualHours = normalizeMoney(annualHoursRaw)
+  } catch {
+    return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
+  }
   const settings = {
     mode: s.mode === 'post' ? 'post' : 'off',
     hoursPerDay,
-    annualHours: Number(s.annualHours) > 0 && Number(s.annualHours) <= 8784 ? Number(s.annualHours) : 2080,
+    annualHours,
     components: cleanComponents(s.components),
   }
   await db.execute(sql`
