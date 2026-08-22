@@ -54,7 +54,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)
   }
   if (format === 'xlsx') {
-    const buf = await exportDataToXlsx(data, { reportName: view.name, dateRangeLabel: '' })
+    const buf = await exportDataToXlsx(data, {
+      reportName: view.name,
+      dateRangeLabel: '',
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    })
     return xlsxResponse(buf, filename)
   }
   const { page, showSummary } = resolveLayout(view.layout)
