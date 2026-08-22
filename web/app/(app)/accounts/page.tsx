@@ -172,6 +172,7 @@ export default async function Accounts({
       closeHref={closeHref}
       createMode={creating}
       multiCurrency={multiCurrencyEnabled}
+      multiSubsidiary={subsidiaryUiEnabled}
     />
   ) : null
 

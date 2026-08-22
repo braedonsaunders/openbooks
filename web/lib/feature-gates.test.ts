@@ -1192,6 +1192,41 @@ test('the surfaces this test was written for are covered', () => {
     /\{payrollEnabled \? <div className=\{field\}>/,
     'the party form must hide the worker-comp picker when Payroll is off',
   )
+  assert.match(
+    read('app/api/accounts/[id]/route.ts'),
+    /subsidiaryFeatureEnabled\(/,
+    'account PATCH must refuse eliminate when Multi-subsidiary is off — existing flags stay',
+  )
+  assert.match(
+    read('app/api/accounts/[id]/route.ts'),
+    /eliminate !== undefined[\s\S]{0,200}status: 404/,
+    'account PATCH must 404 — not persist — eliminate when Multi-subsidiary is off',
+  )
+  assert.match(
+    read('app/api/accounts/route.ts'),
+    /subsidiaryFeatureEnabled\(/,
+    'account POST must refuse eliminate when Multi-subsidiary is off',
+  )
+  assert.match(
+    read('app/api/accounts/route.ts'),
+    /eliminate !== undefined[\s\S]{0,200}status: 404/,
+    'account POST must 404 — not persist — eliminate when Multi-subsidiary is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/AccountDrawer.tsx'),
+    /multiSubsidiary \? \{ eliminate \}/,
+    'the account drawer must not send eliminate when Multi-subsidiary is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/AccountDrawer.tsx'),
+    /\{multiSubsidiary \? <label/,
+    'the account drawer must hide eliminate when Multi-subsidiary is off',
+  )
+  assert.match(
+    read('app/(app)/accounts/page.tsx'),
+    /multiSubsidiary=\{subsidiaryUiEnabled\}/,
+    'the accounts page must not load the eliminate control when Multi-subsidiary is off',
+  )
 })
 
 test('the report catalog page filters entities the reader cannot run', () => {

@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ACCOUNT_TYPES } from '@openbooks/schema'
 import { guardPermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount } from './_lib'
@@ -59,6 +59,9 @@ export async function POST(request: Request) {
     ? parsed as CreateBody
     : {}
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  }
+  if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
 
