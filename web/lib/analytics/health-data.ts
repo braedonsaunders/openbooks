@@ -224,8 +224,8 @@ async function segmentsBy(
       and a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by 1, 2
-    having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0.005
-        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0.005
+    having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
+        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
   `)) as any;
   const rows = r.rows as any[];
   // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
@@ -288,7 +288,7 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
       current,
       prior,
       change: current - prior,
-      changePct: Math.abs(prior) > 0.005 ? (current - prior) / Math.abs(prior) : null,
+      changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
       isIncome: isIncome(x.type),
     };
   });
@@ -338,11 +338,11 @@ async function itemAnalysis(orgId: string, from: string, to: string): Promise<He
           prior,
           current,
           change: current - prior,
-          changePct: Math.abs(prior) > 0.005 ? (current - prior) / Math.abs(prior) : null,
+          changePct: Math.abs(prior) > 0 ? (current - prior) / Math.abs(prior) : null,
           contribution: Math.abs(current - prior) / totalChangeAbs,
         };
       })
-      .filter((x) => Math.abs(x.current) > 0.005 || Math.abs(x.prior) > 0.005)
+      .filter((x) => Math.abs(x.current) > 0 || Math.abs(x.prior) > 0)
       .sort((a, b) => b.current - a.current);
   } catch {
     rows = [];
@@ -365,7 +365,7 @@ function buildPnlSummary(f: FinancialHealth["figures"], prior: FinancialHealth["
     current,
     prior: priorV,
     change: current - priorV,
-    changePct: Math.abs(priorV) > 0.005 ? (current - priorV) / Math.abs(priorV) : null,
+    changePct: Math.abs(priorV) > 0 ? (current - priorV) / Math.abs(priorV) : null,
     strong,
   });
   return [
@@ -557,7 +557,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
     left join b on b.account_id = acc.id
     left join a on a.account_id = acc.id
     where acc.org_id = ${orgId} and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-      and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0.005)
+      and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0)
     order by abs(coalesce(a.actual, 0) - coalesce(b.budget, 0)) desc
   `)) as any;
 
@@ -566,10 +566,10 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
     const budget = Number(x.budget);
     const actual = Number(x.actual);
     const variance = actual - budget;
-    const variancePct = Math.abs(budget) > 0.005 ? variance / Math.abs(budget) : null;
+    const variancePct = Math.abs(budget) > 0 ? variance / Math.abs(budget) : null;
     const favorable = isIncome(x.type) ? variance >= 0 : variance <= 0;
     let status: BudgetRow["status"];
-    if (Math.abs(budget) <= 0.005) status = "no-budget";
+    if (budget === 0) status = "no-budget";
     else if (favorable || Math.abs(variancePct ?? 0) <= 0.1) status = "on-track";
     else if (Math.abs(variancePct ?? 0) <= 0.25) status = "watch";
     else status = "over";

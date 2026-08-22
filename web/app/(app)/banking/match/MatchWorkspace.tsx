@@ -13,6 +13,7 @@ import {
 } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
+import { compareDecimal } from '../../../../lib/exact-decimal'
 import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 type Search = Record<string, string | string[] | undefined>
@@ -183,7 +184,7 @@ export function MatchWorkspace({
     toast.success(tW('signedOffToast', { count: d.journalLinesReconciled })); router.refresh()
   }
 
-  const zero = totals ? Math.abs(Number(totals.difference)) < 0.005 : false
+  const zero = totals ? compareDecimal(String(totals.difference ?? '0'), '0') === 0 : false
 
   // ---- account picker (always shown) --------------------------------------
   const picker = (

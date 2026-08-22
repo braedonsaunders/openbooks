@@ -573,13 +573,13 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     const expenseByDept: Record<string, number> = {};
     for (const d of departmentsBase) expenseByDept[d.id] = c.byDept.get(d.id) ?? 0;
     return buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept, c.total, [...c.accounts.values()].sort((a, b) => b.amount - a.amount));
-  }).filter((c) => Math.abs(c.totalAmount) > 0.005);
+  }).filter((c) => Math.abs(c.totalAmount) > 0);
 
   // ---- native non-billable time category ---------------------------------------
   // A first-class burden category (not a hand-built custom one): the labour cost
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
-  if (nonbillCostTotal > 0.005) {
+  if (nonbillCostTotal > 0) {
     timeCategories.push(buildCategory(TIME_ID, TIME_KEY, "Non-Billable Time", "#8b5cf6", "time", {}, timeExpenseByDept, nonbillCostTotal, []));
   }
 
@@ -598,7 +598,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // Custom category settings live on the category record itself.
     profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
     const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, []);
-    if (Math.abs(built.totalAmount) > 0.005) customCategories.push(built);
+    if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
   }
 
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
@@ -623,7 +623,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   // ---- absorption (utilization-recovery model unless the GL mechanism is live) --
   const glApplied = Number(appliedRows.rows[0]?.applied ?? 0);
-  const hasBurdenGL = Number(appliedRows.rows[0]?.lines ?? 0) > 0 && Math.abs(glApplied) > 0.005;
+  const hasBurdenGL = Number(appliedRows.rows[0]?.lines ?? 0) > 0 && Math.abs(glApplied) > 0;
   const utilization = totalHours > 0 ? billedHours / totalHours : 0;
   const burdenApplied = hasBurdenGL ? glApplied : totalOverhead * utilization;
   const gap = burdenApplied - totalOverhead;
@@ -715,7 +715,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       employeeCount: employees.length,
     },
     categories,
-    unassigned: [...unassignedMap.values()].filter((u) => Math.abs(u.amount) > 0.005).sort((a, b) => b.amount - a.amount),
+    unassigned: [...unassignedMap.values()].filter((u) => Math.abs(u.amount) > 0).sort((a, b) => b.amount - a.amount),
     totals: { byDept: totalsByDept, overall: compositeRate },
     labor: {
       employees: employees.sort((a, b) => b.hours - a.hours),

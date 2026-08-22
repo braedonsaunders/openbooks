@@ -243,7 +243,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
                  sum(b.amount) as balance
             from ${buckets} b
            where true ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
-           group by b.account_id having abs(sum(b.amount)) >= 0.005
+           group by b.account_id having abs(sum(b.amount)) > 0
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
        order by a.number nulls last, a.name
@@ -266,7 +266,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
-     group by a.id having abs(sum(l.amount)) >= 0.005
+     group by a.id having abs(sum(l.amount)) > 0
      order by a.number nulls last, a.name
   `)) as any;
   return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
@@ -284,7 +284,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
        and a.type = ${type}
      group by p.id, p.display_name
-    having abs(sum(l.amount)) >= 0.005
+    having abs(sum(l.amount)) > 0
      order by abs(sum(l.amount)) desc
   `)) as any;
   return r.rows as { id: string | null; display_name: string | null; balance: string; line_count: string; latest_due: string | null }[];
