@@ -468,7 +468,7 @@ export async function updatePropertyLease(input: {
   const baseRent = exactMoney(input.baseRent, "Base rent");
   const deposit = exactMoney(input.securityDepositRequired, "Security deposit");
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : exactMoney(input.camSharePercent, "CAM share");
-  const lateFeeValue = input.lateFeeType === "none" ? "0.0000" : normalizeMoney(input.lateFeeValue);
+  const lateFeeValue = input.lateFeeType === "none" ? "0.0000" : exactMoney(input.lateFeeValue, "Late-fee value");
   if (!leaseNumber || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
   if (!Number.isInteger(input.billingDay) || input.billingDay < 1 || input.billingDay > 31) throw new PropertyManagementError("Billing day must be between 1 and 31");
