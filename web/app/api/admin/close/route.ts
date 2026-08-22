@@ -305,7 +305,8 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
             ${JSON.stringify(object(body, "rules"))}::jsonb, ${body.isActive !== false}, ${actorId}, ${actorId})
     on conflict (org_id, code) do update set name = excluded.name, description = excluded.description,
       policy_type = excluded.policy_type, rules = excluded.rules, is_active = excluded.is_active,
-      updated_at = now(), updated_by = excluded.updated_by returning id`)) as any;
+      updated_at = now(), updated_by = excluded.updated_by
+    where close_policies.org_id = ${orgId} returning id`)) as any;
   return result.rows[0].id as string;
 }
 
