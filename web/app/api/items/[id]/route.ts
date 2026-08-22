@@ -109,6 +109,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (bodyTouchesRevenueRecognition(body) && !(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  if (body.showOnTimesheet !== undefined && !(await isFeatureEnabled(user.orgId, 'timeTracking'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {

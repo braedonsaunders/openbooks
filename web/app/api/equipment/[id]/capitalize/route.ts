@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
 
 export const runtime = 'nodejs'
@@ -16,6 +17,12 @@ export const runtime = 'nodejs'
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
+  // Capitalize writes a fixed_assets row. Equipment being on is not enough —
+  // turning Fixed Assets off must stop new register rows without touching
+  // units that already exist.
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const { id } = await params
   const { orgId, id: userId } = gate.user
 

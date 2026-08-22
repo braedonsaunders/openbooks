@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { loadEquipment } from '../_lib'
@@ -30,6 +31,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
   const body = await req.json() as any
+  if (body.fixedAssetId !== undefined) {
+    const currentId = current.rows[0].fixed_asset_id ? String(current.rows[0].fixed_asset_id) : null
+    const nextId = text(body.fixedAssetId)
+    if (currentId !== nextId && !(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
   const status = body.status ?? current.rows[0].status
   if (!['draft','active','inactive','retired'].includes(status)) return bad('invalid_status')
   const name = body.name !== undefined ? text(body.name) : current.rows[0].name
