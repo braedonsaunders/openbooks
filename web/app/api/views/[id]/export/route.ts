@@ -46,7 +46,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const data = runResultToExportData(result, { title: view.name, dateRangeLabel: '' })
-  const filename = `${safeName(view.slug)}-${await businessToday(user.orgId)}`
+  const stamp = await businessToday(user.orgId)
+  const filename = `${safeName(view.slug)}-${stamp}`
 
   if (format === 'csv') {
     const { sectionHeader } = await reportCsvOptions()
@@ -58,6 +59,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
   const { page, showSummary } = resolveLayout(view.layout)
   const branding = await orgBranding()
-  const pdf = await exportDataToPdf(data, branding, page, { showSummary })
+  const pdf = await exportDataToPdf(data, branding, page, {
+    showSummary,
+    generatedAt: new Date(`${stamp}T00:00:00Z`),
+  })
   return pdfResponse(pdf, filename)
 }
