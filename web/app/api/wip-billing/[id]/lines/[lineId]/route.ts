@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../../../lib/authz'
+import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { isUuid } from '../../../../../../lib/list-params'
 import { holdPrebillLine, updatePrebillLine, WipBillingError } from '../../../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../../../lib/wip-billing-gate'
 
 export const runtime = 'nodejs'
+
+/** Exact numeric(19,4) money string, or null when the request value is not canonical. */
+function exactMoney(value: unknown): string | null {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return null
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return null
+  }
+}
 
 export async function PATCH(
   req: Request,
@@ -30,8 +43,12 @@ export async function PATCH(
       )
       return NextResponse.json(result)
     }
+    const proposedBillAmount = exactMoney(body.proposedBillAmount)
+    if (proposedBillAmount === null) {
+      return NextResponse.json({ error: 'Proposed bill amount must be an exact decimal' }, { status: 422 })
+    }
     const result = await updatePrebillLine(gate.user.orgId, gate.user.id, id, lineId, {
-      proposedBillAmount: String(body.proposedBillAmount ?? ''),
+      proposedBillAmount,
       adjustmentReason: body.adjustmentReason == null ? null : String(body.adjustmentReason),
       adjustmentEvidence: Array.isArray(body.adjustmentEvidence) ? body.adjustmentEvidence.map(String) : [],
     })
