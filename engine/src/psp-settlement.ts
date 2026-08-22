@@ -840,5 +840,6 @@ export async function savePspProviderConfig(
       default_clearing_account_id = excluded.default_clearing_account_id,
       secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
       updated_at = now(), updated_by = ${actorId}
+    where psp_provider_configs.org_id = ${orgId}
   `);
 }
