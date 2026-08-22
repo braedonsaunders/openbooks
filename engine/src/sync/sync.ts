@@ -966,6 +966,7 @@ export async function preflightFullSync(
  *  real "pulling/posting X of Y" bar. Never fails a sync — progress is cosmetic. */
 const _progressAt = new Map<string, number>();
 async function setProgress(
+  orgId: string,
   runId: string,
   p: SyncProgress,
   force = false,
@@ -975,7 +976,7 @@ async function setProgress(
   _progressAt.set(runId, now);
   try {
     await db.execute(
-      sql`update sync_runs set progress = ${JSON.stringify(p)}::jsonb where id = ${runId}`,
+      sql`update sync_runs set progress = ${JSON.stringify(p)}::jsonb where id = ${runId} and org_id = ${orgId}`,
     );
   } catch {
     /* progress is best-effort */
@@ -1181,6 +1182,7 @@ export async function runSync(
     //    a new customer/account/item referenced by a new transaction must exist
     //    before the document builds.
     await setProgress(
+      org.id,
       run!.id,
       { phase: "starting", message: "Connecting…" },
       true,
@@ -1189,6 +1191,7 @@ export async function runSync(
     const loadEntitiesFirst = opts.loadEntitiesFirst ?? true;
     if (needsStandalonePeriodRefresh(targetedRefs, loadEntitiesFirst)) {
       await setProgress(
+        org.id,
         run!.id,
         {
           phase: "entities",
@@ -1222,6 +1225,7 @@ export async function runSync(
     }
     if (loadEntitiesFirst && source.entities) {
       await setProgress(
+        org.id,
         run!.id,
         { phase: "entities", message: "Loading accounts, parties, items…" },
         true,
@@ -1231,7 +1235,7 @@ export async function runSync(
         org.id,
         since,
         (message, current, total) => {
-          void setProgress(run!.id, {
+          void setProgress(org.id, run!.id, {
             phase: "entities",
             message,
             current,
@@ -1343,7 +1347,7 @@ export async function runSync(
     );
     // Pull-phase progress: the adapter reports "X of Y transactions" as it streams.
     ctx.onProgress = (p) => {
-      void setProgress(run!.id, p);
+      void setProgress(org.id, run!.id, p);
     };
     const deps: PostingDeps = {
       control: ctx.control,
@@ -1355,6 +1359,7 @@ export async function runSync(
 
     // -- 3. pull native changes -------------------------------------------------
     await setProgress(
+      org.id,
       run!.id,
       { phase: "pull", message: "Pulling transactions…" },
       true,
@@ -1431,7 +1436,7 @@ export async function runSync(
     let docIndex = 0;
     for (const sourceDoc of changes.documents) {
       docIndex++;
-      await setProgress(run!.id, {
+      await setProgress(org.id, run!.id, {
         phase: "post",
         message: "Posting transactions…",
         current: docIndex,
@@ -1835,6 +1840,7 @@ export async function runSync(
         skipped.push(failure);
         if (writeFailures.length < 20) writeFailures.push(failure);
         await setProgress(
+          org.id,
           run!.id,
           {
             phase: "post",
@@ -1922,6 +1928,7 @@ export async function runSync(
 
     // -- 6. applications ----------------------------------------------------------
     await setProgress(
+      org.id,
       run!.id,
       {
         phase: "applications",
@@ -1969,6 +1976,7 @@ export async function runSync(
 
     // -- 7. verify: authoritative source ledger ----------------------------------
     await setProgress(
+      org.id,
       run!.id,
       {
         phase: "verify",

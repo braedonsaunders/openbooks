@@ -258,13 +258,13 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       update sandboxes
          set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
              last_error = null, updated_at = now()
-       where id = ${sb.id}`);
+       where id = ${sb.id} and org_id = ${sandboxOrgId}`);
   } catch (err) {
     await db.execute(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sb.id}`);
+       where id = ${sb.id} and org_id = ${sandboxOrgId}`);
     throw err;
   }
   return { sandboxId: sb.id, sandboxOrgId };
@@ -295,7 +295,7 @@ export async function refreshSandbox(
   await db.execute(sql`
     update sandboxes
        set status = 'refreshing', last_error = null, updated_at = now()
-     where id = ${sandboxId}`);
+     where id = ${sandboxId} and org_id = ${s.org_id}`);
   try {
     const { rebaseSet } = await loadCatalog();
     // Which tables to wipe + re-copy. Keeping customizations means leaving the
@@ -325,13 +325,13 @@ export async function refreshSandbox(
     await db.execute(sql`
       update sandboxes
          set status = 'ready', last_refresh_at = now(), last_error = null, updated_at = now()
-       where id = ${sandboxId}`);
+       where id = ${sandboxId} and org_id = ${s.org_id}`);
   } catch (err) {
     await db.execute(sql`
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sandboxId}`);
+       where id = ${sandboxId} and org_id = ${s.org_id}`);
     throw err;
   }
 }
@@ -349,7 +349,7 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   await db.execute(sql`
     update sandboxes
        set status = 'deleting', last_error = null, updated_at = now()
-     where id = ${sandboxId}`);
+     where id = ${sandboxId} and org_id = ${orgId}`);
   try {
     const { tenantTables } = await loadCatalog();
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
@@ -361,7 +361,7 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
       update sandboxes
          set status = 'failed', last_error = ${String(err instanceof Error ? err.message : err)},
              updated_at = now()
-       where id = ${sandboxId}`);
+       where id = ${sandboxId} and org_id = ${orgId}`);
     throw err;
   }
 }

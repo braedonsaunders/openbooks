@@ -87,7 +87,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             update sync_runs
                set status = 'ok', finished_at = now(), stats = ${JSON.stringify(summary)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           return { runId, kind: "attachments", ...summary };
         } catch (error) {
@@ -99,7 +99,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             update sync_runs
                set status = 'failed', finished_at = now(), error_message = ${message},
                    stats = ${stats ? JSON.stringify(stats) : null}::jsonb
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           throw error;
         }
@@ -141,7 +141,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                set status = 'ok', finished_at = now(),
                    stats = ${JSON.stringify(summary)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           return { runId, kind: "project_financials", ...summary };
         } catch (error) {
@@ -151,7 +151,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             update sync_runs
                set status = 'failed', finished_at = now(),
                    error_message = ${message}
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           throw error;
         } finally {
@@ -189,7 +189,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                set status = 'ok', finished_at = now(),
                    stats = ${JSON.stringify(plan)}::jsonb,
                    progress = ${JSON.stringify({ phase: "complete" })}::jsonb
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           return { runId, kind: "full_preflight", ...plan };
         } catch (error) {
@@ -199,7 +199,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             update sync_runs
                set status = 'failed', finished_at = now(),
                    error_message = ${message}
-             where id = ${runId}
+             where id = ${runId} and org_id = ${orgId}
           `);
           throw error;
         } finally {

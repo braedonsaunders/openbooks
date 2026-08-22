@@ -48,6 +48,7 @@ export async function submitForApproval(
       from document_links link
       join documents source on source.id = link.to_document_id and source.org_id = link.org_id
      where link.from_document_id = ${targetId}
+       and link.org_id = ${doc.orgId}
        and link.link_type = 'reverses'
        and source.status <> 'voided'
      limit 1

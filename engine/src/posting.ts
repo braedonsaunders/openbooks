@@ -2203,7 +2203,7 @@ export async function regenerateGlImpactTx(
       postedBy: correction.actorId,
       updatedBy: correction.actorId,
     })
-    .where(eq(schema.journalEntries.id, replacement.id));
+    .where(and(eq(schema.journalEntries.id, replacement.id), eq(schema.journalEntries.orgId, doc.orgId)));
   const updated = await tx
     .update(schema.documents)
     .set({
