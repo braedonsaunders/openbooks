@@ -203,6 +203,7 @@ test('the surfaces this test was written for are covered', () => {
     'app/api/documents/draft/route.ts',
     'lib/application/documents.ts',
     'lib/api/writers.ts',
+    'lib/assistant/tools.ts',
   ]) {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
   }
