@@ -228,7 +228,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: 422 });
+    if (e instanceof SubscriptionError) return NextResponse.json({ error: e.message }, { status: e.status });
     throw e;
   }
 }

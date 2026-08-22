@@ -11,6 +11,7 @@ import {
   prepareAdvancedSubscriptionBilling,
   type AdvancedBillingLine,
 } from "./advanced-subscriptions.ts";
+import { inventoryFeatureEnabled } from "./inventory.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its
@@ -25,7 +26,14 @@ import {
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
-export class SubscriptionError extends Error {}
+export class SubscriptionError extends Error {
+  constructor(message: string, readonly status = 422) {
+    super(message);
+    this.name = "SubscriptionError";
+  }
+}
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -232,6 +240,20 @@ export async function createSubscriptionInvoice(
     itemId: spec.itemId,
     taxCodeId: spec.taxCodeId,
   }];
+  // Stored subscriptions and existing invoices stay. Turning Inventory off
+  // must refuse a generate that would persist inventory / assembly / kit.
+  if (!(await inventoryFeatureEnabled(db, spec.orgId))) {
+    const itemIds = [...new Set(
+      invoiceLines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
+    )];
+    for (const itemId of itemIds) {
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`));
+      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        throw new SubscriptionError("Inventory is disabled", 404);
+      }
+    }
+  }
   let netAmount = "0.0000";
   let taxTotal = "0.0000";
   const prepared: Array<{
