@@ -1,7 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { canonicalDecimal, compareDecimal, fixedDecimal } from './exact-decimal'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal, compareDecimal } from './exact-decimal'
 
 /**
  * Custom fields platform — source platform-style header/line/entity extensions.
@@ -85,20 +86,27 @@ export function validateCustomValues(
         cleaned[def.key] = String(raw)
         break
       case 'currency': {
-        const exact = canonicalDecimal(raw, 2)
+        const exact = canonicalDecimal(raw, 4)
         if (exact === null) {
-          errors[def.key] = `${def.label} must be a number with no more than two decimal places`
+          errors[def.key] = `${def.label} must be an exact decimal`
           break
         }
-        if (def.config.min != null && compareDecimal(exact, String(def.config.min)) < 0) {
+        let amount: string
+        try {
+          amount = normalizeMoney(exact)
+        } catch {
+          errors[def.key] = `${def.label} must be an exact decimal`
+          break
+        }
+        if (def.config.min != null && compareDecimal(amount, String(def.config.min)) < 0) {
           errors[def.key] = `${def.label} must be ≥ ${def.config.min}`
           break
         }
-        if (def.config.max != null && compareDecimal(exact, String(def.config.max)) > 0) {
+        if (def.config.max != null && compareDecimal(amount, String(def.config.max)) > 0) {
           errors[def.key] = `${def.label} must be ≤ ${def.config.max}`
           break
         }
-        cleaned[def.key] = fixedDecimal(exact, 2)
+        cleaned[def.key] = amount
         break
       }
       case 'number': {
