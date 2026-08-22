@@ -259,6 +259,9 @@ export async function PUT(
       if (!TARGET_TYPES.includes(target.targetType as never))
         return error("target");
       const isText = TEXT_TARGETS.has(target.targetType!);
+      if (target.targetType === "item" && (target.targetValueId == null || target.targetValueId === "")) {
+        continue;
+      }
       const value = isText
         ? target.targetValueText?.trim()
         : target.targetValueId;
@@ -290,6 +293,17 @@ export async function PUT(
   if (!customValidation.ok) return error("custom");
 
   const orgId = gate.user.orgId;
+  const storedItemTargets = (await db.execute<{
+    code: string;
+    target_value_id: string;
+    include_children: boolean;
+  }>(sql`
+    select a.code, at.target_value_id, at.include_children
+      from labor_rate_adjustment_targets at
+      join labor_rate_adjustments a on a.id = at.adjustment_id and a.org_id = at.org_id
+     where a.version_id = ${id} and a.org_id = ${orgId}
+       and at.target_type = 'item' and at.target_value_id is not null`));
+  const storedTargetIds = new Set(storedItemTargets.rows.map((row) => row.target_value_id));
   // Stored rate-card lines stay when itemId is omitted. Re-sending the stored
   // item is allowed. A new inventory / assembly / kit item is Inventory configuration.
   if (!(await isFeatureEnabled(orgId, "inventory"))) {
@@ -303,6 +317,16 @@ export async function PUT(
         select kind from items where id = ${line.itemId} and org_id = ${orgId}`));
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
         return NextResponse.json({ error: "not found" }, { status: 404 });
+      }
+    }
+    for (const adjustment of adjustments) {
+      for (const target of adjustment.targets ?? []) {
+        if (target.targetType !== "item" || !target.targetValueId || storedTargetIds.has(target.targetValueId)) continue;
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${target.targetValueId} and org_id = ${orgId}`));
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          return NextResponse.json({ error: "not found" }, { status: 404 });
+        }
       }
     }
   }
@@ -414,10 +438,22 @@ export async function PUT(
         const inserted = (await tx.execute<{ id: string }>(
           sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`,
         ));
-        for (const target of adjustment.targets ?? [])
+        let wroteItemTarget = false;
+        for (const target of adjustment.targets ?? []) {
+          if (target.targetType === "item" && !target.targetValueId) continue;
+          if (target.targetType === "item" && target.targetValueId) wroteItemTarget = true;
           await tx.execute(
             sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0].id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
           );
+        }
+        if (!wroteItemTarget) {
+          const code = adjustment.code!.trim().toLowerCase();
+          for (const stored of storedItemTargets.rows.filter((row) => row.code === code)) {
+            await tx.execute(
+              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0].id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
+            );
+          }
+        }
       }
 
       await tx.execute(
