@@ -83,6 +83,17 @@ function persistSubcontractPaymentControlAmountLimit(value: unknown): string {
   }
 }
 
+/** Persist leftover vendor-application work-completed-this-period through exact decimal then ledger money. Fail closed. */
+function persistVendorPayApplicationWorkCompletedThisPeriod(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("work completed this period must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("work completed this period must be an exact decimal");
+  }
+}
+
 export interface VendorApplicationLineInput {
   sovLineId: string;
   scheduledValue: string;
@@ -576,7 +587,7 @@ export async function updateVendorPayApplicationLines(input: {
     if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
     if (app.rows[0].status !== "draft") throw new SubcontractError("Only a draft application can be edited");
     for (const update of input.lines) {
-      const work = normalizeMoney(update.workCompletedThisPeriod);
+      const work = persistVendorPayApplicationWorkCompletedThisPeriod(update.workCompletedThisPeriod);
       const stored = normalizeMoney(update.materialsStoredCurrent);
       if (cmp(work, "0") < 0 || cmp(stored, "0") < 0) throw new SubcontractError("Application amounts cannot be negative");
       const changed = (await tx.execute(sql`
