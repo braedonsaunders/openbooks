@@ -158,6 +158,15 @@ test("time-entry update persist writes costRate through canonicalDecimal then no
   assert.doesNotMatch(body, /moneyOrNull\(f\.costRate\)/);
 });
 
+test("time-entry update persist writes billRate through canonicalDecimal then normalizeMoney", () => {
+  const start = loader.indexOf("update time_entries set worked_on=");
+  const next = loader.indexOf("if (billingChanged || costingChanged)", start);
+  const body = loader.slice(start, next > start ? next : undefined);
+  assert.ok(start >= 0 && next > start, "time-entry billRate UPDATE persist is defined");
+  assert.match(body, /persistTimeEntryBillRate\(/);
+  assert.doesNotMatch(body, /moneyOrNull\(f\.billRate\)/);
+});
+
 test("item persist writes defaultCost through canonicalDecimal then normalizeMoney", () => {
   const helperStart = loader.indexOf("function persistItemDefaultCost");
   const helperEnd = loader.indexOf("\n}", helperStart);
