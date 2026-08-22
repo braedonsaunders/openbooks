@@ -404,7 +404,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       username: String(cfg.username),
       apiKey: String(secret.apiKey),
     };
-    return new OdooSource(creds, { baseCurrency: cfg.baseCurrency });
+    return new OdooSource(creds, { orgId: conn.orgId, baseCurrency: cfg.baseCurrency });
   }
 
   if (conn.source === "erpnext") {
