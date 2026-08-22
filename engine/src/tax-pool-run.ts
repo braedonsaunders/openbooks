@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, formatMoney, fromUnits, normalizeMoney, toUnits } from "./money.ts";
+import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { computeMacrsYear, computePoolYear, type PoolClassDef, TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
 
 /**
@@ -394,7 +394,7 @@ async function ensurePool(
   if (existing.rows[0]) return { id: existing.rows[0].id, openingBalance: existing.rows[0].opening };
   const ins = (await db.execute<{ id: string }>(sql`
     insert into tax_depreciation_pools (org_id, book_id, subsidiary_id, regime, class_code, rate, method, created_by, updated_by)
-    values (${orgId}, ${bookId}, ${subsidiaryId}, ${regime}, ${classDef.code}, ${classDef.rate}, ${classDef.method}, ${actorId}, ${actorId})
+    values (${orgId}, ${bookId}, ${subsidiaryId}, ${regime}, ${classDef.code}, ${normalizeDecimal(classDef.rate, 10)}, ${classDef.method}, ${actorId}, ${actorId})
     returning id`));
   return { id: ins.rows[0].id, openingBalance: "0" };
 }

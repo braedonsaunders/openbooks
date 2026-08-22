@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { normalizeDecimal, normalizeMoney } from "./money.ts";
 import { TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
+
+/** Persist a pack JSON rate through the FX decimal helper — never as an IEEE-754 number. */
+function persistPackFxRate(rate: string | number): string {
+  return normalizeDecimal(rate, 10);
+}
 
 export interface TaxDepreciationPack {
   code: string;
@@ -43,10 +49,10 @@ export async function installTaxDepreciationPack(orgId: string, code: string, ac
           (org_id, regime, class_code, name, rate, method, first_year_fraction,
            allow_recapture, allow_terminal_loss, cost_cap, depreciation_system,
            macrs_method, recovery_period_years, convention, is_active, created_by, updated_by)
-        values (${orgId}, ${regime.code}, ${classDef.code}, ${classDef.name}, ${classDef.rate}, ${classDef.method},
-                ${classDef.firstYearFraction}, ${classDef.allowRecapture}, ${classDef.allowTerminalLoss},
-                ${classDef.costCap ?? null}, ${classDef.depreciationSystem ?? null}, ${classDef.macrsMethod ?? null},
-                ${classDef.recoveryPeriodYears ?? null}, ${classDef.convention ?? null}, true, ${actorId}, ${actorId})
+        values (${orgId}, ${regime.code}, ${classDef.code}, ${classDef.name}, ${persistPackFxRate(classDef.rate)}, ${classDef.method},
+                ${persistPackFxRate(classDef.firstYearFraction)}, ${classDef.allowRecapture}, ${classDef.allowTerminalLoss},
+                ${classDef.costCap == null ? null : normalizeMoney(classDef.costCap)}, ${classDef.depreciationSystem ?? null}, ${classDef.macrsMethod ?? null},
+                ${classDef.recoveryPeriodYears == null ? null : persistPackFxRate(classDef.recoveryPeriodYears)}, ${classDef.convention ?? null}, true, ${actorId}, ${actorId})
         on conflict (org_id, regime, class_code) do nothing returning id`));
       classesCreated += inserted.rows.length;
     }
