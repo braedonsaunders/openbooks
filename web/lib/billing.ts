@@ -362,7 +362,7 @@ export async function generateInvoiceFromBillingRequest(
                i.kind as item_kind, i.category as item_category,
                coalesce(rc.components, '[]'::jsonb) as bill_components
           from document_lines dl
-          join documents d on d.id = dl.document_id
+          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
           left join items i on i.id = dl.item_id
           left join lateral (
             select jsonb_agg(jsonb_build_object(

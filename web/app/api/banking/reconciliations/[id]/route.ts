@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: Params) {
              r.signed_off_by, r.signed_off_at, r.created_at,
              a.number as account_number, a.name as account_name
         from reconciliations r
-        join accounts a on a.id = r.account_id
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${id} and r.org_id = ${user.orgId}
     `))
     if (!rec.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })

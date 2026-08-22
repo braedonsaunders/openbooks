@@ -236,7 +236,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
            p.display_name as employee_name, p.email as employee_email
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.id = ${id} and s.org_id = ${orgId}
   `))
@@ -317,7 +317,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
       left join lateral (
         select * from addresses where party_id = s.employee_party_id

@@ -185,7 +185,7 @@ export async function resolveProjectFinancials(
     db.execute<any>(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
            - coalesce(sum(dl.amount) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced
-        from document_lines dl join documents d on d.id = dl.document_id
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status = 'posted'
@@ -196,7 +196,7 @@ export async function resolveProjectFinancials(
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        join accounts a on a.id = l.account_id
+        join accounts a on a.id = l.account_id and a.org_id = l.org_id and a.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
     // committedCost — unbilled portion (by line amount) of open (approved)
     // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
@@ -216,7 +216,7 @@ export async function resolveProjectFinancials(
                     )
                end
              ), 0) as committed
-        from document_lines dl join documents d on d.id = dl.document_id
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status in (${kindList(committedStatuses.length ? committedStatuses : ['__none__'])})
@@ -288,7 +288,7 @@ export async function resolveProjectFinancials(
                     then -dl.amount else dl.amount end
              )
                filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
-        from document_lines dl join documents d on d.id = dl.document_id
+        from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable
@@ -311,7 +311,7 @@ export async function resolveProjectFinancials(
     profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute<any>(sql`select 0 as overhead`)
       : db.execute<any>(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
-           from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id
+           from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')`),
     // project approved labor hours (base for per-hour / rate-engine overhead).
     db.execute<any>(sql`select coalesce(sum(te.hours), 0) as total,
@@ -321,7 +321,7 @@ export async function resolveProjectFinancials(
     // cost by account (for the breakdown subtab) — same cost predicate.
     db.execute<any>(sql`
       select a.id as account_id, a.number, a.name, a.type, coalesce(sum(l.amount), 0) as amount
-        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${costPredicate(profile.actualCost, costIds)}
        group by a.id, a.number, a.name, a.type having coalesce(sum(l.amount),0) <> 0 order by amount desc`),

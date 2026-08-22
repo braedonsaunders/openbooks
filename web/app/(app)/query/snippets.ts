@@ -17,7 +17,7 @@ export const SNIPPETS: Snippet[] = [
 -- millions. Join journal_lines directly only when you need line detail.
 select a.number, a.name, sum(g.debit_total - g.credit_total) as balance
   from gl_month_activity g
-  join accounts a on a.id = g.account_id
+  join accounts a on a.id = g.account_id and a.org_id = g.org_id
  group by a.number, a.name
 having sum(g.debit_total - g.credit_total) <> 0
  order by a.number
@@ -27,7 +27,7 @@ having sum(g.debit_total - g.credit_total) <> 0
     key: 'topAccounts',
     sql: `select a.number, a.name, sum(g.debit_total - g.credit_total) as balance
   from gl_month_activity g
-  join accounts a on a.id = g.account_id
+  join accounts a on a.id = g.account_id and a.org_id = g.org_id
  group by a.number, a.name
  order by abs(sum(g.debit_total - g.credit_total)) desc
  limit 15`,

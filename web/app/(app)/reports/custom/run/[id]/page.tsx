@@ -89,7 +89,7 @@ export default async function ReportRunPage({
     const runs = (await db.execute<{ document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }>(sql`
       select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
         from pay_runs r
-        join documents d on d.id = r.document_id
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules ps on ps.id = r.pay_schedule_id
        where r.org_id = ${authz.user.orgId}
        order by r.period_end desc

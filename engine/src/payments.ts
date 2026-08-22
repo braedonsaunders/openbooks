@@ -1526,9 +1526,9 @@ export async function paymentRunComplianceDecisions(
            d.id as document_id, d.document_number, d.project_id, d.document_date,
            ri.payment_amount, ri.currency
       from payment_run_items ri
-      join payment_instructions i on i.id = ri.payment_instruction_id
-      join documents d on d.id = ri.source_document_id
-      join parties p on p.id = i.payee_party_id
+      join payment_instructions i on i.id = ri.payment_instruction_id and i.org_id = ri.org_id
+      join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
+      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
      where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
        and i.status <> 'cancelled' and ri.kind <> 'credit'
   `));
@@ -1829,8 +1829,8 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
   const documents = (await db.execute<{ number: string; amount: string; discount: string; credit: string }>(sql`
     select d.document_number as number, ri.payment_amount as amount,
            ri.discount_amount as discount, ri.credit_amount as credit
-      from payment_run_items ri join documents d on d.id = ri.source_document_id
-     where ri.payment_instruction_id = ${instructionId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
+      from payment_run_items ri join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
+     where ri.payment_instruction_id = ${instructionId} and ri.org_id = ${orgId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
      order by d.document_number
   `));
   try {

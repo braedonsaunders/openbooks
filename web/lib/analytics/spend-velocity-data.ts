@@ -232,8 +232,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const spendBase = (f: string, t: string) => sql`
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-    join documents d on d.id = e.source_document_id
-    join accounts a on a.id = l.account_id
+    join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+    join accounts a on a.id = l.account_id and a.org_id = l.org_id
     where l.org_id = ${orgId} and d.voided_at is null
       and d.kind in (${spendKindsIn})
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
@@ -266,8 +266,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         count(distinct d.id) as transaction_count
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join documents d on d.id = e.source_document_id
-      join accounts a on a.id = l.account_id
+      join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and d.voided_at is null
         and d.kind in (${spendKindsIn})
@@ -295,7 +295,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     db.execute(sql`
       select coalesce(-sum(l.amount), 0) as revenue
       from journal_lines l
-      join accounts a on a.id = l.account_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -323,8 +323,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join documents d on d.id = e.source_document_id
-      join accounts a on a.id = l.account_id
+      join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
         and d.kind in ('expense_report', 'vendor_bill')
         and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')

@@ -52,7 +52,7 @@ async function loadRun(orgId: string, documentId: string): Promise<RunHeader> {
     select d.document_number, r.period_start::text as period_start,
            r.period_end::text as period_end, r.pay_date::text as pay_date, r.run_status
       from pay_runs r
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
   `))
   const run = r.rows[0]

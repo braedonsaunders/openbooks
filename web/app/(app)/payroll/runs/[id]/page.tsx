@@ -54,7 +54,7 @@ export default async function PayRunPage({
            r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,
            r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
       from pay_runs r
-      join documents d on d.id = r.document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       left join pay_schedules s on s.id = r.pay_schedule_id
      where r.org_id = ${orgId} and r.document_id = ${id}`))
   const run = runs.rows[0]
@@ -149,7 +149,7 @@ export default async function PayRunPage({
       select trim(concat_ws(' · ', a.number, a.name)) as account_label,
              sum(dl.amount)::text as amount
         from document_lines dl
-        join accounts a on a.id = dl.account_id
+        join accounts a on a.id = dl.account_id and a.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${id}
        group by a.id, a.number, a.name
        having sum(dl.amount) < 0

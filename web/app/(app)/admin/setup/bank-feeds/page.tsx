@@ -52,7 +52,7 @@ export default async function BankFeedsPage() {
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
              a.number as "accountNumber", a.name as "accountName"
         from sftp_import_schedules sc
-        join accounts a on a.id = sc.account_id
+        join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
        where sc.org_id = ${authz.user.orgId} order by sc.created_at desc
     `),
     loadDaemonConfig(),

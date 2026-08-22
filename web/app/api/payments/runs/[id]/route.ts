@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
              d.id as payment_document_id, d.document_number, d.status as payment_status
         from payment_instructions i
         join parties p on p.id = i.payee_party_id
-        left join documents d on d.id = i.payment_document_id
+        left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
        where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
        order by p.display_name
     `),

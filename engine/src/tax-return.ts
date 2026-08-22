@@ -331,7 +331,7 @@ export async function computeTaxReturn(
       const r = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(dl.amount), 0)::text as total
           from document_lines dl
-          join documents d on d.id = dl.document_id
+          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
          where dl.org_id = ${orgId} and dl.tax_code_id = ${src.taxCodeId}
            and d.status = 'posted'
            and coalesce(d.posting_date, d.document_date) between ${from} and ${to}`));
