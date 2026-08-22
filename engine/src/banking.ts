@@ -1031,6 +1031,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
         update bank_statement_lines
            set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
          where id = any(${sql.param(pairs.map((p) => p.statementLineId))})
+           and org_id = ${ctx.orgId}
       `);
     }
 
