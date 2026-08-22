@@ -608,7 +608,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
   if (link.status !== "active") return null;
   return await withOrg(link.orgId, async () => {
     if (link.expiresOn && link.expiresOn < await businessToday(link.orgId)) {
-      await db.execute(sql`update payment_links set status = 'expired', updated_at = now() where id = ${link.id} and status = 'active'`);
+      await db.execute(sql`update payment_links set status = 'expired', updated_at = now() where id = ${link.id} and org_id = ${link.orgId} and status = 'active'`);
       return null;
     }
     const ctx = (await db.execute<{ orgName: string; documentNumber: string; partyName: string; openBalance: string }>(sql`
@@ -892,11 +892,11 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   if (cmp(invoice.open_balance, "0") <= 0) {
     // Paid through another channel meanwhile — nothing to settle.
     await db.execute(sql`
-      update payment_attempts set status = 'succeeded', updated_at = now() where id = ${attemptId}
+      update payment_attempts set status = 'succeeded', updated_at = now() where id = ${attemptId} and org_id = ${orgId}
     `);
     await db.execute(sql`
       update payment_links set status = 'paid', paid_at = now(), updated_at = now()
-       where id = ${a.link_id} and status = 'active'
+       where id = ${a.link_id} and org_id = ${orgId} and status = 'active'
     `);
     return "posted";
   }
@@ -945,7 +945,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
     // or redelivery resumes onto this exact draft rather than minting a
     // duplicate receipt per delivery.
     await db.execute(sql`
-      update payment_attempts set payment_document_id = ${paymentId}, updated_at = now() where id = ${attemptId}
+      update payment_attempts set payment_document_id = ${paymentId}, updated_at = now() where id = ${attemptId} and org_id = ${orgId}
     `);
   }
 

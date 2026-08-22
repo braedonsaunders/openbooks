@@ -246,7 +246,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
            set next_run_on = ${advanced},
                is_active = ${stillActive},
                last_run_at = now()
-         where id = ${s.id} and next_run_on = ${occurrenceDate}
+         where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${occurrenceDate}
         returning id
       `));
     });
@@ -263,7 +263,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         await db.execute(sql`
           update recurring_schedules
              set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
-           where id = ${s.id}
+           where id = ${s.id} and org_id = ${s.orgId}
         `);
       });
     } catch (e) {
@@ -278,10 +278,10 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
           update recurring_schedules
              set next_run_on = ${rollback.nextRunOn}, is_active = ${rollback.isActive},
                  last_run_at = ${rollback.lastRunAt}
-           where id = ${s.id} and next_run_on = ${rollback.expectedNextRunOn}
+           where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${rollback.expectedNextRunOn}
         `);
         await db.execute(sql`
-          update recurring_schedules set last_error = ${message} where id = ${s.id}
+          update recurring_schedules set last_error = ${message} where id = ${s.id} and org_id = ${s.orgId}
         `);
       });
     }
