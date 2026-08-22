@@ -249,12 +249,25 @@ test('the surfaces this test was written for are covered', () => {
     'app/api/documents/[id]/correct/route.ts',
     'app/api/documents/actions/route.ts',
     'app/api/documents/draft/route.ts',
+    'app/api/crm/opportunities/[id]/estimate/route.ts',
+    'app/api/parties/[id]/transactions/route.ts',
     'lib/application/documents.ts',
     'lib/api/writers.ts',
     'lib/assistant/tools.ts',
+    'lib/crm.ts',
   ]) {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
   }
+  assert.match(
+    read('app/api/crm/opportunities/[id]/estimate/route.ts'),
+    /isDocKindEnabled\([^,]+, 'quote'\)/,
+    'CRM estimate must refuse when Orders is off',
+  )
+  assert.match(
+    read('app/api/crm/opportunities/[id]/estimate/route.ts'),
+    /status: 404/,
+    'CRM estimate must 404 — not mint a quote — when Orders is off',
+  )
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(

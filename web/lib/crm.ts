@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { isDocKindEnabled } from './documents'
 
 export async function loadCrmAccount(partyId: string, orgId: string) {
   const profile = (await db.execute<Record<string, unknown>>(sql`
@@ -96,7 +97,13 @@ export async function loadOpportunity(id: string, orgId: string) {
         left join users u on u.id = e.created_by
        where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`),
   ]) as any[]
-  return { opportunity: opportunity.rows[0], lines: lines.rows, team: team.rows, documents: documents.rows, activities: activities.rows, history: history.rows }
+  const visibleDocuments = []
+  for (const row of documents.rows) {
+    if (await isDocKindEnabled(orgId, String((row as { kind?: unknown }).kind))) {
+      visibleDocuments.push(row)
+    }
+  }
+  return { opportunity: opportunity.rows[0], lines: lines.rows, team: team.rows, documents: visibleDocuments, activities: activities.rows, history: history.rows }
 }
 
 export async function loadActivity(id: string, orgId: string) {
