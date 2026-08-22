@@ -425,14 +425,14 @@ export async function loadPickers(
       select p.id, coalesce(p.display_name, '') as label,
              (p.is_active and exists (
                select 1 from employee_roles r
-                where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+                where r.party_id = p.id and r.org_id = p.org_id and r.is_active
              )) as currently_active
         from parties p
        where p.org_id = ${orgId}
          and (
            (p.is_active and exists (
              select 1 from employee_roles r
-              where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
+              where r.party_id = p.id and r.org_id = p.org_id and r.is_active
            ))
            or p.id = ${includeEmployeeId ?? null}
          )
