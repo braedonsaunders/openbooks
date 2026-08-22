@@ -303,6 +303,7 @@ async function persistAgentPolicy(
       next_run_at = excluded.next_run_at,
       updated_at = now(),
       updated_by = excluded.updated_by
+    where ai_agent_policies.org_id = ${orgId}
     returning id
   `));
   await tx.execute(sql`
