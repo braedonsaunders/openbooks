@@ -486,7 +486,10 @@ async function persistFile(input: {
   return db.transaction(async (tx) => {
     const existing = (await tx.execute<{ id: string; contentHash: string | null; maxVersion: number }>(sql`
       select id, content_hash as "contentHash",
-             (select coalesce(max(version_number), 0) from file_versions where file_id = files.id) as "maxVersion"
+             (select coalesce(max(fv.version_number), 0)
+                from file_versions fv
+                join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
+               where fv.file_id = files.id) as "maxVersion"
         from files
        where org_id = ${input.orgId} and source_system = ${SOURCE_SYSTEM} and source_id = ${input.source.id}
        for update

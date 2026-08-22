@@ -675,7 +675,7 @@ export async function deleteFolder(orgId: string, id: string): Promise<{ ok: boo
     await tx.execute(sql`
       update files set is_inactive = true, updated_at = now()
        where folder_id in (${descendants}) and not is_inactive
-         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
     `)
   })
   return { ok: true }
@@ -997,10 +997,13 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
 
   const [versions, attachments] = await Promise.all([
     db.execute(sql`
-      select id, version_number as "versionNumber", size_bytes as "sizeBytes",
-             content_type as "contentType", content_hash as "contentHash",
-             created_at as "createdAt", created_by as "createdBy"
-        from file_versions where file_id = ${id} order by version_number desc
+      select fv.id, fv.version_number as "versionNumber", fv.size_bytes as "sizeBytes",
+             fv.content_type as "contentType", fv.content_hash as "contentHash",
+             fv.created_at as "createdAt", fv.created_by as "createdBy"
+        from file_versions fv
+        join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+       where fv.file_id = ${id}
+       order by fv.version_number desc
     `),
     db.execute(sql`
       select id, target_table as "targetTable", target_id as "targetId",
@@ -1096,10 +1099,12 @@ export async function replaceFile(input: {
     const contentHash = createHash('sha256').update(input.bytes).digest('hex')
     const current = (await tx.execute<{ vid: string | null; max_ver: number | null }>(sql`
       select current_version_id as vid, (
-        select max(version_number) from file_versions where file_id = ${input.fileId}
+        select max(fv.version_number) from file_versions fv
+        join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
+        where fv.file_id = ${input.fileId}
       ) as max_ver
         from files where id = ${input.fileId} and org_id = ${input.orgId}
-          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${input.orgId})
         for update
     `))
     if (current.rows.length === 0) return false
@@ -1145,7 +1150,7 @@ export async function renameFile(
     update files set name = ${name}, extension = ${deriveExtension(name)},
                      updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
     returning id
   `))
   return r.rows.length > 0
@@ -1161,7 +1166,7 @@ export async function moveFile(
   const r = (await db.execute<{ id: string }>(sql`
     update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
      where id = ${id} and org_id = ${orgId}
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
        and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
     returning id
   `))
@@ -1176,7 +1181,7 @@ export async function deleteFile(orgId: string, id: string): Promise<boolean> {
   const r = (await db.execute<{ id: string }>(sql`
     update files set is_inactive = true, updated_at = now()
      where id = ${id} and org_id = ${orgId} and not is_inactive
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
     returning id
   `))
   return r.rows.length > 0
@@ -1200,19 +1205,29 @@ export async function purgeFile(orgId: string, id: string): Promise<boolean> {
   const deleted = await db.transaction(async (tx) => {
     const owned = (await tx.execute<{ id: string }>(sql`
       select id from files where id = ${id} and org_id = ${orgId}
-        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id)
+        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
       for update
     `))
     if (owned.rows.length === 0) return null
     const s3Versions = (await tx.execute<{ id: string }>(sql`
-      select id from file_versions where file_id = ${id} and storage_kind = 's3'
+      select fv.id from file_versions fv
+      join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+      where fv.file_id = ${id} and fv.storage_kind = 's3'
     `))
     await tx.execute(sql`
-      delete from file_blobs where version_id in (select id from file_versions where file_id = ${id})
+      delete from file_blobs where version_id in (
+        select fv.id from file_versions fv
+        join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+        where fv.file_id = ${id}
+      )
     `)
     await tx.execute(sql`delete from file_attachments where file_id = ${id} and org_id = ${orgId}`)
     await tx.execute(sql`update files set current_version_id = null where id = ${id} and org_id = ${orgId}`)
-    await tx.execute(sql`delete from file_versions where file_id = ${id}`)
+    await tx.execute(sql`
+      delete from file_versions fv
+      using files fi
+      where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${id}
+    `)
     await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`)
     return s3Versions.rows.map((v) => v.id)
   })
