@@ -10,6 +10,10 @@
 
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
+import { canonicalDecimal } from '../exact-decimal'
+
+/** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
+const SETUP_DECIMAL_SCALE = 10
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -52,10 +56,9 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
     case 'decimal':
     case 'percent': {
       if (!present) return { column, value: null }
-      const n = Number(raw)
-      if (!Number.isFinite(n)) return { error: `${field.key} must be a number` }
-      // numeric columns accept a string; keep full precision
-      return { column, value: String(raw) }
+      const exact = canonicalDecimal(raw, SETUP_DECIMAL_SCALE)
+      if (exact === null) return { error: `${field.key} must be a number` }
+      return { column, value: exact }
     }
     case 'date': {
       if (!present) return { column, value: null }

@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { formDefinition } from '@openbooks/engine/src/information-returns.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal, isZeroDecimal } from '@/lib/exact-decimal'
 
 export const runtime = 'nodejs'
-
-const AMOUNT_RE = /^-?\d{1,15}(\.\d{1,4})?$/
 
 /**
  * Adjust or exclude one recipient of a filing.
@@ -61,10 +61,11 @@ export async function PATCH(
       if (!validBoxes.has(box)) {
         return NextResponse.json({ error: `${box} is not a box on ${form.formType}` }, { status: 400 })
       }
-      if (!AMOUNT_RE.test(String(value))) {
+      const exact = canonicalDecimal(value, 4)
+      if (exact === null) {
         return NextResponse.json({ error: `${box}: not a valid amount` }, { status: 400 })
       }
-      if (Number(value) !== 0) cleaned[box] = String(value)
+      if (!isZeroDecimal(exact)) cleaned[box] = normalizeMoney(exact)
     }
     if (Object.keys(cleaned).length > 0 && !(body.adjustmentReason ?? '').trim()) {
       return NextResponse.json({ error: 'an adjustment needs a reason' }, { status: 400 })

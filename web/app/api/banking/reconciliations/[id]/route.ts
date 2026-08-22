@@ -9,6 +9,7 @@ import {
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
@@ -50,13 +51,16 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.throughDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.throughDate)) {
       throw new BankingError('Through date must be YYYY-MM-DD')
     }
-    if (body.statementBalance !== undefined && canonicalDecimal(body.statementBalance, 4) === null) {
+    const statementBalance = body.statementBalance === undefined
+      ? null
+      : canonicalDecimal(body.statementBalance, 4)
+    if (body.statementBalance !== undefined && statementBalance === null) {
       throw new BankingError('Statement balance must be a number')
     }
     const updated = (await db.execute<{ id: string }>(sql`
       update reconciliations
          set through_date = coalesce(${body.throughDate ?? null}, through_date),
-             statement_balance = coalesce(${body.statementBalance ?? null}, statement_balance),
+             statement_balance = coalesce(${statementBalance === null ? null : normalizeMoney(statementBalance)}, statement_balance),
              updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId} and status <> 'signed_off'
       returning id

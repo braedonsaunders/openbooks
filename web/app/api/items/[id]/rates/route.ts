@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { cmp } from '@openbooks/engine/src/money.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -47,11 +48,8 @@ function cleanTierRates(input: Record<string, string> | undefined): string {
   if (input && typeof input === 'object') {
     for (const [k, v] of Object.entries(input)) {
       if (isUuid(k) && v !== '') {
-        try {
-          if (cmp(String(v), '0') >= 0) out[k] = String(v)
-        } catch {
-          // Invalid decimal rates are omitted instead of being float-coerced.
-        }
+        const exact = canonicalDecimal(v, 4)
+        if (exact !== null && cmp(exact, '0') >= 0) out[k] = normalizeMoney(exact)
       }
     }
   }
@@ -74,19 +72,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!PRESENTATIONS.includes((body.invoicePresentation ?? 'rate_components') as any)) return NextResponse.json({ error: 'Invalid invoice presentation' }, { status: 422 })
   if (!Array.isArray(body.tiers) || body.tiers.length === 0) return NextResponse.json({ error: 'Add at least one rate unit' }, { status: 422 })
   const baseUnit = body.baseUnit.trim()
-  const tiers = body.tiers
+  const tiers: Array<TierInput & { baseQuantity: string; costRate: string; billRate: string }> = []
   const seen = new Set<string>()
   for (const tier of body.tiers) {
     const code = tier.unitCode?.trim().toLowerCase()
     if (!code || !tier.unitName?.trim()) return NextResponse.json({ error: 'Every rate unit needs a code and name' }, { status: 422 })
     if (seen.has(code)) return NextResponse.json({ error: 'Rate unit codes must be unique' }, { status: 422 })
     seen.add(code)
+    const baseQuantity = canonicalDecimal(tier.baseQuantity, 8)
+    const costRate = canonicalDecimal(tier.costRate, 4)
+    const billRate = canonicalDecimal(tier.billRate, 4)
+    if (baseQuantity === null || costRate === null || billRate === null) {
+      return NextResponse.json({ error: 'Quantities must be positive and rates must be non-negative numbers' }, { status: 422 })
+    }
     try {
-      if (cmp(String(tier.baseQuantity ?? ''), '0') <= 0) throw new Error()
-      if (cmp(String(tier.costRate ?? ''), '0') < 0 || cmp(String(tier.billRate ?? ''), '0') < 0) throw new Error()
+      if (cmp(baseQuantity, '0') <= 0) throw new Error()
+      if (cmp(costRate, '0') < 0 || cmp(billRate, '0') < 0) throw new Error()
     } catch {
       return NextResponse.json({ error: 'Quantities must be positive and rates must be non-negative numbers' }, { status: 422 })
     }
+    tiers.push({
+      ...tier,
+      unitCode: code,
+      unitName: tier.unitName.trim(),
+      baseQuantity,
+      costRate: normalizeMoney(costRate),
+      billRate: normalizeMoney(billRate),
+    })
   }
 
   try {
@@ -137,7 +149,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       for (const tier of tiers) {
         await tx.execute(sql`
           insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by)
-          values (${gate.user.orgId}, ${version.rows[0].id}, ${id}, ${tier.unitCode!.trim().toLowerCase()}, ${tier.unitName!.trim()},
+          values (${gate.user.orgId}, ${version.rows[0].id}, ${id}, ${tier.unitCode}, ${tier.unitName},
                   ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${cleanTierRates(tier.timeTypeBillRates)}::jsonb, ${sort++}, ${gate.user.id}, ${gate.user.id})
         `)
       }
