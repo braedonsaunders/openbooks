@@ -40,7 +40,7 @@ export default async function OrdersReport() {
     db.execute(sql`
       select d.kind, count(distinct d.id)::int as converted
         from documents d
-        join document_links dl on dl.from_document_id = d.id
+        join document_links dl on dl.from_document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
        group by d.kind`) as any,
     orgInfo(orgId),

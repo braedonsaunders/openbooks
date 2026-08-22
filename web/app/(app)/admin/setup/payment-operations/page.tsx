@@ -111,7 +111,7 @@ export default async function PaymentOperationsSetupPage({
       select p.id, p.display_name, jsonb_agg(jsonb_build_object(
         'id', b.id, 'label', concat_ws(' · ', nullif(b.bank_name, ''), case when b.account_last_four is not null then '••••' || b.account_last_four end)
       ) order by b.created_at desc) as bank_accounts
-      from parties p join party_bank_accounts b on b.party_id = p.id and b.is_active and b.approved_at is not null
+      from parties p join party_bank_accounts b on b.party_id = p.id and b.org_id = p.org_id and b.is_active and b.approved_at is not null
      where p.org_id = ${orgId} and p.is_active group by p.id, p.display_name order by p.display_name`),
     db.execute(sql`select code, name from currencies order by code`),
     subsidiaryFeatureEnabled(orgId),

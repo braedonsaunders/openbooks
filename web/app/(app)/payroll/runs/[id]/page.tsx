@@ -114,7 +114,7 @@ export default async function PayRunPage({
              -- the double-pay guard the scope picker warns on.
              exists (
                select 1 from pay_stubs s2
-                 join pay_runs r2 on r2.document_id = s2.pay_run_document_id
+                 join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
                 where s2.org_id = prof.org_id and s2.employee_party_id = prof.employee_party_id
                   and s2.pay_run_document_id <> ${id}
                   and r2.run_status = 'committed'
@@ -139,7 +139,7 @@ export default async function PayRunPage({
       select distinct on (st.employee_party_id)
              st.employee_party_id, st.net_pay, st.pay_date::text as pay_date
         from pay_stubs st
-        join pay_runs r2 on r2.document_id = st.pay_run_document_id and r2.run_status = 'committed'
+        join pay_runs r2 on r2.document_id = st.pay_run_document_id and r2.org_id = st.org_id and r2.run_status = 'committed'
        where st.org_id = ${orgId} and st.pay_run_document_id <> ${id}
          and st.pay_date <= ${run.pay_date}
        order by st.employee_party_id, st.pay_date desc, st.created_at desc`),

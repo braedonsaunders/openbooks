@@ -54,12 +54,12 @@ export async function GET() {
       captureProgress: Record<string, number> | null;
     }>(sql`
     select c.id as "connectionId",
-           (select max(s.last_seen_at) from qbd_sessions s where s.connection_id = c.id) as heartbeat,
+           (select max(s.last_seen_at) from qbd_sessions s where s.connection_id = c.id and s.org_id = c.org_id) as heartbeat,
            capture.status as "captureStatus", capture.progress as "captureProgress"
       from connections c
       left join lateral (
         select status, progress from qbd_captures qc
-         where qc.connection_id = c.id order by qc.created_at desc limit 1
+         where qc.connection_id = c.id and qc.org_id = c.org_id order by qc.created_at desc limit 1
       ) capture on true
      where c.org_id = ${orgId} and c.source = 'qbd'`));
   const qbdByConnection = new Map(

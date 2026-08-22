@@ -95,7 +95,7 @@ export default async function CrmSetup({
         select t.*, u.name manager_name, count(tm.id)::int member_count
           from crm_sales_teams t
           left join users u on u.id=t.manager_user_id
-          left join crm_sales_team_members tm on tm.team_id=t.id and tm.is_active
+          left join crm_sales_team_members tm on tm.team_id=t.id and tm.org_id=t.org_id and tm.is_active
          where t.org_id=${orgId} ${list.q ? sql`and (t.name ilike ${term} or u.name ilike ${term})` : sql``}
          group by t.id, u.name order by t.name limit ${list.perPage} offset ${offset}`),
       db.execute(sql`
@@ -108,12 +108,12 @@ export default async function CrmSetup({
         select q.*, coalesce(u.name,t.name) target_name
           from crm_sales_quotas q
           left join users u on u.id=q.owner_user_id
-          left join crm_sales_teams t on t.id=q.sales_team_id
+          left join crm_sales_teams t on t.id=q.sales_team_id and t.org_id=q.org_id
          where q.org_id=${orgId} ${list.q ? sql`and (u.name ilike ${term} or t.name ilike ${term} or q.currency ilike ${term})` : sql``}
          order by q.period_start desc, target_name limit ${list.perPage} offset ${offset}`),
       db.execute(sql`
         select count(*)::int n from crm_sales_quotas q
-        left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id
+        left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id and t.org_id=q.org_id
         where q.org_id=${orgId} ${list.q ? sql`and (u.name ilike ${term} or t.name ilike ${term} or q.currency ilike ${term})` : sql``}`),
     ]);
   }

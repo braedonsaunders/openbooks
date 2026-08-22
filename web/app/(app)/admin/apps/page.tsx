@@ -50,8 +50,8 @@ export default async function AppsAdminPage({
       select a.key, a.name, a.description, a.status,
              a.granted_permissions as "grantedPermissions", a.updated_at as "updatedAt",
              v.version, v.manifest,
-             (select count(*) from app_runs r where r.app_id = a.id) as run_count
-        from apps a left join app_versions v on v.id = a.active_version_id
+             (select count(*) from app_runs r where r.app_id = a.id and r.org_id = a.org_id) as run_count
+        from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where ${where}
        order by a.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
@@ -72,7 +72,7 @@ export default async function AppsAdminPage({
       select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
              a.granted_permissions as "grantedPermissions",
              v.version, v.manifest
-        from apps a left join app_versions v on v.id = a.active_version_id
+        from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.key = ${appKey} limit 1
     `)) as any
     const app = detail.rows[0]
@@ -81,7 +81,7 @@ export default async function AppsAdminPage({
         listAppFiles(orgId, appKey).catch(() => []),
         db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
-            from app_runs where app_id = ${app.id} order by at desc limit 25`) as any,
+            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`) as any,
         isAppPublished(appKey),
       ])
       drawer = {
