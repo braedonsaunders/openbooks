@@ -278,7 +278,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
   const statusIds = new Map<string, string>()
   for (const source of statuses) {
     const lifecycle = stage(source.entitytype)
-    const saved = (await db.execute<{ id: string }>(sql`insert into crm_account_statuses(org_id,lifecycle_stage,key,name,sequence,is_qualified,is_active,created_by,updated_by) values(${orgId},${lifecycle},${`netsuite_${source.key}`},${source.name},100,${lifecycle !== 'lead'},${source.inactive !== 'T'},${actorId},${actorId}) on conflict(org_id,lifecycle_stage,key) do update set name=excluded.name,is_qualified=excluded.is_qualified,is_active=excluded.is_active,updated_at=now(),updated_by=${actorId} returning id`))
+    const saved = (await db.execute<{ id: string }>(sql`insert into crm_account_statuses(org_id,lifecycle_stage,key,name,sequence,is_qualified,is_active,created_by,updated_by) values(${orgId},${lifecycle},${`netsuite_${source.key}`},${source.name},100,${lifecycle !== 'lead'},${source.inactive !== 'T'},${actorId},${actorId}) on conflict(org_id,lifecycle_stage,key) do update set name=excluded.name,is_qualified=excluded.is_qualified,is_active=excluded.is_active,updated_at=now(),updated_by=${actorId} where crm_account_statuses.org_id=${orgId} returning id`))
     statusIds.set(`${lifecycle}:${source.key}`, saved.rows[0]!.id)
     report.accountStatuses++
   }
