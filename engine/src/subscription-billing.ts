@@ -324,7 +324,8 @@ async function billOne(
     const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber", d.status
         from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
-       where pi.subscription_id = ${sub.id} and pi.period_starts_on = ${advanced.periodStartsOn}
+       where pi.org_id = ${sub.orgId} and pi.subscription_id = ${sub.id}
+         and pi.period_starts_on = ${advanced.periodStartsOn}
          and pi.period_ends_on = ${advanced.periodEndsOn} and pi.contract_revision = ${advanced.contractRevision}
        limit 1
     `));

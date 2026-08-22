@@ -902,7 +902,7 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<"posted"
   }
 
   // Auto-apply to the invoice's open-item line, capped at its open balance.
-  const openItems = await openItemsForParty(a.party_id, "ar");
+  const openItems = await openItemsForParty(a.party_id, "ar", orgId);
   const item = openItems.find((i) => i.documentId === invoice.id);
   if (!item) throw new PaymentAcceptanceError("invoice open item not found");
   const invoicePortion = cmp(a.amount ?? invoice.open_balance, invoice.open_balance) < 0 ? (a.amount ?? invoice.open_balance) : invoice.open_balance;
