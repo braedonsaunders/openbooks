@@ -10,7 +10,7 @@ import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { subsidiaryFeatureEnabled } from '../../../lib/features'
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
   DocumentVoidError,
@@ -30,6 +30,8 @@ export interface OrderHandlerConfig {
   readPerm: string
   createPerm: string
 }
+
+const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
@@ -235,6 +237,22 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           taxAmount: normalizeMoney(l.taxAmount),
           extraDims: lineDims.cleaned,
         })
+      }
+      // Stored inventory / assembly / kit lines stay. Turning Inventory off
+      // must 404 a write that would persist a new one of those kinds.
+      if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+        const stored = (await db.execute<{ item_id: string }>(sql`
+          select item_id from document_lines
+           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
+        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+        for (const l of preparedLines) {
+          if (!l.itemId || storedIds.has(l.itemId)) continue
+          const item = (await db.execute<{ kind: string }>(sql`
+            select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
+          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+            return NextResponse.json({ error: 'not found' }, { status: 404 })
+          }
+        }
       }
     }
 

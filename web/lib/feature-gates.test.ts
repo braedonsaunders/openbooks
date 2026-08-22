@@ -358,6 +358,37 @@ test('the surfaces this test was written for are covered', () => {
     /isFeatureEnabled\([^,]+, 'inventory'\)[\s\S]{0,400}INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
     'CRM estimate must 404 — not copy inventory/assembly/kit onto a quote — when Inventory is off',
   )
+  assert.match(
+    read('app/api/_order/handlers.ts'),
+    /\['inventory', 'assembly', 'kit'\]/,
+    'quote/SO/PO line writes must name the inventory kinds the Features switch refuses',
+  )
+  assert.match(
+    read('app/api/_order/handlers.ts'),
+    /storedIds\.has\(l\.itemId\)/,
+    'quote/SO/PO PATCH must keep stored inventory lines when Inventory is off',
+  )
+  assert.match(
+    read('app/api/_order/handlers.ts'),
+    /INVENTORY_ITEM_KINDS\.has[\s\S]{0,160}status: 404/,
+    'quote/SO/PO PATCH must 404 — not persist new inventory/assembly/kit lines — when Inventory is off',
+  )
+  for (const file of [
+    'app/(app)/estimates/page.tsx',
+    'app/(app)/sales-orders/page.tsx',
+    'app/(app)/purchase-orders/page.tsx',
+  ]) {
+    assert.match(
+      read(file),
+      /isFeatureEnabled\([^,]+, ['"]inventory['"]\)/,
+      `${file} must not offer inventory/assembly/kit items when Inventory is off`,
+    )
+    assert.match(
+      read(file),
+      /kind not in \('inventory', 'assembly', 'kit'\)/,
+      `${file} must drop inventory/assembly/kit from the picker when Inventory is off — stored lines stay`,
+    )
+  }
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "projects"/)
   assert.match(read('lib/api/registry-data.ts'), /featureKey: "fixedAssets"/)
   assert.match(
