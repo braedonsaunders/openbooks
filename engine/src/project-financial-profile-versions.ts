@@ -499,6 +499,7 @@ export async function publishProjectFinancialProfileInTransaction(
              updated_by = ${input.actorId}
         from prior
        where version.id = prior.id
+         and version.org_id = ${input.orgId}
       returning version.id, prior.effective_to as prior_effective_to,
                 version.effective_to
     )
