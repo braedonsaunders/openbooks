@@ -56,6 +56,7 @@ export async function upsertUnionFringe(
             liability_account_id = excluded.liability_account_id,
             remittance_party_id = excluded.remittance_party_id,
             updated_by = ${actorId}, updated_at = now()
+      where pay_components.org_id = ${orgId}
       returning id
     `));
     const componentId = component.rows[0]!.id;
