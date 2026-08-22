@@ -678,7 +678,7 @@
         "title": "United States",
         "description": "Federal statutory withholding for US pay runs: income tax, Social Security, Medicare, and unemployment.",
         "engine": "IRS Pub 15-T percentage-method engine (2026) with W-4 Steps 2–4 and pre-2020 allowances.",
-        "coverage": "Federal plus the nine no-withholding states (AK, FL, NV, NH, SD, TN, TX, WA, WY). State income tax withholding ships in a later wave.",
+        "coverage": "49 supported states: 40 taxing engines plus the nine no-tax states (AK, FL, NV, NH, SD, TN, TX, WA, WY). DC and NM are refused pending official goldens.",
         "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",
         "config": "SUI rates and wage bases are experience-rated per employer. Enter yours under Accounts & posting."
       },
