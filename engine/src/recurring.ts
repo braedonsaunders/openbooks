@@ -398,6 +398,24 @@ async function generateFromTemplate(
       }
     }
   }
+  // Stored templates and existing generated documents stay. Turning Equipment
+  // off must refuse a generate that would persist equipment_charge.
+  const equipmentOn = (await db.execute<{ enabled: boolean }>(sql`
+    select coalesce((settings->'features'->>'equipment')::boolean, true) as enabled
+      from orgs where id = ${orgId}
+  `)).rows[0]?.enabled === true;
+  if (!equipmentOn) {
+    const itemIds = [...new Set(
+      lineRes.rows.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+    )];
+    for (const itemId of itemIds) {
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${itemId} and org_id = ${orgId}`));
+      if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+        throw new RecurringError("Equipment is disabled", 404);
+      }
+    }
+  }
 
   const termDays =
     tpl.document_date && tpl.due_date ? dayDiff(tpl.document_date, tpl.due_date) : null;

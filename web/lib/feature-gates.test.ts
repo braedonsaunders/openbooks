@@ -1137,6 +1137,16 @@ test('the surfaces this test was written for are covered', () => {
     'generateFromTemplate must 404 — not persist inventory/assembly/kit — when Inventory is off',
   )
   assert.match(
+    read('../engine/src/recurring.ts'),
+    /kind === "equipment_charge"[\s\S]{0,80}Equipment is disabled/,
+    'generateFromTemplate must not persist equipment_charge lines when Equipment is off — stored templates and existing documents stay',
+  )
+  assert.match(
+    read('../engine/src/recurring.ts'),
+    /RecurringError\("Equipment is disabled", 404\)/,
+    'generateFromTemplate must 404 — not persist equipment_charge — when Equipment is off',
+  )
+  assert.match(
     read('app/api/recurring/[id]/route.ts'),
     /e instanceof RecurringError[\s\S]{0,120}status: e\.status/,
     'recurring run-now must 404 — not persist inventory/assembly/kit — when Inventory is off',
