@@ -128,8 +128,9 @@ export async function runTaxPool(
   const classes = await effectiveClasses(orgId, regime);
   if (classes.size === 0) throw new TaxPoolError(`unknown tax depreciation regime "${regime}"`);
   const attr = await regimeClassAttribute(orgId, regime);
+  const shortYearFactor = normalizeDecimal(opts.shortYearFactor ?? 1, 10);
   if (await regimeModel(orgId, regime) === "macrs") {
-    return runMacrs(orgId, bookId, subsidiaryId, regime, taxYear, opts, attr, classes);
+    return runMacrs(orgId, bookId, subsidiaryId, regime, taxYear, { ...opts, shortYearFactor }, attr, classes);
   }
 
   // Additions this year + whether the class still holds assets at year-end.
@@ -177,7 +178,7 @@ export async function runTaxPool(
       rate: classDef.rate,
       firstYearFraction: rule.firstYearFraction,
       enhancedFirstYearMultiplier: rule.enhancedMultiplier,
-      shortYearFactor: opts.shortYearFactor,
+      shortYearFactor,
       poolHasAssetsAtYearEnd: row.has_assets,
       allowRecapture: classDef.allowRecapture,
       allowTerminalLoss: classDef.allowTerminalLoss,
@@ -192,7 +193,7 @@ export async function runTaxPool(
         values (${orgId}, ${pool.id}, ${taxYear}, ${result.openingBalance}, ${result.additions},
                 ${result.dispositions}, ${result.netAdditions}, ${result.immediateExpense}, ${result.base},
                 ${result.allowance}, ${result.closingBalance}, ${result.recapture}, ${result.terminalLoss},
-                ${opts.shortYearFactor ?? 1}, ${rule.enhancedMultiplier ?? null}, ${opts.actorId}, ${opts.actorId})
+                ${shortYearFactor}, ${rule.enhancedMultiplier ?? null}, ${opts.actorId}, ${opts.actorId})
         on conflict (org_id, pool_id, tax_year) do update set
           opening_balance = excluded.opening_balance, additions = excluded.additions,
           dispositions = excluded.dispositions, net_additions = excluded.net_additions,
@@ -240,6 +241,7 @@ async function runMacrs(
   attr: string,
   classes: Map<string, PoolClassDef>,
 ): Promise<TaxPoolRunResult> {
+  const shortYearFactor = normalizeDecimal(opts.shortYearFactor ?? 1, 10);
   const assets = (await db.execute<MacrsAssetRow>(sql`
     select a.id,
            coalesce(a.custom->'taxDepreciation'->${regime}->>'classCode', c.tax_attributes->>${attr}) as class_code,
@@ -327,7 +329,7 @@ async function runMacrs(
            short_year_factor, created_by, updated_by)
         values (${orgId}, ${pool.id}, ${taxYear}, ${values.openingBalance}, ${values.additions},
                 ${values.dispositions}, ${values.netAdditions}, ${values.immediateExpense}, ${values.base},
-                ${values.allowance}, ${values.closingBalance}, 0, 0, ${opts.shortYearFactor ?? 1}, ${opts.actorId}, ${opts.actorId})
+                ${values.allowance}, ${values.closingBalance}, 0, 0, ${shortYearFactor}, ${opts.actorId}, ${opts.actorId})
         on conflict (org_id, pool_id, tax_year) do update set
           opening_balance=excluded.opening_balance, additions=excluded.additions, dispositions=excluded.dispositions,
           net_additions=excluded.net_additions, immediate_expense=excluded.immediate_expense, base=excluded.base,
