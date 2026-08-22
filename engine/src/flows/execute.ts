@@ -115,7 +115,7 @@ export async function executeFlowPlan(
     const rows = await db
       .select({ effectKey: schema.flowRunEffects.effectKey })
       .from(schema.flowRunEffects)
-      .where(eq(schema.flowRunEffects.runId, runId));
+      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.orgId, ctx.orgId)));
     for (const row of rows) completedEffects.add(row.effectKey);
   }
   const markEffectComplete = async (effectKey: string, detail: Record<string, unknown>) => {
@@ -449,6 +449,7 @@ async function createGate(
       .from(schema.flowGates)
       .where(
         and(
+          eq(schema.flowGates.orgId, ctx.orgId),
           eq(schema.flowGates.runId, runId),
           eq(schema.flowGates.nodeId, nodeId),
           eq(schema.flowGates.status, "pending"),
