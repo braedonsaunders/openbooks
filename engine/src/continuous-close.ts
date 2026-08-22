@@ -315,6 +315,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
                 and (jl.reconciled_at is not null or exists (
                   select 1 from reconciliation_matches m
                    where m.reconciliation_id = r.id and m.journal_line_id = jl.id
+                     and m.org_id = r.org_id
                 ))
            ), 0))::text as difference
         from reconciliations r
