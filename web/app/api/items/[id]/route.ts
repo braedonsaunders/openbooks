@@ -123,6 +123,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
   }
+  // Equipment-charge kind is Equipment configuration.
+  // Turning that switch off must refuse a new write; the stored kind stays.
+  if (body.kind !== undefined && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
+    const nextKind = String(body.kind)
+    const storedKind = existing.rows[0].kind
+    if (nextKind === 'equipment_charge' && nextKind !== storedKind) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {

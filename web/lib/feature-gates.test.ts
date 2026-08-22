@@ -1277,6 +1277,31 @@ test('the surfaces this test was written for are covered', () => {
     'item catalog PATCH must 404 — not persist — inventory kinds when Inventory is off',
   )
   assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /kind !== undefined[\s\S]{0,80}equipment/,
+    'item catalog PATCH must refuse equipment_charge when Equipment is off — existing kinds stay',
+  )
+  assert.match(
+    read('app/api/items/[id]/route.ts'),
+    /nextKind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'item catalog PATCH must 404 — not persist — equipment_charge when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /equipmentEnabled \|\| kind !== 'equipment_charge'/,
+    'the item drawer must not send equipment_charge when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/items/ItemDrawer.tsx'),
+    /equipmentEnabled \|\| k !== 'equipment_charge'/,
+    'the item drawer must hide equipment_charge when Equipment is off',
+  )
+  assert.match(
+    read('app/(app)/items/page.tsx'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'the items page must read the Equipment switch before offering equipment_charge',
+  )
+  assert.match(
     read('app/(app)/items/ItemDrawer.tsx'),
     /inventoryCosting \|\| !INVENTORY_KINDS\.has\(kind\)/,
     'the item drawer must not send inventory kinds when Inventory is off',

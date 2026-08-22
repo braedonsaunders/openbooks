@@ -66,6 +66,7 @@ export function ItemDrawer({
   inventoryCosting = false,
   fairValuePrices = false,
   timeTracking = false,
+  equipmentEnabled = false,
 }: {
   payload: ItemPayload
   accounts: AccountOpt[]
@@ -82,6 +83,8 @@ export function ItemDrawer({
   fairValuePrices?: boolean
   /** Show-on-timesheet flag — Time Tracking Features switch. */
   timeTracking?: boolean
+  /** Equipment-charge kind — Equipment Features switch. */
+  equipmentEnabled?: boolean
 }) {
   const t = useTranslations('items')
   const tCommon = useTranslations('common')
@@ -94,8 +97,9 @@ export function ItemDrawer({
   const kindOptions = useMemo(
     () => KIND_VALUES
       .filter((k) => inventoryCosting || !INVENTORY_KINDS.has(k) || k === (it.kind ?? 'service'))
+      .filter((k) => equipmentEnabled || k !== 'equipment_charge' || k === (it.kind ?? 'service'))
       .map((k) => ({ value: k, label: t(`kinds.${k}`) })),
-    [t, inventoryCosting, it.kind],
+    [t, inventoryCosting, equipmentEnabled, it.kind],
   )
   const kindLocked = !inventoryCosting && INVENTORY_KINDS.has(String(it.kind ?? ''))
 
@@ -150,7 +154,9 @@ export function ItemDrawer({
   // -- explicit save (no autosave) -------------------------------------------
   const savePayload = useMemo(
     () => ({
-      ...(inventoryCosting || !INVENTORY_KINDS.has(kind) ? { kind } : {}),
+      ...(inventoryCosting || !INVENTORY_KINDS.has(kind)
+        ? (equipmentEnabled || kind !== 'equipment_charge' ? { kind } : {})
+        : {}),
       name: name.trim() || (isActive ? name : 'New item'),
       description,
       code,
@@ -174,7 +180,7 @@ export function ItemDrawer({
         : {}),
       custom: customValues,
     }),
-    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
+    [kind, name, description, code, category, unit, defaultRate, defaultCost, incomeAccountId, expenseAccountId, costRecoveryAccountId, taxCodeId, showOnTimesheet, timeTracking, inventoryCosting, equipmentEnabled, fairValuePrices, recognitionRuleId, deferredAccountId, createPlansOn, revenueAllocation, standaloneSellingPrice, customValues, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
