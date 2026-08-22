@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../../../web/lib/exact-decimal.ts";
+import { businessToday } from "../business-date.ts";
 import { db, schema, withOrg, withOrgContext } from "../db.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money.ts";
 import { postDocument } from "../posting.ts";
@@ -165,9 +166,9 @@ function periodForDate(periods: { id: string; starts_on: string; ends_on: string
     ?? null;
 }
 
-function extractionDate(snapshot: NetSuiteFixedAssetSnapshot): string {
+async function extractionDate(snapshot: NetSuiteFixedAssetSnapshot, orgId: string): Promise<string> {
   const date = new Date(snapshot.extractedAt);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString().slice(0, 10) : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? await businessToday(orgId) : date.toISOString().slice(0, 10);
 }
 
 /**
@@ -186,7 +187,7 @@ export async function syncNetSuiteFixedAssets(
       from orgs where id = ${options.orgId}`));
   if (enabled.rows[0]?.enabled !== true) throw new Error("Fixed Assets feature is disabled");
   const snapshot = await source.fixedAssets();
-  const asOf = extractionDate(snapshot);
+  const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();
   const orphanHistory: Row[] = [];
   for (const row of snapshot.depreciationHistory) {

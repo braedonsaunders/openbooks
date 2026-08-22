@@ -91,6 +91,14 @@ test("NetSuite FAM document-line insert persists amount through persistSyncLineM
   assert.doesNotMatch(body, /amount: normalizeMoney\(line\.amount\)/);
 });
 
+test("NetSuite FAM extractionDate NaN fallback uses the org calendar", () => {
+  const helperStart = source.indexOf("async function extractionDate");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "extractionDate helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /Number\.isNaN\(date\.getTime\(\)\) \? await businessToday\(orgId\) : date\.toISOString\(\)\.slice\(0, 10\)/);
+});
+
 test("NetSuite FAM document-line insert persists taxAmount through persistSyncLineMoney", () => {
   const helperStart = source.indexOf("function persistSyncLineMoney");
   const helperEnd = source.indexOf("\n}", helperStart);
