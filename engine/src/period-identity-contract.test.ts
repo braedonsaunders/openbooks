@@ -26,6 +26,6 @@ test("period-specific accounting logic uses exact ledger period identity", () =>
     /e\.posting_date between \$\{period\.starts_on\} and \$\{period\.ends_on\}/,
   );
 
-  const reports = source("web/lib/reports.ts");
+  const reports = source("web/lib/reports/trends.ts");
   assert.match(reports, /and e\.period_id = p\.id/);
 });
