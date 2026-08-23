@@ -2642,6 +2642,16 @@ test('the surfaces this test was written for are covered', () => {
     'the global create menu must hide Expense when Expenses is off — the draft API 404s',
   )
   assert.match(
+    read('app/(app)/dashboard/_quick-actions-shared.ts'),
+    /id: 'd-expense'[\s\S]{0,280}requiredFeature: 'expenses'/,
+    'the dashboard catalog must hide New expense when Expenses is off — the draft API 404s',
+  )
+  assert.match(
+    read('app/(app)/dashboard/actions.ts'),
+    /action\.requiredFeature && !featureOn\.get\(action\.requiredFeature\)/,
+    'the dashboard catalog must omit New expense when Expenses is off — stored layouts stay',
+  )
+  assert.match(
     read('app/(app)/layout.tsx'),
     /projects: can\(authz, 'projects\.manage'\) && projectsEnabled/,
     'the global create menu must hide Project when Projects is off — the draft API refuses',

@@ -16,7 +16,7 @@ export default async function Home() {
   if (!authz) return null
 
   const today = new Date()
-  const { layout, role } = await loadDashboardLayout(authz)
+  const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
 
   const widgets = layout.widgets.filter((w) => canSeeWidget(authz, w.id))
   const visibleLayout = { ...layout, widgets }
@@ -39,6 +39,7 @@ export default async function Home() {
           role={role}
           mode="view"
           quickActionsSaveAction={saveQuickActions}
+          hiddenQuickActionIds={hiddenQuickActionIds}
         />
       </div>
     </PageContainer>

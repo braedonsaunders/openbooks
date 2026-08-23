@@ -6,6 +6,11 @@ import {
   type DashboardLayoutData,
 } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'
+import { isFeatureEnabled } from '@/lib/features'
+import {
+  CURATED_QUICK_ACTIONS,
+  hiddenCuratedQuickActionIds,
+} from './_quick-actions-shared'
 import {
   dashboardSourceKeyForTier,
   dashboardSourceKeyForRole,
@@ -54,11 +59,33 @@ export async function resolveDashboardDefault(
   }
 }
 
+export async function hiddenQuickActionIdsForOrg(orgId: string): Promise<string[]> {
+  const keys = [...new Set(
+    CURATED_QUICK_ACTIONS
+      .map((action) => action.requiredFeature)
+      .filter((key): key is string => key != null),
+  )]
+  const flags = new Map(
+    await Promise.all(
+      keys.map(async (key) => [key, await isFeatureEnabled(orgId, key)] as const),
+    ),
+  )
+  return hiddenCuratedQuickActionIds((key) => flags.get(key) === true)
+}
+
 export async function loadDashboardLayout(
   authz: Authz,
-): Promise<{ layout: DashboardLayoutData; role: RoleTier; isCustomised: boolean }> {
+): Promise<{
+  layout: DashboardLayoutData
+  role: RoleTier
+  isCustomised: boolean
+  hiddenQuickActionIds: string[]
+}> {
   const role = getUserRoleTier(authz)
-  const fallback = await resolveDashboardDefault(authz, role)
+  const [fallback, hiddenQuickActionIds] = await Promise.all([
+    resolveDashboardDefault(authz, role),
+    hiddenQuickActionIdsForOrg(authz.user.orgId),
+  ])
 
   const res = (await db.execute(sql`
     select layout, source_role, is_customised
@@ -69,11 +96,12 @@ export async function loadDashboardLayout(
 
   const row = res.rows[0]
   if (!row || row.source_role !== fallback.sourceKey) {
-    return { layout: fallback.layout, role, isCustomised: false }
+    return { layout: fallback.layout, role, isCustomised: false, hiddenQuickActionIds }
   }
   return {
     layout: row.layout as DashboardLayoutData,
     role,
     isCustomised: row.is_customised,
+    hiddenQuickActionIds,
   }
 }

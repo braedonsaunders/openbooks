@@ -6,9 +6,10 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { can, getAuthz } from '@/lib/authz'
 import { NAV_MODULES } from '@/lib/nav/registry'
 import { getUserRoleTier, dashboardSourceKeyForTier, dashboardSourceKeyForRole } from './_role-tier'
-import { resolveDashboardDefault } from './_load-layout'
+import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
 import { canSeeWidget, canSeeInsightCards } from './_widget-access'
 import { WIDGETS } from './_widget-registry'
+import { isFeatureEnabled } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
   type QuickActionOption,
@@ -108,7 +109,8 @@ export async function saveQuickActions(input: unknown) {
   const role = getUserRoleTier(authz)
   const dashboardDefault = await resolveDashboardDefault(authz, role)
   const sourceRole = dashboardDefault.sourceKey
-  const quickActions = parsed.data
+  const hiddenIds = new Set(await hiddenQuickActionIdsForOrg(authz.user.orgId))
+  const incoming = parsed.data.filter((action) => !hiddenIds.has(action.id))
 
   // Same single-connection transactional lock as saveDashboardLayout — the
   // advisory lock is only meaningful for the statements sharing its txn.
@@ -123,6 +125,12 @@ export async function saveQuickActions(input: unknown) {
        limit 1
     `)) as any
     const existingLayout = (existing.rows[0]?.layout ?? { widgets: [] }) as DashboardLayoutData
+    const preserved = (existingLayout.quickActions ?? []).filter((action) => hiddenIds.has(action.id))
+    const incomingIds = new Set(incoming.map((action) => action.id))
+    const quickActions = [
+      ...incoming,
+      ...preserved.filter((action) => !incomingIds.has(action.id)),
+    ]
     const layout: DashboardLayoutData = {
       widgets: existingLayout.widgets ?? [],
       quickActions,
@@ -151,8 +159,20 @@ export async function listQuickActionOptions(): Promise<{
 
   const common: QuickActionOption[] = []
 
+  const featureKeys = [...new Set(
+    CURATED_QUICK_ACTIONS
+      .map((action) => action.requiredFeature)
+      .filter((key): key is string => key != null),
+  )]
+  const featureOn = new Map(
+    await Promise.all(
+      featureKeys.map(async (key) => [key, await isFeatureEnabled(authz.user.orgId, key)] as const),
+    ),
+  )
+
   for (const action of CURATED_QUICK_ACTIONS) {
     if (action.requiredPermission && !can(authz, action.requiredPermission)) continue
+    if (action.requiredFeature && !featureOn.get(action.requiredFeature)) continue
     common.push({
       label: action.label,
       href: action.href,

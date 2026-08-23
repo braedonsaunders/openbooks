@@ -120,6 +120,8 @@ export const MAX_QUICK_ACTIONS = 12
 type CuratedQuickAction = QuickActionOption & {
   id: string
   requiredPermission: string | null
+  /** Features switch — omit from the catalog and live chips when off. */
+  requiredFeature?: string
 }
 
 export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
@@ -167,6 +169,8 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     tone: 'amber',
     hint: 'Create',
     requiredPermission: 'expenses.create',
+    // Same switch as the shell create menu: the draft API 404s when Expenses is off.
+    requiredFeature: 'expenses',
   },
   {
     id: 'd-report',
@@ -182,3 +186,19 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
 export const DEFAULT_QUICK_ACTIONS: QuickAction[] = CURATED_QUICK_ACTIONS.map(
   ({ id, label, href, iconKey, tone }) => ({ id, label, href, iconKey, tone }),
 )
+
+export function hiddenCuratedQuickActionIds(
+  featureOn: (key: string) => boolean,
+): string[] {
+  return CURATED_QUICK_ACTIONS
+    .filter((action) => action.requiredFeature != null && !featureOn(action.requiredFeature))
+    .map((action) => action.id)
+}
+
+export function visibleQuickActions(
+  actions: readonly QuickAction[] | null | undefined,
+  hiddenIds: ReadonlySet<string>,
+): QuickAction[] {
+  const source = actions ?? DEFAULT_QUICK_ACTIONS
+  return source.filter((action) => !hiddenIds.has(action.id))
+}
