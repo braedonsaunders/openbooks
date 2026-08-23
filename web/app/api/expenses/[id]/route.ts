@@ -155,10 +155,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const lineDims = validateExtraDims(l.extraDims, segments)
       if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
+      const amount = exactMoney(l.amount)
+      if (amount === 'invalid') {
+        return NextResponse.json({ error: 'Expense line amount is not a valid amount' }, { status: 422 })
+      }
       preparedLines.push({
         accountId: l.accountId!,
         description: l.description ?? null,
-        amount: normalizeMoney(l.amount),
+        amount,
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
         taxInputAmount: normalizeMoney(l.taxInputAmount),
