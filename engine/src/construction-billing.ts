@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, type SqlExecutor } from "./db.ts";
 import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
 
@@ -14,6 +15,17 @@ import { add, cmp, formatMoney, mulPercent, mulRatio, neg, normalizeMoney, sum, 
  */
 
 export class ConstructionBillingError extends Error {}
+
+/** Persist retainage-release amount through exact decimal then ledger money. Fail closed. */
+function persistRetainageReleaseAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("retainage release amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("retainage release amount must be an exact decimal");
+  }
+}
 
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
   const result = (await tx.execute<{ enabled: boolean }>(sql`
@@ -564,7 +576,7 @@ export async function releaseRetainage(
   return db.transaction(async (tx) => {
     await assertProjectsEnabled(tx, orgId);
     await assertApplicationProcedure(tx, orgId, projectId);
-    const exactAmount = normalizeMoney(amount);
+    const exactAmount = persistRetainageReleaseAmount(amount);
     if (cmp(exactAmount, "0") <= 0) throw new ConstructionBillingError("Release amount must be positive");
     const projRes = (await tx.execute<any>(sql`
       select p.id, p.customer_id, p.subsidiary_id, coalesce(s.base_currency, o.base_currency) as currency
