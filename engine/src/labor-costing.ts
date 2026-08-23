@@ -544,7 +544,10 @@ export async function postPayrollVariance(opts: {
   subsidiaryId: string;
 }): Promise<{ entryId: string | null; variance: string }> {
   const { orgId, actorId, periodStart, periodEnd, subsidiaryId } = opts;
-  const entryNumber = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
+  // Business key of the current variance journal is (subsidiary, period-end);
+  // the stored entry number is unique per physical journal because re-runs
+  // reverse the prior generation and repost (journal_entries_org_number).
+  const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
   return inDbTransaction(async (tx) => {
     // The organization row is the stable serialization point even before the
     // first variance journal exists. It also freezes both account mappings for
@@ -571,7 +574,7 @@ export async function postPayrollVariance(opts: {
         from journal_entries
        where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
          and subsidiary_id = ${subsidiaryId}
-         and entry_number = ${entryNumber}
+         and posting_date = ${periodEnd}
        order by created_at desc, id desc
        limit 1
        for update`));
@@ -601,6 +604,20 @@ export async function postPayrollVariance(opts: {
     );
     const variance = rec.periodVariance;
     if (isZero(variance)) return { entryId: null, variance: "0" };
+
+    // Advance past every prior physical journal (posted, reversed, and their
+    // -R mirrors) for this business key so the insert cannot collide with
+    // controlled history.
+    const generations = (await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from journal_entries
+       where org_id = ${orgId} and origin = 'payroll_variance'
+         and subsidiary_id = ${subsidiaryId}
+         and posting_date = ${periodEnd}
+         and entry_number like ${`PVAR-%`}`));
+    const genN = (generations.rows[0]?.n ?? 0) + 1;
+    const entryNumber =
+      genN === 1 ? entryNumberBase : `${entryNumberBase}-${genN}`;
 
     // Standards credited more than payroll debited → clearing carries a credit
     // residue for the period: DR clearing / CR variance clears it (and vice versa).
