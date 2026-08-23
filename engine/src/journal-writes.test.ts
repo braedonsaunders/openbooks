@@ -108,10 +108,22 @@ test("journal-line persist writes amount through canonicalDecimal then normalize
   assert.match(helper, /JournalWriteError/);
 
   const start = source.indexOf("export function validateJournalInput");
-  const next = source.indexOf("async function controlDeps");
+  const next = source.indexOf("export async function createScriptJournal");
   const body = source.slice(start, next);
   assert.match(body, /persistJournalLineAmount\(l\.amount, i \+ 1\)/);
   assert.doesNotMatch(body, /normalizeMoney\(l\.amount\)/);
+});
+
+test("posting-rule control accounts load employeePayable via shared helper", () => {
+  const helper = readFileSync(new URL("./control-accounts.ts", import.meta.url), "utf8");
+  assert.match(helper, /export async function loadControlAccounts/);
+  assert.match(helper, /employeePayable/);
+  assert.match(helper, /settings->'controlAccounts'/);
+
+  const journalWrites = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(journalWrites, /async function controlDeps/);
+  assert.doesNotMatch(journalWrites, /settings->'controlAccounts'/);
+  assert.match(journalWrites, /loadControlAccounts/);
 });
 
 test("line cap is enforced", () => {
