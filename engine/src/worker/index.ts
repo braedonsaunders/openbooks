@@ -21,6 +21,7 @@ import { createBackupWorker } from "./backup-worker.ts";
 import { startBackupScheduler } from "./backup-scheduler.ts";
 import { assertSafeRuntimeDatabaseRole, pool } from "../db.ts";
 import { assertS3Ready, s3Enabled } from "../file-storage.ts";
+import { startTelemetry, stopTelemetry } from "../telemetry.ts";
 
 const ALIVE_FILE = process.env.OPENBOOKS_WORKER_ALIVE_FILE || "/tmp/openbooks-worker-alive";
 const READY_FILE = process.env.OPENBOOKS_WORKER_READY_FILE || "/tmp/openbooks-worker-ready";
@@ -55,6 +56,9 @@ async function checkObjectStorage(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // OTel traces/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is configured; a free
+  // no-op otherwise (see telemetry.ts). First, so boot itself is observable.
+  await startTelemetry();
   await assertSafeRuntimeDatabaseRole();
   const workers = [
     createEmailWorker(),
@@ -102,8 +106,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     clearInterval(heartbeatTimer);
     console.log(`[worker] ${signal} — draining…`);
-    await Promise.allSettled(workers.map((w) => w.close()));
-    await closeJobConnections();
+    await Promise.allSettled([...workers.map((w) => w.close()), closeJobConnections(), stopTelemetry()]);
     process.exit(0);
   }
   process.on("SIGINT", () => void shutdown("SIGINT"));

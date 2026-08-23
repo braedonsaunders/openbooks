@@ -10,6 +10,15 @@ import {
   logTerminalFailure,
   REPORT_RUN_WORKER_IDENTITY,
 } from "./terminal-failure.ts";
+import {
+  ATTR_DEFINITION_ID,
+  ATTR_KIND,
+  ATTR_ORG_ID,
+  ATTR_RUN_ID,
+  ATTR_SURFACE,
+  recordOutboxAttempt,
+  runInSpan,
+} from "./telemetry.ts";
 
 /**
  * Scheduled report runs and their per-recipient delivery outbox — same
@@ -20,7 +29,8 @@ import {
  * ceiling (MAX_RUN_ATTEMPTS) or, for deliveries, a queue-giveup at the delivery
  * ceiling (MAX_DELIVERY_ATTEMPTS) stamps terminal_failed_at /
  * terminal_failed_by exactly once and emits one structured
- * "scheduler.terminal_failure" log line. Operators alert on poison rows with:
+ * "scheduler.terminal_failure" log line plus one `openbooks.terminal_failures`
+ * metric increment (see telemetry.ts). Operators alert on poison rows with:
  *
  *   select id, org_id, definition_id, error, attempt_count,
  *          terminal_failed_at, terminal_failed_by
@@ -154,75 +164,90 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     return complete.rows[0] ? { skipped: true } : { skipped: true };
   }
 
-  try {
-    const meta = (await db.execute<{ report_name: string }>(sql`
-      select rd.name as report_name from report_definitions rd
-       where rd.id=${row.definition_id} and rd.org_id=${row.org_id}
-    `));
-    if (!meta.rows[0]) throw new Error("scheduled report definition is unavailable");
-    const pdf = await render(row.org_id, row.definition_id, runId);
-    if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
-    const slug = meta.rows[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
-    const filename = `${slug || "report"}-${await businessToday(row.org_id)}.pdf`;
-    const hash = createHash("sha256").update(pdf).digest("hex");
-    const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
+  return runInSpan(
+    "report_run.process",
+    {
+      [ATTR_SURFACE]: "report_runs",
+      [ATTR_KIND]: "scheduled_report",
+      [ATTR_ORG_ID]: row.org_id,
+      [ATTR_RUN_ID]: runId,
+      [ATTR_DEFINITION_ID]: row.definition_id,
+    },
+    async () => {
+      const startedAt = Date.now();
+      try {
+        const meta = (await db.execute<{ report_name: string }>(sql`
+          select rd.name as report_name from report_definitions rd
+           where rd.id=${row.definition_id} and rd.org_id=${row.org_id}
+        `));
+        if (!meta.rows[0]) throw new Error("scheduled report definition is unavailable");
+        const pdf = await render(row.org_id, row.definition_id, runId);
+        if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
+        const slug = meta.rows[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
+        const filename = `${slug || "report"}-${await businessToday(row.org_id)}.pdf`;
+        const hash = createHash("sha256").update(pdf).digest("hex");
+        const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
 
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        insert into report_run_artifacts
-          (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
-        values (${row.org_id}, ${runId}, ${filename}, 'application/pdf', ${pdf.length}, ${hash}, ${pdf})
-        on conflict (run_id) do nothing
-      `);
-      for (const recipient of recipients) {
-        await tx.execute(sql`
-          insert into report_delivery_outbox (org_id, run_id, recipient, status, next_attempt_at)
-          values (${row.org_id}, ${runId}, ${recipient}, 'pending', now())
-          on conflict (run_id, recipient) do nothing
-        `);
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`
+            insert into report_run_artifacts
+              (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
+            values (${row.org_id}, ${runId}, ${filename}, 'application/pdf', ${pdf.length}, ${hash}, ${pdf})
+            on conflict (run_id) do nothing
+          `);
+          for (const recipient of recipients) {
+            await tx.execute(sql`
+              insert into report_delivery_outbox (org_id, run_id, recipient, status, next_attempt_at)
+              values (${row.org_id}, ${runId}, ${recipient}, 'pending', now())
+              on conflict (run_id, recipient) do nothing
+            `);
+          }
+          await tx.execute(sql`
+            update report_runs set status='succeeded', finished_at=now(), locked_at=null,
+                   next_attempt_at=null, updated_at=now() where id=${runId} and org_id=${row.org_id}
+          `);
+        });
+        recordOutboxAttempt("report_runs", "scheduled_report", "succeeded", Date.now() - startedAt);
+        return { deliveries: recipients.length };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        recordOutboxAttempt("report_runs", "scheduled_report", "failed", Date.now() - startedAt);
+        // attempt_count was incremented by this run's claim, so it is the ordinal
+        // of the attempt that just failed; reaching the ceiling here is the one
+        // and only transition to terminal.
+        const terminal = row.attempt_count >= MAX_RUN_ATTEMPTS;
+        const failedAt = new Date();
+        const delay = Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, row.attempt_count - 1));
+        const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
+          update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=${failedAt},
+                 locked_at=null, next_attempt_at=${new Date(failedAt.getTime() + delay)},
+                 terminal_failed_at = case when ${terminal}
+                                          then coalesce(terminal_failed_at, ${failedAt})
+                                          else terminal_failed_at end,
+                 terminal_failed_by = case when ${terminal} and terminal_failed_at is null
+                                          then ${REPORT_RUN_WORKER_IDENTITY}
+                                          else terminal_failed_by end,
+                 updated_at=${failedAt}
+           where id=${runId} and org_id=${row.org_id}
+           returning (${terminal}
+                     and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
+                     and terminal_failed_at = ${failedAt}) as "becameTerminal"
+        `));
+        if (marked.rows[0]?.becameTerminal) {
+          logTerminalFailure({
+            surface: "report_runs",
+            id: runId,
+            orgId: row.org_id,
+            attempts: row.attempt_count,
+            error: message.slice(0, 1000),
+            markedBy: REPORT_RUN_WORKER_IDENTITY,
+            at: failedAt,
+          });
+        }
+        throw error;
       }
-      await tx.execute(sql`
-        update report_runs set status='succeeded', finished_at=now(), locked_at=null,
-               next_attempt_at=null, updated_at=now() where id=${runId} and org_id=${row.org_id}
-      `);
-    });
-    return { deliveries: recipients.length };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // attempt_count was incremented by this run's claim, so it is the ordinal
-    // of the attempt that just failed; reaching the ceiling here is the one
-    // and only transition to terminal.
-    const terminal = row.attempt_count >= MAX_RUN_ATTEMPTS;
-    const failedAt = new Date();
-    const delay = Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, row.attempt_count - 1));
-    const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
-      update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=${failedAt},
-             locked_at=null, next_attempt_at=${new Date(failedAt.getTime() + delay)},
-             terminal_failed_at = case when ${terminal}
-                                       then coalesce(terminal_failed_at, ${failedAt})
-                                       else terminal_failed_at end,
-             terminal_failed_by = case when ${terminal} and terminal_failed_at is null
-                                       then ${REPORT_RUN_WORKER_IDENTITY}
-                                       else terminal_failed_by end,
-             updated_at=${failedAt}
-       where id=${runId} and org_id=${row.org_id}
-       returning (${terminal}
-                  and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
-                  and terminal_failed_at = ${failedAt}) as "becameTerminal"
-    `));
-    if (marked.rows[0]?.becameTerminal) {
-      logTerminalFailure({
-        surface: "report_runs",
-        id: runId,
-        orgId: row.org_id,
-        attempts: row.attempt_count,
-        error: message.slice(0, 1000),
-        markedBy: REPORT_RUN_WORKER_IDENTITY,
-        at: failedAt,
-      });
-    }
-    throw error;
-  }
+    },
+  );
 }
 
 /** Dispatch per-recipient outbox rows; deterministic generation ids close the DB/Redis crash gap. */
