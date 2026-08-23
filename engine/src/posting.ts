@@ -1457,21 +1457,39 @@ export async function postDocument(
         `document ${documentId} disappeared before posting`,
       );
     }
-    const [entry] = await tx
-      .insert(schema.journalEntries)
-      .values({
-        orgId: doc.orgId,
-        bookId: book.id,
-        subsidiaryId: subApplied.docSubId,
-        entryNumber: `${effectiveDoc.documentNumber}`,
-        postingDate,
-        periodId: period.id,
-        memo: effectiveDoc.memo,
-        status: "draft",
-        sourceDocumentId: doc.id,
-        origin: subApplied.multi ? "intercompany" : "document",
-      })
-      .returning({ id: schema.journalEntries.id });
+    // The entry insert is the first write in the transaction, so under a
+    // concurrent post of the SAME approved document the racer blocks here on
+    // journal_entries_org_number (entry_number = the document number) until
+    // the winner commits, then fails with a unique violation. Translate that
+    // into the same PostingError the flip guard below produces: the racing
+    // caller must see "already posted", never a raw driver error.
+    let entry: { id: string };
+    try {
+      [entry] = await tx
+        .insert(schema.journalEntries)
+        .values({
+          orgId: doc.orgId,
+          bookId: book.id,
+          subsidiaryId: subApplied.docSubId,
+          entryNumber: `${effectiveDoc.documentNumber}`,
+          postingDate,
+          periodId: period.id,
+          memo: effectiveDoc.memo,
+          status: "draft",
+          sourceDocumentId: doc.id,
+          origin: subApplied.multi ? "intercompany" : "document",
+        })
+        .returning({ id: schema.journalEntries.id });
+    } catch (error) {
+      const code = (error as { code?: string }).code ??
+        (error as { cause?: { code?: string } }).cause?.code;
+      if (code === "23505") {
+        throw new PostingError(
+          `document ${doc.documentNumber} was already posted or voided`,
+        );
+      }
+      throw error;
+    }
 
     await tx.insert(schema.journalLines).values(
       subApplied.lines.map((l, i) => ({
