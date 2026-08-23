@@ -123,7 +123,7 @@ test("posting-rule control accounts load employeePayable via shared helper", () 
   const journalWrites = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
   assert.doesNotMatch(journalWrites, /async function controlDeps/);
   assert.doesNotMatch(journalWrites, /settings->'controlAccounts'/);
-  assert.match(journalWrites, /loadControlAccounts/);
+  assert.match(journalWrites, /loadRequiredControlAccounts/);
 });
 
 test("line cap is enforced", () => {

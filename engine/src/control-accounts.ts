@@ -26,3 +26,26 @@ export async function loadControlAccounts(orgId: string): Promise<OrgControlAcco
     employeePayable: c.employeePayable,
   };
 }
+
+/** Control accounts shaped for PostingDeps: ar/ap/bank are mandatory before
+ * any document may post. Fails closed on incomplete org configuration
+ * instead of letting undefined account ids reach the posting kernel. */
+export async function loadRequiredControlAccounts(orgId: string): Promise<
+  Required<Pick<OrgControlAccounts, "ar" | "ap" | "bank">> &
+    Pick<OrgControlAccounts, "taxCollected" | "taxPaid" | "employeePayable">
+> {
+  const c = await loadControlAccounts(orgId);
+  if (!c.ar || !c.ap || !c.bank) {
+    throw new Error(
+      `org ${orgId} control accounts are incomplete: ar, ap, and bank must be configured in orgs.settings.controlAccounts before posting`,
+    );
+  }
+  return {
+    ar: c.ar,
+    ap: c.ap,
+    bank: c.bank,
+    taxCollected: c.taxCollected,
+    taxPaid: c.taxPaid,
+    employeePayable: c.employeePayable,
+  };
+}
