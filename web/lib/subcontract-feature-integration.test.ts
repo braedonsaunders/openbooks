@@ -5,9 +5,9 @@ import test from "node:test";
 const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("direct subcontracts join both project committed-cost rollups without double-counting linked POs", () => {
-  const helper = source("lib/subcontract-commitments.ts");
+  const helper = source("../engine/src/subcontract-commitments.ts");
   const costing = source("lib/project-costing.ts");
-  const financials = source("lib/project-financials.ts");
+  const financials = source("../engine/src/project-financials.ts");
   assert.match(helper, /original_commitment[\s\S]+changes\.approved[\s\S]+apps\.billed/);
   assert.match(helper, /status in \('active', 'substantially_complete'\)/);
   assert.match(helper, /purchase_order_id is null/);
