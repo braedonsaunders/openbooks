@@ -24,13 +24,25 @@ export async function POST(req: Request) {
   }
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
-    values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
-            ${JSON.stringify(built.outcome)}::jsonb, ${Number(body.priority) || 100}, ${body.isActive !== false}, ${user.id})
-    returning id
-  `))
-  return NextResponse.json({ id: r.rows[0]!.id })
+  // Match rules decide how imported bank lines are categorized and posted, so
+  // every write lands in the audit trail inside the same transaction.
+  const created = await db.transaction(async (tx) => {
+    const row = (await tx.execute<Record<string, unknown>>(sql`
+      insert into bank_match_rules (org_id, name, criteria, outcome, priority, is_active, created_by)
+      values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
+              ${JSON.stringify(built.outcome)}::jsonb, ${Number(body.priority) || 100}, ${body.isActive !== false}, ${user.id})
+      returning *
+    `))
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${user.orgId}, 'bank_match_rules', ${(row.rows[0] as any).id as string}, 'insert',
+         ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${user.id})
+    `)
+    return row.rows[0]!
+  })
+  return NextResponse.json({ id: (created as any).id as string })
 }
 
 export async function PATCH(req: Request) {
@@ -44,12 +56,28 @@ export async function PATCH(req: Request) {
   }
   const built = build(body)
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
-  await db.execute(sql`
-    update bank_match_rules set
-      name = ${String(body.name).trim()}, criteria = ${JSON.stringify(built.criteria)}::jsonb,
-      outcome = ${JSON.stringify(built.outcome)}::jsonb, priority = ${Number(body.priority) || 100},
-      is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
-    where id = ${body.id} and org_id = ${user.orgId}
-  `)
+  const missing = await db.transaction(async (tx) => {
+    const before = (await tx.execute<Record<string, unknown>>(sql`
+      select * from bank_match_rules where id = ${body.id} and org_id = ${user.orgId}
+    `))
+    if (!before.rows[0]) return true
+    const updated = (await tx.execute<Record<string, unknown>>(sql`
+      update bank_match_rules set
+        name = ${String(body.name).trim()}, criteria = ${JSON.stringify(built.criteria)}::jsonb,
+        outcome = ${JSON.stringify(built.outcome)}::jsonb, priority = ${Number(body.priority) || 100},
+        is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
+      where id = ${body.id} and org_id = ${user.orgId}
+      returning *
+    `))
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${user.orgId}, 'bank_match_rules', ${String(body.id)}, 'update',
+         ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${user.id})
+    `)
+    return false
+  })
+  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

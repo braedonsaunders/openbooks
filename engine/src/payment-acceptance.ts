@@ -1181,42 +1181,65 @@ export async function saveAcceptanceConfig(
     webhookSecret?: string | null;
   },
 ): Promise<void> {
-  let secrets: string | null = null;
-  if (input.apiKey || input.webhookSecret) {
-    // Merge with any existing sealed secrets so one field can rotate alone.
+  await db.transaction(async (tx) => {
+    type ConfigRow = NonNullable<Awaited<ReturnType<typeof loadProviderConfig>>>;
+    // Snapshot the stored config first so the audit row carries the real
+    // before/after state; sealed secrets appear only as presence flags.
     const existing = await loadProviderConfig(orgId, input.provider);
-    const prior = unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing?.secrets ?? null) ?? {};
-    secrets = await sealJson({
-      apiKey: input.apiKey ?? prior.apiKey,
-      webhookSecret: input.webhookSecret ?? prior.webhookSecret,
-    });
-  }
-  await db.execute(sql`
-    insert into psp_provider_configs
-      (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-       publishable_key, surcharge_rule_id, settings, secrets, created_by, updated_by)
-    values (${orgId}, ${input.provider}, ${input.displayName ?? input.provider}, ${input.isEnabled},
-            ${input.acceptanceEnabled}, ${input.defaultBankAccountId ?? null},
-            ${input.publishableKey ?? null}, ${input.surchargeRuleId ?? null},
-            ${JSON.stringify(input.settings ?? {})}::jsonb, ${secrets}, ${actorId}, ${actorId})
-    on conflict (org_id, provider) do update set
-      display_name = excluded.display_name,
-      is_enabled = excluded.is_enabled,
-      acceptance_enabled = excluded.acceptance_enabled,
-      default_bank_account_id = excluded.default_bank_account_id,
-      publishable_key = excluded.publishable_key,
-      surcharge_rule_id = excluded.surcharge_rule_id,
-      settings = excluded.settings,
-      secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
-      updated_at = now(), updated_by = ${actorId}
-    where psp_provider_configs.org_id = ${orgId}
-  `);
-  const saved = await loadProviderConfig(orgId, input.provider);
-  if (!saved) throw new PaymentAcceptanceError("provider config failed to persist");
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'psp_provider_configs', ${saved.id}, 'update',
-            ${JSON.stringify({ after: { isEnabled: input.isEnabled, acceptanceEnabled: input.acceptanceEnabled, hasApiKey: !!input.apiKey, hasWebhookSecret: !!input.webhookSecret } })}::jsonb,
-            ${actorId})
-  `);
+    const configView = (row: ConfigRow | null) =>
+      row === null
+        ? null
+        : {
+            displayName: row.display_name,
+            isEnabled: row.is_enabled,
+            acceptanceEnabled: row.acceptance_enabled,
+            defaultBankAccountId: row.default_bank_account_id,
+            publishableKey: row.publishable_key ?? null,
+            surchargeRuleId: row.surcharge_rule_id,
+            settings: row.settings,
+            hasApiKey: row.secrets != null && !!unsealJson<{ apiKey?: string }>(row.secrets)?.apiKey,
+            hasWebhookSecret:
+              row.secrets != null && !!unsealJson<{ webhookSecret?: string }>(row.secrets)?.webhookSecret,
+          };
+    let secrets: string | null = null;
+    if (input.apiKey || input.webhookSecret) {
+      // Merge with any existing sealed secrets so one field can rotate alone.
+      const prior = unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing?.secrets ?? null) ?? {};
+      secrets = await sealJson({
+        apiKey: input.apiKey ?? prior.apiKey,
+        webhookSecret: input.webhookSecret ?? prior.webhookSecret,
+      });
+    }
+    const savedRows = (await tx.execute<ConfigRow>(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
+         publishable_key, surcharge_rule_id, settings, secrets, created_by, updated_by)
+      values (${orgId}, ${input.provider}, ${input.displayName ?? input.provider}, ${input.isEnabled},
+              ${input.acceptanceEnabled}, ${input.defaultBankAccountId ?? null},
+              ${input.publishableKey ?? null}, ${input.surchargeRuleId ?? null},
+              ${JSON.stringify(input.settings ?? {})}::jsonb, ${secrets}, ${actorId}, ${actorId})
+      on conflict (org_id, provider) do update set
+        display_name = excluded.display_name,
+        is_enabled = excluded.is_enabled,
+        acceptance_enabled = excluded.acceptance_enabled,
+        default_bank_account_id = excluded.default_bank_account_id,
+        publishable_key = excluded.publishable_key,
+        surcharge_rule_id = excluded.surcharge_rule_id,
+        settings = excluded.settings,
+        secrets = coalesce(excluded.secrets, psp_provider_configs.secrets),
+        updated_at = now(), updated_by = ${actorId}
+      where psp_provider_configs.org_id = ${orgId}
+      returning id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
+                publishable_key, surcharge_rule_id, settings, secrets
+    `));
+    const saved = savedRows.rows[0];
+    if (!saved) throw new PaymentAcceptanceError("provider config failed to persist");
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'psp_provider_configs', ${saved.id},
+              ${existing ? "update" : "insert"},
+              ${JSON.stringify({ before: configView(existing), after: configView(saved) })}::jsonb,
+              ${actorId})
+    `);
+  });
 }

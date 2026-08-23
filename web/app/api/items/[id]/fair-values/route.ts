@@ -5,6 +5,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
+import { auditSetupChange } from '../../../../../lib/setup/audit'
 
 export const runtime = 'nodejs'
 
@@ -15,6 +16,10 @@ export const runtime = 'nodejs'
  * record, so it is gated by the item permissions and the Revenue Recognition
  * Features switch (same key as the setup entity). GET lists; POST/PATCH/DELETE
  * mutate a single dated row.
+ *
+ * Every mutation is audited through the ONE Setup-registry writer
+ * (auditSetupChange) in the same transaction — the same trail a save through
+ * the registry route would leave, never a parallel format.
  */
 
 async function itemExists(id: string, orgId: string) {
@@ -78,14 +83,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const parsed = parseBody((await req.json().catch(() => ({}))) as Record<string, unknown>)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  const inserted = (await db.execute(sql`
-    insert into fair_value_prices
-      (org_id, item_id, currency, unit_price, low_value, high_value, effective_from, effective_to, is_active, created_by, updated_by)
-    values
-      (${orgId}, ${id}, ${parsed.currency}, ${parsed.unitPrice}, ${parsed.lowValue}, ${parsed.highValue},
-       ${parsed.effectiveFrom}, ${parsed.effectiveTo}, ${parsed.isActive}, ${actorId}, ${actorId})
-    returning id`)) as any
-  return NextResponse.json({ id: inserted.rows[0].id })
+  const created = await db.transaction(async (tx) => {
+    const row = (await tx.execute<Record<string, unknown>>(sql`
+      insert into fair_value_prices
+        (org_id, item_id, currency, unit_price, low_value, high_value, effective_from, effective_to, is_active, created_by, updated_by)
+      values
+        (${orgId}, ${id}, ${parsed.currency}, ${parsed.unitPrice}, ${parsed.lowValue}, ${parsed.highValue},
+         ${parsed.effectiveFrom}, ${parsed.effectiveTo}, ${parsed.isActive}, ${actorId}, ${actorId})
+      returning *
+    `)) as any
+    await auditSetupChange({
+      orgId,
+      table: 'fair_value_prices',
+      rowId: String(row.rows[0].id),
+      action: 'insert',
+      changes: { after: row.rows[0] },
+      actorId,
+    }, tx)
+    return row.rows[0] as Record<string, unknown>
+  })
+  return NextResponse.json({ id: String(created.id) })
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -98,28 +115,65 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const parsed = parseBody(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  const updated = (await db.execute(sql`
-    update fair_value_prices set
-      currency = ${parsed.currency}, unit_price = ${parsed.unitPrice},
-      low_value = ${parsed.lowValue}, high_value = ${parsed.highValue},
-      effective_from = ${parsed.effectiveFrom}, effective_to = ${parsed.effectiveTo},
-      is_active = ${parsed.isActive}, updated_at = now(), updated_by = ${actorId}
-     where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
-    returning id`)) as any
-  if (!updated.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  let notFound = false
+  await db.transaction(async (tx) => {
+    const before = (await tx.execute(sql`
+      select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+    `)) as any
+    if (!before.rows[0]) {
+      notFound = true
+      return
+    }
+    const updated = (await tx.execute(sql`
+      update fair_value_prices set
+        currency = ${parsed.currency}, unit_price = ${parsed.unitPrice},
+        low_value = ${parsed.lowValue}, high_value = ${parsed.highValue},
+        effective_from = ${parsed.effectiveFrom}, effective_to = ${parsed.effectiveTo},
+        is_active = ${parsed.isActive}, updated_at = now(), updated_by = ${actorId}
+       where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+      returning *
+    `)) as any
+    await auditSetupChange({
+      orgId,
+      table: 'fair_value_prices',
+      rowId,
+      action: 'update',
+      changes: { before: before.rows[0], after: updated.rows[0] },
+      actorId,
+    }, tx)
+  })
+  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ id: rowId })
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
-  const { orgId } = gate.user
+  const { orgId, id: actorId } = gate.user
   const { id } = await params
   const rowId = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const deleted = (await db.execute(sql`
-    delete from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
-    returning id`)) as any
-  if (!deleted.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  let notFound = false
+  await db.transaction(async (tx) => {
+    const existing = (await tx.execute(sql`
+      select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+    `)) as any
+    if (!existing.rows[0]) {
+      notFound = true
+      return
+    }
+    await tx.execute(sql`
+      delete from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
+    `)
+    await auditSetupChange({
+      orgId,
+      table: 'fair_value_prices',
+      rowId,
+      action: 'delete',
+      changes: { before: existing.rows[0] },
+      actorId,
+    }, tx)
+  })
+  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
