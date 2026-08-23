@@ -57,22 +57,24 @@ test("same-origin mutations pass the origin check", async () => {
     })),
     true,
   );
-  // Scheme-insensitive: TLS terminates at the edge, internal hop is http.
+  // The trusted edge supplies the public origin when its internal hop is HTTP.
   assert.equal(
-    hasTrustedOrigin(post("http://books.example/api/accounts", {
+    hasTrustedOrigin(post("http://web:4780/api/accounts", {
       origin: "https://books.example",
-    })),
+      "x-forwarded-host": "books.example",
+      "x-forwarded-proto": "https",
+    }), {}),
     true,
   );
 });
 
 test("the operator-declared canonical URL wins over forwarded hosts", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
-  const environment = { OPENBOOKS_APP_URL: "https://erp.rassaun.com" };
+  const environment = { OPENBOOKS_APP_URL: "https://app.example.com" };
   assert.equal(
     hasTrustedOrigin(
       post("https://internal-hop.local/api/accounts", {
-        origin: "https://erp.rassaun.com",
+        origin: "https://app.example.com",
         "x-forwarded-host": "evil.example",
       }),
       environment,
@@ -81,8 +83,8 @@ test("the operator-declared canonical URL wins over forwarded hosts", async () =
   );
   assert.equal(
     hasTrustedOrigin(
-      post("https://erp.rassaun.com/api/accounts", {
-        origin: "https://erp.rassaun.com.evil.example",
+      post("https://app.example.com/api/accounts", {
+        origin: "https://app.example.com.evil.example",
       }),
       environment,
     ),
@@ -105,17 +107,20 @@ test("the outermost x-forwarded-host anchors the check behind proxies", async ()
   const req = post("http://web:4780/api/accounts", {
     origin: "https://books.example",
     "x-forwarded-host": "books.example, web:4780",
+    "x-forwarded-proto": "https, http",
   });
   assert.equal(hasTrustedOrigin(req, {}), true);
 });
 
-test("cross-site origins are rejected, including suffix spoofs", async () => {
+test("forged origins are rejected, including scheme, port, and suffix spoofs", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
   const attacker = (origin: string) =>
     hasTrustedOrigin(post("https://books.example/api/accounts", { origin }), {});
   assert.equal(attacker("https://evil.example"), false);
   assert.equal(attacker("https://books.example.evil.example"), false);
+  assert.equal(attacker("http://books.example"), false);
   assert.equal(attacker("https://books.example:8443"), false);
+  assert.equal(attacker("https://user@books.example/path"), false);
   assert.equal(attacker("null"), false);
   assert.equal(attacker("::::"), false);
 });
@@ -144,9 +149,20 @@ test("referer anchors the decision when Origin is absent", async () => {
   );
 });
 
-test("requests without any browser-origin evidence pass as non-browser clients", async () => {
+test("a forged Origin cannot be rescued by a same-origin Referer", async () => {
   const { hasTrustedOrigin } = await import("./csrf.ts");
-  assert.equal(hasTrustedOrigin(post("https://books.example/api/login", {})), true);
+  assert.equal(
+    hasTrustedOrigin(post("https://books.example/api/accounts", {
+      origin: "https://evil.example",
+      referer: "https://books.example/dashboard",
+    }), {}),
+    false,
+  );
+});
+
+test("unsafe requests without browser-origin evidence fail closed", async () => {
+  const { hasTrustedOrigin } = await import("./csrf.ts");
+  assert.equal(hasTrustedOrigin(post("https://books.example/api/login", {})), false);
   // Safe methods are never judged.
   assert.equal(
     hasTrustedOrigin(new Request("https://books.example/", { headers: { origin: "https://evil.example" } }), {}),
