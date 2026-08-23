@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { RecurringError, runScheduleNow } from "@openbooks/engine/src/recurring.ts";
 import { requirePermission } from "../../../../lib/authz";
@@ -27,26 +27,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const sets = [];
+  const sets: SQL[] = [];
   if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
   if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);
   if ("nextRunOn" in body) sets.push(sql`next_run_on = ${body.nextRunOn as string}`);
   if ("endsOn" in body) sets.push(sql`ends_on = ${(body.endsOn as string | null) ?? null}`);
   if ("name" in body) sets.push(sql`name = ${(body.name as string | null) ?? null}`);
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-  await db.execute(sql`
-    update recurring_schedules set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
-     where id = ${id} and org_id = ${authz.user.orgId}
-  `);
+  await db.transaction(async (tx) => {
+    const before = (await tx.execute<Record<string, unknown>>(sql`
+      select * from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}
+    `));
+    const updated = (await tx.execute<Record<string, unknown>>(sql`
+      update recurring_schedules set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
+       where id = ${id} and org_id = ${authz.user.orgId}
+      returning *
+    `));
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${authz.user.orgId}, 'recurring_schedules', ${id}, 'update',
+         ${JSON.stringify({ before: before.rows[0] ?? null, after: updated.rows[0] ?? null })}::jsonb,
+         ${authz.user.id})
+    `);
+  });
   return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
-  await db.execute(
-    sql`delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}`,
-  );
+  await db.transaction(async (tx) => {
+    // Snapshot first: deleting a schedule removes the only record of what was
+    // set to post automatically.
+    const existing = (await tx.execute<Record<string, unknown>>(sql`
+      select * from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}
+    `));
+    await tx.execute(
+      sql`delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}`,
+    );
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${authz.user.orgId}, 'recurring_schedules', ${id}, 'delete',
+         ${JSON.stringify({ before: existing.rows[0] ?? null })}::jsonb, ${authz.user.id})
+    `);
+  });
   return NextResponse.json({ ok: true });
 }
 
