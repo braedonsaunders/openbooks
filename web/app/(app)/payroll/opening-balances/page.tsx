@@ -48,7 +48,7 @@ export default async function PayrollOpeningBalancesPage({
   // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
   // this load deliberately ignores `year`. See EntitlementOpeningsView.
   const banks = await entitlementOpenings(orgId)
-  const tabs = await groupTabs('payroll', '/payroll/opening-balances')
+  const tabs = await groupTabs('payroll', '/payroll/opening-balances', { orgId })
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
 

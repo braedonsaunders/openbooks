@@ -50,7 +50,7 @@ export default async function AP() {
     </div>
   )
 
-  const tabs = <ModuleHomeTabs tabs={await groupTabs('purchasing', '/ap')} />
+  const tabs = <ModuleHomeTabs tabs={await groupTabs('purchasing', '/ap', { orgId: authz.user.orgId })} />
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }

@@ -37,7 +37,7 @@ export default async function ExpensesHome() {
           actions={
             <div className="flex items-center gap-3">
               {can(authz, 'expenses.create') ? <NewExpenseButton /> : null}
-              <ModuleHomeTabs tabs={await groupTabs('purchasing', '/expenses')} />
+              <ModuleHomeTabs tabs={await groupTabs('purchasing', '/expenses', { orgId: authz.user.orgId })} />
             </div>
           }
         />

@@ -1,5 +1,6 @@
 import 'server-only'
 import { getTranslations } from 'next-intl/server'
+import { featureEnabled, orgFeatureState } from '../../lib/features'
 import type { ModuleHomeTab } from './ui'
 
 /**
@@ -47,10 +48,27 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
 }
 
 /**
+ * Tabs that sit behind an optional-feature switch must not render or navigate
+ * while the org has that feature off — a dead tab pointing at a 404 is a nav
+ * leak even though every target keeps its own authoritative page/API gate.
+ */
+const TAB_FEATURE: Record<string, string> = {
+  '/expenses': 'expenses',
+  '/banking': 'banking',
+  '/banking/cash': 'banking',
+  '/payroll': 'payroll',
+  '/payroll/runs': 'payroll',
+  '/payroll/remittances': 'payroll',
+  '/payroll/separations': 'payroll',
+  '/payroll/year-end': 'payroll',
+}
+
+/**
  * Build the group's tab set with `activeHref` highlighted. `subQs` (e.g.
  * "?sub=<id>") rides along on every tab so the subsidiary lens survives the
  * hop; `exclude` drops routes the viewer can't open (permission gates stay at
- * the call site).
+ * the call site); `orgId` scopes the feature check so tabs whose target
+ * module's Features switch is off are dropped here as well.
  *
  * Layout rule: render the strip as the LAST (rightmost) header action on
  * every page — sibling buttons vary per page, and a right-anchored strip of
@@ -59,15 +77,20 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
 export async function groupTabs(
   group: TabGroup,
   activeHref: string,
-  opts?: { subQs?: string; exclude?: string[] },
+  opts: { subQs?: string; exclude?: string[]; orgId: string },
 ): Promise<ModuleHomeTab[]> {
-  const defs = GROUP_TABS[group].filter((d) => !opts?.exclude?.includes(d.href))
+  const state = await orgFeatureState(opts.orgId)
+  const defs = GROUP_TABS[group].filter(
+    (d) =>
+      !opts.exclude?.includes(d.href) &&
+      (!TAB_FEATURE[d.href] || featureEnabled(state, TAB_FEATURE[d.href])),
+  )
   const namespaces = [...new Set(defs.map((d) => d.ns))]
   const ts = new Map(
     await Promise.all(namespaces.map(async (ns) => [ns, await getTranslations(ns as never)] as const)),
   )
   return defs.map((d) => ({
-    href: `${d.href}${opts?.subQs ?? ''}`,
+    href: `${d.href}${opts.subQs ?? ''}`,
     label: (ts.get(d.ns) as (key: string) => string)(d.key),
     active: d.href === activeHref,
   }))

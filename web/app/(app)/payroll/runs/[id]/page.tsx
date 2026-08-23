@@ -233,7 +233,7 @@ export default async function PayRunPage({
     payRunChanges(orgId, id),
   ])
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/runs')
+  const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
   return (
     <ListPageLayout

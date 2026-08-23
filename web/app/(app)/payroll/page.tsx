@@ -46,7 +46,7 @@ export default async function PayrollHomePage({
   void (await searchParams)
 
   const home = await payrollHome(orgId)
-  const tabs = await groupTabs('payroll', '/payroll')
+  const tabs = await groupTabs('payroll', '/payroll', { orgId })
 
   const header = (
     <PageHeader

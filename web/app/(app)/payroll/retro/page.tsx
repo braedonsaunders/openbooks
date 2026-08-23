@@ -55,7 +55,7 @@ export default async function PayrollRetroPage() {
      order by s.name
   `))
 
-  const tabs = await groupTabs('payroll', '/payroll/retro')
+  const tabs = await groupTabs('payroll', '/payroll/retro', { orgId })
 
   return (
     <ListPageLayout
