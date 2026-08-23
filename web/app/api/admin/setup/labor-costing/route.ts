@@ -249,7 +249,8 @@ export async function POST(req: Request) {
                    effective_from)
       do update set rate = excluded.rate, currency = excluded.currency, basis = excluded.basis, annual_hours = excluded.annual_hours,
                     notes = excluded.notes, effective_to = null, is_active = true,
-                    updated_at = now(), updated_by = ${userId}`)
+                    updated_at = now(), updated_by = ${userId}
+                where labor_cost_rates.org_id = ${orgId}`)
     return NextResponse.json({ ok: true })
   }
 
