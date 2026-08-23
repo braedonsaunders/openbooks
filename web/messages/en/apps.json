@@ -63,5 +63,187 @@
       "updated": "Updated"
     },
     "empty": "No apps yet. Create one to get a ready-to-open starter, or import a .zip package."
+  },
+  "drawer": {
+    "toolbar": {
+      "newApp": "New app",
+      "newAppPromptTitle": "New app",
+      "newAppPromptLabel": "App name",
+      "newAppPromptPlaceholder": "Expense Insights",
+      "importZip": "Import .zip"
+    },
+    "toasts": {
+      "createdApp": "Created “{name}”",
+      "importedApp": "Imported “{key}”",
+      "settingsSaved": "App settings saved",
+      "appDisabled": "App disabled",
+      "appEnabled": "App enabled",
+      "published": "Published to the marketplace",
+      "uninstalled": "Uninstalled",
+      "fileSaved": "Saved {path}",
+      "fileCreated": "Created {path}",
+      "fileUploaded": "Uploaded {path}",
+      "deleted": "Deleted"
+    },
+    "errors": {
+      "saveFailed": "Save failed",
+      "updateFailed": "Update failed",
+      "publishFailed": "Publish failed",
+      "uninstallFailed": "Uninstall failed",
+      "createFailed": "Create failed",
+      "uploadFailed": "Upload failed",
+      "deleteFailed": "Delete failed"
+    },
+    "confirm": {
+      "uninstallTitle": "Uninstall “{name}”?",
+      "uninstallMessage": "Removes the app, its files, storage, and run history. Provisioned record types are kept.",
+      "deleteFileMessage": "Delete {path}?"
+    },
+    "prompt": {
+      "newFileTitle": "New file",
+      "pathLabel": "Path"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "files": "Files",
+      "runs": "Runs"
+    },
+    "actions": {
+      "open": "Open",
+      "saving": "Saving…",
+      "saveSettings": "Save settings",
+      "saveFile": "Save file",
+      "saved": "Saved",
+      "republish": "Republish to marketplace",
+      "publish": "Publish to marketplace",
+      "disable": "Disable",
+      "enable": "Enable",
+      "uninstall": "Uninstall",
+      "addEndpoint": "Add endpoint",
+      "manageNavigation": "Manage navigation shortcuts",
+      "newFileTitleAttr": "New file",
+      "uploadFileTitleAttr": "Upload file",
+      "deleteFileTitleAttr": "Delete file"
+    },
+    "labels": {
+      "name": "Name",
+      "status": "Status",
+      "description": "Description",
+      "capabilities": "Capabilities",
+      "navigation": "Navigation",
+      "endpoints": "Backend endpoints"
+    },
+    "onMarketplace": "on marketplace",
+    "capabilitiesHelp": "Everything else is denied by default; the app's backend and bridge calls are checked against these grants (always intersected with the calling user's own permissions).",
+    "navigationHelp": "This app remains installed independently of its menu shortcuts. Add, remove, rename, or move a shortcut in Navigation settings.",
+    "endpointsHelp": "The frontend calls these with <call>openbooks.callBackend(name, payload)</call>; each runs its file's <handler>handler(request)</handler> in the sandbox.",
+    "noEndpoints": "No endpoints — this app is frontend-only.",
+    "endpointNamePlaceholder": "name",
+    "capabilities": {
+      "allowFallback": "Allow {permission}",
+      "copy": {
+        "records": {
+          "read": {
+            "label": "Read custom records",
+            "help": "Read published custom record types"
+          },
+          "create": {
+            "label": "Manage custom records",
+            "help": "Create, update, and delete custom records"
+          }
+        },
+        "gl": {
+          "read": {
+            "label": "Read the general ledger",
+            "help": "Read accounts and posted journal entries"
+          },
+          "post": {
+            "label": "Create and post journals",
+            "help": "Create governed balanced journals"
+          }
+        },
+        "ap": {
+          "read": {
+            "label": "Read payables",
+            "help": "Read vendor bills"
+          },
+          "create": {
+            "label": "Manage vendor bills",
+            "help": "Create, update, submit, and delete bills"
+          },
+          "post": {
+            "label": "Post vendor bills",
+            "help": "Post governed vendor bills to the ledger"
+          },
+          "pay": {
+            "label": "Read payments",
+            "help": "Read payment documents"
+          }
+        },
+        "ar": {
+          "read": {
+            "label": "Read receivables",
+            "help": "Read customer invoices"
+          },
+          "create": {
+            "label": "Manage customer invoices",
+            "help": "Create, update, submit, and delete invoices"
+          },
+          "post": {
+            "label": "Post customer invoices",
+            "help": "Post governed customer invoices to the ledger"
+          }
+        },
+        "parties": {
+          "read": {
+            "label": "Read parties",
+            "help": "Read customers, vendors, and employees"
+          },
+          "manage": {
+            "label": "Manage parties",
+            "help": "Create, update, and delete parties"
+          }
+        },
+        "items": {
+          "read": {
+            "label": "Read items and services",
+            "help": "Read the item catalog"
+          },
+          "manage": {
+            "label": "Manage items and services",
+            "help": "Create, update, and delete catalog items"
+          }
+        },
+        "projects": {
+          "read": {
+            "label": "Read projects",
+            "help": "Read projects and jobs"
+          },
+          "manage": {
+            "label": "Manage projects",
+            "help": "Create, update, and delete projects"
+          }
+        },
+        "assets": {
+          "read": {
+            "label": "Read fixed assets",
+            "help": "Read fixed assets"
+          },
+          "manage": {
+            "label": "Manage fixed assets",
+            "help": "Create, update, and delete fixed assets"
+          }
+        }
+      }
+    },
+    "files": {
+      "selectToEdit": "Select a file to edit.",
+      "loading": "Loading…",
+      "binaryInfo": "Binary file · {contentType} · {size} bytes"
+    },
+    "runs": {
+      "empty": "No runs yet — the backend has never been called.",
+      "units": "{units} units"
+    }
   }
 }
