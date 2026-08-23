@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
@@ -47,7 +48,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!ownedSub.rows[0]) {
     return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
   }
-  const acquisitionCost = normalizeMoney(unit.purchase_price || '0')
+  const acquisitionCostRaw = canonicalDecimal(unit.purchase_price || '0', 4)
+  if (acquisitionCostRaw === null) {
+    return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
+  }
+  let acquisitionCost: string
+  try {
+    acquisitionCost = normalizeMoney(acquisitionCostRaw)
+  } catch {
+    return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
+  }
 
   const categoryId = await ensureDefaultCategory(orgId, userId)
   const nextRes = (await db.execute<{ n: number }>(sql`
