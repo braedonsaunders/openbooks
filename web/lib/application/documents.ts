@@ -6,6 +6,7 @@ import {
   requestDocumentVoid,
 } from "@openbooks/engine/src/document-void.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/src/control-accounts.ts";
 import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
 import {
   controlDeps,
@@ -92,6 +93,7 @@ function domainFailure(error: unknown): never {
     error instanceof DocumentVoidError
     || error instanceof DocumentEditError
     || error instanceof PostingError
+    || error instanceof ControlAccountsIncompleteError
   ) {
     throw new ApplicationError(
       "invalid_input",

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { getAuthz, can } from '../../../../lib/authz'
 import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
@@ -142,7 +143,12 @@ export async function POST(req: Request) {
     await runPostDocumentEffects(doc.id, outcome.previousStatus)
     return NextResponse.json({ ok: true, entryId: outcome.entryId })
   } catch (e) {
-    const status = e instanceof PostingError ? 422 : 500
+    // Posting refusals (kernel rules or unconfigured org control accounts) are
+    // request-state failures, not server defects.
+    const status =
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+        ? 422
+        : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }

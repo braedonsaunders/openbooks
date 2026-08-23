@@ -7,15 +7,13 @@ import {
   runPostDocumentEffects,
 } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import {
+  ControlAccountsIncompleteError,
+  loadRequiredControlAccounts,
+} from '@openbooks/engine/src/control-accounts.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
-
-async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
-  const c = r.rows[0]?.c ?? {}
-  return { control: { ar: c.ar, ap: c.ap, bank: c.bank, taxCollected: c.taxCollected, taxPaid: c.taxPaid } }
-}
 
 /**
  * Manual-journal actions. A draft is submitted through the tenant's active
@@ -61,14 +59,12 @@ export async function POST(req: Request) {
 
           // Defer after-post scripts/flows until the database transaction has
           // durably committed. Financial writes remain inside this transaction.
-          const entryId = await postDocument(
-            body.documentId!,
-            await controlDeps(gate.user.orgId),
-            {
-              deferEffects: true,
-              audit: { actorId: gate.user.id, source: 'ui' },
-            },
-          )
+          const entryId = await postDocument(body.documentId!, {
+            control: await loadRequiredControlAccounts(gate.user.orgId),
+          }, {
+            deferEffects: true,
+            audit: { actorId: gate.user.id, source: 'ui' },
+          })
           return { kind: 'posted' as const, entryId, previousStatus }
         })
 
@@ -100,7 +96,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
   } catch (e) {
-    const status = e instanceof PostingError ? 422 : 500
+    // Posting refusals (kernel rules or unconfigured org control accounts) are
+    // request-state failures, not server defects.
+    const status =
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+        ? 422
+        : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }
