@@ -1,11 +1,24 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { createPaymentRun } from '@openbooks/engine/src/payments.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'
 
 export const runtime = 'nodejs'
+
+const createRunBody = z.object({
+  paymentBankProfileId: z
+    .string({ error: 'paymentBankProfileId is required' })
+    .refine((v) => uuidId.safeParse(v).success, 'paymentBankProfileId is required'),
+  billDocumentIds: z
+    .array(uuidId, { error: 'select at least one bill' })
+    .min(1, 'select at least one bill'),
+  scheduledFor: isoDate().nullable().optional(),
+  selectionCriteria: z.record(z.string(), z.unknown()).optional(),
+})
 
 export async function GET() {
   const gate = await guardPermission('ap.pay')
@@ -33,18 +46,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const body = (await req.json()) as {
-    paymentBankProfileId?: string
-    billDocumentIds?: string[]
-    scheduledFor?: string | null
-    selectionCriteria?: Record<string, unknown>
-  }
-  if (!body.paymentBankProfileId) {
-    return NextResponse.json({ error: 'paymentBankProfileId is required' }, { status: 400 })
-  }
-  if (!Array.isArray(body.billDocumentIds) || body.billDocumentIds.length === 0) {
-    return NextResponse.json({ error: 'select at least one bill' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, createRunBody)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
 
   try {
     const run = await createPaymentRun({
