@@ -22,8 +22,13 @@ import { inventoryFeatureEnabled } from "./inventory.ts";
  * interval. Billing is claimed with the scheduler's advance-and-guard trick so
  * it can never double-bill, and a failed attempt rolls its claim back —
  * guarded on the claimed value — so the occurrence is retried, never silently
- * lost. Gated by the org's `subscriptionBilling` feature —
- * disabling the feature stops automated billing without touching any data.
+ * lost. Every billed period — advanced lifecycle or plain plan — commits a
+ * `subscription_period_invoices` guard row next to its invoice, so a retried
+ * tick replays the committed invoice instead of cutting a second one.
+ * Success bookkeeping (run_count/last_invoice_id) runs outside the claim-
+ * rollback scope for the same reason. Gated by the org's `subscriptionBilling`
+ * feature — disabling the feature stops automated billing without touching any
+ * data.
  */
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
@@ -374,17 +379,30 @@ async function billOne(
   const price = sub.priceOverride ?? sub.planAmount;
   const advanced = await advancedBillingSnapshot(sub.orgId, sub.id, billingDate, periodStartOverride);
   if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
-  if (advanced) {
-    const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
-      select d.id as "invoiceId", d.document_number as "documentNumber", d.status
-        from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
-       where pi.org_id = ${sub.orgId} and pi.subscription_id = ${sub.id}
-         and pi.period_starts_on = ${advanced.periodStartsOn}
-         and pi.period_ends_on = ${advanced.periodEndsOn} and pi.contract_revision = ${advanced.contractRevision}
-       limit 1
-    `));
-    if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
-  }
+  // ONE occurrence key per billed invoice, lifecycle-managed or not, recorded
+  // through the same subscription_period_invoices guard (single source of
+  // truth). Advanced lifecycles use their frozen period window + contract
+  // revision; plain plan-based subs derive the same shape deterministically
+  // from the occurrence itself — the service period that starts on the billed
+  // date, at revision 1 (plain plans have no amendments). Without this, a tick
+  // whose success bookkeeping failed after posting rolled its claim back and
+  // the retry re-cut a second invoice for the same period.
+  const guard = advanced
+    ? { startsOn: advanced.periodStartsOn, endsOn: advanced.periodEndsOn, revision: advanced.contractRevision }
+    : {
+        startsOn: billingDate,
+        endsOn: advanceSubscription(billingDate, sub.interval, sub.intervalCount),
+        revision: 1,
+      };
+  const prior = (await db.execute<{ invoiceId: string; documentNumber: string; status: string }>(sql`
+    select d.id as "invoiceId", d.document_number as "documentNumber", d.status
+      from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
+     where pi.org_id = ${sub.orgId} and pi.subscription_id = ${sub.id}
+       and pi.period_starts_on = ${guard.startsOn}
+       and pi.period_ends_on = ${guard.endsOn} and pi.contract_revision = ${guard.revision}
+     limit 1
+  `));
+  if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
   const generated = await createSubscriptionInvoice({
     orgId: sub.orgId,
     actorId: sub.id,
@@ -402,14 +420,12 @@ async function billOne(
     autoPost: sub.autoPost,
     lines: advanced?.lines,
   });
-  if (advanced) {
-    await db.execute(sql`
-      insert into subscription_period_invoices
-        (org_id, subscription_id, period_starts_on, period_ends_on, contract_revision, invoice_id, created_by, updated_by)
-      values (${sub.orgId}, ${sub.id}, ${advanced.periodStartsOn}, ${advanced.periodEndsOn},
-              ${advanced.contractRevision}, ${generated.invoiceId}, ${sub.createdBy}, ${sub.createdBy})
-    `);
-  }
+  await db.execute(sql`
+    insert into subscription_period_invoices
+      (org_id, subscription_id, period_starts_on, period_ends_on, contract_revision, invoice_id, created_by, updated_by)
+    values (${sub.orgId}, ${sub.id}, ${guard.startsOn}, ${guard.endsOn},
+            ${guard.revision}, ${generated.invoiceId}, ${sub.createdBy}, ${sub.createdBy})
+  `);
   return generated;
 }
 
@@ -491,8 +507,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     );
     if (!claimed.rows.length) continue;
 
+    let sub: { invoiceId: string; documentNumber: string; posted: boolean };
     try {
-      const sub = await withOrg(row.orgId, async () => {
+      sub = await withOrg(row.orgId, async () => {
         const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`));
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
@@ -500,12 +517,6 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       });
       result.billed += 1;
       if (sub.posted) result.posted += 1;
-      await withBypass(async () => {
-        await db.execute(sql`
-          update subscriptions set run_count = run_count + 1, last_invoice_id = ${sub.invoiceId}, last_error = null
-           where id = ${row.id} and org_id = ${row.orgId}
-        `);
-      });
     } catch (e) {
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
@@ -522,6 +533,30 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
            where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${rollback.expectedNextBillOn}
         `);
         await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`);
+      });
+      continue;
+    }
+    // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
+    // point billOne durably committed exactly one invoice for this period —
+    // together with its subscription_period_invoices guard row — so a transient
+    // bookkeeping failure must NOT roll the claim back: restoring next_bill_on
+    // after a posted invoice is precisely how a tick used to double-bill.
+    // Surface through last_error instead; the claim stays advanced.
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`
+          update subscriptions set run_count = run_count + 1, last_invoice_id = ${sub.invoiceId}, last_error = null
+           where id = ${row.id} and org_id = ${row.orgId}
+        `);
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[subscriptions] success bookkeeping failed for subscription ${row.id}:`, message);
+      await withBypass(async () => {
+        await db.execute(sql`
+          update subscriptions set last_error = ${`invoiced ${sub.documentNumber} but bookkeeping failed: ${message}`}
+           where id = ${row.id} and org_id = ${row.orgId}
+        `);
       });
     }
   }
