@@ -1,31 +1,45 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   loadPaymentDocument,
   updateDraftPayment,
-  type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { can, getAuthz, type Authz } from '../../../../lib/authz'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
 
-/** Exact numeric(19,4) money string, or 'invalid'. */
-function exactMoney(v: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
-  try {
-    return normalizeMoney(exact)
-  } catch {
-    return 'invalid'
-  }
-}
+/** One open-item application on a draft payment (engine AllocationInput). */
+const allocationInput = z.object({
+  openLineId: z.string().min(1),
+  /** Amount consumed from the payment/credit source, in the payment currency. */
+  sourceTransactionAmount: exactMoney,
+  /** Amount extinguished on the invoice/bill, in the target open-item currency. */
+  targetTransactionAmount: exactMoney,
+  /** Optional independently saved target carrying value, revalidated at posting. */
+  targetBaseAmount: exactMoney.optional(),
+  /** Target-currency units for one source-currency unit. Required cross-currency. */
+  settlementRate: z.string().min(1),
+  settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
+  /** Bank advice, contract, provider observation, or import evidence reference. */
+  settlementRateReference: z.string(),
+  settlementFxRateId: nullableUuidId.optional(),
+})
+
+const paymentPatchBody = z.object({
+  partyId: nullableUuidId.optional(),
+  bankAccountId: nullableUuidId.optional(),
+  documentDate: isoDate().optional(),
+  referenceNumber: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+  allocations: z.array(allocationInput).optional(),
+})
 
 /** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly. */
 async function gateForDocument(
@@ -64,46 +78,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
 
-  const body = (await req.json()) as {
-    partyId?: string | null
-    bankAccountId?: string | null
-    documentDate?: string
-    referenceNumber?: string | null
-    memo?: string | null
-    allocations?: AllocationInput[]
-  }
-
-  let allocations = body.allocations
-  if (allocations !== undefined) {
-    if (!Array.isArray(allocations)) {
-      return NextResponse.json({ error: 'allocation amounts must be exact decimals' }, { status: 422 })
-    }
-    const exact: AllocationInput[] = []
-    for (const allocation of allocations) {
-      const sourceTransactionAmount = exactMoney(allocation?.sourceTransactionAmount)
-      const targetTransactionAmount = exactMoney(allocation?.targetTransactionAmount)
-      const targetBaseAmount = allocation?.targetBaseAmount === undefined
-        ? undefined
-        : exactMoney(allocation.targetBaseAmount)
-      if (
-        sourceTransactionAmount === 'invalid' ||
-        targetTransactionAmount === 'invalid' ||
-        targetBaseAmount === 'invalid'
-      ) {
-        return NextResponse.json({ error: 'allocation amounts must be exact decimals' }, { status: 422 })
-      }
-      exact.push({
-        ...allocation,
-        sourceTransactionAmount,
-        targetTransactionAmount,
-        ...(targetBaseAmount === undefined ? {} : { targetBaseAmount }),
-      })
-    }
-    allocations = exact
-  }
+  const parsed = await parseJsonBody(req, paymentPatchBody, { status: 422 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
 
   try {
-    await updateDraftPayment(id, { ...body, allocations }, gate.authz.user.id, gate.authz.user.orgId)
+    await updateDraftPayment(id, body, gate.authz.user.id, gate.authz.user.orgId)
     const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
     return NextResponse.json(payment)
   } catch (e) {
