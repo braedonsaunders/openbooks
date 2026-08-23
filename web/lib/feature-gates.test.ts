@@ -2687,6 +2687,11 @@ test('the surfaces this test was written for are covered', () => {
     'the dashboard picker must omit Continuous Close navigate when Continuous Close is off — stored layouts stay',
   )
   assert.match(
+    read('app/(app)/dashboard/actions.ts'),
+    /mod\.key === 'approvals' && !featureOn\.get\('flows'\)/,
+    'the dashboard picker must omit Approvals navigate when Flows is off — stored layouts stay',
+  )
+  assert.match(
     read('app/(app)/layout.tsx'),
     /projects: can\(authz, 'projects\.manage'\) && projectsEnabled/,
     'the global create menu must hide Project when Projects is off — the draft API refuses',
