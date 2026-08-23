@@ -70,7 +70,7 @@ export function prorateLeaseCharge(amount: string, nominalStart: string, nominal
   const total = dayCount(nominalStart, nominalEnd);
   const active = Math.max(0, dayCount(maxDate(nominalStart, activeStart), minDate(nominalEnd, activeEnd)));
   if (active <= 0 || total <= 0) return "0.0000";
-  return mulRatio(normalizeMoney(amount), BigInt(active), BigInt(total));
+  return mulRatio(exactMoney(amount, "Charge amount"), BigInt(active), BigInt(total));
 }
 
 /** Deterministic charge schedule used by activation, amendments, and tests. */
