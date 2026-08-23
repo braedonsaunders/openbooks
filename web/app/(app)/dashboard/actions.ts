@@ -164,6 +164,8 @@ export async function listQuickActionOptions(): Promise<{
       ...CURATED_QUICK_ACTIONS.map((action) => action.requiredFeature),
       // NAV_MODULES Projects is not a curated create chip — still 404s /projects when off.
       'projects',
+      // NAV_MODULES estimates/sales-orders/purchase-orders — still 404 when Orders is off.
+      'orders',
     ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
@@ -191,6 +193,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.key === 'expenses' && !featureOn.get('expenses')) continue
     // Same requiredFeature filter: /projects 404s when Projects is off.
     if (mod.key === 'projects' && !featureOn.get('projects')) continue
+    // Same requiredFeature filter: /estimates|/sales-orders|/purchase-orders 404 when Orders is off.
+    if ((mod.key === 'estimates' || mod.key === 'sales-orders' || mod.key === 'purchase-orders') && !featureOn.get('orders')) continue
     common.push({
       label: mod.label,
       href: mod.href,
