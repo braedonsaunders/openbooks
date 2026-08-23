@@ -7,6 +7,7 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
+import { auditConfigChange } from '../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -45,19 +46,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       ) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
-      const updated = (await db.execute(sql`
-        update payment_formats set
-          name = coalesce(${body.name?.trim() ?? null}, name),
-          country = case when ${body.country === undefined} then country else ${body.country ?? null} end,
-          currency = case when ${body.currency === undefined} then currency else ${body.currency?.trim().toUpperCase() || null} end,
-          file_extension = coalesce(${body.fileExtension?.trim().replace(/^\./, '') ?? null}, file_extension),
-          content_type = coalesce(${body.contentType?.trim() ?? null}, content_type),
-          formatter_script = case when ${body.formatterScript === undefined} then formatter_script else ${body.formatterScript || null} end,
-          is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
-        where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
-        returning id
+      const before = (await db.execute<Record<string, any>>(sql`
+        select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
       `))
-      if (!updated.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
+      if (!before.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
+      await db.transaction(async (tx) => {
+        const updated = (await tx.execute<Record<string, any>>(sql`
+          update payment_formats set
+            name = coalesce(${body.name?.trim() ?? null}, name),
+            country = case when ${body.country === undefined} then country else ${body.country ?? null} end,
+            currency = case when ${body.currency === undefined} then currency else ${body.currency?.trim().toUpperCase() || null} end,
+            file_extension = coalesce(${body.fileExtension?.trim().replace(/^\./, '') ?? null}, file_extension),
+            content_type = coalesce(${body.contentType?.trim() ?? null}, content_type),
+            formatter_script = case when ${body.formatterScript === undefined} then formatter_script else ${body.formatterScript || null} end,
+            is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
+          where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
+          returning *
+        `))
+        await auditConfigChange(tx, gate.user.orgId, 'payment_formats', id, 'update',
+          { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+      })
     } else if (resource === 'schedules') {
       const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
       if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -67,28 +75,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
         if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       }
-      await db.execute(sql`
-        update payment_schedules set
-          name = coalesce(${body.name?.trim() ?? null}, name),
-          payment_bank_profile_id = coalesce(${body.paymentBankProfileId ?? null}::uuid, payment_bank_profile_id),
-          cron = coalesce(${body.cron?.trim() ?? null}, cron),
-          timezone = coalesce(${body.timezone?.trim() ?? null}, timezone),
-          selection_criteria = coalesce(${body.selectionCriteria ? JSON.stringify(body.selectionCriteria) : null}::jsonb, selection_criteria),
-          action = coalesce(${body.action ?? null}, action),
-          next_run_at = coalesce(${next ?? null}, next_run_at),
-          is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
-        where id = ${id} and org_id = ${gate.user.orgId}
-      `)
+      await db.transaction(async (tx) => {
+        const before = (await tx.execute<Record<string, any>>(sql`
+          select * from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}
+        `))
+        const updated = (await tx.execute<Record<string, any>>(sql`
+          update payment_schedules set
+            name = coalesce(${body.name?.trim() ?? null}, name),
+            payment_bank_profile_id = coalesce(${body.paymentBankProfileId ?? null}::uuid, payment_bank_profile_id),
+            cron = coalesce(${body.cron?.trim() ?? null}, cron),
+            timezone = coalesce(${body.timezone?.trim() ?? null}, timezone),
+            selection_criteria = coalesce(${body.selectionCriteria ? JSON.stringify(body.selectionCriteria) : null}::jsonb, selection_criteria),
+            action = coalesce(${body.action ?? null}, action),
+            next_run_at = coalesce(${next ?? null}, next_run_at),
+            is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
+          where id = ${id} and org_id = ${gate.user.orgId}
+          returning *
+        `))
+        if (!before.rows[0] || !updated.rows[0]) return
+        await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', id, 'update',
+          { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+      })
     } else {
-      await db.execute(sql`
-        update payment_mandates set
-          status = coalesce(${body.status ?? null}, status),
-          signed_on = case when ${body.signedOn === undefined} then signed_on else ${body.signedOn || null}::date end,
-          valid_from = case when ${body.validFrom === undefined} then valid_from else ${body.validFrom || null}::date end,
-          expires_on = case when ${body.expiresOn === undefined} then expires_on else ${body.expiresOn || null}::date end,
-          updated_at = now(), updated_by = ${gate.user.id}
-        where id = ${id} and org_id = ${gate.user.orgId}
-      `)
+      await db.transaction(async (tx) => {
+        const before = (await tx.execute<Record<string, any>>(sql`
+          select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
+        `))
+        const updated = (await tx.execute<Record<string, any>>(sql`
+          update payment_mandates set
+            status = coalesce(${body.status ?? null}, status),
+            signed_on = case when ${body.signedOn === undefined} then signed_on else ${body.signedOn || null}::date end,
+            valid_from = case when ${body.validFrom === undefined} then valid_from else ${body.validFrom || null}::date end,
+            expires_on = case when ${body.expiresOn === undefined} then expires_on else ${body.expiresOn || null}::date end,
+            updated_at = now(), updated_by = ${gate.user.id}
+          where id = ${id} and org_id = ${gate.user.orgId}
+          returning *
+        `))
+        if (!before.rows[0] || !updated.rows[0]) return
+        await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', id, 'update',
+          { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+      })
     }
     return NextResponse.json({ ok: true })
   } catch (error) {

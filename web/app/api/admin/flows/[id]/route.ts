@@ -105,10 +105,22 @@ export async function PATCH(req: Request, { params }: Params) {
     if (!lint.ok) return NextResponse.json({ errors: lint.errors }, { status: 400 })
   }
 
-  await db.execute(sql`
-    update flows set ${sql.join(sets, sql`, `)}
-     where id = ${id} and org_id = ${user.orgId}
-  `)
+  await db.transaction(async (tx) => {
+    const updated = (await tx.execute<Record<string, unknown>>(sql`
+      update flows set ${sql.join(sets, sql`, `)}
+       where id = ${id} and org_id = ${user.orgId}
+       returning *
+    `))
+    if (!updated.rows[0]) throw new Error('flow_changed')
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${user.orgId}, 'flows', ${id}, 'update',
+         ${JSON.stringify({ before: flow, after: updated.rows[0] })}::jsonb,
+         ${user.id}, ${req.headers.get('X-Request-Id')})
+    `)
+  })
   return NextResponse.json({ ok: true, warnings })
 }
 
@@ -141,8 +153,29 @@ export async function DELETE(_req: Request, { params }: Params) {
   }
 
   // Explicit child cleanup (gates → effects → runs → flow) inside one
-  // transaction, so the delete works even before the cascade FKs land.
+  // transaction, so the delete works even before the cascade FKs land. Flows
+  // have no soft-delete column, so the full definition — the row, every gate
+  // it ever created, and the run-history summary — is captured in the audit
+  // payload before the cascade destroys it (the audit log is append-only).
   await db.transaction(async (tx) => {
+    const gates = (await tx.execute<Record<string, unknown>>(sql`
+      select * from flow_gates where flow_id = ${id} and org_id = ${orgId}
+    `))
+    const runs = (await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n from flow_runs where flow_id = ${id} and org_id = ${orgId}
+    `))
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${orgId}, 'flows', ${id}, 'delete',
+         ${JSON.stringify({
+           before: flow,
+           gates: gates.rows,
+           runsDeleted: runs.rows[0]?.n ?? 0,
+         })}::jsonb,
+         ${gate.user.id}, ${_req.headers.get('X-Request-Id')})
+    `)
     await tx.execute(sql`delete from flow_gates where flow_id = ${id} and org_id = ${orgId}`)
     await tx.execute(sql`
       delete from flow_run_effects where org_id = ${orgId}

@@ -46,11 +46,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
   }
 
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
-    values (${user.orgId}, ${name}, ${subjectKind}, false,
-            ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
-    returning id
-  `))
-  return NextResponse.json({ id: r.rows[0]!.id })
+  const id = await db.transaction(async (tx) => {
+    const r = (await tx.execute<{ id: string }>(sql`
+      insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
+      values (${user.orgId}, ${name}, ${subjectKind}, false,
+              ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
+      returning *
+    `))
+    const created = r.rows[0]!
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${user.orgId}, 'flows', ${created.id}, 'insert',
+         ${JSON.stringify({ after: created })}::jsonb,
+         ${user.id}, ${req.headers.get('X-Request-Id')})
+    `)
+    return created.id
+  })
+  return NextResponse.json({ id })
 }
