@@ -1852,12 +1852,12 @@ test('the surfaces this test was written for are covered', () => {
     'property management must not load the asset picker when Fixed Assets is off',
   )
   assert.match(
-    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    read('app/(app)/property-management/PropertyDetailDrawer.tsx'),
     /fixedAssetsEnabled \? \{[\s\S]{0,80}fixedAssetId/,
     'the property form must not send fixedAssetId when Fixed Assets is off',
   )
   assert.match(
-    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    read('app/(app)/property-management/PropertyDrawer.tsx'),
     /\{fixedAssetsEnabled \? <Field label="Fixed asset">/,
     'the property form must hide the fixed-asset picker when Fixed Assets is off',
   )
@@ -1887,12 +1887,12 @@ test('the surfaces this test was written for are covered', () => {
     'property management must not load the currency picker when Multi-currency is off',
   )
   assert.match(
-    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    read('app/(app)/property-management/PropertyDrawer.tsx'),
     /multiCurrency \? \{[\s\S]{0,80}currency/,
     'the property form must not send currency when Multi-currency is off',
   )
   assert.match(
-    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    read('app/(app)/property-management/PropertyDetailDrawer.tsx'),
     /case "currency":\s*if \(!multiCurrency\) return null/,
     'the property form must hide the currency control when Multi-currency is off',
   )
@@ -1907,7 +1907,7 @@ test('the surfaces this test was written for are covered', () => {
     'lease-charge addCharge must 404 — not persist inventory/assembly/kit items — when Inventory is off — stored charges stay',
   )
   assert.match(
-    read('app/(app)/property-management/PropertyManagementWorkspace.tsx'),
+    read('app/(app)/property-management/LeaseSections.tsx'),
     /incomeAccountId: "",\s*taxCodeId: "",/,
     'the lease-charge form must not send itemId — stored charges stay',
   )
