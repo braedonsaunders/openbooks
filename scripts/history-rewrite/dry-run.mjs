@@ -2,8 +2,8 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   containsProhibitedIdentifier,
@@ -11,7 +11,7 @@ import {
   redactLikeCallbacks,
 } from "./build-callbacks.mjs";
 
-const prohibitedPathPatterns = [
+export const prohibitedPathPatterns = [
   /(?:^|\/)\.local\/tenant-migrations(?:\/|$)/i,
   /(?:^|\/)account-data(?:\/|$)/i,
   /(?:^|\/)extraction(?:\/|$)/i,
@@ -73,6 +73,8 @@ function plannedPurgeMatches(path) {
       : filter.regex.test(path),
   );
 }
+
+export { plannedPurgeMatches };
 
 function auditSiblingFiles(hashes) {
   const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -233,10 +235,16 @@ function run() {
   );
 }
 
-try {
-  run();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`dry-run failed: ${message}\n`);
-  process.exitCode = 1;
+const isMain =
+  process.argv[1] !== undefined &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+
+if (isMain) {
+  try {
+    run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`dry-run failed: ${message}\n`);
+    process.exitCode = 1;
+  }
 }

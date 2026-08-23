@@ -46,6 +46,7 @@
     "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
     "check:container-security": "node scripts/check-container-security.mjs",
     "test:load-harness": "node --test scripts/load-smoke.test.mjs",
+    "test:history-rewrite": "node --test scripts/history-rewrite/history-rewrite.test.mjs",
     "test:load": "node scripts/load-smoke.mjs",
     "test": "npm run check:product-neutrality && OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
     "verify:release": "npm run check:dependencies && npm run check:container-security && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"

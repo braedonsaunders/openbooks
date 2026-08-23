@@ -11,8 +11,7 @@ const gatePath = fileURLToPath(
   new URL("../check-history-hygiene.mjs", import.meta.url),
 );
 
-export function loadProhibitedIdentifierHashes() {
-  const gateSource = readFileSync(gatePath, "utf8");
+export function parseProhibitedIdentifierHashes(gateSource) {
   const declaration = gateSource.match(
     /const\s+prohibitedIdentifierHashes\s*=\s*new Set\(\[([\s\S]*?)\]\);/u,
   );
@@ -42,6 +41,10 @@ export function loadProhibitedIdentifierHashes() {
   }
 
   return new Set(hashes);
+}
+
+export function loadProhibitedIdentifierHashes() {
+  return parseProhibitedIdentifierHashes(readFileSync(gatePath, "utf8"));
 }
 
 export function tokensLikeGate(value) {
