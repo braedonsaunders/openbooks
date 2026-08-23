@@ -80,3 +80,68 @@ test("a failed generation tick rolls its claim back instead of losing the occurr
     /where id = \$\{s\.id\} and org_id = \$\{s\.orgId\} and next_run_on = \$\{occurrenceDate\}/,
   );
 });
+
+test("generation is guarded per occurrence before anything is created", () => {
+  // The dedupe guard (recurring_occurrence_documents) must be consulted BEFORE
+  // the clone begins and written INSIDE the generation transaction that creates
+  // the document — so a retried tick replays the committed document instead of
+  // re-posting the occurrence.
+  const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
+  const gen = source.indexOf("async function generateFromTemplate");
+  const lock = source.indexOf("for update", gen);
+  const replay = source.indexOf(
+    "findOccurrenceDocument(orgId, occurrence.scheduleId, occurrence.occurrenceOn)",
+    gen,
+  );
+  const tplLoad = source.indexOf("select * from documents where id = ${templateId}", gen);
+  const guardInsert = source.indexOf("insert into recurring_occurrence_documents", gen);
+  assert.ok(gen >= 0, "generateFromTemplate exists");
+  assert.ok(lock > gen && lock < tplLoad, "the schedule row lock serializes same-schedule attempts first");
+  assert.ok(replay > lock && replay < tplLoad, "the committed occurrence document is replayed before any creation");
+  assert.ok(guardInsert > tplLoad && guardInsert < source.indexOf("return { documentId: newId", gen),
+    "the guard row naming the new document commits inside the same transaction");
+});
+
+test("both entry points pass their occurrence date to the guard", () => {
+  const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueRecurringSchedules");
+  const nowFn = source.indexOf("export async function runScheduleNow");
+  assert.ok(source.indexOf("occurrenceOn: occurrenceDate", run) > run,
+    "a scheduled tick guards its claimed occurrence date");
+  assert.ok(source.indexOf("occurrenceOn: today", nowFn) > nowFn,
+    "run now also guards by its document date so a double-click cannot double-post");
+});
+
+test("success bookkeeping can never roll the claim back after a document exists", () => {
+  // The rollback catch restores next_run_on ONLY when generation itself threw;
+  // it must hand control back (continue) before the success-bookkeeping block,
+  // whose failure path touches last_error alone — never next_run_on.
+  const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueRecurringSchedules");
+  const claim = source.indexOf("set next_run_on = ${advanced}", run);
+  const rollbackCatch = source.indexOf("} catch (e) {", claim);
+  const skipBookkeeping = source.indexOf("continue;", rollbackCatch);
+  const bookkeeping = source.indexOf("set run_count = run_count + 1", skipBookkeeping);
+  const bookkeepingCatch = source.indexOf("} catch (e) {", bookkeeping);
+  const loopEnd = source.indexOf("return result;", run);
+  assert.ok(skipBookkeeping > rollbackCatch, "the rollback catch skips success bookkeeping");
+  assert.ok(bookkeeping > skipBookkeeping && bookkeeping < loopEnd,
+    "bookkeeping runs in its own scope after the rollback catch");
+  const bookkeepingFailurePath = source.slice(bookkeepingCatch, loopEnd);
+  assert.match(bookkeepingFailurePath, /last_error/,
+    "a bookkeeping failure still surfaces through last_error");
+  assert.doesNotMatch(bookkeepingFailurePath, /next_run_on/,
+    "a bookkeeping failure never restores next_run_on once a document was produced");
+});
+
+test("the occurrence-guard table enforces one document per occurrence at the schema level", () => {
+  const migration = readFileSync(
+    new URL("../../schema/migrations/generated/0006_recurring_occurrence_guard.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS recurring_occurrence_once\s*\n?\s*ON public\.recurring_occurrence_documents USING btree \(org_id, schedule_id, occurrence_on\)/);
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /CREATE POLICY org_isolation ON public\.recurring_occurrence_documents/);
+  assert.match(migration, /BEFORE DELETE OR UPDATE ON public\.recurring_occurrence_documents/,
+    "guard lineage is append-only, like subscription_period_invoices");
+});

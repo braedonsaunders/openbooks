@@ -22,6 +22,16 @@ import { computeNextRunAt } from "./scripting.ts";
  * occurrence, so horizontal scaling can never double-bill. A failed attempt
  * rolls its claim back — guarded on the claimed value — so the occurrence is
  * retried on the next tick, never silently lost.
+ *
+ * Retrying safely requires the generation itself to be idempotent per
+ * occurrence: each generated document is committed together with a
+ * `recurring_occurrence_documents` guard row (unique per org/schedule/occurrence
+ * date). A retried tick whose claim was rolled back — or a "run now" racing a
+ * tick — finds the committed guard row and replays that exact document instead
+ * of posting a second one. Success bookkeeping (run_count/last_document_id)
+ * runs outside the claim-rollback scope: once a document exists for the
+ * occurrence, a transient bookkeeping failure surfaces through last_error and
+ * never restores next_run_on.
  */
 
 export type Cadence =
@@ -223,6 +233,40 @@ export interface RecurringRunResult {
 }
 
 /**
+ * The occurrence a generation is for: one schedule, one due date. When passed,
+ * the generated document is committed with a matching
+ * `recurring_occurrence_documents` guard row and any later attempt for the same
+ * key replays that document instead of generating a second one.
+ */
+export interface OccurrenceKey {
+  scheduleId: string;
+  occurrenceOn: string;
+}
+
+/**
+ * The document an earlier attempt committed for this occurrence, if any.
+ * Replaying it — rather than generating again — is what makes a retried tick
+ * financially inert: the claim rollback can resurrect an occurrence only into
+ * a replay, never into a second posting.
+ */
+async function findOccurrenceDocument(
+  orgId: string,
+  scheduleId: string,
+  occurrenceOn: string,
+): Promise<{ documentId: string; documentNumber: string; posted: boolean } | null> {
+  const prior = (await db.execute<{ id: string; documentNumber: string; status: string }>(sql`
+    select d.id, d.document_number as "documentNumber", d.status
+      from recurring_occurrence_documents g
+      join documents d on d.id = g.document_id and d.org_id = g.org_id
+     where g.org_id = ${orgId} and g.schedule_id = ${scheduleId} and g.occurrence_on = ${occurrenceOn}
+     limit 1
+  `));
+  const row = prior.rows[0];
+  if (!row) return null;
+  return { documentId: row.id, documentNumber: row.documentNumber, posted: row.status === "posted" };
+}
+
+/**
  * Generate every recurring document that is due as of `asOf` (default: today).
  * Scans org-lessly under bypass, claims each occurrence, then does the clone +
  * optional post inside a per-org RLS transaction so posting sees the right
@@ -292,20 +336,17 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     });
     if (!claimed.rows.length) continue; // another tick won it
 
+    let gen: { documentId: string; documentNumber: string; posted: boolean };
     try {
-      const gen = await withOrg(s.orgId, async () =>
-        generateFromTemplate(s.orgId, s.templateId, asOf ?? (await businessToday(s.orgId)), s.autoPost),
+      gen = await withOrg(s.orgId, async () =>
+        generateFromTemplate(s.orgId, s.templateId, asOf ?? (await businessToday(s.orgId)), s.autoPost, {
+          scheduleId: s.id,
+          occurrenceOn: occurrenceDate,
+        }),
       );
       result.generated += 1;
       if (gen.posted) result.posted += 1;
       result.documents.push({ scheduleId: s.id, ...gen });
-      await withBypass(async () => {
-        await db.execute(sql`
-          update recurring_schedules
-             set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
-           where id = ${s.id} and org_id = ${s.orgId}
-        `);
-      });
     } catch (e) {
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
@@ -318,10 +359,37 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
           update recurring_schedules
              set next_run_on = ${rollback.nextRunOn}, is_active = ${rollback.isActive},
                  last_run_at = ${rollback.lastRunAt}
-           where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${rollback.expectedNextRunOn}
+            where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${rollback.expectedNextRunOn}
         `);
         await db.execute(sql`
           update recurring_schedules set last_error = ${message} where id = ${s.id} and org_id = ${s.orgId}
+        `);
+      });
+      continue;
+    }
+    // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
+    // point the occurrence durably produced exactly one document (the
+    // generation transaction committed it together with its occurrence-guard
+    // row), so a transient bookkeeping failure must NOT roll the claim back:
+    // restoring next_run_on after a posted document is precisely how a tick
+    // used to double-post. Surface through last_error instead; the claim stays
+    // advanced so the schedule moves on to its next occurrence.
+    try {
+      await withBypass(async () => {
+        await db.execute(sql`
+          update recurring_schedules
+             set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
+           where id = ${s.id} and org_id = ${s.orgId}
+        `);
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[recurring] success bookkeeping failed for schedule ${s.id}:`, message);
+      await withBypass(async () => {
+        await db.execute(sql`
+          update recurring_schedules
+             set last_error = ${`generated ${gen.documentNumber} but bookkeeping failed: ${message}`}
+           where id = ${s.id} and org_id = ${s.orgId}
         `);
       });
     }
@@ -332,7 +400,9 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
 /**
  * Force-generate one schedule immediately (the "run now" button), independent of
  * next_run_on. Does not advance the cadence — a manual run is out-of-band and
- * must not skip the next scheduled occurrence.
+ * must not skip the next scheduled occurrence. The manual document is still
+ * guarded per occurrence date, so a double-click — or a "run now" racing a tick
+ * due the same day — replays the first document instead of posting a duplicate.
  */
 export async function runScheduleNow(
   scheduleId: string,
@@ -348,7 +418,10 @@ export async function runScheduleNow(
   if (!row) throw new Error("recurring schedule not found");
   const today = asOf ?? (await businessToday(row.orgId));
   const gen = await withOrg(row.orgId, () =>
-    generateFromTemplate(row.orgId, row.templateId, today, row.autoPost),
+    generateFromTemplate(row.orgId, row.templateId, today, row.autoPost, {
+      scheduleId,
+      occurrenceOn: today,
+    }),
   );
   await withBypass(async () => {
     await db.execute(sql`
@@ -365,7 +438,25 @@ async function generateFromTemplate(
   templateId: string,
   documentDate: string,
   autoPost: boolean,
+  occurrence?: OccurrenceKey,
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
+  // Per-occurrence dedupe (see recurring_occurrence_documents). The caller's
+  // withOrg transaction pins one connection, so the lock, the replay check, the
+  // clone, and the guard insert below are one atomic unit.
+  if (occurrence) {
+    // Serialize concurrent generations for one schedule (a tick vs a "run now")
+    // exactly like billOne serializes invoice attempts on its subscription row:
+    // the loser waits here, then its replay check sees the winner's committed
+    // guard row instead of racing it to a duplicate document.
+    await db.execute(sql`
+      select id from recurring_schedules
+       where id = ${occurrence.scheduleId} and org_id = ${orgId}
+       for update
+    `);
+    const prior = await findOccurrenceDocument(orgId, occurrence.scheduleId, occurrence.occurrenceOn);
+    if (prior) return prior;
+  }
+
   const tplRes = (await db.execute<Record<string, any>>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId}
   `));
@@ -467,6 +558,19 @@ async function generateFromTemplate(
       await postDocument(newId, deps);
       posted = true;
     }
+  }
+  // Name the finished document for this occurrence in the same transaction that
+  // created it. If anything above threw, the guard row rolls back with the
+  // draft — a failed generation never consumes the occurrence. If it commits,
+  // every future attempt for this key replays the document below instead of
+  // re-posting it; the unique index backstops the invariant even under
+  // unexpected concurrency.
+  if (occurrence) {
+    await db.execute(sql`
+      insert into recurring_occurrence_documents
+        (org_id, schedule_id, occurrence_on, document_id, created_by)
+      values (${orgId}, ${occurrence.scheduleId}, ${occurrence.occurrenceOn}, ${newId}, ${tpl.created_by})
+    `);
   }
   return { documentId: newId, documentNumber, posted };
 }
