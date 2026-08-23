@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { BUILT_IN_ROLES } from "../../web/lib/permissions.ts";
+import { BUILT_IN_ROLES } from "./permissions.ts";
 import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
 
 /**

@@ -20,7 +20,7 @@ const FINANCIAL_REPORT_MODULES = [
   "engine/src/banking.ts",
   "engine/src/validation/project-parity-certificate.ts",
   "web/lib/reports.ts",
-  "web/lib/project-financials.ts",
+  "engine/src/project-financials.ts",
   "web/lib/project-costing.ts",
   "web/lib/budget-report.ts",
   "web/lib/statement-matrix.ts",
