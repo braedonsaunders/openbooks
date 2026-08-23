@@ -220,9 +220,13 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       if (subtotal === 'invalid') {
         return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
       }
+      const taxTotal = exactOrderMoney(computed.taxTotal)
+      if (taxTotal === 'invalid') {
+        return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
+      }
       totals = {
         subtotal,
-        taxTotal: normalizeMoney(computed.taxTotal),
+        taxTotal,
         total: normalizeMoney(computed.total),
       }
       preparedLines = []
