@@ -379,6 +379,7 @@ export async function POST(req: Request) {
                                        else employee_payroll_profiles.sin_encrypted end,
                   sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3
                                    else employee_payroll_profiles.sin_last3 end,
-                  updated_at = now(), updated_by = ${userId}`)
+                  updated_at = now(), updated_by = ${userId}
+    where employee_payroll_profiles.org_id = ${orgId}`)
   return NextResponse.json({ ok: true })
 }
