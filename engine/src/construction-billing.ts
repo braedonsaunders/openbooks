@@ -50,6 +50,18 @@ function persistRevisedScheduleValueInput(value: unknown): string {
   }
 }
 
+/** Persist a draw line's this-period-completed input through exact decimal
+ * then ledger money. Fail closed: it is written onto pay_application_lines. */
+function persistThisPeriodCompleted(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("this period completed must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("this period completed must be an exact decimal");
+  }
+}
+
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
   const result = (await tx.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
@@ -338,7 +350,7 @@ export async function submitPayApplication(
     for (const update of updates) {
       if (seen.has(update.sovLineId)) throw new ConstructionBillingError("A draw line was supplied more than once");
       seen.add(update.sovLineId);
-      const thisPeriod = normalizeMoney(update.thisPeriodCompleted || "0");
+      const thisPeriod = persistThisPeriodCompleted(update.thisPeriodCompleted || "0");
       const stored = normalizeMoney(update.materialsStored || "0");
       if (cmp(thisPeriod, "0") < 0 || cmp(stored, "0") < 0) {
         throw new ConstructionBillingError("Draw amounts cannot be negative");
