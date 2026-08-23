@@ -775,6 +775,13 @@ export async function handleProviderWebhook(
  * refunded, so a succeeded claim moves straight to 'succeeded' before
  * settlement runs — exactly one delivery wins the update, and a failed
  * settlement rolls back to 'initiated' below.
+ *
+ * One deliberate exception lives at the claim site (not here, because it is
+ * conditional on the journal marker): a succeeded event may re-claim an
+ * attempt stuck at succeeded whose settlement never completed
+ * (journal_entry_id is null) — the crash-between-claim-and-finalize window.
+ * Without it, collected money would strand as unbookable forever and the
+ * customer's retry would mint a second charge.
  */
 export const CLAIMABLE_FROM: Record<WebhookEvent["status"], string[]> = {
   succeeded: ["initiated"],
@@ -829,6 +836,18 @@ async function processWebhookEvent(
   // Atomic claim: exactly one concurrent delivery transitions the attempt out
   // of its current state; every later delivery sees a non-claimable row and
   // dedupes instead of settling again.
+  //
+  // Crash recovery: claim and settlement share one transaction, so a process
+  // death mid-settlement rolls the claim back — but a claim that committed
+  // before an earlier crash (or a finalize that never ran after an external
+  // post) leaves the attempt at succeeded with journal_entry_id null. Such a
+  // row is reclaimable by another succeeded event: settleAttempt resumes
+  // exactly-once (reusing any reserved receipt draft, minting one when the
+  // crash preceded the reservation). A fully settled attempt — journal entry
+  // written — stays terminal. The conditional update is also the resume lock:
+  // concurrent resumers serialize on the row lock for the whole settlement,
+  // and the loser rechecks journal_entry_id after the winner commits.
+  const claimableFrom = CLAIMABLE_FROM[event.status];
   let claim: { rows: { id: string }[] };
   try {
     claim = (await db.execute<{ id: string }>(sql`
@@ -838,7 +857,8 @@ async function processWebhookEvent(
              event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify(merge)}::jsonb,
              updated_at = now()
        where id = ${found.id} and org_id = ${orgId}
-         and status in (${sql.join(CLAIMABLE_FROM[event.status].map((s) => sql`${s}`), sql`, `)})
+         and (status in (${sql.join(claimableFrom.map((s) => sql`${s}`), sql`, `)})
+              ${event.status === "succeeded" ? sql`or (status = 'succeeded' and journal_entry_id is null)` : sql``})
        returning id
     `));
   } catch (err) {
