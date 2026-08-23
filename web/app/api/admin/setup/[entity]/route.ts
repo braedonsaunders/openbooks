@@ -17,6 +17,7 @@ import {
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
+import { auditSetupChange as audit } from '../../../../../lib/setup/audit'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 
@@ -46,20 +47,6 @@ function persistFxRateCols<T extends { column: string; value: unknown }>(cols: T
       ? { ...column, value: updateFxRate({ rate: column.value }) }
       : column,
   )
-}
-
-async function audit(args: {
-  orgId: string | null
-  table: string
-  rowId: string
-  action: 'insert' | 'update' | 'delete'
-  changes: Record<string, unknown>
-  actorId: string
-}, runner: Pick<typeof db, 'execute'> = db) {
-  await runner.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId})`)
 }
 
 /** Reconcile a tax group's members join table to exactly `taxCodeIds`. */
