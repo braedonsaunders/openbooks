@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { now } from "./clock.ts";
@@ -408,11 +409,14 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
       }));
       lines.push({ accountId: accts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
       const postingDate = group.postingDate || await businessToday(orgId);
+      // A released group (reverseProjectLaborCost) can be re-posted with the
+      // same date and first member, so the entry number must be unique per
+      // physical journal under journal_entries_org_number.
       const entryId = await postProjectGlEntryWithinTransaction(tx, {
         orgId,
         actorId,
         origin: "labor_burden",
-        entryNumber: `LAB-${postingDate}-${group.timeEntryIds[0].slice(0, 8)}`,
+        entryNumber: `LAB-${postingDate}-${group.timeEntryIds[0].slice(0, 8)}-${randomUUID().slice(0, 8)}`,
         postingDate,
         memo: "Approved labor cost → project WIP",
         subsidiaryId: group.subsidiaryId,
