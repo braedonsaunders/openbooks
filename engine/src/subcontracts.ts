@@ -127,6 +127,17 @@ function persistVendorPayApplicationMaterialsStoredCurrent(value: unknown): stri
   }
 }
 
+/** Persist leftover vendor-application retainage percent through exact decimal then ledger money. Fail closed. */
+function persistVendorPayApplicationRetainagePercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("retainage percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("retainage percent must be an exact decimal");
+  }
+}
+
 /** Persist leftover vendor-bill line gross through exact decimal then ledger money. Fail closed. */
 function persistVendorBillLineGross(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -179,7 +190,7 @@ export function computeVendorApplication(
     const previousStored = persistVendorPayApplicationPreviousMaterialsStored(input.previousMaterialsStored);
     const work = persistVendorPayApplicationWorkCompletedThisPeriod(input.workCompletedThisPeriod);
     const currentStored = persistVendorPayApplicationMaterialsStoredCurrent(input.materialsStoredCurrent);
-    const retainagePercent = normalizeMoney(input.retainagePercent);
+    const retainagePercent = persistVendorPayApplicationRetainagePercent(input.retainagePercent);
     if ([scheduled, previousEarned, previousStored, work, currentStored].some((value) => cmp(value, "0") < 0)) {
       throw new SubcontractError("Schedule and application amounts cannot be negative");
     }
