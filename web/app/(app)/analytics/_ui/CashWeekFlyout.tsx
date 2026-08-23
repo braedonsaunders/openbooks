@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Button, Drawer, cn } from '@openbooks/ui'
 import {
   History,
@@ -47,17 +48,6 @@ const CAT_METHOD_TONE: Record<string, string> = {
 }
 
 /** Human labels for the meta stats behind each estimate. */
-const META_LABELS: Record<string, string> = {
-  sourceTotal: 'Source total', weeksUsed: 'Weeks used', rawAverage: 'Raw avg', adjustmentPct: 'Adjustment %',
-  finalAverage: 'Weekly avg', monthlyMedian: 'Monthly median', finalWeekly: 'Weekly est', vendors: 'Vendors',
-  vendor: 'Vendor', amount: 'Amount', frequency: 'Frequency', detectedPaymentDay: 'Pays on day',
-  medianPayment: 'Median payment', avgPayment: 'Avg payment', currentBalance: 'Card balance',
-  daysSinceLastPayment: 'Days since paid', dailyBurnRate: 'Daily burn', monthlySpendRate: 'Monthly spend',
-  paymentTrend: 'Trend', monthsAnalyzed: 'Months analyzed', accountsIncluded: 'Accounts',
-  nextPaymentDate: 'Next payment', projectedGrowth: 'Projected growth', samples: 'Samples',
-  interval: 'Interval (days)', avgAmount: 'Avg amount', bankAccounts: 'Bank accounts',
-  historyWeeks: 'History weeks', currentWeekApplied: 'Applied this week', memoKeywords: 'Memo filter',
-}
 const MONEYISH = new Set(['sourceTotal','rawAverage','finalAverage','monthlyMedian','finalWeekly','amount','medianPayment','avgPayment','currentBalance','dailyBurnRate','monthlySpendRate','projectedGrowth','avgAmount','currentWeekApplied'])
 
 /**
@@ -93,6 +83,7 @@ export function CashWeekFlyout({
 }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const t = useTranslations('analytics.cashWeek')
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
@@ -140,15 +131,15 @@ export function CashWeekFlyout({
 
   // Breakdown — the summary rows, straight off the shared WeekRow.
   const breakdown: { label: string; value: number; icon: typeof Wallet; tone: string }[] = [
-    { label: 'Starting Cash', value: week.startingCash, icon: Wallet, tone: 'neutral' },
-    ...(week.apCapacity !== null ? [{ label: 'Safe AP Capacity', value: week.apCapacity, icon: ShieldCheck, tone: 'info' }] : []),
-    { label: 'Inflow (AR)', value: arTotal, icon: ArrowDown, tone: 'inflow' },
-    ...(otherIn > 0 ? [{ label: 'Inflow (Other)', value: otherIn, icon: ArrowDown, tone: 'inflow' }] : []),
-    { label: 'Outflow (AP)', value: apTotal, icon: ArrowUp, tone: 'outflow' },
-    ...catOuts.map((c) => ({ label: `Out: ${c.name}`, value: c.weekly[weekIndex] ?? 0, icon: ArrowUp, tone: 'outflow' })),
-    ...(week.deferredOut > 0 ? [{ label: 'Deferred (Backlog)', value: week.deferredOut, icon: Clock, tone: 'warning' }] : []),
-    { label: 'Net Change', value: week.net, icon: ArrowLeftRight, tone: week.net >= 0 ? 'positive' : 'negative' },
-    { label: 'Ending Cash', value: week.endingCash, icon: Landmark, tone: week.endingCash >= 0 ? 'neutral' : 'negative' },
+    { label: t('breakdown.startingCash'), value: week.startingCash, icon: Wallet, tone: 'neutral' },
+    ...(week.apCapacity !== null ? [{ label: t('breakdown.safeApCapacity'), value: week.apCapacity, icon: ShieldCheck, tone: 'info' }] : []),
+    { label: t('breakdown.inflowAr'), value: arTotal, icon: ArrowDown, tone: 'inflow' },
+    ...(otherIn > 0 ? [{ label: t('breakdown.inflowOther'), value: otherIn, icon: ArrowDown, tone: 'inflow' }] : []),
+    { label: t('breakdown.outflowAp'), value: apTotal, icon: ArrowUp, tone: 'outflow' },
+    ...catOuts.map((c) => ({ label: t('breakdown.outCategory', { name: c.name }), value: c.weekly[weekIndex] ?? 0, icon: ArrowUp, tone: 'outflow' })),
+    ...(week.deferredOut > 0 ? [{ label: t('breakdown.deferredBacklog'), value: week.deferredOut, icon: Clock, tone: 'warning' }] : []),
+    { label: t('breakdown.netChange'), value: week.net, icon: ArrowLeftRight, tone: week.net >= 0 ? 'positive' : 'negative' },
+    { label: t('breakdown.endingCash'), value: week.endingCash, icon: Landmark, tone: week.endingCash >= 0 ? 'neutral' : 'negative' },
   ]
 
   const side: 'ar' | 'ap' = tab === 'ar' ? 'ar' : 'ap'
@@ -207,7 +198,10 @@ export function CashWeekFlyout({
       onClose={onClose}
       size="xl"
       title={week.label}
-      description={`Net ${week.net >= 0 ? '+' : ''}${money(week.net)} · ending ${money(week.endingCash)}`}
+      description={t('drawerDescription', {
+        net: `${week.net >= 0 ? '+' : ''}${money(week.net)}`,
+        ending: money(week.endingCash),
+      })}
       bodyClassName="overflow-hidden flex flex-col p-0"
     >
       {/* KPI cards + breakdown */}
@@ -218,7 +212,7 @@ export function CashWeekFlyout({
               <ArrowLeftRight size={16} />
             </span>
             <div>
-              <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">Net Change</p>
+              <p className="text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('netChange')}</p>
               <p className={cn('text-lg font-bold tabular-nums', week.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
                 {week.net >= 0 ? '+' : ''}{money(week.net)}
               </p>
@@ -227,7 +221,7 @@ export function CashWeekFlyout({
           <div className="flex flex-1 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
             <Gauge value={Math.min(100, coverage * 100)} size={64} thickness={8} showTicks={false} showValue={false} className="shrink-0" />
             <div>
-              <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> Coverage Ratio</p>
+              <p className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase dark:text-slate-500"><GaugeIcon size={10} /> {t('coverageRatio')}</p>
               <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-100">{(coverage * 100).toFixed(0)}%</p>
             </div>
           </div>
@@ -250,20 +244,20 @@ export function CashWeekFlyout({
       <div className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-slate-100 px-4 dark:border-slate-800">
         {(
           [
-            { key: 'ar' as TabKey, label: 'AR Inflows', icon: <ArrowDown size={13} className="text-emerald-500" />, count: week.arCount, total: arTotal, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
-            { key: 'ap' as TabKey, label: 'AP Outflows', icon: <ArrowUp size={13} className="text-red-500" />, count: week.apCount, total: apTotal, badge: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' },
+            { key: 'ar' as TabKey, label: t('tabs.arInflows'), icon: <ArrowDown size={13} className="text-emerald-500" />, count: week.arCount, total: arTotal, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
+            { key: 'ap' as TabKey, label: t('tabs.apOutflows'), icon: <ArrowUp size={13} className="text-red-500" />, count: week.apCount, total: apTotal, badge: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' },
           ]
-        ).map((t) => (
+        ).map((tabItem) => (
           <button
-            key={t.key}
+            key={tabItem.key}
             type="button"
-            onClick={() => switchTab(t.key)}
-            className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors', tab === t.key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}
+            onClick={() => switchTab(tabItem.key)}
+            className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors', tab === tabItem.key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}
           >
-            {t.icon}
-            {t.label}
-            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold', t.badge)}>{t.count}</span>
-            <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">{money(t.total)}</span>
+            {tabItem.icon}
+            {tabItem.label}
+            <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-bold', tabItem.badge)}>{tabItem.count}</span>
+            <span className="rounded-full border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:text-slate-400">{money(tabItem.total)}</span>
           </button>
         ))}
         {weekCats.map((c) => (
@@ -291,7 +285,7 @@ export function CashWeekFlyout({
               <input
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                placeholder={`Search ${side === 'ar' ? 'customers' : 'vendors'} or document #…`}
+                placeholder={t('search.transactions', { party: side === 'ar' ? t('search.customers') : t('search.vendors') })}
                 className="h-8 w-full rounded-md border border-slate-200 bg-white pr-2 pl-8 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
               />
             </div>
@@ -301,18 +295,18 @@ export function CashWeekFlyout({
           <div className="min-h-0 flex-1 overflow-y-auto">
             {paged.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-slate-400">
-                {search ? 'No matches for your search.' : `No ${side === 'ar' ? 'inflows' : 'outflows'} predicted this week.`}
+                {search ? t('empty.noMatches') : t('empty.noneThisWeek', { side: side === 'ar' ? t('empty.inflows') : t('empty.outflows') })}
               </p>
             ) : (
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('docNumber')}>ID{sortIcon('docNumber')}</th>
-                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('partyName')}>{side === 'ar' ? 'Customer' : 'Vendor'}{sortIcon('partyName')}</th>
-                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('predictedDate')}>Predicted{sortIcon('predictedDate')}</th>
-                    <th className="px-3 py-2 text-center font-medium">Method</th>
-                    <th className="px-3 py-2 text-center font-medium">Status</th>
-                    <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>Amount{sortIcon('amount')}</th>
+                    <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('docNumber')}>{t('table.id')}{sortIcon('docNumber')}</th>
+                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('partyName')}>{side === 'ar' ? t('table.customer') : t('table.vendor')}{sortIcon('partyName')}</th>
+                    <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('predictedDate')}>{t('table.predicted')}{sortIcon('predictedDate')}</th>
+                    <th className="px-3 py-2 text-center font-medium">{t('table.method')}</th>
+                    <th className="px-3 py-2 text-center font-medium">{t('table.status')}</th>
+                    <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -325,7 +319,7 @@ export function CashWeekFlyout({
                       </td>
                       <td className="px-3 py-2.5">
                         {e.partyId ? (
-                          <button type="button" onClick={() => setEntity({ id: e.partyId!, name: e.partyName })} title="Payment history & reliability" className="flex items-center gap-1 font-medium text-slate-700 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300">
+                          <button type="button" onClick={() => setEntity({ id: e.partyId!, name: e.partyName })} title={t('paymentHistoryTitle')} className="flex items-center gap-1 font-medium text-slate-700 hover:text-teal-700 dark:text-slate-200 dark:hover:text-teal-300">
                             {e.partyName}
                             <History size={11} className="text-slate-300 group-hover:text-teal-500 dark:text-slate-600" />
                           </button>
@@ -348,7 +342,7 @@ export function CashWeekFlyout({
           {sorted.length > PAGE_SIZE ? (
             <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
               <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-                Showing {start + 1}–{Math.min(start + PAGE_SIZE, sorted.length)} of {sorted.length}
+                {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
               </span>
               <div className="flex items-center gap-1">
                 <button type="button" disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
@@ -387,6 +381,8 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const t = useTranslations('analytics.cashWeek')
+  const tMeta = useTranslations('analytics.cashWeek.meta')
   const [search, setSearch] = useState('')
   const [sortCol, setSortCol] = useState<'name' | 'date' | 'amount' | 'type'>('amount')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -430,17 +426,17 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
   const downloadCsv = () => {
     exportCsv(
       `cashflow_category_${cat.name.replace(/\s+/g, '_')}`,
-      ['Entity/Description', 'Date', 'Amount', 'Type'],
+      [t('csvHeaders.entityDescription'), t('csvHeaders.date'), t('csvHeaders.amount'), t('csvHeaders.type')],
       cat.breakdown.map((row) => [row.name, row.date ?? '', row.amount, row.type]),
       today,
     )
   }
 
   const kpis: { label: string; value: string; cls?: string }[] = [
-    { label: 'This Week', value: money(weekAmount), cls: tone },
-    { label: 'Total Forecast', value: money(cat.total), cls: tone },
-    { label: 'Method', value: cat.meta.method, cls: methodTone },
-    { label: 'Source Items', value: String(cat.breakdown.length) },
+    { label: t('category.thisWeek'), value: money(weekAmount), cls: tone },
+    { label: t('category.totalForecast'), value: money(cat.total), cls: tone },
+    { label: t('category.method'), value: cat.meta.method, cls: methodTone },
+    { label: t('category.sourceItems'), value: String(cat.breakdown.length) },
   ]
 
   return (
@@ -453,9 +449,9 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
             <p className={cn('truncate text-sm font-bold tabular-nums', k.cls ?? 'text-slate-800 dark:text-slate-100')}>{k.value}</p>
           </div>
         ))}
-        <button type="button" onClick={downloadCsv} title="Export CSV" className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+        <button type="button" onClick={downloadCsv} title={t('category.exportCsvTitle')} className="flex shrink-0 items-center gap-1.5 self-center rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
           <Download size={13} />
-          Export
+          {t('category.export')}
         </button>
       </div>
       <p className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-4 py-1.5 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
@@ -468,7 +464,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
             .filter(([k]) => k !== 'method' && k !== 'formula')
             .map(([k, v]) => (
               <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                {META_LABELS[k] ?? k}: <span className="font-semibold tabular-nums">{typeof v === 'number' && MONEYISH.has(k) ? money(v) : String(v)}</span>
+                {tMeta.has(k) ? tMeta(k) : k}: <span className="font-semibold tabular-nums">{typeof v === 'number' && MONEYISH.has(k) ? money(v) : String(v)}</span>
               </span>
             ))}
         </div>
@@ -481,7 +477,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search source items…"
+            placeholder={t('search.sourceItems')}
             className="h-8 w-full rounded-md border border-slate-200 bg-white pr-2 pl-8 text-sm text-slate-700 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
           />
         </div>
@@ -491,16 +487,16 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
       <div className="min-h-0 flex-1 overflow-y-auto">
         {paged.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {search ? 'No matches for your search.' : 'No source items behind this estimate.'}
+            {search ? t('empty.noMatches') : t('empty.noSourceItems')}
           </p>
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('name')}>Entity / Description{sortIcon('name')}</th>
-                <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('date')}>Date{sortIcon('date')}</th>
-                <th className="cursor-pointer px-3 py-2 text-center font-medium select-none" onClick={() => sortBy('type')}>Type{sortIcon('type')}</th>
-                <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>Amount{sortIcon('amount')}</th>
+                <th className="cursor-pointer px-4 py-2 text-left font-medium select-none" onClick={() => sortBy('name')}>{t('table.entityDescription')}{sortIcon('name')}</th>
+                <th className="cursor-pointer px-3 py-2 text-left font-medium select-none" onClick={() => sortBy('date')}>{t('table.date')}{sortIcon('date')}</th>
+                <th className="cursor-pointer px-3 py-2 text-center font-medium select-none" onClick={() => sortBy('type')}>{t('table.type')}{sortIcon('type')}</th>
+                <th className="cursor-pointer px-4 py-2 text-right font-medium select-none" onClick={() => sortBy('amount')}>{t('table.amount')}{sortIcon('amount')}</th>
               </tr>
             </thead>
             <tbody>
@@ -526,7 +522,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
       {sorted.length > PAGE_SIZE ? (
         <div className="flex shrink-0 items-center justify-between border-t border-slate-100 px-4 py-2 dark:border-slate-800">
           <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-            Showing {start + 1}–{Math.min(start + PAGE_SIZE, sorted.length)} of {sorted.length}
+            {t('pagination.showing', { from: start + 1, to: Math.min(start + PAGE_SIZE, sorted.length), total: sorted.length })}
           </span>
           <div className="flex items-center gap-1">
             <button type="button" disabled={curPage <= 1} onClick={() => setPage((p) => p - 1)} className="rounded-md border border-slate-200 p-1 text-slate-500 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
@@ -560,16 +556,17 @@ function ActionBar({
 }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const t = useTranslations('analytics.cashWeek.actionBar')
   const runnable = entries.filter((e) => e.docId)
   const total = runnable.reduce((a, e) => a + e.amount, 0)
   if (runnable.length === 0) return null
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
       <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-        {runnable.length} {side === 'ap' ? 'bills' : 'invoices'} · {money(total)}
+        {t('summary', { count: runnable.length, kind: side === 'ap' ? t('bills') : t('invoices'), total: money(total) })}
       </span>
       <Button size="sm" onClick={() => onBuild(runnable.map((e) => e.docId!))}>
-        {side === 'ap' ? 'Build pay run' : 'Build collection run'}
+        {side === 'ap' ? t('buildPayRun') : t('buildCollectionRun')}
         <ArrowRight size={15} />
       </Button>
     </div>
@@ -578,17 +575,18 @@ function ActionBar({
 
 /** Prediction-method pill (classes: History / Terms / Average / Pushed). */
 function MethodPill({ method }: { method: string }) {
+  const t = useTranslations('analytics.cashWeek.methods')
   const base = method.replace(/\s*\(deferred.*$/, '')
-  const map: Record<string, { label: string; cls: string }> = {
-    Statistical: { label: 'History', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' },
-    'Due date': { label: 'Due Date', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' },
-    'Global avg': { label: 'Average', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
-    'Overdue push': { label: 'Pushed', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
+  const map: Record<string, { key: string; cls: string }> = {
+    Statistical: { key: 'history', cls: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300' },
+    'Due date': { key: 'dueDate', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' },
+    'Global avg': { key: 'average', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+    'Overdue push': { key: 'pushed', cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
   }
-  const m = map[base] ?? { label: base, cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' }
+  const m = map[base]
   return (
-    <span title={method} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m.cls)}>
-      {m.label}
+    <span title={method} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap', m?.cls ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>
+      {m ? t(m.key) : base}
     </span>
   )
 }
