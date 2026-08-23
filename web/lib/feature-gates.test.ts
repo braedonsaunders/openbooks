@@ -2652,6 +2652,11 @@ test('the surfaces this test was written for are covered', () => {
     'the dashboard catalog must omit New expense when Expenses is off — stored layouts stay',
   )
   assert.match(
+    read('app/(app)/dashboard/actions.ts'),
+    /mod\.key === 'expenses' && !featureOn\.get\('expenses'\)/,
+    'the dashboard picker must omit Expenses navigate when Expenses is off — stored layouts stay',
+  )
+  assert.match(
     read('app/(app)/layout.tsx'),
     /projects: can\(authz, 'projects\.manage'\) && projectsEnabled/,
     'the global create menu must hide Project when Projects is off — the draft API refuses',

@@ -185,6 +185,8 @@ export async function listQuickActionOptions(): Promise<{
   for (const mod of NAV_MODULES) {
     if (mod.key === 'dashboard' || mod.key === 'admin') continue
     if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue
+    // Same requiredFeature filter as d-expense: /expenses/reports 404s when Expenses is off.
+    if (mod.key === 'expenses' && !featureOn.get('expenses')) continue
     common.push({
       label: mod.label,
       href: mod.href,
