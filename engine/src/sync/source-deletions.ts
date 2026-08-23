@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
-import { neg } from "../money.ts";
+import { reversalJournalLines } from "../reversal-journal-lines.ts";
 import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
@@ -160,29 +160,7 @@ export async function mirrorSourceDeletion(input: {
         })
         .returning({ id: schema.journalEntries.id });
       await tx.insert(schema.journalLines).values(
-        lines.map((line) => ({
-          orgId: input.orgId,
-          entryId: reversal.id,
-          lineNumber: line.lineNumber,
-          accountId: line.accountId,
-          subsidiaryId: line.subsidiaryId,
-          amount: neg(line.amount),
-          currency: line.currency,
-          txnAmount: neg(line.txnAmount),
-          fxRate: line.fxRate,
-          partyId: line.partyId,
-          departmentId: line.departmentId,
-          projectId: line.projectId,
-          locationId: line.locationId,
-          classId: line.classId,
-          equipmentUnitId: line.equipmentUnitId,
-          extraDims: line.extraDims,
-          paymentCardId: line.paymentCardId,
-          taxCodeId: line.taxCodeId,
-          memo: line.memo,
-          dueDate: null,
-          isOpenItem: false,
-        })),
+        reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
       );
       await tx
         .update(schema.journalEntries)
@@ -347,29 +325,7 @@ export async function resolveSourceDeletion(input: {
           })
           .returning({ id: schema.journalEntries.id });
         await db.insert(schema.journalLines).values(
-          lines.map((line) => ({
-            orgId: input.orgId,
-            entryId: reversal.id,
-            lineNumber: line.lineNumber,
-            accountId: line.accountId,
-            subsidiaryId: line.subsidiaryId,
-            amount: neg(line.amount),
-            currency: line.currency,
-            txnAmount: neg(line.txnAmount),
-            fxRate: line.fxRate,
-            partyId: line.partyId,
-            departmentId: line.departmentId,
-            projectId: line.projectId,
-            locationId: line.locationId,
-            classId: line.classId,
-            equipmentUnitId: line.equipmentUnitId,
-            extraDims: line.extraDims,
-            paymentCardId: line.paymentCardId,
-            taxCodeId: line.taxCodeId,
-            memo: line.memo,
-            dueDate: null,
-            isOpenItem: false,
-          })),
+          reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
         );
         await db
           .update(schema.journalEntries)

@@ -34,6 +34,7 @@ import {
   recordTransactionAudit,
 } from "./transaction-audit.ts";
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
+import { reversalJournalLines } from "./reversal-journal-lines.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -2105,32 +2106,7 @@ export async function regenerateGlImpactTx(
     })
     .returning({ id: schema.journalEntries.id });
   await tx.insert(schema.journalLines).values(
-    existing.map((line) => ({
-      orgId: doc.orgId,
-      entryId: reversal.id,
-      lineNumber: line.lineNumber,
-      accountId: line.accountId,
-      subsidiaryId: line.subsidiaryId,
-      amount: neg(line.amount),
-      currency: line.currency,
-      txnAmount: neg(line.txnAmount),
-      fxRate: line.fxRate,
-      partyId: line.partyId,
-      departmentId: line.departmentId,
-      projectId: line.projectId,
-      locationId: line.locationId,
-      classId: line.classId,
-      equipmentUnitId: line.equipmentUnitId,
-      extraDims: line.extraDims,
-      paymentCardId: line.paymentCardId,
-      taxCodeId: line.taxCodeId,
-      memo: line.memo,
-      quantity: line.quantity == null ? null : neg(line.quantity),
-      unit: line.unit,
-      dueDate: null,
-      isOpenItem: false,
-      custom: line.custom,
-    })),
+    reversalJournalLines(existing, { entryId: reversal.id, orgId: doc.orgId }),
   );
   await tx
     .update(schema.journalEntries)

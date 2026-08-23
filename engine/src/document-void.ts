@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
-import { neg } from "./money.ts";
+import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import {
@@ -356,30 +356,7 @@ export async function completeRequestedDocumentVoid(
             })
             .returning({ id: schema.journalEntries.id });
           await tx.insert(schema.journalLines).values(
-            lines.map((line) => ({
-              orgId,
-              entryId: reversal.id,
-              lineNumber: line.lineNumber,
-              accountId: line.accountId,
-              subsidiaryId: line.subsidiaryId,
-              amount: neg(line.amount),
-              currency: line.currency,
-              txnAmount: neg(line.txnAmount),
-              fxRate: line.fxRate,
-              partyId: line.partyId,
-              departmentId: line.departmentId,
-              projectId: line.projectId,
-              locationId: line.locationId,
-              classId: line.classId,
-              equipmentUnitId: line.equipmentUnitId,
-              extraDims: line.extraDims,
-              paymentCardId: line.paymentCardId,
-              taxCodeId: line.taxCodeId,
-              memo: line.memo,
-              dueDate: null,
-              isOpenItem: false,
-              createdBy: String(doc.void_requested_by),
-            })),
+            reversalJournalLines(lines, { entryId: reversal.id, orgId }),
           );
           await tx
             .update(schema.journalEntries)
