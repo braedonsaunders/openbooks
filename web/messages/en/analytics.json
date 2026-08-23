@@ -1521,5 +1521,110 @@
       "average": "Average",
       "pushed": "Pushed"
     }
+  },
+  "categoryManager": {
+    "panelTitle": "Forecast Categories",
+    "panelHint": "Non-AR/AP cash flows — the engine's seven calculation methods",
+    "newCategory": "New category",
+    "editTitle": "Edit",
+    "remove": "Remove",
+    "empty": "No categories yet — AR/AP predictions are the only flows in the forecast.",
+    "methods": {
+      "gl_history_average": {
+        "label": "GL History Average",
+        "description": "Analyzes GL account postings over a defined period to calculate weekly averages"
+      },
+      "vendor_payment_history": {
+        "label": "Vendor Payment History",
+        "description": "Aggregates historical payments to vendors to project future spend"
+      },
+      "credit_card_cycle": {
+        "label": "Credit Card Cycle",
+        "description": "Tracks credit card liability + projected growth until payment date"
+      },
+      "manual_recurring": {
+        "label": "Manual Recurring",
+        "description": "Fixed amount at specified frequency (weekly, bi-weekly, monthly)"
+      },
+      "formula_expression": {
+        "label": "Formula Expression",
+        "description": "Custom formula using Excel-style syntax with forecast variables"
+      },
+      "vendor_recurring_average": {
+        "label": "Vendor Recurring (Auto)",
+        "description": "Auto-detects payment frequency and calculates run rate from vendor history"
+      },
+      "bank_register_history": {
+        "label": "Bank Register History",
+        "description": "Forecasts from actual bank account cash movements"
+      }
+    },
+    "days": {
+      "distributed": "Distributed",
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "weeks": {
+      "distributed": "Distributed",
+      "1stWeek": "1st Week",
+      "2ndWeek": "2nd Week",
+      "3rdWeek": "3rd Week",
+      "4thWeek": "4th Week"
+    },
+    "formulaHelp": "Variables: {vars} · Functions: {funcs}",
+    "picker": {
+      "noMatches": "No matches.",
+      "selectedCount": "{count, plural, one {# selected} other {# selected}}"
+    },
+    "toasts": {
+      "savedRecomputing": "Saved — recomputing…",
+      "forbidden": "Saving requires the Setup permission.",
+      "saveFailed": "Save failed ({status})."
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "Category name",
+      "type": "Type",
+      "typeOutflow": "Outflow (Expense/Payment)",
+      "typeInflow": "Inflow (Revenue/Collection)",
+      "calcMethod": "Calculation Method",
+      "glAccounts": "GL Accounts",
+      "expectedDay": "Expected Day",
+      "expectedWeek": "Expected Week",
+      "historyWeeks": "History Weeks",
+      "adjustmentPct": "Adjustment %",
+      "useNetAmount": "Use Net Amount (respect +/−)",
+      "vendors": "Vendors",
+      "historyMonths": "History Months",
+      "cardAccounts": "Credit Card Accounts",
+      "threshold": "Significant Payment Threshold ($)",
+      "thresholdHelp": "0 = auto-detect (50% of the median payment)",
+      "amount": "Amount",
+      "frequency": "Frequency",
+      "frequencyWeekly": "Weekly",
+      "frequencyBiweekly": "Bi-Weekly",
+      "frequencyMonthly": "Monthly",
+      "formula": "Formula",
+      "bankAccounts": "Bank Accounts",
+      "memoKeywords": "Memo Keywords",
+      "memoKeywordsPlaceholder": "payroll, lease, hydro…",
+      "memoKeywordsHelp": "Comma-separated keywords to filter transactions (empty = all)",
+      "transfers": "Transfers",
+      "checksPayments": "Checks & Payments",
+      "journals": "Journals",
+      "saving": "Saving…",
+      "addCategory": "Add category",
+      "saveCategory": "Save category",
+      "cancel": "Cancel",
+      "searchAccounts": "Search accounts…",
+      "searchVendors": "Search vendors…",
+      "searchCardAccounts": "Search card accounts…",
+      "searchBankAccounts": "Search bank accounts…"
+    }
   }
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Pencil, Plus, SlidersHorizontal } from 'lucide-react'
 import { Button, Select, cn } from '@openbooks/ui'
 import type { ForecastCategory, ForecastCategoryMethod } from '../../../../lib/cash/core'
@@ -10,30 +11,22 @@ import { Panel } from './Panel'
 export interface CatOption { id: string; name: string }
 export interface AccountOption { id: string; number: string | null; name: string; type?: string }
 
-/** Forecast method labels and descriptions. */
-const METHODS: { value: ForecastCategoryMethod; label: string; description: string }[] = [
-  { value: 'gl_history_average', label: 'GL History Average', description: 'Analyzes GL account postings over a defined period to calculate weekly averages' },
-  { value: 'vendor_payment_history', label: 'Vendor Payment History', description: 'Aggregates historical payments to vendors to project future spend' },
-  { value: 'credit_card_cycle', label: 'Credit Card Cycle', description: 'Tracks credit card liability + projected growth until payment date' },
-  { value: 'manual_recurring', label: 'Manual Recurring', description: 'Fixed amount at specified frequency (weekly, bi-weekly, monthly)' },
-  { value: 'formula_expression', label: 'Formula Expression', description: 'Custom formula using Excel-style syntax with forecast variables' },
-  { value: 'vendor_recurring_average', label: 'Vendor Recurring (Auto)', description: 'Auto-detects payment frequency and calculates run rate from vendor history' },
-  { value: 'bank_register_history', label: 'Bank Register History', description: 'Forecasts from actual bank account cash movements' },
+/** Forecast method values. */
+const METHOD_VALUES: ForecastCategoryMethod[] = [
+  'gl_history_average',
+  'vendor_payment_history',
+  'credit_card_cycle',
+  'manual_recurring',
+  'formula_expression',
+  'vendor_recurring_average',
+  'bank_register_history',
 ]
 
-const DAYS = [
-  { value: '', label: 'Distributed' },
-  { value: '0', label: 'Sunday' }, { value: '1', label: 'Monday' }, { value: '2', label: 'Tuesday' },
-  { value: '3', label: 'Wednesday' }, { value: '4', label: 'Thursday' }, { value: '5', label: 'Friday' },
-  { value: '6', label: 'Saturday' },
-]
-const WEEKS = [
-  { value: '', label: 'Distributed' },
-  { value: '1', label: '1st Week' }, { value: '2', label: '2nd Week' },
-  { value: '3', label: '3rd Week' }, { value: '4', label: '4th Week' },
-]
+const DAY_KEYS = ['', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const WEEK_KEYS = ['', '1stWeek', '2ndWeek', '3rdWeek', '4thWeek']
 
-const FORMULA_HELP = 'Variables: {AR_IN} {AP_OUT} {NET_FLOW} {CASH_START} {WEEK_NUM} {MONTH} {QUARTER} {YEAR} {DAY} {IS_WK1}…{IS_WK5} {IS_MONTH_START} {IS_MONTH_END} {IS_Q_START} {IS_Q_END} {IS_YEAR_END} · Functions: IF(cond,a,b) MAX MIN ABS CEIL FLOOR ROUND SQRT POW AVG'
+const FORMULA_VARS = '{AR_IN} {AP_OUT} {NET_FLOW} {CASH_START} {WEEK_NUM} {MONTH} {QUARTER} {YEAR} {DAY} {IS_WK1}…{IS_WK5} {IS_MONTH_START} {IS_MONTH_END} {IS_Q_START} {IS_Q_END} {IS_YEAR_END}'
+const FORMULA_FUNCS = 'IF(cond,a,b) MAX MIN ABS CEIL FLOOR ROUND SQRT POW AVG'
 
 const inputCls = 'h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'
 const numCls = `${inputCls} text-right tabular-nums`
@@ -53,6 +46,7 @@ function MultiPick({
   placeholder: string
 }) {
   const [q, setQ] = useState('')
+  const t = useTranslations('analytics.categoryManager')
   const visible = options.filter((o) => !q || o.label.toLowerCase().includes(q.toLowerCase()))
   // Selected entries sort to the top (stable behavior).
   const ordered = [...visible].sort((a, b) => Number(selected.includes(b.id)) - Number(selected.includes(a.id)))
@@ -74,9 +68,9 @@ function MultiPick({
             </button>
           )
         })}
-        {ordered.length === 0 ? <p className="px-2 py-2 text-xs text-slate-400">No matches.</p> : null}
+        {ordered.length === 0 ? <p className="px-2 py-2 text-xs text-slate-400">{t('picker.noMatches')}</p> : null}
       </div>
-      {selected.length ? <span className={helpCls}>{selected.length} selected</span> : null}
+      {selected.length ? <span className={helpCls}>{t('picker.selectedCount', { count: selected.length })}</span> : null}
     </div>
   )
 }
@@ -97,6 +91,9 @@ export function CategoryManager({
   initialCategories?: ForecastCategory[]
 }) {
   const router = useRouter()
+  const t = useTranslations('analytics.categoryManager')
+  const tForm = useTranslations('analytics.categoryManager.form')
+  const tMethods = useTranslations('analytics.categoryManager.methods')
   const [cats, setCats] = useState<ForecastCategory[]>(initialCategories)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -128,12 +125,12 @@ export function CategoryManager({
     if (r.ok) {
       const j = await r.json()
       setCats(j.categories)
-      setMsg('Saved — recomputing…')
+      setMsg(t('toasts.savedRecomputing'))
       setEditIdx(null)
       setDraft(null)
       router.refresh()
     } else {
-      setMsg(r.status === 403 ? 'Saving requires the Setup permission.' : `Save failed (${r.status}).`)
+      setMsg(r.status === 403 ? t('toasts.forbidden') : t('toasts.saveFailed', { status: r.status }))
     }
     setBusy(false)
   }
@@ -157,7 +154,10 @@ export function CategoryManager({
     void save(editIdx === -1 ? [...cats, clean] : cats.map((c, i) => (i === editIdx ? clean : c)))
   }
 
-  const method = METHODS.find((m) => m.value === draft?.method)
+  const method = draft ? { value: draft.method, description: tMethods.has(`${draft.method}.description`) ? tMethods(`${draft.method}.description`) : '' } : undefined
+  const methodLabel = (value: string) => (tMethods.has(`${value}.label`) ? tMethods(`${value}.label`) : value)
+  const dayOptions = DAY_KEYS.map((key, idx) => ({ value: String(idx - 1), label: key === '' ? t('days.distributed') : t(`days.${key}`) }))
+  const weekOptions = WEEK_KEYS.map((key, idx) => ({ value: idx === 0 ? '' : String(idx), label: key === '' ? t('weeks.distributed') : t(`weeks.${key}`) }))
   const draftValid = !!draft && !!draft.name.trim() && (
     draft.method === 'manual_recurring' ? (draft.amount ?? 0) > 0
     : draft.method === 'gl_history_average' ? (draft.accountIds?.length ?? 0) > 0
@@ -169,13 +169,13 @@ export function CategoryManager({
 
   return (
     <Panel
-      title="Forecast Categories"
+      title={t('panelTitle')}
       icon={SlidersHorizontal}
-      hint="Non-AR/AP cash flows — the engine's seven calculation methods"
+      hint={t('panelHint')}
       actions={editIdx === null ? (
         <Button variant="outline" size="sm" onClick={() => openEditor(-1)}>
           <Plus size={14} />
-          New category
+          {t('newCategory')}
         </Button>
       ) : undefined}
     >
@@ -187,18 +187,18 @@ export function CategoryManager({
                 <span className={cn('mr-2 inline-block h-2 w-2 rounded-full', c.direction === 'inflow' ? 'bg-emerald-500' : 'bg-red-500')} />
                 <span className="font-medium text-slate-800 dark:text-slate-200">{c.name}</span>
                 <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
-                  {METHODS.find((m) => m.value === c.method)?.label ?? c.method}
+                  {methodLabel(c.method)}
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
-                <button type="button" disabled={busy} onClick={() => openEditor(i)} title="Edit" className="rounded-md border border-slate-200 p-1 text-slate-500 hover:text-teal-600 dark:border-slate-700 dark:hover:text-teal-400"><Pencil size={12} /></button>
-                <button type="button" disabled={busy} onClick={() => save(cats.filter((_, j) => j !== i))} className="rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">Remove</button>
+                <button type="button" disabled={busy} onClick={() => openEditor(i)} title={t('editTitle')} className="rounded-md border border-slate-200 p-1 text-slate-500 hover:text-teal-600 dark:border-slate-700 dark:hover:text-teal-400"><Pencil size={12} /></button>
+                <button type="button" disabled={busy} onClick={() => save(cats.filter((_, j) => j !== i))} className="rounded-md border border-slate-200 px-2 py-0.5 text-[11px] text-slate-500 hover:text-rose-500 dark:border-slate-700">{t('remove')}</button>
               </span>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">No categories yet — AR/AP predictions are the only flows in the forecast.</p>
+        <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">{t('empty')}</p>
       )}
 
       {editIdx !== null && draft ? (
@@ -206,23 +206,23 @@ export function CategoryManager({
           {/* General */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Name</label>
-              <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="Category name" className={inputCls} />
+              <label className={labelCls}>{tForm('name')}</label>
+              <input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder={tForm('namePlaceholder')} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Type</label>
+              <label className={labelCls}>{tForm('type')}</label>
               <Select value={draft.direction} onChange={(e) => set({ direction: e.target.value as 'inflow' | 'outflow' })} triggerClassName="h-8 text-sm">
-                <option value="outflow">Outflow (Expense/Payment)</option>
-                <option value="inflow">Inflow (Revenue/Collection)</option>
+                <option value="outflow">{tForm('typeOutflow')}</option>
+                <option value="inflow">{tForm('typeInflow')}</option>
               </Select>
             </div>
           </div>
 
           {/* Method */}
           <div>
-            <label className={labelCls}>Calculation Method</label>
+            <label className={labelCls}>{tForm('calcMethod')}</label>
             <Select value={draft.method} onChange={(e) => set({ method: e.target.value as ForecastCategoryMethod })} triggerClassName="h-8 text-sm">
-              {METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              {METHOD_VALUES.map((v) => <option key={v} value={v}>{methodLabel(v)}</option>)}
             </Select>
             {method ? <span className={helpCls}>{method.description}</span> : null}
           </div>
@@ -231,63 +231,63 @@ export function CategoryManager({
           {draft.method === 'gl_history_average' ? (
             <>
               <div>
-                <label className={labelCls}>GL Accounts</label>
-                <MultiPick options={glAccounts.map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.accountIds ?? []} onChange={(accountIds) => set({ accountIds })} placeholder="Search accounts…" />
+                <label className={labelCls}>{tForm('glAccounts')}</label>
+                <MultiPick options={glAccounts.map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.accountIds ?? []} onChange={(accountIds) => set({ accountIds })} placeholder={tForm('searchAccounts')} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>Expected Day</label>
+                  <label className={labelCls}>{tForm('expectedDay')}</label>
                   <Select value={String(draft.expectedDay ?? '')} onChange={(e) => set({ expectedDay: e.target.value })} triggerClassName="h-8 text-sm">
-                    {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    {dayOptions.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
                   </Select>
                 </div>
                 <div>
-                  <label className={labelCls}>Expected Week</label>
+                  <label className={labelCls}>{tForm('expectedWeek')}</label>
                   <Select value={String(draft.expectedWeek ?? '')} onChange={(e) => set({ expectedWeek: e.target.value })} triggerClassName="h-8 text-sm">
-                    {WEEKS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+                    {weekOptions.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
                   </Select>
                 </div>
                 <div>
-                  <label className={labelCls}>History Weeks</label>
+                  <label className={labelCls}>{tForm('historyWeeks')}</label>
                   <input type="number" min={1} max={52} value={draft.historyWeeks ?? 12} onChange={(e) => set({ historyWeeks: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Adjustment %</label>
+                  <label className={labelCls}>{tForm('adjustmentPct')}</label>
                   <input type="number" step={0.1} value={draft.adjustmentPct ?? 0} onChange={(e) => set({ adjustmentPct: Number(e.target.value) })} className={numCls} />
                 </div>
               </div>
               <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <input type="checkbox" checked={draft.useNetAmt ?? false} onChange={(e) => set({ useNetAmt: e.target.checked })} className="h-4 w-4 accent-teal-600" />
-                Use Net Amount (respect +/−)
+                {tForm('useNetAmount')}
               </label>
             </>
           ) : draft.method === 'vendor_payment_history' || draft.method === 'vendor_recurring_average' ? (
             <>
               <div>
-                <label className={labelCls}>Vendors</label>
-                <MultiPick options={vendorOptions.map((v) => ({ id: v.id, label: v.name }))} selected={draft.partyIds ?? (draft.partyId ? [draft.partyId] : [])} onChange={(partyIds) => set({ partyIds, partyId: partyIds[0] })} placeholder="Search vendors…" />
+                <label className={labelCls}>{tForm('vendors')}</label>
+                <MultiPick options={vendorOptions.map((v) => ({ id: v.id, label: v.name }))} selected={draft.partyIds ?? (draft.partyId ? [draft.partyId] : [])} onChange={(partyIds) => set({ partyIds, partyId: partyIds[0] })} placeholder={tForm('searchVendors')} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>History Months</label>
+                  <label className={labelCls}>{tForm('historyMonths')}</label>
                   <input type="number" min={1} max={36} value={draft.historyMonths ?? (draft.method === 'vendor_recurring_average' ? 3 : 12)} onChange={(e) => set({ historyMonths: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Adjustment %</label>
+                  <label className={labelCls}>{tForm('adjustmentPct')}</label>
                   <input type="number" step={0.1} value={draft.adjustmentPct ?? 0} onChange={(e) => set({ adjustmentPct: Number(e.target.value) })} className={numCls} />
                 </div>
                 {draft.method === 'vendor_payment_history' ? (
                   <>
                     <div>
-                      <label className={labelCls}>Expected Day</label>
+                      <label className={labelCls}>{tForm('expectedDay')}</label>
                       <Select value={String(draft.expectedDay ?? '')} onChange={(e) => set({ expectedDay: e.target.value })} triggerClassName="h-8 text-sm">
-                        {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        {dayOptions.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
                       </Select>
                     </div>
                     <div>
-                      <label className={labelCls}>Expected Week</label>
+                      <label className={labelCls}>{tForm('expectedWeek')}</label>
                       <Select value={String(draft.expectedWeek ?? '')} onChange={(e) => set({ expectedWeek: e.target.value })} triggerClassName="h-8 text-sm">
-                        {WEEKS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+                        {weekOptions.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
                       </Select>
                     </div>
                   </>
@@ -297,71 +297,71 @@ export function CategoryManager({
           ) : draft.method === 'credit_card_cycle' ? (
             <>
               <div>
-                <label className={labelCls}>Credit Card Accounts</label>
-                <MultiPick options={(cardAccounts.length ? cardAccounts : accountOptions).map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.cardAccountIds ?? []} onChange={(cardAccountIds) => set({ cardAccountIds })} placeholder="Search card accounts…" />
+                <label className={labelCls}>{tForm('cardAccounts')}</label>
+                <MultiPick options={(cardAccounts.length ? cardAccounts : accountOptions).map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.cardAccountIds ?? []} onChange={(cardAccountIds) => set({ cardAccountIds })} placeholder={tForm('searchCardAccounts')} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>History Months</label>
+                  <label className={labelCls}>{tForm('historyMonths')}</label>
                   <input type="number" min={1} max={24} value={draft.historyMonths ?? 6} onChange={(e) => set({ historyMonths: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Significant Payment Threshold ($)</label>
+                  <label className={labelCls}>{tForm('threshold')}</label>
                   <input type="number" min={0} value={draft.significantPaymentThreshold ?? 0} onChange={(e) => set({ significantPaymentThreshold: Number(e.target.value) })} className={numCls} />
-                  <span className={helpCls}>0 = auto-detect (50% of the median payment)</span>
+                  <span className={helpCls}>{tForm('thresholdHelp')}</span>
                 </div>
               </div>
             </>
           ) : draft.method === 'manual_recurring' ? (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Amount</label>
+                <label className={labelCls}>{tForm('amount')}</label>
                 <input type="number" min={0} value={draft.amount ?? ''} onChange={(e) => set({ amount: Number(e.target.value) })} className={numCls} />
               </div>
               <div>
-                <label className={labelCls}>Frequency</label>
+                <label className={labelCls}>{tForm('frequency')}</label>
                 <Select value={draft.frequency ?? 'weekly'} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} triggerClassName="h-8 text-sm">
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-Weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="weekly">{tForm('frequencyWeekly')}</option>
+                  <option value="biweekly">{tForm('frequencyBiweekly')}</option>
+                  <option value="monthly">{tForm('frequencyMonthly')}</option>
                 </Select>
               </div>
             </div>
           ) : draft.method === 'formula_expression' ? (
             <div>
-              <label className={labelCls}>Formula</label>
+              <label className={labelCls}>{tForm('formula')}</label>
               <textarea rows={4} value={draft.formula ?? ''} onChange={(e) => set({ formula: e.target.value })} placeholder="{AR_IN} * 0.02 + IF({IS_MONTH_END}, 5000, 0)" className={cn(inputCls, 'h-auto py-1.5 font-mono text-xs')} />
-              <span className={helpCls}>{FORMULA_HELP}</span>
+              <span className={helpCls}>{t('formulaHelp', { vars: FORMULA_VARS, funcs: FORMULA_FUNCS })}</span>
             </div>
           ) : draft.method === 'bank_register_history' ? (
             <>
               <div>
-                <label className={labelCls}>Bank Accounts</label>
-                <MultiPick options={bankAccounts.map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.bankAccountIds ?? []} onChange={(bankAccountIds) => set({ bankAccountIds })} placeholder="Search bank accounts…" />
+                <label className={labelCls}>{tForm('bankAccounts')}</label>
+                <MultiPick options={bankAccounts.map((a) => ({ id: a.id, label: acctLabel(a) }))} selected={draft.bankAccountIds ?? []} onChange={(bankAccountIds) => set({ bankAccountIds })} placeholder={tForm('searchBankAccounts')} />
               </div>
               <div>
-                <label className={labelCls}>Memo Keywords</label>
-                <input value={(draft.memoKeywords ?? []).join(', ')} onChange={(e) => set({ memoKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="payroll, lease, hydro…" className={inputCls} />
-                <span className={helpCls}>Comma-separated keywords to filter transactions (empty = all)</span>
+                <label className={labelCls}>{tForm('memoKeywords')}</label>
+                <input value={(draft.memoKeywords ?? []).join(', ')} onChange={(e) => set({ memoKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder={tForm('memoKeywordsPlaceholder')} className={inputCls} />
+                <span className={helpCls}>{tForm('memoKeywordsHelp')}</span>
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-300">
-                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeTransfers !== false} onChange={(e) => set({ includeTransfers: e.target.checked })} className="h-4 w-4 accent-teal-600" /> Transfers</label>
-                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeChecks !== false} onChange={(e) => set({ includeChecks: e.target.checked })} className="h-4 w-4 accent-teal-600" /> Checks & Payments</label>
-                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeJournals === true} onChange={(e) => set({ includeJournals: e.target.checked })} className="h-4 w-4 accent-teal-600" /> Journals</label>
+                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeTransfers !== false} onChange={(e) => set({ includeTransfers: e.target.checked })} className="h-4 w-4 accent-teal-600" /> {tForm('transfers')}</label>
+                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeChecks !== false} onChange={(e) => set({ includeChecks: e.target.checked })} className="h-4 w-4 accent-teal-600" /> {tForm('checksPayments')}</label>
+                <label className="flex items-center gap-1.5"><input type="checkbox" checked={draft.includeJournals === true} onChange={(e) => set({ includeJournals: e.target.checked })} className="h-4 w-4 accent-teal-600" /> {tForm('journals')}</label>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls}>Expected Day</label>
+                  <label className={labelCls}>{tForm('expectedDay')}</label>
                   <Select value={String(draft.expectedDay ?? '')} onChange={(e) => set({ expectedDay: e.target.value })} triggerClassName="h-8 text-sm">
-                    {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    {dayOptions.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
                   </Select>
                 </div>
                 <div>
-                  <label className={labelCls}>History Weeks</label>
+                  <label className={labelCls}>{tForm('historyWeeks')}</label>
                   <input type="number" min={1} max={52} value={draft.historyWeeks ?? 12} onChange={(e) => set({ historyWeeks: Number(e.target.value) })} className={numCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Adjustment %</label>
+                  <label className={labelCls}>{tForm('adjustmentPct')}</label>
                   <input type="number" step={0.1} value={draft.adjustmentPct ?? 0} onChange={(e) => set({ adjustmentPct: Number(e.target.value) })} className={numCls} />
                 </div>
               </div>
@@ -370,9 +370,9 @@ export function CategoryManager({
 
           <div className="flex items-center gap-2 pt-1">
             <Button size="sm" disabled={busy || !draftValid} onClick={applyDraft}>
-              {busy ? 'Saving…' : editIdx === -1 ? 'Add category' : 'Save category'}
+              {busy ? tForm('saving') : editIdx === -1 ? tForm('addCategory') : tForm('saveCategory')}
             </Button>
-            <button type="button" onClick={() => { setEditIdx(null); setDraft(null) }} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={() => { setEditIdx(null); setDraft(null) }} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">{tForm('cancel')}</button>
             {msg ? <span className="text-xs text-slate-400 dark:text-slate-500">{msg}</span> : null}
           </div>
         </div>
