@@ -174,6 +174,8 @@ export async function listQuickActionOptions(): Promise<{
       'budgets',
       // NAV_MODULES continuous-close — still 404s /continuous-close when Continuous Close is off.
       'continuousClose',
+      // NAV_MODULES approvals — still 404s /approvals when Flows is off.
+      'flows',
     ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
@@ -211,6 +213,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.key === 'budgets' && !featureOn.get('budgets')) continue
     // Same requiredFeature filter: /continuous-close 404s when Continuous Close is off.
     if (mod.key === 'continuous-close' && !featureOn.get('continuousClose')) continue
+    // Same requiredFeature filter: /approvals 404s when Flows is off.
+    if (mod.key === 'approvals' && !featureOn.get('flows')) continue
     common.push({
       label: mod.label,
       href: mod.href,
