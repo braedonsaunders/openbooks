@@ -4,6 +4,14 @@ import {
   logTerminalFailure,
   SCHEDULER_OUTBOX_WORKER_IDENTITY,
 } from "./terminal-failure.ts";
+import {
+  ATTR_KIND,
+  ATTR_ORG_ID,
+  ATTR_ROW_ID,
+  ATTR_SURFACE,
+  runInSpan,
+  recordOutboxAttempt,
+} from "./telemetry.ts";
 
 /**
  * Durable scheduler/approval-escalation outbox — same claim/run/fail/retry
@@ -14,7 +22,8 @@ import {
  * MAX_SCHEDULER_OUTBOX_ATTEMPTS stamps terminal_failed_at / terminal_failed_by
  * on the row (exactly once — later attempts cannot exist because claims require
  * attempt_count < ceiling) and emits one structured
- * "scheduler.terminal_failure" log line. Crash recovery of a stale running row
+ * "scheduler.terminal_failure" log line plus one `openbooks.terminal_failures`
+ * metric increment (see telemetry.ts). Crash recovery of a stale running row
  * that was already at the ceiling performs the same transition. Operators alert
  * on poison scans with:
  *
@@ -262,13 +271,25 @@ export async function processDueSchedulerOutbox(
     const row = claimed.rows[0];
     if (!row) continue;
     processed++;
+    const startedAt = Date.now();
     try {
-      await run(row);
+      await runInSpan(
+        "outbox.attempt",
+        {
+          [ATTR_SURFACE]: "scheduler_outbox",
+          [ATTR_KIND]: row.kind,
+          ...(row.org_id ? { [ATTR_ORG_ID]: row.org_id } : {}),
+          [ATTR_ROW_ID]: row.id,
+        },
+        () => run(row),
+      );
       await markSucceeded(row, now);
       succeeded++;
+      recordOutboxAttempt("scheduler_outbox", row.kind, "succeeded", Date.now() - startedAt);
     } catch (error) {
       await markFailed(row, error, now);
       failed++;
+      recordOutboxAttempt("scheduler_outbox", row.kind, "failed", Date.now() - startedAt);
       console.error(`[scheduler-outbox] ${row.kind} ${row.id} failed:`, error);
     }
   }

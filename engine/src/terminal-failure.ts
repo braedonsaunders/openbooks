@@ -35,7 +35,15 @@
  *    order by terminal_failed_at desc;
  *
  * All three are partial-indexed on terminal_failed_at for that predicate.
+ *
+ * The same transition also increments the OpenTelemetry counter
+ * `openbooks.terminal_failures` (tagged by surface/kind — see telemetry.ts), so
+ * an operator with a collector can page on any increase instead of polling
+ * these queries; when no OTel SDK is registered that increment is a free no-op
+ * and the stamped rows remain the durable record.
  */
+import { recordTerminalFailure } from "./telemetry.ts";
+
 export const TERMINAL_FAILURE_LOG_EVENT = "scheduler.terminal_failure";
 
 /** System identities recorded in `terminal_failed_by`. */
@@ -56,7 +64,9 @@ export type TerminalFailureLogFields = {
   at: Date;
 };
 
-/** Emit the one-line operator signal for a poison row. Best-effort by design: the durable record is the stamped row, not this line. */
+/** Emit the operator signal for a poison row: the structured log line plus the
+ * `openbooks.terminal_failures` metric increment. Best-effort by design — the
+ * durable record is the stamped row, not these emissions. */
 export function logTerminalFailure(fields: TerminalFailureLogFields): void {
   console.log(
     JSON.stringify({
@@ -72,4 +82,5 @@ export function logTerminalFailure(fields: TerminalFailureLogFields): void {
       at: fields.at.toISOString(),
     }),
   );
+  recordTerminalFailure(fields.surface, fields.kind);
 }

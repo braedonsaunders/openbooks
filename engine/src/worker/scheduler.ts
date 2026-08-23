@@ -3,6 +3,7 @@ import { dispatchQueuedReportRuns, dispatchReportDeliveries, materializeDueRepor
 import { ensureScanOutboxRows, processDueSchedulerOutbox } from "../scheduler-outbox.ts";
 import { processDuePostingEffects } from "../posting-effects.ts";
 import { processGateTimers } from "../flows/gates.ts";
+import { runInSpan } from "../telemetry.ts";
 
 /**
  * The database is the durable scheduler/outbox; Redis queues are rebuilt from
@@ -82,13 +83,17 @@ export async function tick(): Promise<void> {
   running = true;
   try {
     await withTickClaim(async () => {
-      await withBypassContext(() => materializeDueReportRuns());
-      await withBypassContext(() => dispatchQueuedReportRuns());
-      await withBypassContext(() => dispatchReportDeliveries());
-      await withBypassContext(() => ensureScanOutboxRows());
-      await processGateTimers();
-      await withBypassContext(() => processDueSchedulerOutbox());
-      await withBypassContext(() => processDuePostingEffects());
+      // One span per claimed pass: every outbox/report attempt below joins it
+      // as a child, so a collector shows the full tick tree per replica.
+      await runInSpan("scheduler.tick", undefined, async () => {
+        await withBypassContext(() => materializeDueReportRuns());
+        await withBypassContext(() => dispatchQueuedReportRuns());
+        await withBypassContext(() => dispatchReportDeliveries());
+        await withBypassContext(() => ensureScanOutboxRows());
+        await processGateTimers();
+        await withBypassContext(() => processDueSchedulerOutbox());
+        await withBypassContext(() => processDuePostingEffects());
+      });
     });
   } catch (e) {
     console.error("[report-scheduler] tick failed:", e);

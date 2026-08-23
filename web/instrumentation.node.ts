@@ -1,5 +1,9 @@
 /** Node-only OpenBooks process services registered by Next.js instrumentation. */
 export async function registerNodeInstrumentation() {
+  // OTel traces/metrics when OTEL_EXPORTER_OTLP_ENDPOINT is configured; a free
+  // no-op otherwise (see engine telemetry.ts). First, so boot is observable.
+  const { startTelemetry } = await import('@openbooks/engine/src/telemetry.ts')
+  await startTelemetry()
   const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/db.ts')
   await assertSafeRuntimeDatabaseRole()
   const { ensureScheduler } = await import('@openbooks/engine/src/scheduler.ts')
