@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { FinancialProfile } from "@openbooks/schema";
 import { db, type SqlExecutor } from "./db.ts";
-import { normalizeDecimal } from "./money.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
+import { normalizeMoney } from "./money.ts";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MEASURES = new Set([
@@ -52,14 +53,15 @@ function strings(value: unknown, name: string): string[] {
   return value;
 }
 
-function optionalNonnegativeDecimal(
-  value: unknown,
-  name: string,
-): string | undefined {
-  if (value === undefined) return undefined;
+/** Persist leftover project-policy rates/amounts through exact decimal then ledger money. Fail closed. */
+function persistProjectPolicyDecimal(value: unknown, name: string): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new Error(`${name} must be a finite non-negative decimal`);
+  }
   let canonical: string;
   try {
-    canonical = normalizeDecimal(value as string | number, 4);
+    canonical = normalizeMoney(exact);
   } catch {
     throw new Error(`${name} must be a finite non-negative decimal`);
   }
@@ -67,6 +69,14 @@ function optionalNonnegativeDecimal(
     throw new Error(`${name} must be a finite non-negative decimal`);
   }
   return canonical;
+}
+
+function optionalNonnegativeDecimal(
+  value: unknown,
+  name: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  return persistProjectPolicyDecimal(value, name);
 }
 
 /**
