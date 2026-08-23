@@ -2582,17 +2582,17 @@ test('the surfaces this test was written for are covered', () => {
     'the party bank-account create must hide the currency picker when Multi-currency is off',
   )
   assert.match(
-    read('lib/customization/entity-list-query.ts'),
+    read('lib/customization/entity-list-query/customers.ts'),
     /function customerBaseJoins[\s\S]{0,200}crm_account_profiles/,
     'customer list queries must name the CRM profile join the Features switch omits',
   )
   assert.match(
-    read('lib/customization/entity-list-query.ts'),
+    read('lib/customization/entity-list-query/customers.ts'),
     /function customerStatusExpr[\s\S]{0,120}crmOn \? sql`coalesce\(cap\.lifecycle_stage[\s\S]{0,80}'customer'/,
     'customer list queries must not read CRM lifecycle when CRM is off — stored profiles stay',
   )
   assert.match(
-    read('lib/customization/entity-list-query.ts'),
+    read('lib/customization/entity-list-query/customers.ts'),
     /!crmOn && adhoc\.filters\.status !== 'customer'[\s\S]{0,80}and false/,
     'customer list queries must not filter by prospect when CRM is off',
   )
