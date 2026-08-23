@@ -88,6 +88,18 @@ function persistInvoiceDecimal(value: unknown, error: string): string {
   }
 }
 
+/**
+ * Exact decimal for a persisted quantity. Quantities are not money:
+ * document_lines.quantity is numeric(28,8), so Postgres hands every stored
+ * line back at eight decimals ("1.00000000") — canonicalize at the column's
+ * own scale instead of the ledger's four.
+ */
+function persistInvoiceQuantity(value: unknown, error: string): string {
+  const exact = canonicalDecimal(value, 8)
+  if (exact === null) throw new BillingError(error)
+  return exact
+}
+
 export async function generateInvoiceFromBillingRequest(
   orgId: string,
   userId: string,
@@ -433,7 +445,7 @@ export async function generateInvoiceFromBillingRequest(
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: `${cl.description || cl.item_name || ''}${component.unitName ? ` — ${component.unitName}` : ''}` || null,
-            quantity: persistInvoiceDecimal(component.quantity ?? '0', 'A cost line quantity is invalid'),
+            quantity: persistInvoiceQuantity(component.quantity ?? '0', 'A cost line quantity is invalid'),
             unitPrice: persistInvoiceDecimal(component.rate ?? '0', 'A cost line rate is invalid'),
             amount: persistInvoiceDecimal(component.amount ?? '0', 'A cost line amount is invalid'),
             taxCodeId: cl.tax_code_id,
@@ -450,7 +462,7 @@ export async function generateInvoiceFromBillingRequest(
             itemId: cl.item_id,
             accountId: cl.income_account_id ?? defaultIncomeId,
             description: cl.description || cl.item_name || null,
-            quantity: isProjectCharge ? persistInvoiceDecimal(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1',
+            quantity: isProjectCharge ? persistInvoiceQuantity(cl.quantity ?? '1', 'A cost line quantity is invalid') : '1',
             unitPrice: isProjectCharge ? persistInvoiceDecimal(cl.bill_rate ?? amount, 'A cost line rate is invalid') : amount,
             amount,
             taxCodeId: cl.tax_code_id,

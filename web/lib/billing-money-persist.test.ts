@@ -30,17 +30,25 @@ test('invoice generation persists time hours and rates through canonicalDecimal 
   assert.doesNotMatch(timeLoop, /String\(te\.default_rate/)
 })
 
-test('invoice generation persists cost-line qty, rate, and amount through persistInvoiceDecimal', () => {
+test('invoice generation persists cost-line qty, rate, and amount through exact-decimal helpers', () => {
   const billing = source('lib/billing.ts')
+  const helperStart = billing.indexOf('function persistInvoiceQuantity')
+  const helperEnd = billing.indexOf('\n}', helperStart)
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, 'persistInvoiceQuantity helper is defined')
+  const helper = billing.slice(helperStart, helperEnd + 2)
+  // document_lines.quantity is numeric(28,8): Postgres hands every stored
+  // line back at eight decimals, so quantities canonicalize at that scale.
+  assert.match(helper, /canonicalDecimal\(value, 8\)/)
+
   const costLoopStart = billing.indexOf('for (const cl of costRows.rows)')
   const costLoopEnd = billing.indexOf('Lump-sum markup', costLoopStart)
   assert.ok(costLoopStart >= 0 && costLoopEnd > costLoopStart, 'cost-line invoice loop is present')
   const costLoop = billing.slice(costLoopStart, costLoopEnd)
   assert.match(costLoop, /persistInvoiceDecimal\(cl\.amount \?\? '0'/)
   assert.match(costLoop, /persistInvoiceDecimal\(cl\.bill_amount \?\? '0'/)
-  assert.match(costLoop, /persistInvoiceDecimal\(cl\.quantity \?\? '1'/)
+  assert.match(costLoop, /persistInvoiceQuantity\(cl\.quantity \?\? '1'/)
   assert.match(costLoop, /persistInvoiceDecimal\(cl\.bill_rate \?\? amount/)
-  assert.match(costLoop, /persistInvoiceDecimal\(component\.quantity \?\? '0'/)
+  assert.match(costLoop, /persistInvoiceQuantity\(component\.quantity \?\? '0'/)
   assert.match(costLoop, /persistInvoiceDecimal\(component\.rate \?\? '0'/)
   assert.match(costLoop, /persistInvoiceDecimal\(component\.amount \?\? '0'/)
   assert.doesNotMatch(costLoop, /String\(cl\.amount/)
