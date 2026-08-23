@@ -84,9 +84,14 @@ test("a failed billing tick rolls its claim back instead of losing the occurrenc
   assert.ok(restore > rollbackCall, "the failed attempt restores the pre-claim next_bill_on");
   assert.ok(restoreGuard > restore, "the restore is guarded on the claimed value");
   assert.ok(lastError > restoreGuard, "last_error is still written for observability");
-  // The claim itself stays compare-and-swap: only one tick can win an occurrence.
+  // The claim itself stays compare-and-swap: only one tick can win an
+  // occurrence, and the claim is org-scoped (and status-guarded) like every
+  // other subscription write.
   const claimSql = source.slice(claim, source.indexOf("returning id", claim));
-  assert.match(claimSql, /where id = \$\{row\.id\} and next_bill_on = \$\{row\.nextBillOn\}/);
+  assert.match(
+    claimSql,
+    /where id = \$\{row\.id\} and org_id = \$\{row\.orgId\} and next_bill_on = \$\{row\.nextBillOn\} and status = 'active'/,
+  );
 });
 
 test("changeSubscription and prorateFirstInvoice serialize on the subscription row lock", () => {
@@ -97,8 +102,8 @@ test("changeSubscription and prorateFirstInvoice serialize on the subscription r
   for (const name of ["export async function changeSubscription", "export async function prorateFirstInvoice"]) {
     const fn = source.indexOf(name);
     const orgTx = source.indexOf("return withOrg(orgId", fn);
-    const lock = source.indexOf("for update", orgTx);
-    const read = source.indexOf("await loadSubRow(subscriptionId)", orgTx);
+  const lock = source.indexOf("for update", orgTx);
+  const read = source.indexOf("await loadSubRow(subscriptionId, orgId)", orgTx);
     const invoice = source.indexOf("createSubscriptionInvoice({", orgTx);
     assert.ok(orgTx > fn, `${name}: the mutation runs inside one org transaction`);
     assert.ok(lock > orgTx, `${name}: the subscription row lock is taken inside that transaction`);

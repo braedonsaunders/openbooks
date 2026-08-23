@@ -72,7 +72,11 @@ test("a failed generation tick rolls its claim back instead of losing the occurr
   assert.ok(restore > rollbackCall, "the failed attempt restores the pre-claim next_run_on");
   assert.ok(restoreGuard > restore, "the restore is guarded on the claimed value");
   assert.ok(lastError > restoreGuard, "last_error is still written for observability");
-  // The claim itself stays compare-and-swap: only one tick can win an occurrence.
+  // The claim itself stays compare-and-swap: only one tick can win an
+  // occurrence, and the claim is org-scoped like every other schedule write.
   const claimSql = source.slice(claim, source.indexOf("returning id", claim));
-  assert.match(claimSql, /where id = \$\{s\.id\} and next_run_on = \$\{occurrenceDate\}/);
+  assert.match(
+    claimSql,
+    /where id = \$\{s\.id\} and org_id = \$\{s\.orgId\} and next_run_on = \$\{occurrenceDate\}/,
+  );
 });
