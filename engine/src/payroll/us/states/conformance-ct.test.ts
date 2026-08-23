@@ -18,10 +18,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { CT_CERTIFICATE, CT_REGION } from "./ct-declaration.ts";
 import {
-  CT_RATES_2026, CT_WITHHOLDING,
-  ctInitialTax, ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
+  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_WITHHOLDING, ctInitialTax, ctPersonalCredit,
+  ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
 } from "./ct.ts";
 import { pctToRate } from "./transcription.ts";
 

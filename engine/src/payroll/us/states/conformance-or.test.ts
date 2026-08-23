@@ -13,12 +13,10 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
-import { OR_CERTIFICATE, OR_REGION } from "./or-declaration.ts";
 import {
-  OR_RATES_2026, OR_WITHHOLDING,
-  orAllowancesUsed, orAnnualWithholding, orBracketTableFor, orFederalCap,
-  orMulRateDollars, orPhaseTableFor, orRatesForPayDate, orRoundToDollar,
-  orSupplementalFlat, orTransitWithholding,
+  OR_CERTIFICATE, OR_REGION, OR_RATES_2026, OR_WITHHOLDING, orAllowancesUsed, orAnnualWithholding,
+  orBracketTableFor, orFederalCap, orMulRateDollars, orPhaseTableFor, orRatesForPayDate,
+  orRoundToDollar, orSupplementalFlat, orTransitWithholding,
 } from "./or.ts";
 import { pctToRate } from "./transcription.ts";
 

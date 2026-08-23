@@ -11,8 +11,7 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { VT_CERTIFICATE, VT_REGION } from "./vt-declaration.ts";
-import { VT_WITHHOLDING, vtPeriodTax } from "./vt.ts";
+import { VT_CERTIFICATE, VT_REGION, VT_WITHHOLDING, vtPeriodTax } from "./vt.ts";
 import { pctToRate } from "./transcription.ts";
 
 const money = (value: string) => {

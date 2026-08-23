@@ -13,10 +13,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { IN_CERTIFICATE, IN_REGION } from "./in-declaration.ts";
 import {
-  IN_COUNTIES_2026, IN_RATES_2026, IN_WITHHOLDING,
-  inApplicableCounty, inCounty, inCountyWithholding, inPeriodTaxable,
+  IN_CERTIFICATE, IN_REGION, IN_COUNTIES_2026, IN_RATES_2026, IN_WITHHOLDING, inApplicableCounty,
+  inCounty, inCountyWithholding, inPeriodTaxable,
 } from "./in.ts";
 import { pctToRate } from "./transcription.ts";
 

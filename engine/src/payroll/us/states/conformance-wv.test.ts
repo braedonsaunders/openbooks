@@ -16,8 +16,9 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
-import { WV_CERTIFICATE, WV_REGION } from "./wv-declaration.ts";
-import { WV_RATES_2026, WV_WITHHOLDING, wvPercentageMethod, wvRoundToDollar } from "./wv.ts";
+import {
+  WV_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING, wvPercentageMethod, wvRoundToDollar,
+} from "./wv.ts";
 
 const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");

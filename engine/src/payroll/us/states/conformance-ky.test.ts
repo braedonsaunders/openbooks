@@ -13,8 +13,7 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { KY_CERTIFICATE, KY_REGION } from "./ky-declaration.ts";
-import { KY_RATES_2026, KY_WITHHOLDING } from "./ky.ts";
+import { KY_CERTIFICATE, KY_REGION, KY_RATES_2026, KY_WITHHOLDING } from "./ky.ts";
 import { pctToRate } from "./transcription.ts";
 
 const money = (value: string) => {

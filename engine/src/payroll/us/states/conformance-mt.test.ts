@@ -11,8 +11,7 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { MT_CERTIFICATE, MT_REGION } from "./mt-declaration.ts";
-import { MT_RATES_2026, MT_WITHHOLDING, mtPeriodTax } from "./mt.ts";
+import { MT_CERTIFICATE, MT_REGION, MT_RATES_2026, MT_WITHHOLDING, mtPeriodTax } from "./mt.ts";
 import { pctToRate } from "./transcription.ts";
 
 const money = (value: string) => {

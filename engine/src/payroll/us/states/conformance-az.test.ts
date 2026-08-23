@@ -12,9 +12,9 @@ import {
   certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
-import { AZ_CERTIFICATE, AZ_REGION } from "./az-declaration.ts";
 import {
-  AZ_PRINTED_PERCENTS, AZ_RATES_2026, AZ_WITHHOLDING, azRateForPrintedPercent,
+  AZ_CERTIFICATE, AZ_REGION, AZ_PRINTED_PERCENTS, AZ_RATES_2026, AZ_WITHHOLDING,
+  azRateForPrintedPercent,
 } from "./az.ts";
 import { pctToRate } from "./transcription.ts";
 

@@ -14,8 +14,9 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
-import { VA_CERTIFICATE, VA_REGION } from "./va-declaration.ts";
-import { VA_RATES_2026, VA_WITHHOLDING, vaSupplementalFlat } from "./va.ts";
+import {
+  VA_CERTIFICATE, VA_REGION, VA_RATES_2026, VA_WITHHOLDING, vaSupplementalFlat,
+} from "./va.ts";
 
 const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");

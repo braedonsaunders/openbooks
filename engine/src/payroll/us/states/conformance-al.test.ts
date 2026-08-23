@@ -13,10 +13,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { AL_CERTIFICATE, AL_REGION } from "./al-declaration.ts";
 import {
-  AL_RATES_2026, AL_WITHHOLDING,
-  alAnnualTax, alDependentAllowance, alPersonalExemption, alStandardDeduction, alSupplementalFlat,
+  AL_CERTIFICATE, AL_REGION, AL_RATES_2026, AL_WITHHOLDING, alAnnualTax, alDependentAllowance,
+  alPersonalExemption, alStandardDeduction, alSupplementalFlat,
 } from "./al.ts";
 import { pctToRate } from "./transcription.ts";
 

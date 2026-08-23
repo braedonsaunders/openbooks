@@ -14,9 +14,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { MN_CERTIFICATE, MN_MWR, MN_REGION } from "./mn-declaration.ts";
 import {
-  MN_RATES_2026, MN_WITHHOLDING, mnAnnualTax, mnScheduleFor, mnSupplementalFlat,
+  MN_CERTIFICATE, MN_MWR, MN_REGION, MN_RATES_2026, MN_WITHHOLDING, mnAnnualTax, mnScheduleFor,
+  mnSupplementalFlat,
 } from "./mn.ts";
 import { pctToRate } from "./transcription.ts";
 
