@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
-import { db, schema, withOrg } from "./db.ts";
+import { db, schema, withOrgContext, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
@@ -34,36 +34,35 @@ function validateDate(value: string): string {
   return value;
 }
 
+async function loadVoidableDocument(documentId: string, orgId: string) {
+  const [doc] = await db
+    .select()
+    .from(schema.documents)
+    .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)));
+  if (!doc) throw new DocumentVoidError("document not found");
+  if (!["approved", "posted"].includes(doc.status)) {
+    throw new DocumentVoidError(
+      `${doc.documentNumber} is ${doc.status}; only issued or posted documents can be voided`,
+    );
+  }
+  if (doc.voidRequestedAt) {
+    throw new DocumentVoidError(`${doc.documentNumber} already has a pending void request`);
+  }
+  return doc;
+}
+
 /**
- * Request a controlled cancellation/void. `before_void` flow gates are the
- * approval authority. The document remains posted while gates wait; the final
- * aggregate approval invokes completeRequestedDocumentVoid through the
- * documents adapter.
+ * Tenant-authored before_void scripts run in QuickJS. They must not check out
+ * `longPool` (max 4, no statement timeout) — that pin is for clone/wipe only.
+ * `withOrgContext` applies RLS on the request pool without holding a
+ * transaction across the sandbox.
  */
-export async function requestDocumentVoid(input: {
+async function runBeforeVoidScripts(input: {
   documentId: string;
   orgId: string;
-  actorId: string;
-  reason: string;
-  reversalDate?: string | null;
-  source?: FlowEventSource;
-}): Promise<DocumentVoidResult> {
-  const reason = validateReason(input.reason);
-  // Business-meaningful default date — the org's business day via a sim-clock-
-  // aware instant, not the server's UTC day.
-  const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
-  return withOrg(input.orgId, async () => {
-    const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, input.documentId), eq(schema.documents.orgId, input.orgId)));
-    if (!doc) throw new DocumentVoidError("document not found");
-    if (!["approved", "posted"].includes(doc.status)) {
-      throw new DocumentVoidError(
-        `${doc.documentNumber} is ${doc.status}; only issued or posted documents can be voided`,
-      );
-    }
-    if (doc.voidRequestedAt) {
-      throw new DocumentVoidError(`${doc.documentNumber} already has a pending void request`);
-    }
-
+}): Promise<void> {
+  await withOrgContext(input.orgId, async () => {
+    const doc = await loadVoidableDocument(input.documentId, input.orgId);
     const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, input.orgId));
     const lines = await db
       .select()
@@ -85,6 +84,30 @@ export async function requestDocumentVoid(input: {
           : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
       );
     }
+  });
+}
+
+/**
+ * Request a controlled cancellation/void. `before_void` flow gates are the
+ * approval authority. The document remains posted while gates wait; the final
+ * aggregate approval invokes completeRequestedDocumentVoid through the
+ * documents adapter.
+ */
+export async function requestDocumentVoid(input: {
+  documentId: string;
+  orgId: string;
+  actorId: string;
+  reason: string;
+  reversalDate?: string | null;
+  source?: FlowEventSource;
+}): Promise<DocumentVoidResult> {
+  const reason = validateReason(input.reason);
+  // Business-meaningful default date — the org's business day via a sim-clock-
+  // aware instant, not the server's UTC day.
+  const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
+  await runBeforeVoidScripts(input);
+  return withOrgTransaction(input.orgId, async () => {
+    const doc = await loadVoidableDocument(input.documentId, input.orgId);
 
     const reserved = (await db.execute<{ id: string }>(sql`
       update documents
@@ -158,7 +181,7 @@ export async function completeRequestedDocumentVoid(
   documentId: string,
   orgId: string,
 ): Promise<string | null> {
-  return withOrg(orgId, async () => {
+  return withOrgTransaction(orgId, async () => {
     const result: {
       reversalEntryId: string | null;
       kind: string;
@@ -508,7 +531,7 @@ export async function rejectRequestedDocumentVoid(
   actorId: string | null,
   comment: string | null,
 ): Promise<void> {
-  await withOrg(orgId, async () => {
+  await withOrgTransaction(orgId, async () => {
     await db.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
