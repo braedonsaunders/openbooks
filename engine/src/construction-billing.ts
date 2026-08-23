@@ -163,7 +163,7 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
     const previous = normalizeMoney(l.previousCompleted || "0");
     const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
     const thisPeriod = normalizeMoney(l.thisPeriodCompleted || "0");
-    const stored = normalizeMoney(l.materialsStored || "0");
+    const stored = persistMaterialsStored(l.materialsStored || "0");
     const retainagePercent = normalizeMoney(l.retainagePercent || "0");
     if ([scheduled, previous, previousStored, thisPeriod, stored].some((value) => cmp(value, "0") < 0)) {
       throw new ConstructionBillingError("Schedule values and application amounts cannot be negative");
