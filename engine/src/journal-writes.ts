@@ -3,7 +3,7 @@ import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, schema, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
-import { loadControlAccounts } from "./control-accounts.ts";
+import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { postDocument, runPostDocumentEffects } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
@@ -237,7 +237,7 @@ export async function createScriptJournal(
     if (submission.gated) return { approvalPending: true as const };
     const entryId = await postDocument(
       docId.id,
-      { control: await loadControlAccounts(orgId) },
+      { control: await loadRequiredControlAccounts(orgId) },
       { deferEffects: true },
     );
     return { approvalPending: false as const, entryId };
