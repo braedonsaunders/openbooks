@@ -88,6 +88,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${user.orgId}, 'quote', null, 'EST-')
       on conflict on constraint sequences_org_kind_sub do update set next_number = number_sequences.next_number + 1
+      where number_sequences.org_id = ${user.orgId}
       returning prefix, next_number, padding`))
     const seq = sequence.rows[0]
     const number = `${seq.prefix}${String(seq.next_number).padStart(seq.padding, '0')}`
