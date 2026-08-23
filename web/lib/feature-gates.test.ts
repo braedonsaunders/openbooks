@@ -1177,6 +1177,36 @@ test('the surfaces this test was written for are covered', () => {
     'scheduled close automations must skip orgs whose Advanced close switch is off',
   )
   assert.match(
+    read('../engine/src/close.ts'),
+    /export async function publishCloseRun[\s\S]{0,200}advancedCloseEnabled/,
+    'publishCloseRun must refuse when Advanced close is off — stored binders stay',
+  )
+  assert.match(
+    read('app/api/close/runs/[id]/route.ts'),
+    /action === "publish"[\s\S]{0,80}isFeatureEnabled\([^,]+, "advancedClose"\)[\s\S]{0,160}status: 404/,
+    'close-package publish must 404 — not persist — when Advanced close is off — stored binders stay',
+  )
+  assert.match(
+    read('lib/application/close.ts'),
+    /action === "publish"[\s\S]{0,80}isFeatureEnabled\([^,]+, "advancedClose"\)/,
+    'MCP/assistant publish_close_package must refuse when Advanced close is off',
+  )
+  assert.match(
+    read('lib/application/close.ts'),
+    /action === "publish"[\s\S]{0,160}notFound\(/,
+    'MCP/assistant publish_close_package must 404 when Advanced close is off',
+  )
+  assert.match(
+    read('app/(app)/close/CloseWizard.tsx'),
+    /advancedClose[\s\S]{0,80}STAGES[\s\S]{0,80}stage !== "publish"/,
+    'the close wizard must omit the publish stage when Advanced close is off',
+  )
+  assert.match(
+    read('app/(app)/close/CloseWizard.tsx'),
+    /props\.advancedClose && props\.run\.status !== "published"/,
+    'the close wizard must hide the publish action when Advanced close is off — stored binders stay',
+  )
+  assert.match(
     read('../engine/src/worker/overhead-scheduler.ts'),
     /coalesce\(\(settings->'features'->>'projects'\)::boolean, true\)/,
     'scheduled overhead publish must skip orgs whose Projects switch is off',
