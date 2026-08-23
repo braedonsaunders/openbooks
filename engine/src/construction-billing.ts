@@ -86,6 +86,18 @@ function persistMaterialsStored(value: unknown): string {
   }
 }
 
+/** Persist a draw line's previous-materials-stored input through exact decimal
+ * then ledger money. Fail closed: it is written onto pay_application_lines. */
+function persistPreviousMaterialsStored(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("previous materials stored must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("previous materials stored must be an exact decimal");
+  }
+}
+
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
   const result = (await tx.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
@@ -173,7 +185,7 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   const computed: ComputedAppLine[] = lines.map((l) => {
     const scheduled = persistRevisedScheduleValueInput(l.scheduledValue || "0");
     const previous = persistPreviousCompleted(l.previousCompleted || "0");
-    const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
+    const previousStored = persistPreviousMaterialsStored(l.previousMaterialsStored || "0");
     const thisPeriod = persistThisPeriodCompleted(l.thisPeriodCompleted || "0");
     const stored = persistMaterialsStored(l.materialsStored || "0");
     const retainagePercent = normalizeMoney(l.retainagePercent || "0");
