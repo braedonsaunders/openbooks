@@ -176,6 +176,99 @@
         "depositReversed": "Deposit transaction reversed",
         "depositPosted": "Deposit transaction posted"
       }
+    },
+    "detail": {
+      "selectEmpty": "Not mapped",
+      "fields": {
+        "name": "Name",
+        "code": "Property code",
+        "propertyType": "Property type",
+        "status": "Status",
+        "subsidiary": "Subsidiary",
+        "location": "Location",
+        "fixedAsset": "Fixed asset",
+        "currency": "Currency",
+        "street": "Street",
+        "city": "City",
+        "region": "State / province",
+        "postalCode": "Postal code",
+        "rentIncomeAccount": "Rent income account",
+        "camIncomeAccount": "CAM income account",
+        "depositLiabilityAccount": "Deposit liability account",
+        "defaultBankAccount": "Default bank account"
+      },
+      "selectSubsidiary": "Select subsidiary",
+      "tabsLabelMap": {
+        "overview": "Overview",
+        "units": "Units",
+        "leases": "Leases",
+        "rent": "Rent",
+        "deposits": "Deposits",
+        "cam": "CAM"
+      },
+      "tabsAria": "Property details",
+      "description": "{subsidiary} · {location}",
+      "noLocation": "No location",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "save": "Save",
+      "edit": "Edit",
+      "actions": "Actions",
+      "customForm": "Custom form",
+      "customizeForm": "Customize form",
+      "deactivate": "Deactivate property",
+      "reactivate": "Reactivate property",
+      "deleteConfirm": "Delete {name}? Only unused properties can be permanently deleted.",
+      "deleteProperty": "Delete property",
+      "units": {
+        "title": "Rentable units",
+        "description": "Occupancy, rentable area, and unit-level lease capacity.",
+        "addUnit": "Add unit",
+        "table": {
+          "unit": "Unit",
+          "type": "Type",
+          "rentableArea": "Rentable area",
+          "bedrooms": "Bedrooms",
+          "status": "Status"
+        },
+        "emptyTitle": "No units yet",
+        "emptyDetail": "Add the first rentable unit from this property record."
+      },
+      "leases": {
+        "title": "Property leases",
+        "description": "Current and historical tenant agreements for this property.",
+        "newLease": "New lease",
+        "table": {
+          "lease": "Lease",
+          "unit": "Unit",
+          "tenant": "Tenant",
+          "term": "Term",
+          "status": "Status"
+        },
+        "wholeProperty": "Whole property",
+        "openTerm": "Open",
+        "emptyTitle": "No leases yet",
+        "emptyDetail": "Create a lease from the Leases workspace tab."
+      },
+      "rent": {
+        "title": "Rent schedule",
+        "description": "Scheduled and invoiced rent for this property’s leases.",
+        "assessLateFees": "Assess late fees",
+        "billDueRent": "Bill due rent"
+      },
+      "depositsTab": {
+        "title": "Security deposits",
+        "description": "Append-only tenant deposit activity across this property."
+      },
+      "cam": {
+        "title": "CAM reconciliations",
+        "description": "Operating-expense pools, allocations, and tenant true-ups for this property.",
+        "newPool": "New CAM pool"
+      },
+      "toasts": {
+        "lateFeesAssessed": "Property late fees assessed",
+        "rentBilled": "Property rent billed"
+      }
     }
   }
 }
