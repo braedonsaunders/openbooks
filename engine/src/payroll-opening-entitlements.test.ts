@@ -67,6 +67,7 @@ async function seedBanks(): Promise<BankFixture> {
   const vacationPayable = await account("2320", "Vacation payable", "liability_current_other");
   await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify({
+      features: { payroll: true },
       payroll: {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: burdenExpense,
