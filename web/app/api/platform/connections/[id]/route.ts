@@ -150,9 +150,29 @@ export async function DELETE(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const orgId = gate.user.orgId;
   const { id } = await params;
-  await db.execute(
-    sql`delete from connections where org_id = ${gate.user.orgId} and id = ${id}`,
-  );
+  const existing = await getConnection(orgId, id);
+  if (!existing)
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  // Audit-safe snapshot: the sealed secrets blob never enters the trail.
+  const { secrets, ...rest } = existing as unknown as Record<string, unknown>;
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`delete from connections where org_id = ${orgId} and id = ${id}`,
+    );
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${orgId}, 'connections', ${id}, 'delete',
+        ${JSON.stringify({
+          before: { ...rest, hasSecrets: secrets != null },
+          source: String(existing.source),
+        })}::jsonb,
+        ${gate.user.id}
+      )
+    `);
+  });
   return NextResponse.json({ ok: true });
 }
