@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -62,6 +63,7 @@ export function PropertyDetailDrawer({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const t = useTranslations("entities.propertyManagement.detail");
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [tab, setTab] = useState(initialTab ?? "overview");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -133,7 +135,7 @@ export function PropertyDetailDrawer({
     value: string,
     onChange: (value: string) => void,
     items: Option[],
-    empty = "Not mapped",
+    empty = t("selectEmpty"),
   ) =>
     editable ? (
       <Select value={value} onChange={(event) => onChange(event.target.value)}>
@@ -172,7 +174,7 @@ export function PropertyDetailDrawer({
       case "name":
         return field(
           placement,
-          "Name",
+          t("fields.name"),
           editable ? (
             <Input
               value={form.name}
@@ -186,7 +188,7 @@ export function PropertyDetailDrawer({
       case "code":
         return field(
           placement,
-          "Property code",
+          t("fields.code"),
           editable ? (
             <Input
               className="font-mono"
@@ -201,7 +203,7 @@ export function PropertyDetailDrawer({
       case "property_type":
         return field(
           placement,
-          "Property type",
+          t("fields.propertyType"),
           editable ? (
             <Select
               value={form.propertyType}
@@ -229,7 +231,7 @@ export function PropertyDetailDrawer({
       case "status":
         return field(
           placement,
-          "Status",
+          t("fields.status"),
           editable ? (
             <Select
               value={form.status}
@@ -248,19 +250,19 @@ export function PropertyDetailDrawer({
       case "subsidiary_id":
         return field(
           placement,
-          "Subsidiary",
+          t("fields.subsidiary"),
           select(
             form.subsidiaryId,
             (value) => setForm({ ...form, subsidiaryId: value }),
             options.subsidiaries,
-            "Select subsidiary",
+            t("selectSubsidiary"),
           ),
           true,
         );
       case "location_id":
         return field(
           placement,
-          "Location",
+          t("fields.location"),
           select(
             form.locationId,
             (value) => setForm({ ...form, locationId: value }),
@@ -271,7 +273,7 @@ export function PropertyDetailDrawer({
         if (!fixedAssetsEnabled) return null;
         return field(
           placement,
-          "Fixed asset",
+          t("fields.fixedAsset"),
           select(
             form.fixedAssetId,
             (value) => setForm({ ...form, fixedAssetId: value }),
@@ -282,7 +284,7 @@ export function PropertyDetailDrawer({
         if (!multiCurrency) return null;
         return field(
           placement,
-          "Currency",
+          t("fields.currency"),
           editable ? (
             <Input
               className="font-mono uppercase"
@@ -300,7 +302,7 @@ export function PropertyDetailDrawer({
       case "street":
         return field(
           placement,
-          "Street",
+          t("fields.street"),
           editable ? (
             <Input
               value={form.street}
@@ -313,7 +315,7 @@ export function PropertyDetailDrawer({
       case "city":
         return field(
           placement,
-          "City",
+          t("fields.city"),
           editable ? (
             <Input
               value={form.city}
@@ -326,7 +328,7 @@ export function PropertyDetailDrawer({
       case "region":
         return field(
           placement,
-          "State / province",
+          t("fields.region"),
           editable ? (
             <Input
               value={form.region}
@@ -339,7 +341,7 @@ export function PropertyDetailDrawer({
       case "postal_code":
         return field(
           placement,
-          "Postal code",
+          t("fields.postalCode"),
           editable ? (
             <Input
               value={form.postalCode}
@@ -352,7 +354,7 @@ export function PropertyDetailDrawer({
       case "rent_income_account_id":
         return field(
           placement,
-          "Rent income account",
+          t("fields.rentIncomeAccount"),
           select(
             form.rentIncomeAccountId,
             (value) => setForm({ ...form, rentIncomeAccountId: value }),
@@ -362,7 +364,7 @@ export function PropertyDetailDrawer({
       case "cam_income_account_id":
         return field(
           placement,
-          "CAM income account",
+          t("fields.camIncomeAccount"),
           select(
             form.camIncomeAccountId,
             (value) => setForm({ ...form, camIncomeAccountId: value }),
@@ -372,7 +374,7 @@ export function PropertyDetailDrawer({
       case "deposit_liability_account_id":
         return field(
           placement,
-          "Deposit liability account",
+          t("fields.depositLiabilityAccount"),
           select(
             form.depositLiabilityAccountId,
             (value) => setForm({ ...form, depositLiabilityAccountId: value }),
@@ -382,7 +384,7 @@ export function PropertyDetailDrawer({
       case "default_bank_account_id":
         return field(
           placement,
-          "Default bank account",
+          t("fields.defaultBankAccount"),
           select(
             form.defaultBankAccountId,
             (value) => setForm({ ...form, defaultBankAccountId: value }),
@@ -397,12 +399,12 @@ export function PropertyDetailDrawer({
   const tabLabel = (item: { key: string; labelOverride?: string | null }) =>
     item.labelOverride?.trim() ||
     ({
-      overview: "Overview",
-      units: "Units",
-      leases: "Leases",
-      rent: "Rent",
-      deposits: "Deposits",
-      cam: "CAM",
+      overview: t("tabsLabelMap.overview"),
+      units: t("tabsLabelMap.units"),
+      leases: t("tabsLabelMap.leases"),
+      rent: t("tabsLabelMap.rent"),
+      deposits: t("tabsLabelMap.deposits"),
+      cam: t("tabsLabelMap.cam"),
     }[item.key] ??
       item.key.replace(/^tab_/, "").replaceAll("_", " "));
   const propertyPayload = (status = form.status) => ({
@@ -458,10 +460,13 @@ export function PropertyDetailDrawer({
           <Status value={form.status} />
         </span>
       }
-      description={`${property.subsidiaryName} · ${property.locationName || "No location"}`}
+      description={t("description", {
+        subsidiary: property.subsidiaryName,
+        location: property.locationName || t("noLocation"),
+      })}
       subtabs={
         <RecordTabs
-          label="Property details"
+          label={t("tabsAria")}
           active={tab}
           tabs={tabs.map((item) => ({ key: item.key, label: tabLabel(item) }))}
           onChange={setTab}
@@ -471,14 +476,14 @@ export function PropertyDetailDrawer({
         mode === "edit" ? (
           <div className="flex items-center gap-1.5">
             <Button size="sm" variant="outline" disabled={busy} onClick={reset}>
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               size="sm"
               disabled={busy || !form.name.trim() || !form.code.trim()}
               onClick={save}
             >
-              {busy ? "Saving…" : "Save"}
+              {busy ? t("saving") : t("save")}
             </Button>
           </div>
         ) : permissions.manage || permissions.customize ? (
@@ -490,7 +495,7 @@ export function PropertyDetailDrawer({
                 className="h-8 px-2.5 text-xs"
                 onClick={() => setMode("edit")}
               >
-                Edit
+                {t("edit")}
               </Button>
             ) : null}
             <Popover
@@ -505,7 +510,7 @@ export function PropertyDetailDrawer({
                   className="h-8 gap-1.5 px-2.5 text-xs"
                   onClick={() => setActionsOpen((open) => !open)}
                 >
-                  Actions{" "}
+                  {t("actions")}{" "}
                   <ChevronDown
                     className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")}
                   />
@@ -514,7 +519,7 @@ export function PropertyDetailDrawer({
             >
               {customization.forms.length ? (
                 <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800">
-                  <Label className="mb-1 block text-xs">Custom form</Label>
+                  <Label className="mb-1 block text-xs">{t("customForm")}</Label>
                   <Select
                     value={customization.currentFormId ?? ""}
                     onChange={(e) => selectForm(e.target.value)}
@@ -534,7 +539,7 @@ export function PropertyDetailDrawer({
                   className="h-8 w-full justify-start rounded px-2 text-xs"
                 >
                   <Link href="/admin/customization?recordType=property&tab=forms">
-                    Customize form
+                    {t("customizeForm")}
                   </Link>
                 </Button>
               ) : null}
@@ -547,7 +552,7 @@ export function PropertyDetailDrawer({
                       disabled={busy}
                       onClick={() => changeStatus("inactive")}
                     >
-                      Deactivate property
+                      {t("deactivate")}
                     </Button>
                   ) : form.status === "inactive" ? (
                     <Button
@@ -556,7 +561,7 @@ export function PropertyDetailDrawer({
                       disabled={busy}
                       onClick={() => changeStatus("active")}
                     >
-                      Reactivate property
+                      {t("reactivate")}
                     </Button>
                   ) : null}
                   <Button
@@ -566,13 +571,13 @@ export function PropertyDetailDrawer({
                     onClick={() => {
                       if (
                         window.confirm(
-                          `Delete ${property.name}? Only unused properties can be permanently deleted.`,
+                          t("deleteConfirm", { name: property.name }),
                         )
                       )
                         void onDelete();
                     }}
                   >
-                    Delete property
+                    {t("deleteProperty")}
                   </Button>
                 </div>
               ) : null}
@@ -594,14 +599,14 @@ export function PropertyDetailDrawer({
         <div className="space-y-3 p-1">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Rentable units</h3>
+              <h3 className="text-sm font-semibold">{t("units.title")}</h3>
               <p className="text-xs text-slate-500">
-                Occupancy, rentable area, and unit-level lease capacity.
+                {t("units.description")}
               </p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={onAddUnit}>
-                Add unit
+                {t("units.addUnit")}
               </Button>
             ) : null}
           </div>
@@ -609,11 +614,11 @@ export function PropertyDetailDrawer({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Unit</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Rentable area</TableHead>
-                  <TableHead className="text-right">Bedrooms</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("units.table.unit")}</TableHead>
+                  <TableHead>{t("units.table.type")}</TableHead>
+                  <TableHead className="text-right">{t("units.table.rentableArea")}</TableHead>
+                  <TableHead className="text-right">{t("units.table.bedrooms")}</TableHead>
+                  <TableHead>{t("units.table.status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -653,8 +658,8 @@ export function PropertyDetailDrawer({
             </Table>
           ) : (
             <Empty
-              title="No units yet"
-              detail="Add the first rentable unit from this property record."
+              title={t("units.emptyTitle")}
+              detail={t("units.emptyDetail")}
             />
           )}
         </div>
@@ -663,14 +668,14 @@ export function PropertyDetailDrawer({
         <div className="space-y-3 p-1">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Property leases</h3>
+              <h3 className="text-sm font-semibold">{t("leases.title")}</h3>
               <p className="text-xs text-slate-500">
-                Current and historical tenant agreements for this property.
+                {t("leases.description")}
               </p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={() => onAddLease(null)}>
-                New lease
+                {t("leases.newLease")}
               </Button>
             ) : null}
           </div>
@@ -678,11 +683,11 @@ export function PropertyDetailDrawer({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Lease</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead>Tenant</TableHead>
-                  <TableHead>Term</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("leases.table.lease")}</TableHead>
+                  <TableHead>{t("leases.table.unit")}</TableHead>
+                  <TableHead>{t("leases.table.tenant")}</TableHead>
+                  <TableHead>{t("leases.table.term")}</TableHead>
+                  <TableHead>{t("leases.table.status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -703,10 +708,10 @@ export function PropertyDetailDrawer({
                     <TableCell className="font-medium text-teal-700">
                       {lease.leaseNumber}
                     </TableCell>
-                    <TableCell>{lease.unitCode || "Whole property"}</TableCell>
+                    <TableCell>{lease.unitCode || t("leases.wholeProperty")}</TableCell>
                     <TableCell>{lease.tenantName}</TableCell>
                     <TableCell>
-                      {lease.startsOn} – {lease.endsOn || "Open"}
+                      {lease.startsOn} – {lease.endsOn || t("leases.openTerm")}
                     </TableCell>
                     <TableCell>
                       <Status value={lease.status} />
@@ -717,8 +722,8 @@ export function PropertyDetailDrawer({
             </Table>
           ) : (
             <Empty
-              title="No leases yet"
-              detail="Create a lease from the Leases workspace tab."
+              title={t("leases.emptyTitle")}
+              detail={t("leases.emptyDetail")}
             />
           )}
         </div>
@@ -727,9 +732,9 @@ export function PropertyDetailDrawer({
         <div className="space-y-3 p-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">Rent schedule</h3>
+              <h3 className="text-sm font-semibold">{t("rent.title")}</h3>
               <p className="text-xs text-slate-500">
-                Scheduled and invoiced rent for this property’s leases.
+                {t("rent.description")}
               </p>
             </div>
             {permissions.bill ? (
@@ -741,11 +746,11 @@ export function PropertyDetailDrawer({
                   onClick={() =>
                     act(
                       { action: "assessLateFees", propertyId: property.id },
-                      "Property late fees assessed",
+                      t("toasts.lateFeesAssessed"),
                     )
                   }
                 >
-                  Assess late fees
+                  {t("rent.assessLateFees")}
                 </Button>
                 <Button
                   size="sm"
@@ -753,11 +758,11 @@ export function PropertyDetailDrawer({
                   onClick={() =>
                     act(
                       { action: "billRent", propertyId: property.id },
-                      "Property rent billed",
+                      t("toasts.rentBilled"),
                     )
                   }
                 >
-                  Bill due rent
+                  {t("rent.billDueRent")}
                 </Button>
               </div>
             ) : null}
@@ -774,9 +779,9 @@ export function PropertyDetailDrawer({
       {tab === "deposits" ? (
         <div className="space-y-3 p-1">
           <div>
-            <h3 className="text-sm font-semibold">Security deposits</h3>
+            <h3 className="text-sm font-semibold">{t("depositsTab.title")}</h3>
             <p className="text-xs text-slate-500">
-              Append-only tenant deposit activity across this property.
+              {t("depositsTab.description")}
             </p>
           </div>
           <DepositTable
@@ -792,15 +797,14 @@ export function PropertyDetailDrawer({
         <div className="space-y-3 p-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">CAM reconciliations</h3>
+              <h3 className="text-sm font-semibold">{t("cam.title")}</h3>
               <p className="text-xs text-slate-500">
-                Operating-expense pools, allocations, and tenant true-ups for
-                this property.
+                {t("cam.description")}
               </p>
             </div>
             {permissions.manage && property.status === "active" ? (
               <Button size="sm" onClick={onAddCam}>
-                New CAM pool
+                {t("cam.newPool")}
               </Button>
             ) : null}
           </div>
