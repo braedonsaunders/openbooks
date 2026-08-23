@@ -113,7 +113,7 @@ test('project financials clarify included overhead and keep revenue recognition 
 })
 
 test('project transaction amounts use project-charge bill value and expose governed editing', () => {
-  const financials = source('lib/project-financials.ts')
+  const financials = source('../engine/src/project-financials.ts')
   const related = source('components/related-transaction-drawer.tsx')
   const document = source('components/document-drawer.tsx')
 
