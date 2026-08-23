@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Card, CardContent, cn } from "@openbooks/ui";
 import type { FormLayoutConfig, ListViewConfig } from "@openbooks/customization";
@@ -36,11 +37,11 @@ type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 type LeaseCreateContext = { propertyId: string; unitId?: string | null };
 type CamCreateContext = { propertyId?: string; poolId?: string };
 type ActionPayload = Record<string, unknown>;
-const mainTabs: Array<{ key: Tab; label: string }> = [
-  { key: "properties", label: "Properties" },
-  { key: "rentRoll", label: "Rent Roll" },
-  { key: "cam", label: "CAM" },
-  { key: "depositReconciliation", label: "Deposit Reconciliation" },
+const mainTabs: Array<{ key: Tab }> = [
+  { key: "properties" },
+  { key: "rentRoll" },
+  { key: "cam" },
+  { key: "depositReconciliation" },
 ];
 const empty: Workspace = {
   properties: [],
@@ -101,6 +102,7 @@ export function PropertyManagementWorkspace({
   multiCurrency?: boolean;
 }) {
   const { money } = useMoney();
+  const t = useTranslations("entities.propertyManagement.workspace");
   const [data, setData] = useState<Workspace>(empty);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -130,7 +132,7 @@ export function PropertyManagementWorkspace({
       setData(body);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Could not load properties",
+        error instanceof Error ? error.message : t("toasts.couldNotLoad"),
       );
     } finally {
       setLoading(false);
@@ -148,7 +150,7 @@ export function PropertyManagementWorkspace({
       await load();
       return result;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Action failed");
+      toast.error(error instanceof Error ? error.message : t("toasts.actionFailed"));
       return null;
     } finally {
       setBusy(false);
@@ -211,35 +213,35 @@ export function PropertyManagementWorkspace({
   return (
     <div className="space-y-4">
       <section
-        aria-label="Property health"
+        aria-label={t("healthAria")}
         className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         <Metric
-          label="Occupied units"
+          label={t("metrics.occupiedUnits")}
           value={`${occupied} / ${data.units.length}`}
-          hint={`${activeLeases.length} active leases`}
+          hint={t("metrics.activeLeasesHint", { count: activeLeases.length })}
           icon="building"
           accent="teal"
         />
         <Metric
-          label="Monthly base rent"
+          label={t("metrics.monthlyBaseRent")}
           value={money(monthlyRent)}
-          hint="Current active charges"
+          hint={t("metrics.currentChargesHint")}
           icon="badge-dollar"
           accent="emerald"
         />
         <Metric
-          label="Rent billed past due"
+          label={t("metrics.rentPastDue")}
           value={money(overdue)}
-          hint="Invoice schedule aging"
+          hint={t("metrics.agingHint")}
           tone={overdue > 0 ? "danger" : undefined}
           icon="circle-alert"
           accent="red"
         />
         <Metric
-          label="Security deposits held"
+          label={t("metrics.depositsHeld")}
           value={money(depositsHeld)}
-          hint="Tenant deposit liability"
+          hint={t("metrics.depositLiabilityHint")}
           icon="shield-check"
           accent="violet"
         />
@@ -251,7 +253,7 @@ export function PropertyManagementWorkspace({
             <nav
               className="-mb-px flex min-w-0 gap-1 overflow-x-auto"
               role="tablist"
-              aria-label="Property management sections"
+              aria-label={t("sectionsAria")}
             >
               {mainTabs.map((item) => (
                 <button
@@ -267,18 +269,18 @@ export function PropertyManagementWorkspace({
                       : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
                   )}
                 >
-                  {item.label}
+                  {t(`tabs.${item.key}`)}
                 </button>
               ))}
             </nav>
             <div className="flex flex-wrap gap-2 py-3 sm:justify-end">
               {tab === "properties" && permissions.manage ? (
                 <Button onClick={() => setCreateProperty(true)}>
-                  New property
+                  {t("newProperty")}
                 </Button>
               ) : null}
               {tab === "cam" && permissions.manage ? (
-                <Button onClick={() => setCreateCam({})}>New CAM pool</Button>
+                <Button onClick={() => setCreateCam({})}>{t("newCamPool")}</Button>
               ) : null}
               {tab === "rentRoll" && permissions.bill && permissions.bulk ? (
                 <>
@@ -288,19 +290,19 @@ export function PropertyManagementWorkspace({
                     onClick={() =>
                       act(
                         { action: "assessLateFees" },
-                        "Portfolio late fees assessed",
+                        t("toasts.lateFeesAssessed"),
                       )
                     }
                   >
-                    Assess late fees
+                    {t("assessLateFees")}
                   </Button>
                   <Button
                     disabled={busy}
                     onClick={() =>
-                      act({ action: "billRent" }, "Portfolio rent billed")
+                      act({ action: "billRent" }, t("toasts.rentBilled"))
                     }
                   >
-                    Bill due rent
+                    {t("billDueRent")}
                   </Button>
                 </>
               ) : null}
@@ -308,7 +310,7 @@ export function PropertyManagementWorkspace({
           </div>
           {loading ? (
             <div className="p-12 text-center text-sm text-slate-500">
-              Loading property portfolio…
+              {t("loading")}
             </div>
           ) : tab === "properties" ? (
             <PropertiesTable
@@ -368,7 +370,7 @@ export function PropertyManagementWorkspace({
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createProperty", ...payload },
-            "Property created",
+            t("toasts.propertyCreated"),
           );
           if (result) setCreateProperty(false);
         }}
@@ -418,13 +420,13 @@ export function PropertyManagementWorkspace({
         }
         onReopenCam={(pool: any) => setReopenCamPoolId(pool.id)}
         onSave={(payload: ActionPayload) =>
-          act({ action: "updateProperty", ...payload }, "Property updated")
+          act({ action: "updateProperty", ...payload }, t("toasts.propertyUpdated"))
         }
         onDelete={async () => {
           if (!selectedProperty) return null;
           const result = await act(
             { action: "deleteProperty", propertyId: selectedProperty.id },
-            "Property deleted",
+            t("toasts.propertyDeleted"),
           );
           if (result) setSelectedPropertyId(null);
           return result;
@@ -437,7 +439,7 @@ export function PropertyManagementWorkspace({
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createUnit", ...payload },
-            "Unit added",
+            t("toasts.unitAdded"),
           );
           if (result) setUnitPropertyId(null);
         }}
@@ -459,13 +461,13 @@ export function PropertyManagementWorkspace({
           })
         }
         onSave={(payload: ActionPayload) =>
-          act({ action: "updateUnit", ...payload }, "Unit updated")
+          act({ action: "updateUnit", ...payload }, t("toasts.unitUpdated"))
         }
         onDelete={async () => {
           if (!selectedUnit) return null;
           const result = await act(
             { action: "deleteUnit", unitId: selectedUnit.id },
-            "Unit deleted",
+            t("toasts.unitDeleted"),
           );
           if (result) setSelectedUnitId(null);
           return result;
@@ -483,7 +485,7 @@ export function PropertyManagementWorkspace({
         onSave={async (payload: ActionPayload) => {
           const result = await act(
             { action: "createLease", ...payload },
-            "Lease created",
+            t("toasts.leaseCreated"),
           );
           if (result?.id) {
             setCreateLease(null);
@@ -505,7 +507,7 @@ export function PropertyManagementWorkspace({
             createCam?.poolId
               ? { action: "updateCamPool", poolId: createCam.poolId, ...payload }
               : { action: "createCamPool", ...payload },
-            createCam?.poolId ? "CAM pool updated" : "CAM pool created",
+            createCam?.poolId ? t("toasts.camPoolUpdated") : t("toasts.camPoolCreated"),
           );
           if (result) setCreateCam(null);
         }}
@@ -519,7 +521,7 @@ export function PropertyManagementWorkspace({
         onSave={async (reason: string) => {
           const result = await act(
             { action: "reopenCamPool", poolId: reopenCamPoolId, reason },
-            "CAM pool reopened for correction",
+            t("toasts.camPoolReopened"),
           );
           if (result) setReopenCamPoolId(null);
         }}
@@ -536,7 +538,7 @@ export function PropertyManagementWorkspace({
         act={act}
         money={money}
         onSave={(payload: ActionPayload) =>
-          act({ action: "updateLease", ...payload }, "Lease updated")
+          act({ action: "updateLease", ...payload }, t("toasts.leaseUpdated"))
         }
       />
     </div>
