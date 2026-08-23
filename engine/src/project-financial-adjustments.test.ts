@@ -10,7 +10,7 @@ const service = readFileSync(
   "engine/src/project-financial-adjustments.ts",
   "utf8",
 );
-const resolver = readFileSync("web/lib/project-financials.ts", "utf8");
+const resolver = readFileSync("engine/src/project-financials.ts", "utf8");
 
 test("project financial adjustments are immutable controlled evidence", () => {
   assert.match(baseline, /project_financial_adjustments/i);

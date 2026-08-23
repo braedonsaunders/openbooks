@@ -9,8 +9,8 @@
 import { readFileSync } from 'node:fs'
 import { db } from '../db.ts'
 import { sql } from 'drizzle-orm'
-import { resolveProjectFinancials } from '../../../web/lib/project-financials.ts'
-import { loadProjectType } from '../../../web/lib/project-type.ts'
+import { resolveProjectFinancials } from '../project-financials.ts'
+import { loadProjectType } from '../project-type.ts'
 import { abs, add, cmp, formatMoney, neg } from '../money.ts'
 
 const CENT = '0.0050'

@@ -10,7 +10,7 @@ const service = readFileSync(
   "engine/src/project-overhead-adjustments.ts",
   "utf8",
 );
-const resolver = readFileSync("web/lib/project-financials.ts", "utf8");
+const resolver = readFileSync("engine/src/project-financials.ts", "utf8");
 
 test("statistical overhead exceptions are native immutable evidence", () => {
   assert.match(baseline, /project_overhead_adjustments/i);

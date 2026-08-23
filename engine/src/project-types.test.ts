@@ -61,13 +61,13 @@ test('project financial policy is effective-dated, immutable, and tenant isolate
   assert.match(service, /controlled_historical_correction/)
   assert.match(service, /project financial profile changed after the correction was planned/)
 
-  const resolver = readFileSync('web/lib/project-type.ts', 'utf8')
-  assert.match(resolver, /v\.effective_from <= \$\{asOf\}/)
-  assert.match(resolver, /v\.effective_to is null or v\.effective_to >= \$\{asOf\}/)
+  const resolver = readFileSync('engine/src/project-type.ts', 'utf8')
+  assert.match(resolver, /v\.effective_from <= \$\{effectiveAsOf\}/)
+  assert.match(resolver, /v\.effective_to is null or v\.effective_to >= \$\{effectiveAsOf\}/)
 })
 
 test('project cost and selling-value evidence preserve canonical document direction', () => {
-  const financials = readFileSync('web/lib/project-financials.ts', 'utf8')
+  const financials = readFileSync('engine/src/project-financials.ts', 'utf8')
   assert.match(
     financials,
     /d\.kind = 'vendor_credit'\s+then -dl\.amount else dl\.amount end/,

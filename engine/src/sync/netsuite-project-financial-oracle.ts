@@ -6,8 +6,8 @@ import { fromUnits, roundDiv, toUnits } from "../money.ts";
 import { netsuiteRestlet, type NetSuiteCreds } from "../netsuite.ts";
 import { unsealJson } from "../secrets.ts";
 import { buildSource, getConnection } from "./connection.ts";
-import { loadProjectType } from "../../../web/lib/project-type.ts";
-import { resolveProjectFinancials } from "../../../web/lib/project-financials.ts";
+import { loadProjectType } from "../project-type.ts";
+import { resolveProjectFinancials } from "../project-financials.ts";
 
 interface OracleMapping {
   collectionPath: string;

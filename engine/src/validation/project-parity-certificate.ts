@@ -41,8 +41,8 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../db.ts";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money.ts";
 import { sourceClient } from "../sync/source-client.ts";
-import { resolveProjectFinancials } from "../../../web/lib/project-financials.ts";
-import { loadProjectType } from "../../../web/lib/project-type.ts";
+import { resolveProjectFinancials } from "../project-financials.ts";
+import { loadProjectType } from "../project-type.ts";
 
 type JsonRow = Record<string, unknown>;
 
