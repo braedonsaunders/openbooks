@@ -121,8 +121,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       exactLines,
       await taxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
     )
+    const subtotal = exactMoney(computed.subtotal)
+    if (subtotal === 'invalid') {
+      return NextResponse.json({ error: 'Expense subtotal is not a valid amount' }, { status: 422 })
+    }
     totals = {
-      subtotal: normalizeMoney(computed.subtotal),
+      subtotal,
       taxTotal: normalizeMoney(computed.taxTotal),
       total: normalizeMoney(computed.total),
     }
