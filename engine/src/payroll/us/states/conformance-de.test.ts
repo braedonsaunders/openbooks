@@ -18,18 +18,10 @@ import {
   deStandardDeduction,
 } from "./de.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: DE_CERTIFICATE,
-    stored: [{ certificateKey: DE_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(DE_CERTIFICATE, answers);
 
 test("DE certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(DE_CERTIFICATE), null);

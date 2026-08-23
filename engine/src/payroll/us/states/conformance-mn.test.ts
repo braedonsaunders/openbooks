@@ -19,18 +19,10 @@ import {
   mnSupplementalFlat,
 } from "./mn.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: MN_CERTIFICATE,
-    stored: [{ certificateKey: MN_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(MN_CERTIFICATE, answers);
 
 test("MN certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(MN_CERTIFICATE), null);

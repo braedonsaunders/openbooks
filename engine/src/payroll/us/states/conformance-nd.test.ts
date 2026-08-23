@@ -13,18 +13,10 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { ND_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax } from "./nd.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: ND_CERTIFICATE,
-    stored: [{ certificateKey: ND_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(ND_CERTIFICATE, answers);
 
 test("ND certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(ND_CERTIFICATE), null);

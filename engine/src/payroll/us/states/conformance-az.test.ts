@@ -17,18 +17,10 @@ import {
   azRateForPrintedPercent,
 } from "./az.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: AZ_CERTIFICATE,
-    stored: [{ certificateKey: AZ_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(AZ_CERTIFICATE, answers);
 
 test("AZ certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(AZ_CERTIFICATE), null);

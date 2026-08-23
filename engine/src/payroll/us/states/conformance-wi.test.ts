@@ -18,18 +18,10 @@ import {
   wiScheduleFor,
 } from "./wi.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: WI_CERTIFICATE,
-    stored: [{ certificateKey: WI_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(WI_CERTIFICATE, answers);
 
 test("WI certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WI_CERTIFICATE), null);

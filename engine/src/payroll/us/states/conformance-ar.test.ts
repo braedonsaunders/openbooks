@@ -16,18 +16,10 @@ import {
   arRoundToDollar,
 } from "./ar.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: AR_CERTIFICATE,
-    stored: [{ certificateKey: AR_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(AR_CERTIFICATE, answers);
 
 test("AR certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(AR_CERTIFICATE), null);

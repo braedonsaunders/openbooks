@@ -8,20 +8,12 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveCertificate } from "../../certificates.ts";
+import type { ResolvedCertificate } from "../../certificates.ts";
 import { CO_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}) {
-  return resolveCertificate({
-    certificate: CO_CERTIFICATE,
-    stored: [{ certificateKey: "us_co_dr0004", answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(CO_CERTIFICATE, answers);
 
 test("CO DR 1098 — weekly $1,000, otherwise status, no DR 0004 allowance: $39.77", () => {
   // 1c $52,000 − 2a $5,000 = $47,000 × 4.40% = $2,068.00 ÷ 52 = $39.7692… → $39.77
