@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { can, guardPermission } from '../../../../lib/authz'
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const authz = gate
 
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     resource?: string
     columns?: string[]
     format?: ExportFormat

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   TaxRateProviderError,
@@ -23,7 +24,9 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const provider = body.provider as TaxRateProviderKey;
   if (!["avalara", "taxjar", "custom_http", "manual"].includes(provider)) {
     return NextResponse.json({ error: "invalid provider" }, { status: 422 });
@@ -53,7 +56,9 @@ export async function PUT(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as Record<string, any>;
   try {
     if (body.action === "manualQuote") {
       const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);

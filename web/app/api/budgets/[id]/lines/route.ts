@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -10,7 +11,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const body = (await req.json().catch(() => ({}))) as { expectedRevision?: number; cells?: Record<string, unknown>[] }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { expectedRevision?: number; cells?: Record<string, unknown>[] }
   if (!Array.isArray(body.cells)) return NextResponse.json({ error: 'cells_required' }, { status: 422 })
 
   const nullableUuid = (value: unknown) => value === null || value === undefined || value === ''

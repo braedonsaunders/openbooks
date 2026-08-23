@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/src/db.ts";
@@ -132,7 +133,9 @@ async function actionProjectId(orgId: string, action: string, body: Record<strin
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as Record<string, any>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, any>;
   const action = body.action as string;
   const permission = action === "approveChangeOrder" || action === "approvePayApp" || action === "voidPayApp"
     ? "ar.approve"

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -103,7 +104,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  const body = (await req.json()) as DocumentEditInput
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as DocumentEditInput
   // Stored inventory / assembly / kit lines stay. Turning Inventory off must
   // 404 a write that would persist a new one of those kinds.
   if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
@@ -187,7 +190,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
   }
   try {
-    const body = (await req.json().catch(() => ({}))) as { reason?: string }
+    const parsedBody2 = await parseJsonBody(req, jsonObject);
+    if (!parsedBody2.ok) return parsedBody2.response;
+    const body = (parsedBody2.data) as { reason?: string }
     await deleteDocument(id, authz.user.id, authz.user.orgId, {
       source: 'ui',
       reason: body.reason,

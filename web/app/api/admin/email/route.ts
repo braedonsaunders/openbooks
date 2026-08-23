@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/email-config.ts'
@@ -20,7 +21,9 @@ export async function PUT(req: Request) {
   if (gate instanceof NextResponse) return gate
   let body: Record<string, unknown>
   try {
-    body = (await req.json()) as Record<string, unknown>
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = (parsedBody.data) as Record<string, unknown>
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }

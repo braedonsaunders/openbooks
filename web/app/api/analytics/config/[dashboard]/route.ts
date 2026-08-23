@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -53,7 +54,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown> | null;
   if (!body || typeof body !== "object") return NextResponse.json({ error: "object body required" }, { status: 400 });
 
   // Keep only known keys, clamped — then store the cleaned overrides verbatim.

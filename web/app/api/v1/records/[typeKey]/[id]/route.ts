@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
@@ -63,7 +64,9 @@ async function mutate(
     if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
     let body: Record<string, unknown>;
     try {
-      const parsed = await request.json();
+      const parsedBody = await parseJsonBody(request, jsonObject);
+      if (!parsedBody.ok) return parsedBody.response;
+      const parsed = parsedBody.data;
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
       body = parsed as Record<string, unknown>;
     } catch {

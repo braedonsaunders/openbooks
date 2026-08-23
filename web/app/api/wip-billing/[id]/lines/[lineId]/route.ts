@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -29,7 +30,9 @@ export async function PATCH(
   if (feature) return feature
   const { id, lineId } = await params
   if (!isUuid(id) || !isUuid(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown> | null
   if (!body) return NextResponse.json({ error: 'body required' }, { status: 400 })
   try {
     if (body.action === 'hold') {

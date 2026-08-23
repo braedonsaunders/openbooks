@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -67,7 +68,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const existingPayload = await loadAccount(id, gate.user.orgId)
   if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const existing = existingPayload.account as Record<string, any>
-  const parsed = await request.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = parsedBody.data
   const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as PatchBody : {}
   if (body.currencyRestriction !== undefined && !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -144,7 +145,9 @@ async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: str
 export async function POST(req: Request) {
   const gate = await projectGate('projects.manage')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as AssignmentInput
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as AssignmentInput
   const parsed = await normalizedInput(body, gate.user.orgId)
   if ('errorCode' in parsed) return NextResponse.json({ errorCode: parsed.errorCode }, { status: 400 })
   const v = parsed.values
@@ -162,7 +165,9 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const gate = await projectGate('projects.manage')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as AssignmentInput
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as AssignmentInput
   const id = String(body.id ?? '')
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
   const parsed = await normalizedInput(body, gate.user.orgId, id)

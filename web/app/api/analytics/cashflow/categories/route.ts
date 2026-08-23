@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -116,7 +117,9 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => null)) as { categories?: unknown[] } | null;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { categories?: unknown[] } | null;
   if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
   if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
 

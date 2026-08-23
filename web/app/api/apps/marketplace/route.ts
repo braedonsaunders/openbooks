@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { listListings, publishApp, installFromListing, AppError } from '@/lib/apps/store'
@@ -20,7 +21,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { action?: string; key?: string; listingId?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { action?: string; key?: string; listingId?: string }
   try {
     if (body.action === 'publish') {
       if (!body.key) return NextResponse.json({ error: 'key required' }, { status: 400 })

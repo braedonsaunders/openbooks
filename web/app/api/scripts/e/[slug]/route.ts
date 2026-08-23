@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { runEndpointScript } from '@openbooks/engine/src/scripting.ts'
 import { guardFeaturePermission } from '@/lib/feature-gates'
@@ -19,7 +20,12 @@ async function handle(req: Request, slug: string) {
   const url = new URL(req.url)
   const query: Record<string, string> = {}
   url.searchParams.forEach((v, k) => (query[k] = v))
-  const body = req.method === 'POST' ? await req.json().catch(() => null) : null
+  let body: Record<string, unknown> | null = null
+  if (req.method === 'POST') {
+    const parsedBody = await parseJsonBody(req, jsonObject)
+    if (!parsedBody.ok) return parsedBody.response
+    body = parsedBody.data
+  }
 
   const outcome = await runEndpointScript(
     slug,

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   resolveSourceDeletion,
@@ -15,7 +16,9 @@ export async function POST(
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id, ref } = await params;
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     action?: SourceDeletionAction;
     note?: string;
   };

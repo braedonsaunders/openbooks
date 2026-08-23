@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -31,7 +32,9 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
 
   if (body.action === 'publish') {
     const effectiveFrom: string = body.effectiveFrom

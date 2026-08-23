@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { enqueueApCapture } from '@openbooks/jobs'
@@ -10,7 +11,9 @@ export const runtime = 'nodejs'
 export async function POST(request: Request) {
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
-  const body = (await request.json().catch(() => ({}))) as { action?: string; ids?: string[] }
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { action?: string; ids?: string[] }
   const ids = Array.isArray(body.ids) ? [...new Set(body.ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id)))].slice(0, 50) : []
   if (!ids.length || !['reprocess', 'reject', 'materialize'].includes(String(body.action))) {
     return NextResponse.json({ error: 'invalid_action' }, { status: 400 })

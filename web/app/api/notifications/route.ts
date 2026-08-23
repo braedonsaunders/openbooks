@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -42,7 +43,9 @@ export async function PATCH(req: Request) {
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id: userId, orgId } = authz.user
 
-  const body = (await req.json().catch(() => ({}))) as { ids?: string[]; all?: boolean }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { ids?: string[]; all?: boolean }
   if (body.all === true) {
     await db.execute(sql`
       update notifications set read_at = now(), updated_at = now()

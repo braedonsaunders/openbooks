@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
@@ -555,9 +556,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
   const body = normalizeTaxReturnFormInput(
     entity.key,
-    (await req.json().catch(() => ({}))) as Record<string, unknown>,
+    (parsedBody.data) as Record<string, unknown>,
   )
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
@@ -739,9 +742,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
   const body = normalizeTaxReturnFormInput(
     entity.key,
-    (await req.json().catch(() => ({}))) as Record<string, unknown>,
+    (parsedBody2.data) as Record<string, unknown>,
   )
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

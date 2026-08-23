@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -32,7 +33,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   let body: Record<string, unknown>;
   try {
-    body = await request.json();
+    const parsedBody = await parseJsonBody(request, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }

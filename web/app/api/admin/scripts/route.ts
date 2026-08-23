@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -33,7 +34,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const body = (await req.json()) as Record<string, unknown>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>
   const err = validate(body)
   if (err) return NextResponse.json({ error: err }, { status: 400 })
 
@@ -66,7 +69,9 @@ export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const body = (await req.json()) as Record<string, unknown>
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const err = validate(body)
   if (err) return NextResponse.json({ error: err }, { status: 400 })

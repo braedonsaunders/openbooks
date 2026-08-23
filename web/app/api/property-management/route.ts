@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -327,7 +328,9 @@ async function refuseDisabledLeaseChargeInventory(
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, any>;
   const action = String(body.action ?? "");
   if (!knownActions.has(action))
     return NextResponse.json({ error: "unknown action" }, { status: 400 });

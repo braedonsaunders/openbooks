@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { disposeAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -29,7 +30,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
   const date = body.date && DATE_RE.test(body.date) ? body.date : await businessToday(gate.user.orgId)
   const writeOff = body.writeOff === true
   const proceedsRaw = writeOff ? '0' : canonicalDecimal(body.proceeds ?? '0', 4)

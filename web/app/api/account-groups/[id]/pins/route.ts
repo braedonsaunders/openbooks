@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -22,7 +23,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  const { accountId } = (await req.json()) as { accountId?: string };
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { accountId } = (parsedBody.data) as { accountId?: string };
   if (!accountId) return NextResponse.json({ error: "accountId required" }, { status: 400 });
 
   const group = await loadGroup(id, gate.user.orgId);

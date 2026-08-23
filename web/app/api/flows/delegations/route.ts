@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   createDelegation,
@@ -45,7 +46,9 @@ export async function POST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     toUserId?: string
     startsAt?: string
     endsAt?: string
@@ -80,7 +83,9 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
-  const body = (await req.json().catch(() => ({}))) as { id?: string; revoke?: boolean }
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as { id?: string; revoke?: boolean }
   if (!body.id || !isUuid(body.id) || body.revoke !== true) {
     return NextResponse.json({ error: 'id and revoke:true required' }, { status: 400 })
   }

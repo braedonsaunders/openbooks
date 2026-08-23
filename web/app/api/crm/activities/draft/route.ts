@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -10,7 +11,9 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = await req.json().catch(() => ({})) as { subjectKind?: string; subjectId?: string; kind?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as { subjectKind?: string; subjectId?: string; kind?: string }
   const kind = ['task', 'call', 'event', 'email', 'note'].includes(body.kind ?? '') ? body.kind! : 'task'
   if ((body.subjectKind || body.subjectId) && (!body.subjectKind || !body.subjectId || !isUuid(body.subjectId))) {
     return NextResponse.json({ error: 'subjectKind and a valid subjectId are required together' }, { status: 422 })

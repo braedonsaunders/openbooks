@@ -16,6 +16,7 @@ import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
+import { jsonObject, parseJsonBody } from '@/lib/api/json'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -78,7 +79,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const status = existing.rows[0].status
 
-    const body = (await req.json()) as OrderPatchBody
+    const parsedBody = await parseJsonBody(req, jsonObject)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data as OrderPatchBody
 
     if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
       if (!(await subsidiaryFeatureEnabled(user.orgId))) {
@@ -371,7 +374,9 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    const body = (await req.json()) as { targetKind?: string }
+    const parsedBody = await parseJsonBody(req, jsonObject)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data as { targetKind?: string }
     if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
 
     // Scope check: the source must be this kind, in the caller's org.

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { CloseError, updateCloseTask } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
@@ -24,7 +25,9 @@ export async function POST(
       { error: "invalid run or task id" },
       { status: 400 },
     );
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     action?: string;
     notes?: string;
   };

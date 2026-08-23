@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -44,7 +45,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   try {
     await updateTicketHeader(gate.user.orgId, gate.user.id, id, {
       ...(('projectId' in body) ? { projectId: isUuid(body.projectId) ? body.projectId : null } : {}),
@@ -64,7 +67,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = await req.json().catch(() => ({}))
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = parsedBody2.data
   const action = String(body.action ?? '')
 
   const gate = await guardPermission('time.manage')

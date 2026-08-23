@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { deleteApp, getAppByKey, setAppStatus } from '@/lib/apps/store'
@@ -19,7 +20,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ key: s
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
-  const body = (await req.json().catch(() => ({}))) as { status?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { status?: string }
   if (body.status !== 'installed' && body.status !== 'disabled') {
     return NextResponse.json({ error: 'status must be "installed" or "disabled"' }, { status: 400 })
   }

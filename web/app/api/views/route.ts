@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../lib/authz'
 import { createView, loadViews } from '../../../lib/views'
@@ -18,7 +19,9 @@ export async function POST(req: Request) {
   const gate = await guardPermission('reports.create')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json().catch(() => ({}))) as { name?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { name?: string }
   const created = await createView({ orgId: user.orgId, userId: user.id, name: body.name })
   return NextResponse.json({ id: created.id, slug: created.slug }, { status: 201 })
 }

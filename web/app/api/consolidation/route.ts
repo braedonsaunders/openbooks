@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   ConsolidationError,
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const { action, periodId } = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const { action, periodId } = (parsedBody.data) as {
     action?: string
     periodId?: string
   }

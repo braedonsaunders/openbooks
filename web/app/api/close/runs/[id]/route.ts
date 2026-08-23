@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   attestOwnerManagedClose,
@@ -20,7 +21,9 @@ export async function POST(
   const { id } = await params;
   if (!isUuid(id))
     return NextResponse.json({ error: "invalid run id" }, { status: 400 });
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     action?: string;
     comment?: string;
   };

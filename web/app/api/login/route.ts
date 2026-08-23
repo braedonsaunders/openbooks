@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   completeMfaLogin,
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
   const startedAt = Date.now();
   let body: { email?: unknown; password?: unknown; mfaCode?: unknown };
   try {
-    body = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }

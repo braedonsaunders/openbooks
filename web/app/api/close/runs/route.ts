@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { startCloseRun, CloseError } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../lib/authz";
@@ -8,7 +9,9 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const gate = await guardPermission("close.run");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const periodId = typeof body.periodId === "string" ? body.periodId : "";
   const bookId = typeof body.bookId === "string" ? body.bookId : "";
   if (!isUuid(periodId) || !isUuid(bookId)) {

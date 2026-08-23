@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -56,7 +57,9 @@ export async function POST(
   if (source.status !== 'posted') {
     return NextResponse.json({ error: 'only a posted transaction can be corrected' }, { status: 422 })
   }
-  const body = (await req.json()) as DocumentEditInput
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as DocumentEditInput
   let replacement: { id: string; documentNumber: string } | null = null
   try {
     replacement = await createPostedCorrectionDraft(id, body, {

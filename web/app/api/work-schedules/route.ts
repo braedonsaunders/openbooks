@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -87,7 +88,9 @@ export async function POST(request: Request) {
   const orgId = gate.user.orgId
   const actorId = gate.user.id
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>
   const action = String(body.action ?? '')
 
   if (action === 'delete') {

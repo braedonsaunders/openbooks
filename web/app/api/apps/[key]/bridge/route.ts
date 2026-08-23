@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { can } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
@@ -16,7 +17,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ key: st
   const gate = await guardFeaturePermission('apps.use', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
-  const body = (await req.json().catch(() => ({}))) as { method?: string; payload?: unknown }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { method?: string; payload?: unknown }
   if (typeof body.method !== 'string') {
     return NextResponse.json({ error: 'method required' }, { status: 400 })
   }

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   deleteFolder,
@@ -34,7 +35,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Editing a folder (rename/move/flags) needs Manager on it.
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
-  const body = await req.json().catch(() => null)
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 
   if (typeof body.parentId === 'string' || body.parentId === null) {

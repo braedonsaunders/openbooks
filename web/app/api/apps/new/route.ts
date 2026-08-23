@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { createAppScaffold, AppError } from '@/lib/apps/store'
@@ -8,7 +9,9 @@ export const runtime = 'nodejs'
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { name?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { name?: string }
   if (!body.name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 })
   try {
     const { key } = await createAppScaffold(gate.user.orgId, gate.user.id, body.name)

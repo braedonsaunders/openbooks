@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -64,7 +65,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   ))
   if (owned.rows.length === 0) return NextResponse.json({ error: 'party not found' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
   // Party bank-account currency is Multi-currency configuration. Turning that
   // switch off must refuse a new write; omitting currency keeps the create
   // path and stored accounts with a null currency.
@@ -122,7 +125,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   `))
   if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as Body
   // Party bank-account currency is Multi-currency configuration. Turning that
   // switch off must refuse a currency write; omitting currency keeps the
   // stored account.
@@ -232,7 +237,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody3 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody3.ok) return parsedBody3.response;
+  const body = (parsedBody3.data) as Body
   const reason = body.retirementReason?.trim() ?? ''
   if (reason.length < 5 || reason.length > 500) {
     return NextResponse.json({ error: 'a retirement reason between 5 and 500 characters is required' }, { status: 422 })

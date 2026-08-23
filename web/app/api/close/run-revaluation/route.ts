@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { runRevaluation } from '@openbooks/engine/src/fx-revaluation.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
   if (!body.periodId || !isUuid(body.periodId)) {
     return NextResponse.json({ error: 'invalid period' }, { status: 422 })
   }

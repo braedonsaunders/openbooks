@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   isContinuousCloseAgentKey,
@@ -12,7 +13,9 @@ export async function POST(request: Request) {
   if (gate instanceof NextResponse) return gate;
   let body: Record<string, unknown>;
   try {
-    body = await request.json();
+    const parsedBody = await parseJsonBody(request, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }

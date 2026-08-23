@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
 import { isUuid } from '../../../../../lib/list-params'
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     items?: BulkItem[]
     decision?: 'approved' | 'rejected'
     comment?: string
