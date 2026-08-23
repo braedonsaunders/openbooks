@@ -439,6 +439,17 @@ function persistPoolImmediateExpense(value: unknown): string {
   }
 }
 
+/** Persist pool claim cap through exact decimal then ledger money. Fail closed. */
+function persistPoolClaimCap(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("claim cap must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("claim cap must be an exact decimal");
+  }
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = persistPoolAdditions(input.additions);
@@ -476,7 +487,7 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
 
   let allowance = roundMoney(mulDecimalFactors(base, [String(input.rate), shortYear]), 2);
   allowance = minMoney(nonnegative(allowance), roundMoney(afterIei, 2));
-  if (input.claimCap != null) allowance = minMoney(allowance, nonnegative(normalizeMoney(input.claimCap)));
+  if (input.claimCap != null) allowance = minMoney(allowance, nonnegative(persistPoolClaimCap(input.claimCap)));
 
   return zero({
     immediateExpense: s(immediateExpense),
