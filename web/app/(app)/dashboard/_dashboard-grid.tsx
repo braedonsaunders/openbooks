@@ -68,6 +68,7 @@ export function DashboardGrid({
   resetLayoutAction = resetDashboardLayout as ResetDashboardGridAction,
   saveRedirectHref = '/',
   quickActionsSaveAction,
+  hiddenQuickActionIds,
 }: {
   initialLayout: DashboardLayoutData
   nodes: Record<string, ReactNode>
@@ -80,6 +81,7 @@ export function DashboardGrid({
   resetLayoutAction?: ResetDashboardGridAction
   saveRedirectHref?: string
   quickActionsSaveAction?: SaveQuickActionsAction
+  hiddenQuickActionIds?: readonly string[]
 }) {
   const t = useTranslations('dashboard')
   const cardNameById = useMemo(
@@ -248,6 +250,7 @@ export function DashboardGrid({
         key={quickActionsStateKey(initialLayout.quickActions)}
         actions={initialLayout.quickActions}
         saveAction={quickActionsSaveAction}
+        hiddenActionIds={hiddenQuickActionIds}
       />
     ) : (
       nodes[id]

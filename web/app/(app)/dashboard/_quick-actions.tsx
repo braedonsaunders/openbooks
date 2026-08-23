@@ -9,6 +9,7 @@ import {
   DEFAULT_QUICK_ACTIONS,
   isExternalHref,
   toneOf,
+  visibleQuickActions,
   type QuickAction,
   type SaveQuickActionsAction,
 } from './_quick-actions-shared'
@@ -18,13 +19,19 @@ import { QuickActionsEditor } from './_quick-actions-editor'
 export function QuickActions({
   actions,
   saveAction,
+  hiddenActionIds,
 }: {
   actions?: QuickAction[] | null
   saveAction?: SaveQuickActionsAction
+  hiddenActionIds?: readonly string[]
 }) {
   const t = useTranslations('dashboard')
-  const [items, setItems] = useState<QuickAction[]>(actions ?? DEFAULT_QUICK_ACTIONS)
+  const hidden = new Set(hiddenActionIds)
+  const [items, setItems] = useState<QuickAction[]>(
+    actions ?? visibleQuickActions(DEFAULT_QUICK_ACTIONS, hidden),
+  )
   const [editorOpen, setEditorOpen] = useState(false)
+  const visibleItems = visibleQuickActions(items, hidden)
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -48,7 +55,7 @@ export function QuickActions({
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {items.length === 0 ? (
+        {visibleItems.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 py-6 text-center">
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {t('quickActions.empty')}
@@ -66,7 +73,7 @@ export function QuickActions({
           <div
             className="grid h-full min-h-0 auto-rows-fr grid-cols-2 gap-2 p-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
           >
-            {items.map((a, i) => (
+            {visibleItems.map((a, i) => (
               <ActionTile key={a.id} action={a} index={i} />
             ))}
           </div>
@@ -76,6 +83,7 @@ export function QuickActions({
       <QuickActionsEditor
         open={editorOpen}
         value={items}
+        hiddenActionIds={hiddenActionIds}
         onClose={() => setEditorOpen(false)}
         onSaved={(next) => setItems(next)}
         saveAction={saveAction}

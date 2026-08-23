@@ -23,7 +23,7 @@ export default async function CustomiseDashboardPage() {
   const authz = await getAuthz()
   if (!authz) return null
 
-  const { layout, role } = await loadDashboardLayout(authz)
+  const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
   const visibleLayout = {
     ...layout,
     widgets: layout.widgets.filter((w) => canSeeWidget(authz, w.id)),
@@ -66,6 +66,7 @@ export default async function CustomiseDashboardPage() {
           apps={apps}
           allowedWidgetIds={allowedWidgetIds}
           quickActionsSaveAction={saveQuickActions}
+          hiddenQuickActionIds={hiddenQuickActionIds}
         />
       </div>
     </PageContainer>

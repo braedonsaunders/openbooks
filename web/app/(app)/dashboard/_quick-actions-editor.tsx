@@ -11,6 +11,7 @@ import {
   TONE_KEYS,
   TONES,
   toneOf,
+  visibleQuickActions,
   type QuickAction,
   type QuickActionOption,
   type QuickActionOptions,
@@ -29,12 +30,14 @@ function genId(): string {
 export function QuickActionsEditor({
   open,
   value,
+  hiddenActionIds,
   onClose,
   onSaved,
   saveAction = saveQuickActions,
 }: {
   open: boolean
   value: QuickAction[]
+  hiddenActionIds?: readonly string[]
   onClose: () => void
   onSaved: (next: QuickAction[]) => void
   saveAction?: SaveQuickActionsAction
@@ -80,6 +83,8 @@ export function QuickActionsEditor({
   }, [open, options, t])
 
   const loadingOptions = open && !options
+  const hidden = new Set(hiddenActionIds)
+  const visibleItems = visibleQuickActions(items, hidden)
   const editing = editingId ? items.find((a) => a.id === editingId) : null
 
   function patch(id: string, changes: Partial<QuickAction>) {
@@ -182,7 +187,8 @@ export function QuickActionsEditor({
     >
       {view === 'list' ? (
         <ListView
-          items={items}
+          items={visibleItems}
+          storedCount={items.length}
           onAdd={() => setView('picker')}
           onEdit={(id) => { setEditingId(id); setView('edit') }}
           onRemove={remove}
@@ -217,19 +223,21 @@ export function QuickActionsEditor({
 
 function ListView({
   items,
+  storedCount,
   onAdd,
   onEdit,
   onRemove,
   onMove,
 }: {
   items: QuickAction[]
+  storedCount: number
   onAdd: () => void
   onEdit: (id: string) => void
   onRemove: (id: string) => void
   onMove: (id: string, dir: -1 | 1) => void
 }) {
   const t = useTranslations('dashboard')
-  const atMax = items.length >= MAX_QUICK_ACTIONS
+  const atMax = storedCount >= MAX_QUICK_ACTIONS
   return (
     <div className="space-y-3">
       <ul className="space-y-2">
