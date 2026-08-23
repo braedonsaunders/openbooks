@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -113,6 +115,8 @@ export const revenueContracts = pgTable(
      *  (percent-complete over-time recognition); null for invoice bundles. */
     projectId: uuid("project_id"),
     contractNumber: text("contract_number").notNull(),
+    /** Stable source-effect identity; null for directly managed contracts. */
+    idempotencyKey: text("idempotency_key"),
     status: text("status", { enum: ["draft", "active", "complete", "cancelled"] })
       .notNull()
       .default("draft"),
@@ -131,7 +135,17 @@ export const revenueContracts = pgTable(
     memo: text("memo"),
     ...auditColumns,
   },
-  (t) => [index("rev_contracts_customer").on(t.customerId), index("rev_contracts_project").on(t.projectId)],
+  (t) => [
+    index("rev_contracts_customer").on(t.customerId),
+    index("rev_contracts_project").on(t.projectId),
+    uniqueIndex("revenue_contracts_org_idempotency")
+      .on(t.orgId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
+    check(
+      "revenue_contracts_idempotency_key",
+      sql`${t.idempotencyKey} is null or length(btrim(${t.idempotencyKey})) between 1 and 500`,
+    ),
+  ],
 );
 
 /**
@@ -147,6 +161,8 @@ export const performanceObligations = pgTable(
     orgId: orgRef(),
     contractId: uuid("contract_id").notNull(),
     documentLineId: uuid("document_line_id"),
+    /** Stable source-effect identity; null for directly managed obligations. */
+    idempotencyKey: text("idempotency_key"),
     itemId: uuid("item_id"),
     description: text("description").notNull(),
     recognitionRuleId: uuid("recognition_rule_id").notNull(),
@@ -175,7 +191,17 @@ export const performanceObligations = pgTable(
     cancelledBy: uuid("cancelled_by"),
     ...auditColumns,
   },
-  (t) => [index("obligations_contract").on(t.contractId), index("obligations_doc_line").on(t.documentLineId)],
+  (t) => [
+    index("obligations_contract").on(t.contractId),
+    index("obligations_doc_line").on(t.documentLineId),
+    uniqueIndex("performance_obligations_org_idempotency")
+      .on(t.orgId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
+    check(
+      "performance_obligations_idempotency_key",
+      sql`${t.idempotencyKey} is null or length(btrim(${t.idempotencyKey})) between 1 and 500`,
+    ),
+  ],
 );
 
 /**

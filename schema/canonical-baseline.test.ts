@@ -21,6 +21,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0006_terminal_failure_surfacing.sql",
     "0007_posting_effects_terminal_lifecycle.sql",
     "0008_durable_work_lease_fencing.sql",
+    "0009_posting_effect_idempotency_keys.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

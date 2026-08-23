@@ -80,3 +80,16 @@ test("posting-effect completions are fenced by the active per-claim lease", () =
   const recovery = outbox.slice(outbox.indexOf("recoverStalePostingEffects"));
   assert.match(recovery, /lease_token=null/);
 });
+
+test("downstream posting effects carry storage-enforced idempotency keys", () => {
+  const inventory = source("./inventory.ts");
+  assert.match(inventory, /inventoryPostingEffectKey/);
+  assert.match(inventory, /idempotency_key/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\(l\.lineId, "receipt"\)/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\(l\.lineId, "issue"\)/);
+
+  const revenue = source("./revenue-recognition.ts");
+  assert.match(revenue, /revenueContractPostingEffectKey/);
+  assert.match(revenue, /revenueObligationPostingEffectKey/);
+  assert.match(revenue, /on conflict \(org_id, idempotency_key\) where idempotency_key is not null do nothing/);
+});

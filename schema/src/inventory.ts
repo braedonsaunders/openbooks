@@ -141,6 +141,8 @@ export const inventoryMovements = pgTable(
     documentLineId: uuid("document_line_id"),
     journalEntryId: uuid("journal_entry_id"),
     pairedMovementId: uuid("paired_movement_id"), // transfer_out ↔ transfer_in
+    /** Stable key for retryable source effects; null for ordinary ad-hoc moves. */
+    idempotencyKey: text("idempotency_key"),
     /** Append-only correction lineage. Exactly one posted movement may reverse
      *  a source movement; the source row itself remains immutable. */
     reversesMovementId: uuid("reverses_movement_id"),
@@ -152,10 +154,17 @@ export const inventoryMovements = pgTable(
   (t) => [
     index("inv_moves_item_loc").on(t.itemId, t.stockLocationId),
     index("inv_moves_doc_line").on(t.documentLineId),
+    uniqueIndex("inventory_movements_org_idempotency")
+      .on(t.orgId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
     uniqueIndex("inv_moves_one_reversal")
       .on(t.reversesMovementId)
       .where(sql`${t.reversesMovementId} is not null`),
     check("inv_moves_qty_nonzero", sql`${t.quantity} <> 0`),
+    check(
+      "inventory_movements_idempotency_key",
+      sql`${t.idempotencyKey} is null or length(btrim(${t.idempotencyKey})) between 1 and 500`,
+    ),
     check(
       "inv_moves_reversal_evidence",
       sql`(${t.reversesMovementId} is null and ${t.reversalReason} is null)
