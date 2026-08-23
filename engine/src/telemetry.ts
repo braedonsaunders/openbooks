@@ -172,21 +172,35 @@ function configuredEndpoint(value: string | undefined): value is string {
   return value !== undefined && value.trim().length > 0;
 }
 
+function splitUrlSuffix(value: string): [base: string, suffix: string] {
+  const suffixIndex = value.search(/[?#]/);
+  return suffixIndex === -1
+    ? [value, ""]
+    : [value.slice(0, suffixIndex), value.slice(suffixIndex)];
+}
+
+function ensureRootPath(value: string): string {
+  const [base, suffix] = splitUrlSuffix(value);
+  return /^https?:\/\/[^/]+$/i.test(base) ? `${base}/${suffix}` : value;
+}
+
 /**
  * Resolve an OTLP/HTTP signal URL exactly as specified by OpenTelemetry.
- * Signal-specific values win and are returned byte-for-byte. The shared value
- * is a base URL, so only it receives the relative `v1/<signal>` path.
+ * Signal-specific values win and are returned byte-for-byte unless they omit
+ * a path, in which case the required root path is added. The shared value is a
+ * base URL, so only its path receives the relative `v1/<signal>` path.
  */
 export function resolveOtlpHttpEndpoint(
   env: TelemetryEnv,
   signal: OtlpSignal,
 ): string | undefined {
   const specific = env[SIGNAL_ENDPOINT_VARIABLES[signal]];
-  if (configuredEndpoint(specific)) return specific;
+  if (configuredEndpoint(specific)) return ensureRootPath(specific);
 
   const shared = env.OTEL_EXPORTER_OTLP_ENDPOINT;
   if (!configuredEndpoint(shared)) return undefined;
-  return `${shared.replace(/\/+$/, "")}/v1/${signal}`;
+  const [base, suffix] = splitUrlSuffix(shared);
+  return `${base.endsWith("/") ? base : `${base}/`}v1/${signal}${suffix}`;
 }
 
 /** Telemetry is configured when any shared or signal-specific endpoint exists. */

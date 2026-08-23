@@ -21,3 +21,18 @@ test("Compose infrastructure images use deliberate release tags", async () => {
     "all four stateful infrastructure images must be digest-pinned",
   );
 });
+
+test("Compose passes every supported OTLP/HTTP endpoint to the runtimes", async () => {
+  const compose = await readFile(join(repoRoot, "compose.yaml"), "utf8");
+  for (const variable of [
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+  ]) {
+    const interpolation = "${" + variable + ":-}";
+    assert.ok(
+      compose.includes(`  ${variable}: ${interpolation}`),
+      `${variable} must be passed through the shared runtime environment`,
+    );
+  }
+});

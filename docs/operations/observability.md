@@ -15,8 +15,8 @@ compose file passes them through to both the `web` and `worker` services):
 
 | Variable | Meaning |
 | --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL of an OTLP/HTTP collector. Setting this enables telemetry; leaving it empty keeps everything a no-op. |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Optional per-signal override of the endpoint. Per spec, `/v1/traces` / `/v1/metrics` are appended to a base URL unless it already ends with them. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base URL of an OTLP/HTTP collector. The exporter appends `/v1/traces` or `/v1/metrics` to its path. |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Optional per-signal endpoint override. Per spec, each override is used as supplied (a pathless URL uses `/`); include `/v1/traces` or `/v1/metrics` when the collector expects the standard signal path. A per-signal endpoint alone enables that signal. |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Optional `key=value,key2=value2` headers (URL-encoded values), e.g. collector auth tokens. |
 | `OTEL_SERVICE_NAME` | Resource name reported to the collector (default `openbooks`). Distinguish replicas with per-deployment values. |
 | `OTEL_RESOURCE_ATTRIBUTES` | Optional extra resource attributes (`k=v,k2=v2`, URL-encoded). |
