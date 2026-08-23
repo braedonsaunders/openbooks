@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Alert,
@@ -134,6 +135,7 @@ export function WipBillingWorkspace({
   const router = useRouter();
   const { money } = useMoney();
   const today = useBusinessToday();
+  const t = useTranslations("projects.wipBilling");
   const [creating, setCreating] = useState(false);
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
   const [periodStart, setPeriodStart] = useState("");
@@ -170,7 +172,10 @@ export function WipBillingWorkspace({
         }),
       });
       toast.success(
-        `${result.worksheetNumber} created with ${result.sourceCount} source lines`,
+        t("toasts.created", {
+          worksheetNumber: result.worksheetNumber,
+          sourceCount: result.sourceCount,
+        }),
       );
       setCreating(false);
       router.push(`/projects/wip-billing?prebill=${result.id}`);
@@ -198,12 +203,12 @@ export function WipBillingWorkspace({
       });
       toast.success(
         action === "submit"
-          ? "Sent for review"
+          ? t("toasts.sentForReview")
           : action === "approve"
-            ? "Prebill approved"
+            ? t("toasts.approved")
             : action === "return"
-              ? "Returned to draft"
-              : "Prebill voided",
+              ? t("toasts.returnedToDraft")
+              : t("toasts.voided"),
       );
       setWorkflowAction(null);
       setWorkflowReason("");
@@ -223,7 +228,9 @@ export function WipBillingWorkspace({
         `/api/wip-billing/${selected.id}/convert`,
         { method: "POST" },
       );
-      toast.success(`${result.documentNumber} created as a draft invoice`);
+      toast.success(
+        t("toasts.converted", { documentNumber: result.documentNumber }),
+      );
       router.refresh();
     } catch (error) {
       toast.error((error as Error).message);
@@ -240,39 +247,45 @@ export function WipBillingWorkspace({
   return (
     <div className="space-y-4">
       <section
-        aria-label="WIP health"
+        aria-label={t("wipHealthAria")}
         className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4"
       >
         <HomeStatTile
-          label="Available WIP"
+          label={t("tiles.availableWip")}
           value={money(agingTotal)}
-          sub="Eligible and not held"
+          sub={t("tiles.availableWipSub")}
           icon="wallet"
           accent="teal"
         />
         <HomeStatTile
-          label="Over 90 days"
+          label={t("tiles.over90")}
           value={money(Number(analytics.aging.over90))}
-          sub={`${money(Number(analytics.aging.days61to90))} at 61–90 days`}
+          sub={t("tiles.over90Sub", {
+            amount: money(Number(analytics.aging.days61to90)),
+          })}
           icon="calendar-clock"
           accent="red"
           tone={Number(analytics.aging.over90) > 0 ? "negative" : "neutral"}
         />
         <HomeStatTile
-          label="Realization"
+          label={t("tiles.realization")}
           value={
             analytics.realization.percent == null
               ? "—"
               : `${(analytics.realization.percent * 100).toFixed(1)}%`
           }
-          sub={`${money(Number(analytics.realization.billed))} billed`}
+          sub={t("tiles.realizationSub", {
+            amount: money(Number(analytics.realization.billed)),
+          })}
           icon="trending-up"
           accent="emerald"
         />
         <HomeStatTile
-          label="Leakage"
+          label={t("tiles.leakage")}
           value={money(Number(analytics.leakage.total))}
-          sub={`${money(Number(analytics.leakage.heldOver90))} held over 90 days`}
+          sub={t("tiles.leakageSub", {
+            amount: money(Number(analytics.leakage.heldOver90)),
+          })}
           icon="triangle-alert"
           accent={Number(analytics.leakage.total) > 0 ? "red" : "amber"}
           tone={Number(analytics.leakage.total) > 0 ? "negative" : "neutral"}
@@ -284,11 +297,10 @@ export function WipBillingWorkspace({
           <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
             <div>
               <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Prebill worksheets
+                {t("list.title")}
               </div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Review eligible project work, billing adjustments, and approval
-                status.
+                {t("list.description")}
               </div>
             </div>
             {canManage ? (
@@ -297,7 +309,7 @@ export function WipBillingWorkspace({
                 onClick={() => setCreating(true)}
               >
                 <Plus className="mr-2 size-4" />
-                New prebill
+                {t("list.newPrebill")}
               </Button>
             ) : null}
           </div>
@@ -308,24 +320,24 @@ export function WipBillingWorkspace({
                 icon={<FileText />}
                 title={
                   projects.length === 0
-                    ? "Create a project first"
-                    : "No prebill worksheets yet"
+                    ? t("empty.noProjectsTitle")
+                    : t("empty.noPrebillsTitle")
                 }
                 description={
                   projects.length === 0
-                    ? "WIP review starts from an active project with billable time or cost."
-                    : "Create a worksheet to snapshot eligible unbilled project work through a cutoff date."
+                    ? t("empty.noProjectsDescription")
+                    : t("empty.noPrebillsDescription")
                 }
                 action={
                   canManage ? (
                     projects.length > 0 ? (
                       <Button onClick={() => setCreating(true)}>
                         <Plus className="mr-2 size-4" />
-                        Create prebill
+                        {t("empty.createPrebill")}
                       </Button>
                     ) : (
                       <Button asChild variant="outline">
-                        <Link href="/projects">Go to projects</Link>
+                        <Link href="/projects">{t("empty.goToProjects")}</Link>
                       </Button>
                     )
                   ) : undefined
@@ -335,10 +347,12 @@ export function WipBillingWorkspace({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Worksheet</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Proposed</TableHead>
+                    <TableHead>{t("table.worksheet")}</TableHead>
+                    <TableHead>{t("table.project")}</TableHead>
+                    <TableHead>{t("table.status")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("table.proposed")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -357,13 +371,13 @@ export function WipBillingWorkspace({
                       <TableCell>
                         <p className="font-medium">{row.worksheetNumber}</p>
                         <p className="text-xs text-slate-500">
-                          Through {row.periodEnd}
+                          {t("table.through", { periodEnd: row.periodEnd })}
                         </p>
                       </TableCell>
                       <TableCell>
                         <p>{row.projectName}</p>
                         <p className="text-xs text-slate-500">
-                          {row.customerName ?? "No customer"}
+                          {row.customerName ?? t("table.noCustomer")}
                         </p>
                       </TableCell>
                       <TableCell>
@@ -387,25 +401,27 @@ export function WipBillingWorkspace({
         open={creating}
         onClose={() => setCreating(false)}
         size="md"
-        title="New prebill worksheet"
-        description="Snapshot eligible unbilled work through a cutoff date."
+        title={t("createDrawer.title")}
+        description={t("createDrawer.description")}
         headerActions={
           <>
             <Button variant="outline" onClick={() => setCreating(false)}>
-              Cancel
+              {t("createDrawer.cancel")}
             </Button>
             <Button
               disabled={!projectId || !periodEnd || busy === "create"}
               onClick={createWorksheet}
             >
-              {busy === "create" ? "Creating…" : "Create prebill"}
+              {busy === "create"
+                ? t("createDrawer.creating")
+                : t("createDrawer.submit")}
             </Button>
           </>
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="wip-project">Project</Label>
+            <Label htmlFor="wip-project">{t("createDrawer.projectLabel")}</Label>
             <Select
               id="wip-project"
               value={projectId}
@@ -420,18 +436,17 @@ export function WipBillingWorkspace({
               ))}
             </Select>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Only active project types using standard T&amp;M or Cost-Plus
-              source billing are listed. {" "}
+              {t("createDrawer.projectHelp")}{" "}
               <Link
                 href="/admin/setup/project-types"
                 className="font-medium text-teal-700 hover:underline dark:text-teal-300"
               >
-                Configure project types
+                {t("createDrawer.configureProjectTypes")}
               </Link>
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wip-start">Start (optional)</Label>
+            <Label htmlFor="wip-start">{t("createDrawer.startLabel")}</Label>
             <Input
               id="wip-start"
               type="date"
@@ -440,7 +455,7 @@ export function WipBillingWorkspace({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="wip-end">Cutoff</Label>
+            <Label htmlFor="wip-end">{t("createDrawer.cutoffLabel")}</Label>
             <Input
               id="wip-end"
               type="date"
@@ -449,13 +464,13 @@ export function WipBillingWorkspace({
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="wip-notes">Review notes</Label>
+            <Label htmlFor="wip-notes">{t("createDrawer.notesLabel")}</Label>
             <Textarea
               id="wip-notes"
               rows={4}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Scope, billing instructions, or reviewer context"
+              placeholder={t("createDrawer.notesPlaceholder")}
             />
           </div>
         </div>
@@ -474,7 +489,10 @@ export function WipBillingWorkspace({
               </Badge>
             </span>
           }
-          description={`${selected.projectName} · through ${selected.periodEnd}`}
+          description={t("detail.description", {
+            projectName: selected.projectName,
+            periodEnd: selected.periodEnd,
+          })}
           headerActions={
             <>
               {selected.status === "draft" && canManage ? (
@@ -483,7 +501,7 @@ export function WipBillingWorkspace({
                   disabled={Boolean(busy)}
                 >
                   <Send className="mr-2 size-4" />
-                  Send for review
+                  {t("detail.sendForReview")}
                 </Button>
               ) : null}
               {selected.status === "review" && canManage ? (
@@ -496,7 +514,7 @@ export function WipBillingWorkspace({
                   disabled={Boolean(busy)}
                 >
                   <RotateCcw className="mr-2 size-4" />
-                  Return
+                  {t("detail.return")}
                 </Button>
               ) : null}
               {selected.status === "review" && canApprove ? (
@@ -505,13 +523,15 @@ export function WipBillingWorkspace({
                   disabled={Boolean(busy)}
                 >
                   <ShieldCheck className="mr-2 size-4" />
-                  Approve
+                  {t("detail.approve")}
                 </Button>
               ) : null}
               {selected.status === "approved" && canCreateInvoice ? (
                 <Button onClick={convert} disabled={Boolean(busy)}>
                   <FileText className="mr-2 size-4" />
-                  {busy === "convert" ? "Converting…" : "Create invoice"}
+                  {busy === "convert"
+                    ? t("detail.converting")
+                    : t("detail.createInvoice")}
                 </Button>
               ) : null}
               {["draft", "review", "approved"].includes(selected.status) &&
@@ -525,7 +545,7 @@ export function WipBillingWorkspace({
                   disabled={Boolean(busy)}
                 >
                   <X className="mr-2 size-4" />
-                  Void
+                  {t("detail.void")}
                 </Button>
               ) : null}
               {selected.invoiceDocumentId ? (
@@ -533,7 +553,9 @@ export function WipBillingWorkspace({
                   <Link
                     href={`/ar/invoices?invoice=${selected.invoiceDocumentId}`}
                   >
-                    Open {selected.invoiceNumber}
+                    {t("detail.openInvoice", {
+                      invoiceNumber: selected.invoiceNumber ?? "",
+                    })}
                   </Link>
                 </Button>
               ) : null}
@@ -551,16 +573,18 @@ export function WipBillingWorkspace({
                   className="font-medium text-slate-900 dark:text-slate-100"
                 >
                   {workflowAction === "return"
-                    ? "Return worksheet to draft"
-                    : "Void worksheet"}
+                    ? t("workflow.returnTitle")
+                    : t("workflow.voidTitle")}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {workflowAction === "return"
-                    ? "Explain what the preparer needs to correct. This becomes part of the review trail."
-                    : "Explain why this worksheet must not proceed. The source WIP remains available for a future worksheet."}
+                    ? t("workflow.returnDescription")
+                    : t("workflow.voidDescription")}
                 </p>
                 <div className="mt-3 space-y-1.5">
-                  <Label htmlFor="workflow-reason">Reason</Label>
+                  <Label htmlFor="workflow-reason">
+                    {t("workflow.reasonLabel")}
+                  </Label>
                   <Textarea
                     id="workflow-reason"
                     autoFocus
@@ -577,10 +601,10 @@ export function WipBillingWorkspace({
                     onClick={() => transition(workflowAction, workflowReason)}
                   >
                     {busy === workflowAction
-                      ? "Saving…"
+                      ? t("workflow.saving")
                       : workflowAction === "return"
-                        ? "Return to draft"
-                        : "Void worksheet"}
+                        ? t("workflow.returnSubmit")
+                        : t("workflow.voidSubmit")}
                   </Button>
                   <Button
                     variant="outline"
@@ -589,22 +613,22 @@ export function WipBillingWorkspace({
                       setWorkflowReason("");
                     }}
                   >
-                    Cancel
+                    {t("workflow.cancel")}
                   </Button>
                 </div>
               </section>
             ) : null}
             <div className="grid gap-3 sm:grid-cols-4">
               <DetailMetric
-                label="Original"
+                label={t("metrics.original")}
                 value={money(Number(selected.originalBillAmount))}
               />
               <DetailMetric
-                label="Proposed"
+                label={t("metrics.proposed")}
                 value={money(Number(selected.proposedBillAmount))}
               />
               <DetailMetric
-                label="Adjustment"
+                label={t("metrics.adjustment")}
                 value={money(Number(selected.adjustmentAmount))}
                 tone={
                   Number(selected.adjustmentAmount) < 0
@@ -615,7 +639,7 @@ export function WipBillingWorkspace({
                 }
               />
               <DetailMetric
-                label="Cost"
+                label={t("metrics.cost")}
                 value={money(Number(selected.costAmount))}
               />
             </div>
@@ -623,8 +647,7 @@ export function WipBillingWorkspace({
               <Alert>
                 <Lock className="size-4" />
                 <AlertDescription>
-                  This approval snapshot is locked. Convert it as approved, or
-                  void it and prepare a new worksheet.
+                  {t("lockedAlert")}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -632,13 +655,17 @@ export function WipBillingWorkspace({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
-                    <TableHead className="text-right">Original</TableHead>
+                    <TableHead>{t("linesTable.source")}</TableHead>
+                    <TableHead>{t("linesTable.date")}</TableHead>
+                    <TableHead>{t("linesTable.description")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("linesTable.cost")}
+                    </TableHead>
+                    <TableHead className="text-right">
+                      {t("linesTable.original")}
+                    </TableHead>
                     <TableHead className="min-w-72">
-                      Proposed / support
+                      {t("linesTable.proposedSupport")}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -658,7 +685,7 @@ export function WipBillingWorkspace({
             </div>
             <div>
               <h3 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Review trail
+                {t("trail.title")}
               </h3>
               <ol className="space-y-2">
                 {selected.events.map((event) => (
@@ -670,7 +697,7 @@ export function WipBillingWorkspace({
                       </span>
                       <span className="text-slate-500">
                         {" "}
-                        · {event.actorName ?? "System"} ·{" "}
+                        · {event.actorName ?? t("trail.system")} ·{" "}
                         {new Date(event.occurredAt).toLocaleString()}
                       </span>
                     </div>
@@ -706,6 +733,7 @@ function PrebillLine({
   const [holdReason, setHoldReason] = useState("");
   const [holdEvidence, setHoldEvidence] = useState("");
   const changed = Number(amount) !== Number(line.originalBillAmount);
+  const t = useTranslations("projects.wipBilling");
 
   async function save() {
     setSaving(true);
@@ -722,7 +750,7 @@ function PrebillLine({
             .filter(Boolean),
         }),
       });
-      toast.success("Billing amount saved");
+      toast.success(t("lineToasts.saved"));
       onChanged();
     } catch (error) {
       toast.error((error as Error).message);
@@ -747,7 +775,7 @@ function PrebillLine({
             .filter(Boolean),
         }),
       });
-      toast.success("Billing hold applied");
+      toast.success(t("lineToasts.holdApplied"));
       setHoldForm(null);
       setHoldReason("");
       setHoldEvidence("");
@@ -769,7 +797,7 @@ function PrebillLine({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: holdReason.trim() }),
       });
-      toast.success("Billing hold released");
+      toast.success(t("lineToasts.holdReleased"));
       setHoldForm(null);
       setHoldReason("");
       onChanged();
@@ -791,10 +819,10 @@ function PrebillLine({
       <TableCell>
         <Badge variant={line.disposition === "hold" ? "warning" : "outline"}>
           {line.disposition === "hold"
-            ? "Held"
+            ? t("line.held")
             : line.sourceType === "time_entry"
-              ? "Time"
-              : "Cost"}
+              ? t("line.time")
+              : t("line.cost")}
         </Badge>
       </TableCell>
       <TableCell className="whitespace-nowrap">{line.sourceDate}</TableCell>
@@ -817,7 +845,7 @@ function PrebillLine({
           <div className="space-y-2">
             <div className="flex gap-2">
               <Input
-                aria-label="Proposed billing amount"
+                aria-label={t("line.amountAria")}
                 inputMode="decimal"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
@@ -836,14 +864,14 @@ function PrebillLine({
             {changed ? (
               <>
                 <Input
-                  aria-label="Adjustment reason"
-                  placeholder="Adjustment reason"
+                  aria-label={t("line.reasonAria")}
+                  placeholder={t("line.reasonAria")}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
                 <Input
-                  aria-label="Adjustment evidence"
-                  placeholder="Evidence references, comma separated"
+                  aria-label={t("line.evidencePlaceholder")}
+                  placeholder={t("line.evidencePlaceholder")}
                   value={evidence}
                   onChange={(event) => setEvidence(event.target.value)}
                 />
@@ -851,7 +879,7 @@ function PrebillLine({
             ) : null}
             <div className="flex gap-2">
               <Button size="sm" onClick={save} disabled={saving}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? t("line.saving") : t("line.save")}
               </Button>
               <Button
                 size="sm"
@@ -864,12 +892,14 @@ function PrebillLine({
                 disabled={saving}
               >
                 <AlertTriangle className="mr-1.5 size-3.5" />
-                Hold
+                {t("line.hold")}
               </Button>
             </div>
             {holdForm === "hold" ? (
               <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
-                <Label htmlFor={`hold-reason-${line.id}`}>Hold reason</Label>
+                <Label htmlFor={`hold-reason-${line.id}`}>
+                  {t("line.holdReason")}
+                </Label>
                 <Textarea
                   id={`hold-reason-${line.id}`}
                   autoFocus
@@ -877,13 +907,13 @@ function PrebillLine({
                   onChange={(event) => setHoldReason(event.target.value)}
                 />
                 <Label htmlFor={`hold-evidence-${line.id}`}>
-                  Evidence references
+                  {t("line.evidenceReferences")}
                 </Label>
                 <Input
                   id={`hold-evidence-${line.id}`}
                   value={holdEvidence}
                   onChange={(event) => setHoldEvidence(event.target.value)}
-                  placeholder="File, URL, or note; comma separated"
+                  placeholder={t("line.evidencePlaceholder")}
                 />
                 <div className="flex gap-2">
                   <Button
@@ -891,14 +921,14 @@ function PrebillLine({
                     disabled={!holdReason.trim() || saving}
                     onClick={hold}
                   >
-                    Apply hold
+                    {t("line.applyHold")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setHoldForm(null)}
                   >
-                    Cancel
+                    {t("workflow.cancel")}
                   </Button>
                 </div>
               </div>
@@ -915,12 +945,12 @@ function PrebillLine({
               }}
               disabled={saving}
             >
-              Release hold
+              {t("line.releaseHold")}
             </Button>
             {holdForm === "release" ? (
               <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/30">
                 <Label htmlFor={`release-reason-${line.id}`}>
-                  Release reason
+                  {t("line.releaseReason")}
                 </Label>
                 <Textarea
                   id={`release-reason-${line.id}`}
@@ -934,14 +964,14 @@ function PrebillLine({
                     disabled={!holdReason.trim() || saving}
                     onClick={release}
                   >
-                    Release
+                    {t("line.release")}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setHoldForm(null)}
                   >
-                    Cancel
+                    {t("workflow.cancel")}
                   </Button>
                 </div>
               </div>

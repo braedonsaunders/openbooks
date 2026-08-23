@@ -340,5 +340,123 @@
     "rateCardLapse": "When the rate card has lapsed",
     "block": "Block invoicing",
     "carry_forward": "Bill at the last card"
+  },
+  "wipBilling": {
+    "wipHealthAria": "WIP health",
+    "tiles": {
+      "availableWip": "Available WIP",
+      "availableWipSub": "Eligible and not held",
+      "over90": "Over 90 days",
+      "over90Sub": "{amount} at 61–90 days",
+      "realization": "Realization",
+      "realizationSub": "{amount} billed",
+      "leakage": "Leakage",
+      "leakageSub": "{amount} held over 90 days"
+    },
+    "list": {
+      "title": "Prebill worksheets",
+      "description": "Review eligible project work, billing adjustments, and approval status.",
+      "newPrebill": "New prebill"
+    },
+    "empty": {
+      "noProjectsTitle": "Create a project first",
+      "noPrebillsTitle": "No prebill worksheets yet",
+      "noProjectsDescription": "WIP review starts from an active project with billable time or cost.",
+      "noPrebillsDescription": "Create a worksheet to snapshot eligible unbilled project work through a cutoff date.",
+      "createPrebill": "Create prebill",
+      "goToProjects": "Go to projects"
+    },
+    "table": {
+      "worksheet": "Worksheet",
+      "project": "Project",
+      "status": "Status",
+      "proposed": "Proposed",
+      "through": "Through {periodEnd}",
+      "noCustomer": "No customer"
+    },
+    "createDrawer": {
+      "title": "New prebill worksheet",
+      "description": "Snapshot eligible unbilled work through a cutoff date.",
+      "cancel": "Cancel",
+      "creating": "Creating…",
+      "submit": "Create prebill",
+      "projectLabel": "Project",
+      "projectHelp": "Only active project types using standard T&M or Cost-Plus source billing are listed.",
+      "configureProjectTypes": "Configure project types",
+      "startLabel": "Start (optional)",
+      "cutoffLabel": "Cutoff",
+      "notesLabel": "Review notes",
+      "notesPlaceholder": "Scope, billing instructions, or reviewer context"
+    },
+    "detail": {
+      "description": "{projectName} · through {periodEnd}",
+      "sendForReview": "Send for review",
+      "return": "Return",
+      "approve": "Approve",
+      "converting": "Converting…",
+      "createInvoice": "Create invoice",
+      "void": "Void",
+      "openInvoice": "Open {invoiceNumber}"
+    },
+    "workflow": {
+      "returnTitle": "Return worksheet to draft",
+      "voidTitle": "Void worksheet",
+      "returnDescription": "Explain what the preparer needs to correct. This becomes part of the review trail.",
+      "voidDescription": "Explain why this worksheet must not proceed. The source WIP remains available for a future worksheet.",
+      "reasonLabel": "Reason",
+      "saving": "Saving…",
+      "returnSubmit": "Return to draft",
+      "voidSubmit": "Void worksheet",
+      "cancel": "Cancel"
+    },
+    "metrics": {
+      "original": "Original",
+      "proposed": "Proposed",
+      "adjustment": "Adjustment",
+      "cost": "Cost"
+    },
+    "lockedAlert": "This approval snapshot is locked. Convert it as approved, or void it and prepare a new worksheet.",
+    "linesTable": {
+      "source": "Source",
+      "date": "Date",
+      "description": "Description",
+      "cost": "Cost",
+      "original": "Original",
+      "proposedSupport": "Proposed / support"
+    },
+    "trail": {
+      "title": "Review trail",
+      "system": "System"
+    },
+    "toasts": {
+      "created": "{worksheetNumber} created with {sourceCount} source lines",
+      "sentForReview": "Sent for review",
+      "approved": "Prebill approved",
+      "returnedToDraft": "Returned to draft",
+      "voided": "Prebill voided",
+      "converted": "{documentNumber} created as a draft invoice"
+    },
+    "lineToasts": {
+      "saved": "Billing amount saved",
+      "holdApplied": "Billing hold applied",
+      "holdReleased": "Billing hold released"
+    },
+    "line": {
+      "held": "Held",
+      "time": "Time",
+      "cost": "Cost",
+      "amountAria": "Proposed billing amount",
+      "reasonAria": "Adjustment reason",
+      "evidencePlaceholder": "Evidence references, comma separated",
+      "saving": "Saving…",
+      "save": "Save",
+      "hold": "Hold",
+      "holdReason": "Hold reason",
+      "evidenceReferences": "Evidence references",
+      "applyHold": "Apply hold",
+      "releaseHold": "Release hold",
+      "releaseReason": "Release reason",
+      "release": "Release"
+    }
   }
 }
