@@ -112,8 +112,22 @@
       "search": "Search accounts…",
       "csv": "CSV",
       "all": "All",
-      "status": { "on-track": "On Track", "watch": "Watch", "over": "Over", "no-budget": "No Budget" },
-      "columns": { "account": "Account", "type": "Type", "budget": "Budget", "actual": "Actual", "progress": "Progress", "variance": "Variance", "variancePct": "Variance %", "status": "Status" },
+      "status": {
+        "on-track": "On Track",
+        "watch": "Watch",
+        "over": "Over",
+        "no-budget": "No Budget"
+      },
+      "columns": {
+        "account": "Account",
+        "type": "Type",
+        "budget": "Budget",
+        "actual": "Actual",
+        "progress": "Progress",
+        "variance": "Variance",
+        "variancePct": "Variance %",
+        "status": "Status"
+      },
       "showing": "Showing {from}–{to} of {total} accounts",
       "previous": "Previous",
       "next": "Next",
@@ -128,7 +142,117 @@
   },
   "vendor": {
     "title": "Vendor Performance",
-    "backToHub": "Analytics"
+    "backToHub": "Analytics",
+    "tabs": {
+      "overview": "Overview",
+      "payment": "Payment Behavior",
+      "scorecard": "Scorecard",
+      "matrix": "Leverage Matrix",
+      "vendors": "Vendors"
+    },
+    "gauge": {
+      "diversified": "Diversified",
+      "balanced": "Balanced",
+      "concentrated": "Concentrated"
+    },
+    "kpi": {
+      "activeVendors": "Active Vendors",
+      "totalSpend": "Total Spend",
+      "onTimeRate": "On-Time Rate",
+      "top5Share": "Top 5 Share",
+      "topVendor": "Top Vendor",
+      "avgBill": "Avg Bill",
+      "hhi": "Concentration (HHI)",
+      "avgDaysToPay": "Avg Days to Pay",
+      "latePaidSpend": "Late-Paid Spend",
+      "vendorsPaid": "Vendors Paid"
+    },
+    "sub": {
+      "inPeriod": "in period",
+      "yoy": "YoY {pct}",
+      "onTimeBills": "bills paid by due date",
+      "top5Concentration": "spend concentration",
+      "billsCount": "{count} bills",
+      "perBill": "per bill",
+      "highlyConcentrated": "highly concentrated",
+      "moderate": "moderate",
+      "diversified": "diversified",
+      "fromBillToPayment": "from bill to payment",
+      "paidAfterDue": "paid after due date",
+      "withPaymentHistory": "with payment history"
+    },
+    "tier": {
+      "strategic": "Strategic",
+      "core": "Core",
+      "tactical": "Tactical",
+      "tail": "Tail"
+    },
+    "quadrant": {
+      "strategic": {
+        "label": "Strategic",
+        "desc": "High spend, reliable — partner & protect"
+      },
+      "commodity": {
+        "label": "Commodity",
+        "desc": "High spend, strained — renegotiate or dual-source"
+      },
+      "niche": {
+        "label": "Niche",
+        "desc": "Low spend, reliable — nurture"
+      },
+      "transactional": {
+        "label": "Transactional",
+        "desc": "Low spend, low engagement — automate / consolidate"
+      }
+    },
+    "chart": {
+      "spend": "Spend",
+      "xAxis": "Spend (log) →",
+      "yAxis": "On-time %",
+      "tooltipSpend": "Spend: {amount}",
+      "tooltipOnTime": "On-time: {pct}%"
+    },
+    "info": {
+      "title": "Not measurable on this ledger:",
+      "body": "OTIF (on-time in-full delivery), lead-time reliability, purchase-price variance and maverick (off-PO) spend all require purchase-order → receipt → bill line linkage, which this data does not carry (no document links, no line-level items on bills). Payment behavior, concentration and relationship scorecards are computed from complete data."
+    },
+    "panels": {
+      "topBySpend": "Top Vendors by Spend",
+      "spendByTier": "Spend by Tier",
+      "spendTrend12mo": "Spend Trend (12mo)",
+      "paymentBehaviour": "Payment Behaviour by Vendor",
+      "mostLatePaid": "Most Late-Paid Vendors",
+      "scorecard": "Vendor Scorecard",
+      "scorecardHint": "Relationship value — spend significance, engagement & stability",
+      "leverageMatrix": "Leverage Matrix",
+      "leverageHint": "Spend (impact) × payment reliability (performance) — bubble size = spend",
+      "allVendors": "All Vendors ({count})"
+    },
+    "table": {
+      "vendor": "Vendor",
+      "spend": "Spend",
+      "paid": "Paid",
+      "avgDays": "Avg Days",
+      "onTime": "On-Time",
+      "lateSpend": "Late Spend",
+      "tier": "Tier",
+      "bills": "Bills",
+      "yoy": "YoY",
+      "score": "Score",
+      "grade": "Grade",
+      "share": "Share"
+    },
+    "csv": {
+      "sharePct": "Share %",
+      "onTimePct": "On-Time %"
+    },
+    "days": "{days}d",
+    "empty": {
+      "noLatePaid": "No late-paid spend."
+    },
+    "drill": {
+      "billsSpend": "{bills} bills · {spend} spend"
+    }
   },
   "cashflow": {
     "title": "Cash Flow",
