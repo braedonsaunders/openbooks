@@ -17,6 +17,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0003_pay_application_invoice_fk.sql",
     "0004_scheduler_outbox.sql",
     "0005_posting_effects.sql",
+    "0006_recurring_occurrence_guard.sql",
     "0006_terminal_failure_surfacing.sql",
   ]);
   assert.deepEqual(
