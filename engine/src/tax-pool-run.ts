@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, formatMoney, fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "./money.ts";
 import { computeMacrsYear, computePoolYear, type PoolClassDef, TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
 
@@ -353,10 +354,12 @@ function taxAssetConfig(custom: Record<string, unknown> | null, regime: string):
 }
 
 function decimalOr(value: unknown, fallback: string): string {
+  const exact = canonicalDecimal(value ?? fallback, 4);
+  if (exact === null) throw new TaxPoolError("percent must be an exact decimal");
   try {
-    return normalizeMoney(String(value ?? fallback));
+    return normalizeMoney(exact);
   } catch {
-    return fallback;
+    throw new TaxPoolError("percent must be an exact decimal");
   }
 }
 
