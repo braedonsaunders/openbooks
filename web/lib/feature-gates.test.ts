@@ -2648,53 +2648,40 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/dashboard/actions.ts'),
-    /action\.requiredFeature && !featureOn\.get\(action\.requiredFeature\)/,
+    /action\.requiredFeature && !featureEnabled\(featureState, action\.requiredFeature\)/,
     'the dashboard catalog must omit New expense when Expenses is off — stored layouts stay',
   )
+  // The navigate picker must consume hiddenNavModules — the same mapping the
+  // sidebar resolver applies — instead of hand-maintained per-key filters.
+  // The hardcoded chain this replaces covered only a subset of FEATURES
+  // navModules, so gated modules like CRM, Timesheets, Payroll, Subcontracts,
+  // WIP billing, Property Management, Compliance, Inventory, Banking, Apps,
+  // Scripts, API keys, and the query console stayed listed as dead Navigate
+  // options pointing at routes that 404 with their feature off.
   assert.match(
     read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'expenses' && !featureOn\.get\('expenses'\)/,
-    'the dashboard picker must omit Expenses navigate when Expenses is off — stored layouts stay',
+    /const hiddenModules = hiddenNavModules\(featureState\)/,
+    'the dashboard picker must derive hidden modules from the feature registry, not a hand-written list',
   )
   assert.match(
     read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'projects' && !featureOn\.get\('projects'\)/,
-    'the dashboard picker must omit Projects navigate when Projects is off — stored layouts stay',
+    /hiddenModules\.has\(mod\.key\)/,
+    'the dashboard picker must drop every module a disabled feature hides — stored layouts stay',
   )
   assert.match(
     read('app/(app)/dashboard/actions.ts'),
-    /\(mod\.key === 'estimates' \|\| mod\.key === 'sales-orders' \|\| mod\.key === 'purchase-orders'\) && !featureOn\.get\('orders'\)/,
-    'the dashboard picker must omit Orders navigate when Orders is off — stored layouts stay',
+    /resolvedFeatureState\(authz\.user\.orgId\)/,
+    'the dashboard picker must resolve data-dependent feature defaults exactly like the sidebar resolver',
+  )
+  assert.doesNotMatch(
+    read('app/(app)/dashboard/actions.ts'),
+    /featureOn\.get\(/,
+    'the dashboard picker must not fork per-key feature filters — hiddenNavModules is the single source of truth',
   )
   assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /\(mod\.key === 'assets' \|\| mod\.key === 'tax-depreciation'\) && !featureOn\.get\('fixedAssets'\)/,
-    'the dashboard picker must omit Assets navigate when Fixed Assets is off — stored layouts stay',
-  )
-  assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'equipment' && !featureOn\.get\('equipment'\)/,
-    'the dashboard picker must omit Equipment navigate when Equipment is off — stored layouts stay',
-  )
-  assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'budgets' && !featureOn\.get\('budgets'\)/,
-    'the dashboard picker must omit Budgets navigate when Budgets is off — stored layouts stay',
-  )
-  assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'continuous-close' && !featureOn\.get\('continuousClose'\)/,
-    'the dashboard picker must omit Continuous Close navigate when Continuous Close is off — stored layouts stay',
-  )
-  assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'approvals' && !featureOn\.get\('flows'\)/,
-    'the dashboard picker must omit Approvals navigate when Flows is off — stored layouts stay',
-  )
-  assert.match(
-    read('app/(app)/dashboard/actions.ts'),
-    /mod\.key === 'flows' && !featureOn\.get\('flows'\)/,
-    'the dashboard picker must omit Flows navigate when Flows is off — stored layouts stay',
+    read('lib/nav/resolve.ts'),
+    /featureHiddenModules = hiddenNavModules\(featureState\)/,
+    'the sidebar resolver and the dashboard picker must share one hidden-module mapping',
   )
   assert.match(
     read('app/(app)/layout.tsx'),
