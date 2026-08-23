@@ -117,9 +117,11 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
       values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
   }
 
-  // Org control accounts (for document posting).
+  // Org control accounts (for document posting), with the payroll feature
+  // gate open so DB-backed payroll suites exercise real runs (the product
+  // default is off; scratch orgs exist only inside a single test's lifetime).
   await db.execute(sql`
-    update orgs set settings = ${JSON.stringify({ controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank, fxRealizedGainLoss: accounts.fxGainLoss } })}::jsonb
+    update orgs set settings = ${JSON.stringify({ features: { payroll: true }, controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank, fxRealizedGainLoss: accounts.fxGainLoss } })}::jsonb
      where id = ${orgId}`);
 
   // Items + inventory profiles.
