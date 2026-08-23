@@ -6,10 +6,10 @@
  * through the @opentelemetry/api no-op until `startTelemetry()` registers a
  * real SDK. Boot happens where the background processes are assembled (the
  * standalone worker's `main()` and Next's nodejs instrumentation) and only
- * when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — the standard OTel variable — so
- * enabling observability is a deployment concern, never a code change. Any
- * OTLP/HTTP receiver (Grafana Agent/Alloy, Jaeger, Datadog OTel gateway, …)
- * speaks the same protocol; there is deliberately no vendor SDK here.
+ * when a shared or signal-specific OTLP endpoint is set, so enabling
+ * observability is a deployment concern, never a code change. Any OTLP/HTTP
+ * receiver (Grafana Agent/Alloy, Jaeger, Datadog OTel gateway, …) speaks the
+ * same protocol; there is deliberately no vendor SDK here.
  *
  * Signals emitted under the scope "openbooks.engine":
  *
@@ -156,13 +156,54 @@ export function recordTerminalFailure(
 
 export type TelemetryEnv = Record<string, string | undefined>;
 
-/** Telemetry is enabled purely by configuration: a collector endpoint means on. */
+export type OtlpSignal = "traces" | "metrics" | "logs";
+
+const SIGNAL_ENDPOINT_VARIABLES = {
+  traces: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+  metrics: "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+  logs: "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+} as const satisfies Record<OtlpSignal, string>;
+
+function configuredEndpoint(value: string | undefined): value is string {
+  return value !== undefined && value.trim().length > 0;
+}
+
+/**
+ * Resolve an OTLP/HTTP signal URL exactly as specified by OpenTelemetry.
+ * Signal-specific values win and are returned byte-for-byte. The shared value
+ * is a base URL, so only it receives the relative `v1/<signal>` path.
+ */
+export function resolveOtlpHttpEndpoint(
+  env: TelemetryEnv,
+  signal: OtlpSignal,
+): string | undefined {
+  const specific = env[SIGNAL_ENDPOINT_VARIABLES[signal]];
+  if (configuredEndpoint(specific)) return specific;
+
+  const shared = env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  if (!configuredEndpoint(shared)) return undefined;
+  return `${shared.replace(/\/+$/, "")}/v1/${signal}`;
+}
+
+/** Telemetry is configured when any shared or signal-specific endpoint exists. */
 export function telemetryEnabled(env: TelemetryEnv = process.env): boolean {
-  return Boolean(env.OTEL_EXPORTER_OTLP_ENDPOINT);
+  return (["traces", "metrics", "logs"] as const).some(
+    (signal) => resolveOtlpHttpEndpoint(env, signal) !== undefined,
+  );
 }
 
 function signalDisabled(env: TelemetryEnv, varName: "OTEL_TRACES_EXPORTER" | "OTEL_METRICS_EXPORTER"): boolean {
   return env[varName] === "none";
+}
+
+function enabledExportEndpoint(
+  env: TelemetryEnv,
+  signal: "traces" | "metrics",
+): string | undefined {
+  const exporterVariable = signal === "traces" ? "OTEL_TRACES_EXPORTER" : "OTEL_METRICS_EXPORTER";
+  return signalDisabled(env, exporterVariable)
+    ? undefined
+    : resolveOtlpHttpEndpoint(env, signal);
 }
 
 /** Parse the standard OTEL_RESOURCE_ATTRIBUTES "k=v,k2=v2" list (URL-encoded). */
@@ -196,7 +237,7 @@ const shutdowns: Array<() => Promise<void>> = [];
  */
 export function startTelemetry(env: TelemetryEnv = process.env): Promise<boolean> {
   if (!telemetryEnabled(env)) return Promise.resolve(false);
-  if (signalDisabled(env, "OTEL_TRACES_EXPORTER") && signalDisabled(env, "OTEL_METRICS_EXPORTER")) {
+  if (!enabledExportEndpoint(env, "traces") && !enabledExportEndpoint(env, "metrics")) {
     return Promise.resolve(false);
   }
   bootPromise ??= boot(env).catch((error) => {
@@ -230,26 +271,11 @@ function parseHeaders(raw: string | undefined): Record<string, string> {
   return headers;
 }
 
-/**
- * Resolve the per-signal export URL per the OTel spec: a signal-specific
- * OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT wins; otherwise the shared endpoint is
- * appended with /v1/<signal> unless it already names that path.
- */
-function exportUrl(
-  env: TelemetryEnv,
-  signal: "traces" | "metrics",
-): string {
-  const specific =
-    signal === "traces"
-      ? env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
-      : env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
-  const base = (specific ?? env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").replace(/\/+$/, "");
-  return /\/v1\/(traces|metrics)$/.test(base) ? base : `${base}/v1/${signal}`;
-}
-
 async function boot(env: TelemetryEnv): Promise<boolean> {
-  const tracesOn = !signalDisabled(env, "OTEL_TRACES_EXPORTER");
-  const metricsOn = !signalDisabled(env, "OTEL_METRICS_EXPORTER");
+  const tracesEndpoint = enabledExportEndpoint(env, "traces");
+  const metricsEndpoint = enabledExportEndpoint(env, "metrics");
+  const tracesOn = tracesEndpoint !== undefined;
+  const metricsOn = metricsEndpoint !== undefined;
 
   const [{ resourceFromAttributes }, traceSdk, metricsSdk, tracesExporter, metricsExporter] =
     await Promise.all([
@@ -277,7 +303,7 @@ async function boot(env: TelemetryEnv): Promise<boolean> {
         new traceSdk.BatchSpanProcessor(
           new tracesExporter.OTLPTraceExporter({
             ...exporterDefaults,
-            url: exportUrl(env, "traces"),
+            url: tracesEndpoint,
           }),
         ),
       ],
@@ -293,7 +319,7 @@ async function boot(env: TelemetryEnv): Promise<boolean> {
         new metricsSdk.PeriodicExportingMetricReader({
           exporter: new metricsExporter.OTLPMetricExporter({
             ...exporterDefaults,
-            url: exportUrl(env, "metrics"),
+            url: metricsEndpoint,
           }),
           exportIntervalMillis: Number.isFinite(interval) && interval > 0 ? interval : 60_000,
         }),
