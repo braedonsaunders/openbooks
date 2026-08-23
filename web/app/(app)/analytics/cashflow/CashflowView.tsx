@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { useMemo, useState } from 'react'
 import {
   University,
@@ -85,8 +86,15 @@ export function CashflowView({ data }: { data: CashflowData }) {
 function OverviewTab({ data }: { data: CashflowData }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const tCharts = useTranslations('analytics.charts')
   const s = data.summary
-  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money), [s, money])
+  const bridgeLabels = {
+    start: tCharts('bridge.start'),
+    inflows: tCharts('bridge.inflows'),
+    outflows: tCharts('bridge.outflows'),
+    projectedEnd: tCharts('bridge.projectedEnd'),
+  }
+  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money, bridgeLabels), [s, money])
 
   return (
     <div className="space-y-5">
