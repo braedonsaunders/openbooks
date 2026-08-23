@@ -132,14 +132,18 @@ test("manual evidence replacement is append-preserved and concurrent runs post o
     assert.equal(correction.replacedInputId, null, "posted evidence remains intact instead of being superseded");
     const correctionRun = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId);
     assert.equal(correctionRun.posted, 1);
-    const corrected = (await db.execute<{ accumulated: string; postings: number }>(sql`
+    assert.deepEqual(correctionRun.problems, []);
+    const corrected = (await db.execute<{ accumulated: string; postings: number; journals: number; entry_numbers: number }>(sql`
       select coalesce(sum(posted_amount), 0)::text as accumulated,
-             count(*) filter (where posted_amount is not null)::int as postings
-        from depreciation_schedule_lines
-       where org_id = ${org.orgId} and schedule_id = (
+             count(*) filter (where posted_amount is not null)::int as postings,
+             count(distinct journal_entry_id)::int as journals,
+             count(distinct je.entry_number)::int as entry_numbers
+        from depreciation_schedule_lines l
+        left join journal_entries je on je.id = l.journal_entry_id and je.org_id = l.org_id
+       where l.org_id = ${org.orgId} and l.schedule_id = (
          select schedule_id from depreciation_schedule_lines where id = ${second.scheduleLineId})
     `));
-    assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2 });
+    assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2, journals: 2, entry_numbers: 2 });
   } finally {
     await dropScratchOrg(org.orgId);
   }

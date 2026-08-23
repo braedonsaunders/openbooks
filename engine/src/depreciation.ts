@@ -837,11 +837,13 @@ export async function runDepreciation(
           { accountId: accounts.accumulatedDepreciationAccountId, amount: neg(planned) },
         ];
         assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: row.subsidiary_id })));
+        // Corrections create another line for the same asset and period, so the
+        // schedule-line id distinguishes every physical journal generation.
         const entryRes = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
           values (${orgId}, ${row.book_id}, ${row.subsidiary_id},
-                  ${`DEP-${row.asset_number}-${row.period_name}`},
+                  ${`DEP-${row.asset_number}-${row.period_name}-${row.line_id}`},
                   ${postingDate}, ${row.period_id},
                   ${`Depreciation — ${row.asset_name} (${row.period_name})`},
                   'draft', 'depreciation', ${actorId}, ${actorId})
