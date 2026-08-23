@@ -38,6 +38,18 @@ function persistRetainagePercent(value: unknown): string {
   }
 }
 
+/** Persist a revised schedule-of-values input through exact decimal then ledger
+ * money. Fail closed: these feed the persisted sov_lines.scheduled_value. */
+function persistRevisedScheduleValueInput(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("schedule value must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("schedule value must be an exact decimal");
+  }
+}
+
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
   const result = (await tx.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
@@ -99,9 +111,9 @@ export function revisedScheduleValue(
   changeAmount: string,
   billedToDate: string,
 ): string {
-  const current = normalizeMoney(currentScheduledValue);
-  const change = normalizeMoney(changeAmount);
-  const billed = normalizeMoney(billedToDate);
+  const current = persistRevisedScheduleValueInput(currentScheduledValue);
+  const change = persistRevisedScheduleValueInput(changeAmount);
+  const billed = persistRevisedScheduleValueInput(billedToDate);
   if (cmp(current, "0") < 0 || cmp(billed, "0") < 0) {
     throw new ConstructionBillingError("Schedule and billed values cannot be negative");
   }
