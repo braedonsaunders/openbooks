@@ -117,7 +117,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   crm: ['app/api/crm', 'app/api/parties/[id]/activities'],
   subcontractorCompliance: ['app/api/compliance'],
   scripts: ['app/api/scripts'],
-  onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers'],
+  onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers', 'app/api/pay'],
   queryConsole: ['app/api/query'],
   flows: ['app/api/flows', 'app/api/admin/flows'],
   multiSubsidiary: ['app/api/consolidation'],
@@ -1693,7 +1693,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('lib/project-charges.ts'),
-    /kind === 'equipment_charge'[\s\S]{0,80}!equipmentOn/,
+    /kind\) === 'equipment_charge'[\s\S]{0,80}!equipmentOn/,
     'project-charge lines must not store equipment_charge items when Equipment is off — existing charges stay',
   )
   assert.match(
@@ -2585,6 +2585,31 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/parties/PartyDrawer.tsx'),
     /initialTab === 'activities' && !canReadActivities/,
     'the party drawer must omit the activities tab when CRM is off — stored activities stay',
+  )
+  assert.match(
+    read('app/api/pay/[token]/route.ts'),
+    /isFeatureEnabled\([^,]+, ['"]onlinePayments['"]\)/,
+    'hosted checkout must refuse when Online Payments is off — stored links stay',
+  )
+  assert.match(
+    read('app/api/pay/[token]/route.ts'),
+    /status: 404/,
+    'hosted checkout must 404 — not create a payment attempt — when Online Payments is off',
+  )
+  assert.match(
+    read('../engine/src/payment-acceptance.ts'),
+    /export async function createCheckoutSession[\s\S]{0,400}onlinePaymentsFeatureEnabled/,
+    'createCheckoutSession must not insert payment_attempts when Online Payments is off — stored links stay',
+  )
+  assert.match(
+    read('../engine/src/payment-acceptance.ts'),
+    /export async function publicPaymentPage[\s\S]{0,250}onlinePaymentsFeatureEnabled/,
+    'the hosted pay page must hide when Online Payments is off — stored links stay',
+  )
+  assert.match(
+    read('lib/pdf-templates/send.ts'),
+    /isFeatureEnabled\([^,]+, ['"]onlinePayments['"]\)/,
+    'invoice email must omit the pay-online link when Online Payments is off — stored links stay',
   )
 })
 

@@ -575,6 +575,21 @@ interface LinkWithContext {
   expiresOn: string | null;
 }
 
+/** Registry default is off — absence must not enable hosted checkout. */
+export async function onlinePaymentsFeatureEnabled(orgId: string): Promise<boolean> {
+  const result = await withBypassContext(async () =>
+    db.execute<{ enabled: boolean }>(sql`
+      select coalesce((settings->'features'->>'onlinePayments')::boolean, false) as enabled
+        from orgs where id = ${orgId}
+    `),
+  );
+  return result.rows[0]?.enabled === true;
+}
+
+export async function paymentLinkOrgId(token: string): Promise<string | null> {
+  return (await loadLinkByToken(token))?.orgId ?? null;
+}
+
 async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
   // Token lookup must span orgs (public surface); all subsequent work is
   // org-scoped via withOrg once the token resolves.
@@ -605,6 +620,7 @@ export interface PublicPaymentPage {
 export async function publicPaymentPage(token: string): Promise<PublicPaymentPage | null> {
   const link = await loadLinkByToken(token);
   if (!link) return null;
+  if (!(await onlinePaymentsFeatureEnabled(link.orgId))) return null;
   if (link.status !== "active") return null;
   return await withOrg(link.orgId, async () => {
     if (link.expiresOn && link.expiresOn < await businessToday(link.orgId)) {
@@ -650,6 +666,9 @@ export async function createCheckoutSession(
 ): Promise<{ redirectUrl: string }> {
   const link = await loadLinkByToken(token);
   if (!link) throw new PaymentAcceptanceError("payment link not found");
+  if (!(await onlinePaymentsFeatureEnabled(link.orgId))) {
+    throw new PaymentAcceptanceError("Online Payments is disabled");
+  }
   if (link.status !== "active") throw new PaymentAcceptanceError(`payment link is ${link.status}`);
   return await withOrg(link.orgId, async () => {
     const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
