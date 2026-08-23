@@ -27,6 +27,17 @@ function persistRetainageReleaseAmount(value: unknown): string {
   }
 }
 
+/** Persist retainage percent through exact decimal then ledger money. Fail closed. */
+function persistRetainagePercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("retainage percent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("retainage percent must be an exact decimal");
+  }
+}
+
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
   const result = (await tx.execute<{ enabled: boolean }>(sql`
     select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
@@ -216,7 +227,7 @@ export async function createPayApplication(
   retainagePercent = "10",
 ): Promise<{ id: string; applicationNumber: number }> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(periodEnd)) throw new ConstructionBillingError("A valid period-ending date is required");
-  const exactRetainage = normalizeMoney(retainagePercent);
+  const exactRetainage = persistRetainagePercent(retainagePercent);
   if (cmp(exactRetainage, "0") < 0 || cmp(exactRetainage, "100") > 0) {
     throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
   }
