@@ -10,6 +10,7 @@ import {
 } from '@openbooks/engine/src/email-config.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
+import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { mergeAndPrintPdf } from './render'
 import { resolvePdfTemplate } from './store'
@@ -85,9 +86,10 @@ export async function sendRecordPdfEmail(args: {
   const pdf = args.encrypt ? await args.encrypt(rendered) : rendered
   // When the invoice has an active hosted payment link, include it as a
   // pay-online call-to-action. Creating the link is the opt-in; nothing is
-  // attached for invoices without one.
+  // attached for invoices without one. Stored links stay when the feature is
+  // off — the email just omits the CTA.
   let paymentUrl: string | undefined
-  if (args.recordType === 'customer_invoice') {
+  if (args.recordType === 'customer_invoice' && (await isFeatureEnabled(args.orgId, 'onlinePayments'))) {
     const link = (await db.execute<{ token: string }>(sql`
       select token from payment_links
        where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
