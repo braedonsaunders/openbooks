@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -17,7 +18,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>
   if (!body.accountId || !isUuid(String(body.accountId))) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
   }

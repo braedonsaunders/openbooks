@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -13,7 +14,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = (await req.json().catch(() => ({}))) as { action?: string; reason?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { action?: string; reason?: string }
   try {
     if (body.action === 'exclude') {
       await excludeStatementLine(id, String(body.reason ?? ''), { orgId: user.orgId, userId: user.id })

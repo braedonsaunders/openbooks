@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -18,7 +19,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json()) as Record<string, unknown>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>
   if (!body.name || String(body.name).trim() === '' || String(body.name).length > 200) {
     return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
   }
@@ -49,7 +52,9 @@ export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json()) as Record<string, unknown>
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   if (!body.name || String(body.name).trim() === '' || String(body.name).length > 200) {
     return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })

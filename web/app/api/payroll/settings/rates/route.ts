@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -211,7 +212,9 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const parsed = parseBody(await req.json().catch(() => null))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = parseBody(parsedBody.data)
   if (typeof parsed === 'string') return NextResponse.json({ error: parsed }, { status: 422 })
 
   const account = parsed.filingAccountId

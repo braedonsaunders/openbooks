@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-error.ts'
@@ -73,7 +74,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => null)) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     country?: string
     filing?: string
     year?: number

@@ -28,6 +28,13 @@ export type ParsedBody<T> =
 
 const INVALID_BODY = "invalid request body";
 
+/**
+ * Object-only transition schema for routes that retain narrower field and
+ * lifecycle validation in their existing domain code. It still closes the
+ * malformed/null/array body gap and keeps all JSON decoding on this boundary.
+ */
+export const jsonObject = z.looseObject({}) as z.ZodType<Record<string, any>>;
+
 export async function parseJsonBody<S extends z.ZodType>(
   req: Request,
   schema: S,

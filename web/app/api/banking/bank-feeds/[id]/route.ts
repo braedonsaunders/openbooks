@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -49,7 +50,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!before) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const sets: ReturnType<typeof sql>[] = [];
   if ("name" in body) sets.push(sql`name = ${body.name as string}`);
   if ("externalAccountId" in body) sets.push(sql`external_account_id = ${(body.externalAccountId as string | null) ?? null}`);
@@ -107,7 +110,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!existing) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as { action?: string };
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as { action?: string };
   if (body.action === "test") {
     const result = await testBankFeedConnection(id, { orgId: authz.user.orgId });
     // Reflect the probe result on the row so the list shows connection health,

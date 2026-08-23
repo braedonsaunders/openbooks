@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -44,9 +45,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   try {
-    const body = await request.json().catch(() => {
-      throw new ProjectWorkBreakdownError('Task details must be valid JSON')
-    })
+    const parsedBody = await parseJsonBody(request, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
     const task = await createWorkBreakdownTask({
       orgId: gate.user.orgId,
       projectId: id,
