@@ -7,7 +7,7 @@ import { db } from '@openbooks/engine/src/db.ts'
  *
  * The table's `action` column is a fixed enum (insert/update/delete/…), so the
  * specific file verb is carried in `changes.event`; the activity UI reads that.
- * Writes are best-effort: a logging failure must never fail the user action.
+ * Audit evidence is required: a logging failure must fail the file action.
  */
 export type FileEvent =
   | 'create'
@@ -40,16 +40,12 @@ export async function recordFileEvent(input: {
   action: FileEvent
   changes?: Record<string, unknown>
 }): Promise<void> {
-  try {
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
-      values (${input.orgId}, ${input.table}, ${input.rowId}, ${EVENT_ACTION[input.action]},
-              ${JSON.stringify({ event: input.action, ...(input.changes ?? {}) })}::jsonb,
-              ${input.actorId}, now())
-    `)
-  } catch {
-    // best-effort — never let audit logging break the operation
-  }
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at)
+    values (${input.orgId}, ${input.table}, ${input.rowId}, ${EVENT_ACTION[input.action]},
+            ${JSON.stringify({ event: input.action, ...(input.changes ?? {}) })}::jsonb,
+            ${input.actorId}, now())
+  `)
 }
 
 export type FileActivityEntry = {
