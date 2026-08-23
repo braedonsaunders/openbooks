@@ -9,6 +9,12 @@ export const runtime = "nodejs";
 const PROVIDERS = ["manual", "sftp", "plaid", "gocardless", "truelayer"] as const;
 const API_PROVIDERS = new Set(["plaid", "gocardless", "truelayer"]);
 
+/** Audit-safe projection: sealed credentials never enter the trail — presence only. */
+function withoutCredentials(row: Record<string, unknown>): Record<string, unknown> {
+  const { credentials, ...rest } = row;
+  return { ...rest, hasCredentials: credentials != null };
+}
+
 /**
  * Bank feed connections — the registry behind Company Settings → Bank Feeds.
  * Credentials are sealed with the org data key on write and NEVER returned; the
@@ -61,13 +67,24 @@ export async function POST(req: Request) {
   const status = isApi ? "pending" : "connected";
   const cadence = isApi ? (body.syncCadence ?? "daily") : "manual";
 
-  const created = (await db.execute<{ id: string }>(sql`
-    insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
-                                       sync_cadence, credentials, status, created_by, updated_by)
-    values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
-            ${body.externalAccountId ?? null}, ${cadence}, ${sealed}, ${status},
-            ${authz.user.id}, ${authz.user.id})
-    returning id
-  `));
-  return NextResponse.json({ id: created.rows[0]!.id }, { status: 201 });
+  const id = await db.transaction(async (tx) => {
+    const created = (await tx.execute<Record<string, unknown>>(sql`
+      insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
+                                         sync_cadence, credentials, status, created_by, updated_by)
+      values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
+              ${body.externalAccountId ?? null}, ${cadence}, ${sealed}, ${status},
+              ${authz.user.id}, ${authz.user.id})
+      returning *
+    `));
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${authz.user.orgId}, 'bank_feed_connections', ${created.rows[0]!.id}, 'insert',
+         ${JSON.stringify({ after: withoutCredentials(created.rows[0]!) })}::jsonb,
+         ${authz.user.id}, ${req.headers.get("X-Request-Id")})
+    `);
+    return created.rows[0]!.id;
+  });
+  return NextResponse.json({ id }, { status: 201 });
 }
