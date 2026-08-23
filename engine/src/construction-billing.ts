@@ -162,7 +162,7 @@ export function computeApplication(lines: AppLineInput[]): ComputedApplication {
     const scheduled = normalizeMoney(l.scheduledValue || "0");
     const previous = normalizeMoney(l.previousCompleted || "0");
     const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
-    const thisPeriod = normalizeMoney(l.thisPeriodCompleted || "0");
+    const thisPeriod = persistThisPeriodCompleted(l.thisPeriodCompleted || "0");
     const stored = persistMaterialsStored(l.materialsStored || "0");
     const retainagePercent = normalizeMoney(l.retainagePercent || "0");
     if ([scheduled, previous, previousStored, thisPeriod, stored].some((value) => cmp(value, "0") < 0)) {
