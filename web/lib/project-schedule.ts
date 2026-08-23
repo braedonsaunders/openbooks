@@ -9,7 +9,7 @@ import type {
   ScheduleTaskPatchInput,
 } from '@appkit/scheduling'
 import { wouldCreateDependencyCycle } from '@appkit/scheduling'
-import { canonicalDecimal } from './exact-decimal'
+import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
 
 /**
  * Project schedule persistence.
@@ -216,6 +216,18 @@ function patchValue(key: string, value: unknown) {
   return value === undefined ? null : value
 }
 
+/** Persist schedule assignment units through exact decimal then ledger money. Fail closed. */
+function persistScheduleAssignmentUnits(value: unknown): string | 'invalid' {
+  const exact = canonicalDecimal(value ?? 1, 4)
+  if (exact === null || !isPositiveDecimal(exact)) return 'invalid'
+  try {
+    const canonical = normalizeMoney(exact)
+    return compareDecimal(canonical, '0.0001') < 0 ? normalizeMoney('0.0001') : canonical
+  } catch {
+    return 'invalid'
+  }
+}
+
 /** `exec` lets callers run the patch inside an open transaction. */
 type Executor = Pick<typeof db, 'execute'>
 
@@ -251,10 +263,14 @@ async function applyTaskPatch(
       delete from schedule_task_assignments where org_id = ${orgId} and task_id = ${taskId}`)
     for (const assignment of patch.resourceAssignments) {
       if (!assignment.resourceId) continue
+      const units = persistScheduleAssignmentUnits(assignment.units)
+      if (units === 'invalid') {
+        throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
+      }
       await exec.execute(sql`
         insert into schedule_task_assignments (org_id, task_id, resource_id, units, role, created_by, updated_by)
         values (${orgId}, ${taskId}, ${assignment.resourceId},
-                ${Math.max(0.0001, Number(assignment.units ?? 1) || 1)}, ${assignment.role ?? ''},
+                ${units}, ${assignment.role ?? ''},
                 ${userId}, ${userId})
         on conflict (task_id, resource_id)
           do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}
