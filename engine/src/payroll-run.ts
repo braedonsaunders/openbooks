@@ -31,6 +31,7 @@ import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./payroll/statutory-context.ts";
 import {
   resolveStatutoryHolidayPay,
   undeclaredJurisdictionHolidayConflict,
+  type StatutoryHolidayEarningLine,
 } from "./payroll-holidays.ts";
 import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
 // Aliased: the local closure keeps the same name, and this module is the one
@@ -1346,6 +1347,228 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
   });
 }
 
+/**
+ * One line of a stub under construction — earnings, deductions, and employer
+ * contributions alike, in the order phases append them. Hoisted to module
+ * level so the jurisdiction and persistence helpers below can name it; it
+ * carries no behavior, only shape.
+ */
+interface Line {
+  componentId: string | null; kind: "earning" | "deduction" | "employer_contribution";
+  description: string; hours?: string; rate?: string; amount: string;
+  projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
+  sequence: number;
+  taxable?: boolean; pensionable?: boolean; insurable?: boolean;
+  vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
+  accrualOnly?: boolean;
+  /**
+   * Set on every pack-emitted statutory line: what the country pack declares
+   * the amount is assessed on. `taxable_income` lines are dropped and
+   * re-derived on each protection pass; `earnings` lines are computed once
+   * and asserted unchanged (see the statutory pass below).
+   */
+  assessedOn?: PayrollAssessedOn;
+  /** Time-type classification behind an hours line: the hours cap exempts
+   *  overtime/double time charged to a job. */
+  classification?: string;
+  /** pay_components protection columns, carried so phase 10 needs no re-read. */
+  protectionBase?: string;
+  protectionMaxPercent?: string | null;
+  protectionPriority?: number;
+  includeInDisposableEarnings?: boolean;
+}
+
+/**
+ * The run's resolved country pack, refused when it is declared but not
+ * installable — statutory compute for such a country is refused, never
+ * silently skipped.
+ */
+function installablePackOrThrow(country: string) {
+  const pack = payrollPack(country);
+  if (!pack.installable) {
+    throw new PayrollJurisdictionError(
+      `the ${country} payroll pack is declared but not installable — statutory compute is refused`,
+    );
+  }
+  return pack;
+}
+
+/**
+ * Phase 2 — statutory holiday pay lines for one employee, gated entirely on
+ * JURISDICTION facts. A day's pay derived from a LOOKBACK over prior
+ * earnings, plus the premium for hours actually worked on the day, where —
+ * and only where — the jurisdiction declares one. The formula is a statutory
+ * fact declared per jurisdiction in the country pack
+ * (engine/src/payroll/packs.ts), never hardcoded here: Ontario divides four
+ * weeks of regular wages plus vacation pay by 20, British Columbia divides
+ * thirty days of wages by the days actually worked, Saskatchewan takes five
+ * per cent.
+ *
+ * The caller gates on the org's settings.payroll.statutoryHolidayPay (OFF for
+ * existing tenants: the phase changes gross, so it is opted into, never
+ * inherited by upgrade) and on the run not being an off-cycle one-off.
+ *
+ * A jurisdiction NO pack has transcribed (CA-MB, US-MA) is neither guessed at
+ * nor blindly refused: with no statutory holiday in the period it calculates
+ * exactly as it always has, and when one lands in the period — probed against
+ * the country's declared employment calendars — the run stops with the same
+ * message readiness raises, naming the jurisdiction and the holiday. A silent
+ * zero on a paid holiday is indistinguishable from a correct calculation,
+ * which is why the refusal exists.
+ *
+ * Returns the earning lines to append to the stub (empty when the period has
+ * no paid holiday or the jurisdiction mandates none). Throws before any line
+ * is produced when the employee's labour jurisdiction cannot be honoured or
+ * an undeclared jurisdiction's holiday lands in the period.
+ */
+export async function statutoryHolidayLinesForStub(
+  tx: Pick<typeof db, "execute">,
+  args: {
+    orgId: string;
+    documentId: string;
+    employeePartyId: string;
+    employeeName: string;
+    /** The profile record — its labour_jurisdiction overrides the region. */
+    emp: Record<string, string | null>;
+    country: string;
+    province: string | null;
+    periodStart: string;
+    periodEnd: string;
+    /** The resolved labor cost rate; a salaried rate is divided to hourly here. */
+    payRate: { basis: "hour" | "year"; rate: string; annualHours: string } | null;
+    need: (systemKey: string, kind: string) => Record<string, unknown>;
+  },
+): Promise<StatutoryHolidayEarningLine[]> {
+  const {
+    orgId, documentId, employeePartyId, employeeName,
+    emp, country, province, periodStart, periodEnd, payRate, need,
+  } = args;
+  // The employment attribute wins over the region derivation where the
+  // profile carries one: an employer regulated by a different labour
+  // jurisdiction than the one the employee works in has a different holiday
+  // calendar AND a different holiday-pay formula.
+  //
+  // An EXPLICIT value the packs do not declare is refused outright, not put
+  // through the untranscribed-province gate below. The two are different
+  // failures: an untranscribed province is a gap in the packs, and calculates
+  // as it always has until a holiday actually lands in the period, whereas an
+  // undeclared explicit key is a value somebody entered that means nothing —
+  // it would silently fall back on the work region's calendar, which is the
+  // exact substitution the attribute exists to prevent. The API validates it
+  // with the same function (labourJurisdictionProblem), so reaching this is a
+  // direct database write.
+  const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction);
+  if (labourProblem) {
+    throw new PayrollError(
+      `${employeeName} has a labour jurisdiction this payroll cannot `
+      + `honour — ${labourProblem}`,
+    );
+  }
+  const employeeJurisdiction = jurisdictionKey(country, province, emp.labour_jurisdiction);
+  if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
+    const conflict = undeclaredJurisdictionHolidayConflict({
+      country, jurisdiction: employeeJurisdiction,
+      from: periodStart, to: periodEnd,
+    });
+    if (conflict) throw new PayrollError(conflict.message);
+    return [];
+  }
+  const holidayRate = payRate
+    ? (payRate.basis === "hour"
+        ? payRate.rate
+        : divideMoney(payRate.rate, payRate.annualHours, 4))
+    : "0";
+  return resolveStatutoryHolidayPay(tx, {
+    orgId,
+    employeePartyId,
+    employeeName,
+    jurisdiction: employeeJurisdiction,
+    periodStart,
+    periodEnd,
+    holidayComponentId: need("stat_holiday", "earning").id as string,
+    premiumComponentId: need("stat_holiday_premium", "earning").id as string,
+    excludeDocumentId: documentId,
+    hourlyRate: holidayRate,
+  });
+}
+
+/** Insert the pay_stubs header row; returns the new stub's id. */
+async function insertPayStubRow(
+  tx: Pick<typeof db, "execute">,
+  stub: {
+    orgId: string; actorId: string; documentId: string; employeePartyId: string;
+    province: string; periodsPerYear: number; payDate: string; taxYear: number;
+    federalClaim: string; provincialClaim: string; currency: string | null;
+    gross: string; pensionable: string; insurable: string; net: string;
+    employerCost: string; vacationAccrued: string;
+    factors: Record<string, string>; paymentMethod: string;
+  },
+): Promise<string> {
+  const inserted = (await tx.execute<{ id: string }>(sql`
+    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+                           periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
+                           currency_code, gross, pensionable_earnings, insurable_earnings,
+                           net_pay, employer_cost, vacation_accrued, factors, payment_method,
+                           created_by, updated_by)
+    values (${stub.orgId}, ${stub.documentId}, ${stub.employeePartyId}, ${stub.province}, ${stub.periodsPerYear},
+            ${stub.payDate}, ${stub.taxYear}, ${stub.federalClaim}, ${stub.provincialClaim},
+            ${stub.currency}, ${stub.gross}, ${stub.pensionable}, ${stub.insurable},
+            ${stub.net}, ${stub.employerCost}, ${stub.vacationAccrued}, ${JSON.stringify(stub.factors)}::jsonb,
+            ${stub.paymentMethod},
+            ${stub.actorId}, ${stub.actorId})
+    returning id
+  `));
+  return inserted.rows[0]!.id;
+}
+
+/** Insert one row per stub line, in the order the phases appended them. */
+async function insertPayStubLineRows(
+  tx: Pick<typeof db, "execute">,
+  args: { orgId: string; stubId: string; actorId: string },
+  lines: readonly Line[],
+): Promise<void> {
+  for (const line of lines) {
+    await tx.execute(sql`
+      insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
+                                  amount, project_id, department_id, time_type_id, sequence,
+                                  created_by, updated_by)
+      values (${args.orgId}, ${args.stubId}, ${line.componentId}, ${line.kind}, ${line.description},
+              ${line.hours ?? null}, ${line.rate ?? null}, ${line.amount},
+              ${line.projectId ?? null}, ${line.departmentId ?? null}, ${line.timeTypeId ?? null},
+              ${line.sequence}, ${args.actorId}, ${args.actorId})
+    `);
+  }
+}
+
+/**
+ * Ledger movements land only once the stub rows exist. The call replaces
+ * THIS EMPLOYEE'S prior movements on this run and nobody else's — it is made
+ * once per employee, so a run-scoped replacement here would erase every
+ * previously calculated employee's bank. It runs unconditionally: an
+ * employee whose recompute produced no movements must still have their stale
+ * rows cleared.
+ *
+ * Skipped entirely for a SIMULATION: the movements of a committed run are
+ * append-only (entitlement_ledger_append_only), and a rolled-back
+ * re-derivation has no business rewriting the bank behind a payroll that has
+ * already gone out.
+ */
+async function persistEntitlementMovements(
+  tx: Pick<typeof db, "execute">,
+  args: {
+    orgId: string; actorId: string; documentId: string;
+    employeePartyIds: [string]; simulate: boolean;
+    movements: Awaited<ReturnType<typeof planMovementsForStub>>["movements"];
+  },
+): Promise<void> {
+  if (args.simulate) return;
+  await recordEntitlementMovements(tx, {
+    orgId: args.orgId, actorId: args.actorId, payRunDocumentId: args.documentId,
+    employeePartyIds: args.employeePartyIds,
+    movements: args.movements,
+  });
+}
+
 async function calculateStub(
   tx: Pick<typeof db, "execute">,
   ctx: {
@@ -1379,37 +1602,8 @@ async function calculateStub(
   // the paying legal entity before this function was called.
   const { country, region: province } = jurisdiction;
   const taxYear = jurisdiction.taxYear;
-  const pack = payrollPack(country);
-  if (!pack.installable) {
-    throw new PayrollJurisdictionError(
-      `the ${country} payroll pack is declared but not installable — statutory compute is refused`,
-    );
-  }
+  const pack = installablePackOrThrow(country);
 
-  interface Line {
-    componentId: string | null; kind: "earning" | "deduction" | "employer_contribution";
-    description: string; hours?: string; rate?: string; amount: string;
-    projectId?: string | null; departmentId?: string | null; timeTypeId?: string | null;
-    sequence: number;
-    taxable?: boolean; pensionable?: boolean; insurable?: boolean;
-    vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
-    accrualOnly?: boolean;
-    /**
-     * Set on every pack-emitted statutory line: what the country pack declares
-     * the amount is assessed on. `taxable_income` lines are dropped and
-     * re-derived on each protection pass; `earnings` lines are computed once
-     * and asserted unchanged (see the statutory pass below).
-     */
-    assessedOn?: PayrollAssessedOn;
-    /** Time-type classification behind an hours line: the hours cap exempts
-     *  overtime/double time charged to a job. */
-    classification?: string;
-    /** pay_components protection columns, carried so phase 10 needs no re-read. */
-    protectionBase?: string;
-    protectionMaxPercent?: string | null;
-    protectionPriority?: number;
-    includeInDisposableEarnings?: boolean;
-  }
   const lines: Line[] = [];
   // Entitlement movements are written to the ledger only after the stub rows
   // exist, so they can carry the stub_line_id that produced them.
@@ -1698,89 +1892,44 @@ async function calculateStub(
     }
   }
 
-  // Phase 2 — statutory holiday pay. A day's pay derived from a LOOKBACK over
-  // prior earnings, plus the premium for hours actually worked on the day,
-  // where — and only where — the jurisdiction declares one. The formula is a
-  // statutory fact declared per jurisdiction in the country pack
-  // (engine/src/payroll/packs.ts), never hardcoded here: Ontario divides four
-  // weeks of regular wages plus vacation pay by 20, British Columbia divides
-  // thirty days of wages by the days actually worked, Saskatchewan takes five
-  // per cent. Landing here, before phase 3, is what puts the day's pay in
-  // gross for percent-of-gross components, vacation, union fringes, WCB and
-  // the statutory pass (.local/payroll-pipeline-contract.md).
+  // Phase 2 — statutory holiday pay. The jurisdiction gate itself — the
+  // labour-jurisdiction refusal, the undeclared-jurisdiction holiday probe,
+  // the hourly-rate derivation, and the pack-declared lookback formula —
+  // lives in `statutoryHolidayLinesForStub`, which returns the earning lines.
+  // Landing here, before phase 3, is what puts the day's pay in gross for
+  // percent-of-gross components, vacation, union fringes, WCB and the
+  // statutory pass (.local/payroll-pipeline-contract.md).
   //
   // Gated on orgs.settings.payroll.statutoryHolidayPay (OFF for existing
   // tenants: the phase changes gross, so it is opted into, never inherited by
   // upgrade). Skipped on an off-cycle bonus run, which pays only its one-off
   // lines.
-  //
-  // A jurisdiction NO pack has transcribed (CA-MB, US-MA) is neither guessed
-  // at nor blindly refused: with no statutory holiday in the period it
-  // calculates exactly as it always has, and when one lands in the period —
-  // probed against the country's declared employment calendars — the run stops
-  // with the same message readiness raises, naming the jurisdiction and the
-  // holiday. A silent zero on a paid holiday is indistinguishable from a
-  // correct calculation, which is why the refusal exists.
   if (!oneOffRun && ctx.statHolidayPay) {
-    // The employment attribute wins over the region derivation where the
-    // profile carries one: an employer regulated by a different labour
-    // jurisdiction than the one the employee works in has a different holiday
-    // calendar AND a different holiday-pay formula.
-    //
-    // An EXPLICIT value the packs do not declare is refused outright, not put
-    // through the untranscribed-province gate below. The two are different
-    // failures: an untranscribed province is a gap in the packs, and calculates
-    // as it always has until a holiday actually lands in the period, whereas an
-    // undeclared explicit key is a value somebody entered that means nothing —
-    // it would silently fall back on the work region's calendar, which is the
-    // exact substitution the attribute exists to prevent. The API validates it
-    // with the same function (labourJurisdictionProblem), so reaching this is a
-    // direct database write.
-    const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction);
-    if (labourProblem) {
-      throw new PayrollError(
-        `${emp.display_name ?? employeePartyId} has a labour jurisdiction this payroll cannot `
-        + `honour — ${labourProblem}`,
-      );
-    }
-    const employeeJurisdiction = jurisdictionKey(country, province, emp.labour_jurisdiction);
-    if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
-      const conflict = undeclaredJurisdictionHolidayConflict({
-        country, jurisdiction: employeeJurisdiction,
-        from: run.period_start, to: run.period_end,
+    const holidayLines = await statutoryHolidayLinesForStub(tx, {
+      orgId,
+      documentId,
+      employeePartyId,
+      employeeName: emp.display_name ?? employeePartyId,
+      emp,
+      country,
+      province,
+      periodStart: run.period_start,
+      periodEnd: run.period_end,
+      payRate,
+      need: ctx.need,
+    });
+    for (const line of holidayLines) {
+      lines.push({
+        componentId: line.componentId,
+        kind: "earning",
+        // Deliberately no `hours`: a paid day off is not worked hours, and
+        // carrying them would pay per-hour components and union fringes
+        // twice. The component's own flags (taxable, pensionable, insurable,
+        // vacationable — all true) classify the amount: holiday pay is wages.
+        description: line.description,
+        amount: line.amount,
+        sequence: line.sequence,
       });
-      if (conflict) throw new PayrollError(conflict.message);
-    } else {
-      const holidayRate = payRate
-        ? (payRate.basis === "hour"
-            ? payRate.rate
-            : divideMoney(payRate.rate, payRate.annualHours, 4))
-        : "0";
-      const holidayLines = await resolveStatutoryHolidayPay(tx, {
-        orgId,
-        employeePartyId,
-        employeeName: emp.display_name ?? employeePartyId,
-        jurisdiction: employeeJurisdiction,
-        periodStart: run.period_start,
-        periodEnd: run.period_end,
-        holidayComponentId: ctx.need("stat_holiday", "earning").id as string,
-        premiumComponentId: ctx.need("stat_holiday_premium", "earning").id as string,
-        excludeDocumentId: documentId,
-        hourlyRate: holidayRate,
-      });
-      for (const line of holidayLines) {
-        lines.push({
-          componentId: line.componentId,
-          kind: "earning",
-          // Deliberately no `hours`: a paid day off is not worked hours, and
-          // carrying them would pay per-hour components and union fringes
-          // twice. The component's own flags (taxable, pensionable, insurable,
-          // vacationable — all true) classify the amount: holiday pay is wages.
-          description: line.description,
-          amount: line.amount,
-          sequence: line.sequence,
-        });
-      }
     }
   }
 
@@ -2348,51 +2497,20 @@ async function calculateStub(
     fallbackToCheque: ctx.eftFallbackToCheque,
   }).method;
 
-  const stub = (await tx.execute<{ id: string }>(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
-                           periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
-                           currency_code, gross, pensionable_earnings, insurable_earnings,
-                           net_pay, employer_cost, vacation_accrued, factors, payment_method,
-                           created_by, updated_by)
-    values (${orgId}, ${documentId}, ${employeePartyId}, ${province}, ${P},
-            ${run.pay_date}, ${taxYear}, ${factors.TC ?? "0"}, ${factors.TCP ?? "0"},
-            ${run.doc_currency}, ${gross}, ${pensionable}, ${insurable},
-            ${net}, ${employerCost}, ${vacationAccrued}, ${JSON.stringify(factors)}::jsonb,
-            ${paymentMethod},
-            ${actorId}, ${actorId})
-    returning id
-  `));
-  const stubId = stub.rows[0]!.id;
-  for (const line of lines) {
-    await tx.execute(sql`
-      insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, hours, rate,
-                                  amount, project_id, department_id, time_type_id, sequence,
-                                  created_by, updated_by)
-      values (${orgId}, ${stubId}, ${line.componentId}, ${line.kind}, ${line.description},
-              ${line.hours ?? null}, ${line.rate ?? null}, ${line.amount},
-              ${line.projectId ?? null}, ${line.departmentId ?? null}, ${line.timeTypeId ?? null},
-              ${line.sequence}, ${actorId}, ${actorId})
-    `);
-  }
+  const stubId = await insertPayStubRow(tx, {
+    orgId, actorId, documentId, employeePartyId,
+    province, periodsPerYear: P, payDate: run.pay_date, taxYear,
+    federalClaim: factors.TC ?? "0", provincialClaim: factors.TCP ?? "0",
+    currency: run.doc_currency, gross, pensionable, insurable, net,
+    employerCost, vacationAccrued, factors, paymentMethod,
+  });
+  await insertPayStubLineRows(tx, { orgId, stubId, actorId }, lines);
 
-  // Ledger movements land only once the stub rows exist. The call replaces
-  // THIS EMPLOYEE'S prior movements on this run and nobody else's — it is made
-  // once per employee, so a run-scoped replacement here would erase every
-  // previously calculated employee's bank. It runs unconditionally: an
-  // employee whose recompute produced no movements must still have their stale
-  // rows cleared.
-  //
-  // Skipped entirely for a SIMULATION: the movements of a committed run are
-  // append-only (entitlement_ledger_append_only), and a rolled-back
-  // re-derivation has no business rewriting the bank behind a payroll that has
-  // already gone out.
-  if (!ctx.simulate) {
-    await recordEntitlementMovements(tx, {
-      orgId, actorId, payRunDocumentId: documentId,
-      employeePartyIds: [employeePartyId],
-      movements: entitlementMovements,
-    });
-  }
+  await persistEntitlementMovements(tx, {
+    orgId, actorId, documentId,
+    employeePartyIds: [employeePartyId],
+    simulate: ctx.simulate, movements: entitlementMovements,
+  });
 
   return {
     employeePartyId, province, gross, net, employerCost,
