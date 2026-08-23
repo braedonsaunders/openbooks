@@ -84,13 +84,15 @@ test("parseJsonBody surfaces the first issue message and all issues", async () =
   }
 });
 
-test("exactMoney canonicalizes signed decimals without IEEE-754 drift", () => {
+test("exactMoney accepts decimal strings and safe integer numbers without IEEE-754 drift", () => {
   assert.equal(exactMoneySchema().parse("1234.5"), "1234.5000");
   assert.equal(exactMoneySchema().parse("-0"), "0.0000");
   assert.equal(exactMoneySchema().parse("10"), "10.0000");
-  assert.equal(exactMoneySchema().parse(100.5), "100.5000");
+  assert.equal(exactMoneySchema().parse(100), "100.0000");
   assert.equal(exactMoneySchema().parse("0.0001"), "0.0001");
   assert.equal(exactMoneySchema().parse("-12.34"), "-12.3400");
+  assert.throws(() => exactMoneySchema().parse(100.5));
+  assert.throws(() => exactMoneySchema().parse(Number.MAX_SAFE_INTEGER + 1));
   assert.throws(() => exactMoneySchema().parse("1.00001"));
   assert.throws(() => exactMoneySchema().parse("1e5"));
   assert.throws(() => exactMoneySchema().parse("abc"));
@@ -98,8 +100,8 @@ test("exactMoney canonicalizes signed decimals without IEEE-754 drift", () => {
   assert.throws(() => exactMoneySchema().parse(null));
   assert.throws(() => exactMoneySchema().parse(true));
   assert.throws(
-    () => exactMoneySchema("a numeric amount is required").parse("junk"),
-    (e: unknown) => e instanceof z.ZodError && e.issues[0]?.message === "a numeric amount is required",
+    () => exactMoneySchema("a decimal string or minor-unit integer is required").parse(100.5),
+    (e: unknown) => e instanceof z.ZodError && e.issues[0]?.message === "a decimal string or minor-unit integer is required",
   );
 });
 
