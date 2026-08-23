@@ -97,7 +97,7 @@ export function leaseChargeSchedule(input: {
 }
 
 export function escalatedRent(current: string, method: "percent" | "fixed" | "new_amount", value: string): string {
-  const base = normalizeMoney(current); const v = normalizeMoney(value);
+  const base = exactMoney(current, "Current rent"); const v = exactMoney(value, "Escalation value");
   const next = method === "percent" ? add(base, mulPercent(base, v)) : method === "fixed" ? add(base, v) : v;
   if (cmp(next, "0") <= 0) throw new PropertyManagementError("Escalated rent must be positive");
   return next;
