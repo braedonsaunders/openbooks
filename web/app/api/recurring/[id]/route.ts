@@ -58,12 +58,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
-  await db.transaction(async (tx) => {
+  const missing = await db.transaction(async (tx) => {
     // Snapshot first: deleting a schedule removes the only record of what was
-    // set to post automatically.
+    // set to post automatically. Lock it so the audit evidence is the exact
+    // state that this transaction deletes.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
       select * from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}
+       for update
     `));
+    if (!existing.rows[0]) return true;
     await tx.execute(
       sql`delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}`,
     );
@@ -72,9 +75,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         (org_id, table_name, row_id, action, changes, actor_id)
       values
         (${authz.user.orgId}, 'recurring_schedules', ${id}, 'delete',
-         ${JSON.stringify({ before: existing.rows[0] ?? null })}::jsonb, ${authz.user.id})
+         ${JSON.stringify({ before: existing.rows[0], after: null })}::jsonb, ${authz.user.id})
     `);
+    return false;
   });
+  if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
