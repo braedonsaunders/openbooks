@@ -428,11 +428,22 @@ function persistPoolDispositions(value: unknown): string {
   }
 }
 
+/** Persist pool immediate expense through exact decimal then ledger money. Fail closed. */
+function persistPoolImmediateExpense(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("immediate expense must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("immediate expense must be an exact decimal");
+  }
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = persistPoolAdditions(input.additions);
   const dispositions = persistPoolDispositions(input.dispositions);
-  const requestedImmediateExpense = nonnegative(normalizeMoney(input.immediateExpense ?? "0"));
+  const requestedImmediateExpense = nonnegative(persistPoolImmediateExpense(input.immediateExpense ?? "0"));
   const shortYear = String(input.shortYearFactor ?? 1);
   const firstYearFraction = String(input.firstYearFraction ?? 1);
   const netAdditions = nonnegative(add(additions, neg(dispositions)));
