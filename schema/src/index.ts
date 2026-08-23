@@ -40,6 +40,7 @@ export * from "./custom-records";
 export * from "./reporting";
 export * from "./scheduler-outbox";
 export * from "./posting-effects";
+export * from "./recurring-occurrences";
 export * from "./insights";
 export * from "./views";
 export * from "./file-cabinet";
