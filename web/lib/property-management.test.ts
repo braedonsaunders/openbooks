@@ -182,7 +182,7 @@ test("property customization provisions form, view, and custom-field persistence
 });
 
 test("property migration uses the universal company import and export registry", () => {
-  const resources = source("lib/data-io/resources.ts");
+  const resources = source("lib/data-io/property-resources.ts");
   const types = source("lib/data-io/types.ts");
 
   for (const key of [
