@@ -172,6 +172,8 @@ export async function listQuickActionOptions(): Promise<{
       'equipment',
       // NAV_MODULES budgets — still 404s /budgets when Budgets is off.
       'budgets',
+      // NAV_MODULES continuous-close — still 404s /continuous-close when Continuous Close is off.
+      'continuousClose',
     ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
@@ -207,6 +209,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.key === 'equipment' && !featureOn.get('equipment')) continue
     // Same requiredFeature filter: /budgets 404s when Budgets is off.
     if (mod.key === 'budgets' && !featureOn.get('budgets')) continue
+    // Same requiredFeature filter: /continuous-close 404s when Continuous Close is off.
+    if (mod.key === 'continuous-close' && !featureOn.get('continuousClose')) continue
     common.push({
       label: mod.label,
       href: mod.href,
