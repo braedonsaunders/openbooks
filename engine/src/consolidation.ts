@@ -94,10 +94,13 @@ export async function runOwnershipConsolidation(
         if (material.length === 0) return null;
         assertFinalKernelBalance(material.map((line) => ({ amount: line.amount, subsidiaryId: elimination.id })));
         sequence++;
+        // run ids are uuidv7 (time-ordered): their LEADING bytes repeat for
+        // every run inside a ~50-day window, so the whole id must salt the
+        // entry number to keep reruns unique under journal_entries_org_number.
         const inserted = (await tx.execute<{ id: string }>(sql`
           insert into journal_entries
             (org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,created_by)
-          values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId.slice(0,8)}-${sequence}`},
+          values (${orgId},${bookId},${elimination.id},${`OWN-${period.name}-${runId}-${sequence}`},
                   ${period.ends_on},${periodId},${`Ownership consolidation ${kind}`},'draft','translation',${reverses ?? null},${userId ?? null})
           returning id
         `));
@@ -426,11 +429,22 @@ export async function runAutoElimination(
     }
     if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
 
+    // Reversed generations keep their rows (posted ledgers are never
+    // rewritten), so the replacement's number must advance past every prior
+    // generation to satisfy journal_entries_org_number.
+    const generations = (await tx.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${orgId} and period_id = ${periodId}
+         and subsidiary_id = ${elim.id} and origin = 'intercompany'
+         and reverses_entry_id is null
+         and entry_number like ${`ELIM-${period.name}%`}`));
+    const genN = (generations.rows[0]?.n ?? 0) + 1;
+    const elimEntryNumber = genN === 1 ? `ELIM-${period.name}` : `ELIM-${period.name}-${genN}`;
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
          memo, status, origin, created_by)
-      values (${orgId}, ${book.id}, ${elim.id}, ${`ELIM-${period.name}`}, ${period.ends_on},
+      values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
               ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
       returning id`));
     const entryId = ins.rows[0].id;
