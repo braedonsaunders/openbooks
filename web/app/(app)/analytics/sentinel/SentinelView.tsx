@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   AlertTriangle, BarChart3, CalendarDays, CheckCircle2, Copy, FileWarning, Flag, Ghost,
   History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database, Download,
@@ -22,10 +23,6 @@ import { useAnalyticsMoney } from '../_ui/format'
 
 const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABEL: Record<Tab, string> = {
-  overview: 'Overview', benford: 'Benford', analysis: 'Analysis', detection: 'Detection',
-  vendors: 'Vendors', audit: 'Audit Trail', config: 'Configuration',
-}
 const num = (n: number) => n.toLocaleString('en-US')
 
 function riskTone(score: number) {
@@ -35,14 +32,14 @@ function riskTone(score: number) {
 }
 
 function RiskPill({ score }: { score: number }) {
-  const t = riskTone(score)
   return <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', score >= 80 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' : score >= 60 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{score}</span>
 }
 
 /** Overall-risk gauge (Risk-meter, inverted: high = red). */
 function RiskGauge({ score }: { score: number }) {
+  const t = useTranslations('analytics.sentinel')
   const color = score >= 60 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#f59e0b' : '#10b981'
-  const label = score >= 60 ? 'HIGH RISK' : score >= 40 ? 'ELEVATED' : score >= 20 ? 'MODERATE' : 'LOW RISK'
+  const label = score >= 60 ? t('risk.high') : score >= 40 ? t('risk.elevated') : score >= 20 ? t('risk.moderate') : t('risk.low')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(score, 100) / 100)
   return (
@@ -54,36 +51,37 @@ function RiskGauge({ score }: { score: number }) {
       <div className="min-w-0">
         <p className="text-xl font-bold tabular-nums" style={{ color }}>{score}</p>
         <p className="text-[10px] font-bold tracking-wider" style={{ color }}>{label}</p>
-        <p className="text-[10px] text-slate-400 dark:text-slate-500">integrity risk</p>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('risk.caption')}</p>
       </div>
     </div>
   )
 }
 
-const KIND_LABEL: Record<string, string> = {
-  vendor_bill: 'Bill', vendor_credit: 'Credit', vendor_payment: 'Payment', check: 'Check',
-  expense_report: 'Expense', journal: 'Journal', customer_credit: 'Cust. Credit',
-}
+const KNOWN_KINDS = ['vendor_bill', 'vendor_credit', 'vendor_payment', 'check', 'expense_report', 'journal', 'customer_credit'] as const
 
 function DocCell({ f }: { f: { docId: string; docNumber: string; kind: string } }) {
+  const t = useTranslations('analytics.sentinel')
+  const kindLabel = (k: string) => (KNOWN_KINDS as readonly string[]).includes(k) ? t(`kind.${k}`) : k
   return (
     <TxnLink entryId={f.docId} docKind={f.kind} docId={f.docId} className="font-medium text-teal-600 hover:underline dark:text-teal-400">
-      {f.docNumber || KIND_LABEL[f.kind] || f.kind}
-      <span className="ml-1.5 text-[10px] uppercase tracking-wide text-slate-400">{KIND_LABEL[f.kind] ?? f.kind}</span>
+      {f.docNumber || kindLabel(f.kind)}
+      <span className="ml-1.5 text-[10px] uppercase tracking-wide text-slate-400">{kindLabel(f.kind)}</span>
     </TxnLink>
   )
 }
 
-const FLAG_BADGE: Record<FlaggedDoc['flagType'], { label: string; cls: string }> = {
-  duplicate: { label: 'Duplicate', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' },
-  weekend: { label: 'Weekend', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400' },
-  rsf: { label: 'RSF', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' },
-  zscore: { label: 'Z-Score', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400' },
-  trap: { label: '99-Trap', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400' },
-  sequential: { label: 'Sequential', cls: 'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400' },
+const FLAG_BADGE_CLS: Record<FlaggedDoc['flagType'], string> = {
+  duplicate: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400',
+  weekend: 'bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-400',
+  rsf: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400',
+  zscore: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400',
+  trap: 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-400',
+  sequential: 'bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-400',
 }
+const FLAGGED_TYPES = Object.keys(FLAG_BADGE_CLS)
 
 function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showReason?: boolean }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
   return (
@@ -91,13 +89,13 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-white dark:bg-slate-900">
           <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            <th className="px-4 py-2 text-left font-medium">Date</th>
-            <th className="px-4 py-2 text-left font-medium">Document</th>
-            <th className="px-4 py-2 text-left font-medium">Party</th>
-            <th className="px-4 py-2 text-right font-medium">Amount</th>
-            <th className="px-4 py-2 text-center font-medium">Flag</th>
-            {showReason ? <th className="px-4 py-2 text-left font-medium">Reason</th> : null}
-            <th className="px-4 py-2 text-right font-medium">Risk</th>
+            <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
+            <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
+            <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+            <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+            <th className="px-4 py-2 text-center font-medium">{t('table.flag')}</th>
+            {showReason ? <th className="px-4 py-2 text-left font-medium">{t('table.reason')}</th> : null}
+            <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
           </tr>
         </thead>
         <tbody>
@@ -107,12 +105,12 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
               <td className="px-4 py-2"><DocCell f={f} /></td>
               <td className="max-w-44 truncate px-4 py-2 text-slate-600 dark:text-slate-300" title={f.partyName}>{f.partyName || '—'}</td>
               <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(f.amount)}</td>
-              <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE[f.flagType].cls)}>{FLAG_BADGE[f.flagType].label}</span></td>
+              <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', FLAG_BADGE_CLS[f.flagType])}>{t(`flag.${f.flagType}`)}</span></td>
               {showReason ? <td className="max-w-72 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={f.reason}>{f.reason}</td> : null}
               <td className="px-4 py-2 text-right"><RiskPill score={f.riskScore} /></td>
             </tr>
           )) : (
-            <tr><td colSpan={showReason ? 7 : 6} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />Nothing flagged</td></tr>
+            <tr><td colSpan={showReason ? 7 : 6} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.nothingFlagged')}</td></tr>
           )}
         </tbody>
       </table>
@@ -136,8 +134,10 @@ function SubPills<T extends string>({ value, onChange, options }: { value: T; on
 /* ------------------------------------------------------------------- shell */
 
 export function SentinelView({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const conformLabel = (v: string) => v === 'Conforming' ? t('benford.conforming') : v === 'Marginal' ? t('benford.marginal') : v === 'Non-Conforming' ? t('benford.nonConforming') : v
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
@@ -147,23 +147,23 @@ export function SentinelView({ data }: { data: SentinelData }) {
       {/* Full-dataset proof banner — the anti-"artificial subset" statement. */}
       <p className="flex items-center gap-2 rounded-lg bg-slate-50 px-3.5 py-2 text-xs text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
         <Database size={13} className="shrink-0 text-teal-500" />
-        Analyzed across your <span className="font-semibold text-slate-700 dark:text-slate-200">complete ledger</span>:
-        {' '}{num(data.meta.totalDocs)} documents · {money(data.meta.totalAmount)} · {num(data.meta.days)} days · in {(data.meta.queryMs / 1000).toFixed(1)}s — no caps or date-range limits.
+        {t('banner.pre')}<span className="font-semibold text-slate-700 dark:text-slate-200">{t('banner.ledger')}</span>
+        {` `}{t('banner.stats', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: (data.meta.queryMs / 1000).toFixed(1) })}
       </p>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <RiskGauge score={s.overallRiskScore} />
-        <KpiCard icon={Flag} accent={s.flaggedCount > 0 ? 'red' : 'emerald'} label="Flagged" value={num(s.flaggedCount)} sub={`${money(s.totalAtRisk)} at risk`} tone={s.flaggedCount > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Copy} accent="amber" label="Duplicate Pairs" value={num(s.duplicateCount)} sub={money(s.totalDuplicateAmount)} tone={s.duplicateCount > 0 ? 'negative' : 'neutral'} />
-        <KpiCard icon={BarChart3} accent={s.benfordConformity === 'Non-Conforming' ? 'red' : s.benfordConformity === 'Marginal' ? 'amber' : 'emerald'} label="Benford" value={s.benfordConformity} sub={`2D: ${s.benford2DConformity}`} />
-        <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label="Shell Signals" value={num(s.ghostCount + s.sequentialGroups)} sub={`${s.ghostCount} ghosts · ${s.sequentialGroups} sequential`} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Flag} accent={s.flaggedCount > 0 ? 'red' : 'emerald'} label={t('kpi.flagged')} value={num(s.flaggedCount)} sub={t('sub.atRisk', { amount: money(s.totalAtRisk) })} tone={s.flaggedCount > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Copy} accent="amber" label={t('kpi.duplicatePairs')} value={num(s.duplicateCount)} sub={money(s.totalDuplicateAmount)} tone={s.duplicateCount > 0 ? 'negative' : 'neutral'} />
+        <KpiCard icon={BarChart3} accent={s.benfordConformity === 'Non-Conforming' ? 'red' : s.benfordConformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.benford')} value={conformLabel(s.benfordConformity)} sub={t('sub.twoD', { value: s.benford2DConformity })} />
+        <KpiCard icon={ShieldAlert} accent={s.ghostCount + s.sequentialGroups > 0 ? 'red' : 'emerald'} label={t('kpi.shellSignals')} value={num(s.ghostCount + s.sequentialGroups)} sub={t('sub.ghostsSequential', { ghosts: s.ghostCount, sequential: s.sequentialGroups })} tone={s.ghostCount + s.sequentialGroups > 0 ? 'negative' : 'positive'} />
       </div>
 
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
           {TABS.map((k) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === k ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {TAB_LABEL[k]}
+              {t(`tabs.${k}`)}
               {k === 'detection' && s.flaggedCount > 0 ? <span className="rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">{num(s.flaggedCount)}</span> : null}
             </button>
           ))}
@@ -188,13 +188,14 @@ export function SentinelView({ data }: { data: SentinelData }) {
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const s = data.summary
   const b = data.benford1D
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Panel title="Benford's Law — First Digit" icon={BarChart3} hint={`${num(b.totalTransactions)} amounts · MAD ${b.mad.toFixed(4)} · ${b.conformity}`}>
+          <Panel title={t('panels.benfordFirstDigit')} icon={BarChart3} hint={t('panels.benfordHint', { amounts: num(b.totalTransactions), mad: b.mad.toFixed(4), conformity: b.conformity })}>
             <Chart
               height={230}
               option={{
@@ -204,19 +205,19 @@ function OverviewTab({ data }: { data: SentinelData }) {
                 xAxis: { type: 'category', data: b.digits.map((d) => String(d.digit)) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
                 series: [
-                  { name: 'Observed', type: 'bar', data: b.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
-                  { name: 'Expected (Benford)', type: 'line', data: b.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
+                  { name: t('chart.observed'), type: 'bar', data: b.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
+                  { name: t('chart.expectedBenford'), type: 'line', data: b.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
                 ],
               }}
             />
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{b.message}</p>
           </Panel>
-          <Panel title="Highest-Risk Flags" icon={Flag} hint="Across all detectors · click a document to open it" bodyClassName="p-0">
+          <Panel title={t('panels.highestRiskFlags')} icon={Flag} hint={t('panels.highestRiskHint')} bodyClassName="p-0">
             <FlaggedTable items={data.flagged.slice(0, 10)} />
           </Panel>
         </div>
         <div className="space-y-5">
-          <Panel title="Top Risk Areas" icon={AlertTriangle} bodyClassName="p-0">
+          <Panel title={t('panels.topRiskAreas')} icon={AlertTriangle} bodyClassName="p-0">
             {s.topRiskAreas.length ? (
               <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
                 {s.topRiskAreas.map((a) => (
@@ -230,24 +231,24 @@ function OverviewTab({ data }: { data: SentinelData }) {
                 ))}
               </ul>
             ) : (
-              <p className="flex items-center gap-2 px-4 py-6 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />No elevated risk areas</p>
+              <p className="flex items-center gap-2 px-4 py-6 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />{t('empty.noElevatedRisk')}</p>
             )}
           </Panel>
-          <Panel title="Detector Summary" icon={ShieldAlert}>
+          <Panel title={t('panels.detectorSummary')} icon={ShieldAlert}>
             <div className="grid grid-cols-2 gap-2 text-center">
               {[
-                { label: 'Duplicates', value: num(s.duplicateCount), active: s.duplicateCount > 0 },
-                { label: 'Weekend', value: num(s.weekendCount), active: s.weekendCount > 0 },
-                { label: 'RSF', value: num(s.rsfCount), active: s.rsfCount > 0 },
-                { label: 'Z-Score', value: num(s.zScoreCount), active: s.zScoreCount > 0 },
-                { label: 'Sequential', value: num(s.sequentialGroups), active: s.sequentialGroups > 0 },
-                { label: 'Ghost Vendors', value: num(s.ghostCount), active: s.ghostCount > 0 },
-                { label: '99-Trap', value: num(s.trapCount), active: s.trapCount > 0 },
-                { label: 'Audit Events', value: num(data.auditTrail.total), active: data.auditTrail.deletes > 0 },
-              ].map((t) => (
-                <div key={t.label} className={cn('rounded-lg p-2.5', t.active ? 'bg-slate-100 dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/40')}>
-                  <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-200">{t.value}</p>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{t.label}</p>
+                { label: t('detectors.duplicates'), value: num(s.duplicateCount), active: s.duplicateCount > 0 },
+                { label: t('flag.weekend'), value: num(s.weekendCount), active: s.weekendCount > 0 },
+                { label: t('flag.rsf'), value: num(s.rsfCount), active: s.rsfCount > 0 },
+                { label: t('flag.zscore'), value: num(s.zScoreCount), active: s.zScoreCount > 0 },
+                { label: t('flag.sequential'), value: num(s.sequentialGroups), active: s.sequentialGroups > 0 },
+                { label: t('detectors.ghostVendors'), value: num(s.ghostCount), active: s.ghostCount > 0 },
+                { label: t('flag.trap'), value: num(s.trapCount), active: s.trapCount > 0 },
+                { label: t('detectors.auditEvents'), value: num(data.auditTrail.total), active: data.auditTrail.deletes > 0 },
+              ].map((tile) => (
+                <div key={tile.label} className={cn('rounded-lg p-2.5', tile.active ? 'bg-slate-100 dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-800/40')}>
+                  <p className="text-lg font-bold tabular-nums text-slate-800 dark:text-slate-200">{tile.value}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500">{tile.label}</p>
                 </div>
               ))}
             </div>
@@ -261,8 +262,10 @@ function OverviewTab({ data }: { data: SentinelData }) {
 /* ----------------------------------------------------------------- Benford */
 
 function BenfordTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const conformLabel = (v: string) => v === 'Conforming' ? t('benford.conforming') : v === 'Marginal' ? t('benford.marginal') : v === 'Non-Conforming' ? t('benford.nonConforming') : v
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
   const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
   const b1 = data.benford1D
@@ -271,21 +274,21 @@ function BenfordTab({ data }: { data: SentinelData }) {
   return (
     <div className="space-y-4">
       <SubPills value={sub} onChange={setSub} options={[
-        { key: '1d', label: 'First Digit (1D)' },
-        { key: '2d', label: 'First Two Digits (2D)', count: b2.anomalies.length },
-        { key: 'trap', label: 'Threshold Trap', count: trap.total },
+        { key: '1d', label: t('benford.firstDigit1D') },
+        { key: '2d', label: t('benford.firstTwoDigits2D'), count: b2.anomalies.length },
+        { key: 'trap', label: t('benford.thresholdTrap'), count: trap.total },
       ]} />
       {drill ? <BenfordDrill digit={drill.digit} dim={drill.dim} from={data.period.from} to={data.period.to} onClose={() => setDrill(null)} /> : null}
 
       {sub === '1d' ? (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard icon={Sigma} accent="sky" label="Amounts Analyzed" value={num(b1.totalTransactions)} sub="every document, no caps" />
-            <KpiCard icon={Scale} accent={b1.conformity === 'Non-Conforming' ? 'red' : b1.conformity === 'Marginal' ? 'amber' : 'emerald'} label="Conformity" value={b1.conformity} sub={`MAD ${b1.mad.toFixed(4)}`} />
-            <KpiCard icon={AlertTriangle} accent="amber" label="Deviating Digits" value={num(b1.digits.filter((d) => d.isAnomaly).length)} sub=">25% off expected" />
-            <KpiCard icon={BarChart3} accent="violet" label="Digit 1 Share" value={`${((b1.digits[0]?.observed ?? 0) * 100).toFixed(1)}%`} sub="expected 30.1%" />
+            <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b1.totalTransactions)} sub={t('sub.everyDocument')} />
+            <KpiCard icon={Scale} accent={b1.conformity === 'Non-Conforming' ? 'red' : b1.conformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b1.conformity)} sub={`MAD ${b1.mad.toFixed(4)}`} />
+            <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.deviatingDigits')} value={num(b1.digits.filter((d) => d.isAnomaly).length)} sub={t('sub.offExpected25')} />
+            <KpiCard icon={BarChart3} accent="violet" label={t('kpi.digit1Share')} value={`${((b1.digits[0]?.observed ?? 0) * 100).toFixed(1)}%`} sub={t('sub.expected301')} />
           </div>
-          <Panel title="Observed vs Expected Distribution" icon={BarChart3}>
+          <Panel title={t('panels.observedVsExpected')} icon={BarChart3}>
             <Chart
               height={280}
               option={{
@@ -295,22 +298,22 @@ function BenfordTab({ data }: { data: SentinelData }) {
                 xAxis: { type: 'category', data: b1.digits.map((d) => String(d.digit)) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
                 series: [
-                  { name: 'Observed', type: 'bar', data: b1.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
-                  { name: 'Expected', type: 'line', data: b1.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
+                  { name: t('chart.observed'), type: 'bar', data: b1.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly ? '#ef4444' : '#14b8a6' } })) },
+                  { name: t('chart.expected'), type: 'line', data: b1.digits.map((d) => d.expected), symbolSize: 6, lineStyle: { width: 2, type: 'dashed', color: '#64748b' }, itemStyle: { color: '#64748b' } },
                 ],
               }}
             />
           </Panel>
-          <Panel title="Digit Detail" icon={ListOrdered} hint="Click a digit to see the transactions behind it" bodyClassName="p-0">
+          <Panel title={t('panels.digitDetail')} icon={ListOrdered} hint={t('panels.digitDetailHint')} bodyClassName="p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Digit</th>
-                  <th className="px-4 py-2 text-right font-medium">Count</th>
-                  <th className="px-4 py-2 text-right font-medium">Amount</th>
-                  <th className="px-4 py-2 text-right font-medium">Observed</th>
-                  <th className="px-4 py-2 text-right font-medium">Expected</th>
-                  <th className="px-4 py-2 text-right font-medium">Deviation</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.digit')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.count')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('chart.observed')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('chart.expected')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.deviation')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,12 +336,12 @@ function BenfordTab({ data }: { data: SentinelData }) {
       {sub === '2d' ? (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard icon={Sigma} accent="sky" label="Amounts Analyzed" value={num(b2.totalTransactions)} sub="first-two-digit pairs" />
-            <KpiCard icon={Scale} accent={b2.conformity === 'Non-Conforming' ? 'red' : b2.conformity === 'Marginal' ? 'amber' : 'emerald'} label="Conformity" value={b2.conformity} sub={`MAD ${b2.mad.toFixed(4)}`} />
-            <KpiCard icon={AlertTriangle} accent={b2.anomalies.length > 0 ? 'amber' : 'emerald'} label="Anomalous Pairs" value={num(b2.anomalies.length)} sub=">50% off expected, n≥5" />
-            <KpiCard icon={FileWarning} accent={data.summary.approvalLimitRisk ? 'red' : 'emerald'} label="Approval-Limit Risk" value={data.summary.approvalLimitRisk ? 'Yes' : 'No'} sub="see Threshold Trap" />
+            <KpiCard icon={Sigma} accent="sky" label={t('kpi.amountsAnalyzed')} value={num(b2.totalTransactions)} sub={t('sub.twoDigitPairs')} />
+            <KpiCard icon={Scale} accent={b2.conformity === 'Non-Conforming' ? 'red' : b2.conformity === 'Marginal' ? 'amber' : 'emerald'} label={t('kpi.conformity')} value={conformLabel(b2.conformity)} sub={`MAD ${b2.mad.toFixed(4)}`} />
+            <KpiCard icon={AlertTriangle} accent={b2.anomalies.length > 0 ? 'amber' : 'emerald'} label={t('kpi.anomalousPairs')} value={num(b2.anomalies.length)} sub={t('sub.offExpected50')} />
+            <KpiCard icon={FileWarning} accent={data.summary.approvalLimitRisk ? 'red' : 'emerald'} label={t('kpi.approvalLimitRisk')} value={data.summary.approvalLimitRisk ? t('yes') : t('no')} sub={t('sub.seeThresholdTrap')} />
           </div>
-          <Panel title="First-Two-Digit Distribution (10–99)" icon={BarChart3}>
+          <Panel title={t('panels.twoDigitDistribution')} icon={BarChart3}>
             <Chart
               height={280}
               option={{
@@ -348,21 +351,21 @@ function BenfordTab({ data }: { data: SentinelData }) {
                 xAxis: { type: 'category', data: b2.digits.map((d) => String(d.digit)), axisLabel: { interval: 9 } },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(1)}%` } },
                 series: [
-                  { name: 'Observed', type: 'bar', barCategoryGap: '10%', data: b2.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly && d.count >= 5 ? '#ef4444' : '#14b8a6' } })) },
-                  { name: 'Expected', type: 'line', data: b2.digits.map((d) => d.expected), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: '#64748b' } },
+                  { name: t('chart.observed'), type: 'bar', barCategoryGap: '10%', data: b2.digits.map((d) => ({ value: d.observed, itemStyle: { color: d.isAnomaly && d.count >= 5 ? '#ef4444' : '#14b8a6' } })) },
+                  { name: t('chart.expected'), type: 'line', data: b2.digits.map((d) => d.expected), symbol: 'none', lineStyle: { width: 1.5, type: 'dashed', color: '#64748b' } },
                 ],
               }}
             />
           </Panel>
           {b2.anomalies.length ? (
-            <Panel title="Anomalous Digit Pairs" icon={AlertTriangle} bodyClassName="p-0">
+            <Panel title={t('panels.anomalousPairs')} icon={AlertTriangle} bodyClassName="p-0">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Digits</th>
-                    <th className="px-4 py-2 text-right font-medium">Count</th>
-                    <th className="px-4 py-2 text-right font-medium">Amount</th>
-                    <th className="px-4 py-2 text-right font-medium">Deviation</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.digits')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.count')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.deviation')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -384,17 +387,17 @@ function BenfordTab({ data }: { data: SentinelData }) {
       {sub === 'trap' ? (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard icon={FileWarning} accent={trap.total > 0 ? 'red' : 'emerald'} label="Trap Amounts" value={num(trap.total)} sub="ending 99 / 999 / 9999" tone={trap.total > 0 ? 'negative' : 'positive'} />
-            <KpiCard icon={Scale} accent="amber" label="Total Value" value={money(trap.totalAmount)} sub="potential limit-gaming" />
-            {trap.byTrap.map((t) => (
-              <KpiCard key={t.trap} icon={Zap} accent="violet" label={`Ends in ${t.trap}`} value={num(t.count)} sub={money(t.amount)} />
+            <KpiCard icon={FileWarning} accent={trap.total > 0 ? 'red' : 'emerald'} label={t('kpi.trapAmounts')} value={num(trap.total)} sub={t('sub.ending99')} tone={trap.total > 0 ? 'negative' : 'positive'} />
+            <KpiCard icon={Scale} accent="amber" label={t('kpi.totalValue')} value={money(trap.totalAmount)} sub={t('sub.limitGaming')} />
+            {trap.byTrap.map((bt) => (
+              <KpiCard key={bt.trap} icon={Zap} accent="violet" label={t('kpi.endsIn', { ending: bt.trap })} value={num(bt.count)} sub={money(bt.amount)} />
             ))}
           </div>
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span>Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review.</span>
+            <span>{t('trapNote')}</span>
           </p>
-          <Panel title="Threshold-Trap Documents" icon={FileWarning} bodyClassName="p-0">
+          <Panel title={t('panels.thresholdTrapDocs')} icon={FileWarning} bodyClassName="p-0">
             <FlaggedTable items={trap.items} showReason={false} />
           </Panel>
         </div>
@@ -405,6 +408,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
 
 /** Benford digit → transactions drill (). */
 function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<any>(null)
@@ -420,22 +424,22 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
   const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? 'First two digits' : 'Leading digit'}: ${digit}`} description={data ? `${num(data.count)} documents · ${money(data.total)}${data.count > data.documents.length ? ` (top ${data.documents.length})` : ''}` : 'Loading…'} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? t('drill.firstTwoDigits') : t('drill.leadingDigit')}: ${digit}`} description={data ? `${t('drill.documentsTotal', { count: num(data.count), total: money(data.total) })}${data.count > data.documents.length ? ` (${t('drill.top', { count: data.documents.length })})` : ''}` : t('loading')} bodyClassName="overflow-hidden flex flex-col p-0">
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="p-6 text-center text-sm text-slate-400">Could not load transactions.</p>
+          <p className="p-6 text-center text-sm text-slate-400">{t('error.loadFailed')}</p>
         ) : !data ? (
-          <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
+          <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
         ) : data.documents.length === 0 ? (
-          <p className="p-6 text-center text-sm text-slate-400">No documents lead with {digit}.</p>
+          <p className="p-6 text-center text-sm text-slate-400">{t('drill.noDocuments', { digit })}</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Date</th>
-                <th className="px-4 py-2 text-left font-medium">Document</th>
-                <th className="px-4 py-2 text-left font-medium">Party</th>
-                <th className="px-4 py-2 text-right font-medium">Amount</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
               </tr>
             </thead>
             <tbody>
@@ -458,6 +462,7 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
 /* ---------------------------------------------------------------- Analysis */
 
 function AnalysisTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -488,29 +493,29 @@ function AnalysisTab({ data }: { data: SentinelData }) {
   return (
     <div className="space-y-4">
       <SubPills value={sub} onChange={setSub} options={[
-        { key: 'rsf', label: 'Relative Size Factor', count: data.rsf.total },
-        { key: 'zscore', label: 'Z-Score', count: data.zscore.total },
-        { key: 'calendar', label: 'Calendar' },
+        { key: 'rsf', label: t('analysis.rsfFull'), count: data.rsf.total },
+        { key: 'zscore', label: t('flag.zscore'), count: data.zscore.total },
+        { key: 'calendar', label: t('analysis.calendar') },
       ]} />
 
       {sub === 'rsf' ? (
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">RSF</span> = amount ÷ the vendor&apos;s historical 2nd-largest transaction (36-month baseline, computed in one window-function pass). RSF ≥ 10 means a transaction wildly out of scale for that vendor — a classic error/fraud signal.</span>
+            <span><span className="font-semibold">{t('flag.rsf')}</span>{t('analysis.rsfNote')}</span>
           </p>
-          <Panel title={`RSF Anomalies (${num(data.rsf.total)})`} icon={Scale} bodyClassName="p-0">
+          <Panel title={t('panels.rsfAnomalies', { count: num(data.rsf.total) })} icon={Scale} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Date</th>
-                    <th className="px-4 py-2 text-left font-medium">Document</th>
-                    <th className="px-4 py-2 text-left font-medium">Vendor</th>
-                    <th className="px-4 py-2 text-right font-medium">Amount</th>
-                    <th className="px-4 py-2 text-right font-medium">2nd Largest</th>
-                    <th className="px-4 py-2 text-right font-medium">RSF</th>
-                    <th className="px-4 py-2 text-right font-medium">Risk</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.secondLargest')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('flag.rsf')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -536,20 +541,20 @@ function AnalysisTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">Z-score</span> measures how many standard deviations a transaction sits from that vendor&apos;s own average (per-vendor baselines over 36 months, one aggregate pass). |z| ≥ 3 flags entity-specific outliers that global thresholds miss.</span>
+            <span><span className="font-semibold">{t('analysis.zscoreWord')}</span>{t('analysis.zscoreNote')}</span>
           </p>
-          <Panel title={`Z-Score Anomalies (${num(data.zscore.total)})`} icon={Sigma} bodyClassName="p-0">
+          <Panel title={t('panels.zscoreAnomalies', { count: num(data.zscore.total) })} icon={Sigma} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Date</th>
-                    <th className="px-4 py-2 text-left font-medium">Document</th>
-                    <th className="px-4 py-2 text-left font-medium">Party</th>
-                    <th className="px-4 py-2 text-right font-medium">Amount</th>
-                    <th className="px-4 py-2 text-right font-medium">Party Avg</th>
-                    <th className="px-4 py-2 text-right font-medium">Z</th>
-                    <th className="px-4 py-2 text-right font-medium">Risk</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.document')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.party')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.partyAvg')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.z')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -572,7 +577,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
       ) : null}
 
       {sub === 'calendar' ? (
-        <Panel title="Spend Calendar" icon={CalendarDays} hint="Daily spend intensity — weekend spikes and unusual clusters stand out">
+        <Panel title={t('panels.spendCalendar')} icon={CalendarDays} hint={t('panels.spendCalendarHint')}>
           <Chart option={calendarOption as any} height={Math.min(2, new Set(data.calendar.map((c) => c.date.slice(0, 4))).size) * 150 + 80} />
         </Panel>
       ) : null}
@@ -583,31 +588,33 @@ function AnalysisTab({ data }: { data: SentinelData }) {
 /* --------------------------------------------------------------- Detection */
 
 function DetectionTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
   const [sub, setSub] = useState<'flagged' | 'duplicates' | 'weekend' | 'sequential' | 'ghost'>('flagged')
   const s = data.summary
+  const kindLabel = (k: string) => (KNOWN_KINDS as readonly string[]).includes(k) ? t(`kind.${k}`) : k
   return (
     <div className="space-y-4">
       <SubPills value={sub} onChange={setSub} options={[
-        { key: 'flagged', label: 'All Flagged', count: s.flaggedCount },
-        { key: 'duplicates', label: 'Duplicates', count: s.duplicateCount },
-        { key: 'weekend', label: 'Weekend', count: s.weekendCount },
-        { key: 'sequential', label: 'Sequential', count: s.sequentialGroups },
-        { key: 'ghost', label: 'Ghost Vendors', count: s.ghostCount },
+        { key: 'flagged', label: t('detection.allFlagged'), count: s.flaggedCount },
+        { key: 'duplicates', label: t('detectors.duplicates'), count: s.duplicateCount },
+        { key: 'weekend', label: t('flag.weekend'), count: s.weekendCount },
+        { key: 'sequential', label: t('flag.sequential'), count: s.sequentialGroups },
+        { key: 'ghost', label: t('detectors.ghostVendors'), count: s.ghostCount },
       ]} />
 
       {sub === 'flagged' ? (
         <Panel
-          title={`All Flagged Documents (top ${num(Math.min(300, s.flaggedCount))} of ${num(s.flaggedCount)})`}
+          title={t('panels.allFlaggedDocs', { top: num(Math.min(300, s.flaggedCount)), total: num(s.flaggedCount) })}
           icon={Flag}
           bodyClassName="p-0"
           actions={
             <button
               type="button"
-              onClick={() => exportCsv('flagged-documents', ['Date', 'Document', 'Kind', 'Party', 'Amount', 'Flag', 'Risk', 'Reason'], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, Math.round(f.amount), f.flagType, f.riskScore, f.reason]), today)}
+              onClick={() => exportCsv('flagged-documents', [t('table.date'), t('table.document'), t('csv.kind'), t('table.party'), t('table.amount'), t('table.flag'), t('table.risk'), t('table.reason')], data.flagged.map((f) => [f.date, f.docNumber, f.kind, f.partyName, Math.round(f.amount), f.flagType, f.riskScore, f.reason]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
@@ -621,22 +628,22 @@ function DetectionTab({ data }: { data: SentinelData }) {
       {sub === 'duplicates' ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <KpiCard icon={Copy} accent="red" label="Duplicate Pairs" value={num(data.duplicates.total)} sub="all matching pairs" tone="negative" />
-            <KpiCard icon={Scale} accent="amber" label="Value at Risk" value={money(s.totalDuplicateAmount)} sub="sum of pair amounts" />
-            <KpiCard icon={Info} accent="slate" label="Rule" value="≤14 days" sub={`same vendor + kind + amount, ≥${money(100)}`} />
+            <KpiCard icon={Copy} accent="red" label={t('kpi.duplicatePairs')} value={num(data.duplicates.total)} sub={t('sub.allMatchingPairs')} tone="negative" />
+            <KpiCard icon={Scale} accent="amber" label={t('kpi.valueAtRisk')} value={money(s.totalDuplicateAmount)} sub={t('sub.sumPairAmounts')} />
+            <KpiCard icon={Info} accent="slate" label={t('kpi.rule')} value={t('duplicates.ruleValue')} sub={t('duplicates.ruleNote', { min: money(100) })} />
           </div>
-          <Panel title="Potential Duplicate Pairs" icon={Copy} hint="Both documents open in their native module" bodyClassName="p-0">
+          <Panel title={t('panels.potentialDuplicates')} icon={Copy} hint={t('panels.duplicatesHint')} bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-white dark:bg-slate-900">
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Vendor</th>
-                    <th className="px-4 py-2 text-left font-medium">Doc 1</th>
-                    <th className="px-4 py-2 text-left font-medium">Doc 2</th>
-                    <th className="px-4 py-2 text-right font-medium">Amount</th>
-                    <th className="px-4 py-2 text-right font-medium">Days Apart</th>
-                    <th className="px-4 py-2 text-right font-medium">Confidence</th>
-                    <th className="px-4 py-2 text-right font-medium">Risk</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.doc1')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.doc2')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.amount')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.daysApart')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.confidence')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -644,16 +651,16 @@ function DetectionTab({ data }: { data: SentinelData }) {
                     <tr key={`${p.docId1}-${i}`} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="max-w-44 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={p.partyName}>{p.partyName}</td>
                       <td className="px-4 py-2">
-                        <TxnLink entryId={p.docId1} docKind={p.kind} docId={p.docId1} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber1 || KIND_LABEL[p.kind]}</TxnLink>
+                        <TxnLink entryId={p.docId1} docKind={p.kind} docId={p.docId1} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber1 || kindLabel(p.kind)}</TxnLink>
                         <span className="block text-[10px] tabular-nums text-slate-400">{p.date1}</span>
                       </td>
                       <td className="px-4 py-2">
-                        <TxnLink entryId={p.docId2} docKind={p.kind} docId={p.docId2} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber2 || KIND_LABEL[p.kind]}</TxnLink>
+                        <TxnLink entryId={p.docId2} docKind={p.kind} docId={p.docId2} className="text-teal-600 hover:underline dark:text-teal-400">{p.docNumber2 || kindLabel(p.kind)}</TxnLink>
                         <span className="block text-[10px] tabular-nums text-slate-400">{p.date2}</span>
                       </td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money0(p.amount)}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{p.daysBetween}</td>
-                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(p.confidence * 100)}%{p.sameMemo ? <span className="ml-1 text-[10px] text-rose-500">same memo</span> : null}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{Math.round(p.confidence * 100)}%{p.sameMemo ? <span className="ml-1 text-[10px] text-rose-500">{t('duplicates.sameMemo')}</span> : null}</td>
                       <td className="px-4 py-2 text-right"><RiskPill score={p.riskScore} /></td>
                     </tr>
                   ))}
@@ -667,12 +674,12 @@ function DetectionTab({ data }: { data: SentinelData }) {
       {sub === 'weekend' ? (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard icon={CalendarDays} accent="violet" label="Weekend Documents" value={num(data.weekend.total)} sub={money(data.weekend.totalAmount)} />
-            <KpiCard icon={CalendarDays} accent="sky" label="Saturday" value={num(data.weekend.saturday)} sub="documents" />
-            <KpiCard icon={CalendarDays} accent="amber" label="Sunday" value={num(data.weekend.sunday)} sub="higher risk weighting" />
-            <KpiCard icon={Info} accent="slate" label="Signal" value="Doc date" sub="accounting date on Sat/Sun" />
+            <KpiCard icon={CalendarDays} accent="violet" label={t('kpi.weekendDocuments')} value={num(data.weekend.total)} sub={money(data.weekend.totalAmount)} />
+            <KpiCard icon={CalendarDays} accent="sky" label={t('kpi.saturday')} value={num(data.weekend.saturday)} sub={t('sub.documents')} />
+            <KpiCard icon={CalendarDays} accent="amber" label={t('kpi.sunday')} value={num(data.weekend.sunday)} sub={t('sub.higherRiskWeighting')} />
+            <KpiCard icon={Info} accent="slate" label={t('kpi.signal')} value={t('weekend.signalValue')} sub={t('weekend.signalNote')} />
           </div>
-          <Panel title="Weekend-Dated Documents (top 200 by amount)" icon={CalendarDays} bodyClassName="p-0">
+          <Panel title={t('panels.weekendDated')} icon={CalendarDays} bodyClassName="p-0">
             <FlaggedTable items={data.weekend.items} showReason={false} />
           </Panel>
         </div>
@@ -682,23 +689,23 @@ function DetectionTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">Shell-company indicator:</span> if a vendor&apos;s invoice numbers to you are perfectly sequential over weeks or months, you are likely their <em>only</em> customer. Legitimate vendors have numbering gaps from invoicing others. Detected by scanning every vendor's reference numbers for unbroken runs.</span>
+            <span><span className="font-semibold">{t('sequential.indicatorTitle')}</span>{t('sequential.indicatorNote1')}<em>{t('sequential.only')}</em>{t('sequential.indicatorNote2')}</span>
           </p>
           <div className="space-y-4">
             {data.sequential.length ? data.sequential.map((g, i) => (
               <Panel key={`${g.partyId}-${i}`} title={g.partyName} icon={ListOrdered} actions={<Badge variant={g.riskLevel === 'high' ? 'destructive' : 'warning'}>{g.riskLevel} · {g.riskScore}</Badge>}>
-                <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{g.reason} — total {money0(g.totalAmount)} ({g.firstDate} → {g.lastDate})</p>
+                <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{g.reason}{t('sequential.runTotal', { total: money0(g.totalAmount), first: g.firstDate, last: g.lastDate })}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {g.invoices.map((inv) => (
                     <TxnLink key={inv.docId} entryId={inv.docId} docKind="vendor_bill" docId={inv.docId} className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-teal-400 hover:text-teal-600 dark:border-slate-700 dark:text-slate-300 dark:hover:text-teal-400">
                       <span className="font-semibold">#{inv.reference}</span> · {money(inv.amount)} · <span className="tabular-nums">{inv.date}</span>
                     </TxnLink>
                   ))}
-                  {g.count > g.invoices.length ? <span className="px-2 py-1 text-xs text-slate-400">+{g.count - g.invoices.length} more</span> : null}
+                  {g.count > g.invoices.length ? <span className="px-2 py-1 text-xs text-slate-400">{t('sequential.more', { count: g.count - g.invoices.length })}</span> : null}
                 </div>
               </Panel>
             )) : (
-              <Panel title="Sequential Invoice Runs" icon={ListOrdered}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />No gap-free sequential runs detected</p></Panel>
+              <Panel title={t('panels.sequentialRuns')} icon={ListOrdered}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />{t('empty.noSequential')}</p></Panel>
             )}
           </div>
         </div>
@@ -708,17 +715,17 @@ function DetectionTab({ data }: { data: SentinelData }) {
         <div className="space-y-4">
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span><span className="font-semibold">Ghost vendors</span> are payee companies controlled by employees. Two-phase matching across the full party registry: employee names against vendor names, and normalized street addresses (line 1 + postal code) shared between a paid vendor and an employee. Name match scores 75, shared address 90, both 95.</span>
+            <span><span className="font-semibold">{t('ghost.title')}</span>{t('ghost.note')}</span>
           </p>
           {data.ghosts.length ? (
-            <Panel title={`Ghost Vendor Matches (${data.ghosts.length})`} icon={Ghost} bodyClassName="p-0">
+            <Panel title={t('panels.ghostMatches', { count: data.ghosts.length })} icon={Ghost} bodyClassName="p-0">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Vendor</th>
-                    <th className="px-4 py-2 text-left font-medium">Employee</th>
-                    <th className="px-4 py-2 text-center font-medium">Match</th>
-                    <th className="px-4 py-2 text-right font-medium">Risk</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.vendor')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.employee')}</th>
+                    <th className="px-4 py-2 text-center font-medium">{t('table.match')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.risk')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -734,7 +741,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
               </table>
             </Panel>
           ) : (
-            <Panel title="Ghost Vendors" icon={Ghost}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />No vendor–employee name or address matches found</p></Panel>
+            <Panel title={t('panels.ghostVendors')} icon={Ghost}><p className="py-6 text-center text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={18} className="mx-auto mb-1.5" />{t('empty.noGhostMatches')}</p></Panel>
           )}
         </div>
       ) : null}
@@ -745,27 +752,28 @@ function DetectionTab({ data }: { data: SentinelData }) {
 /* ------------------------------------------------------------------ Vendors */
 
 function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillTarget) => void }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
   const { sorted, SortTh } = useSort(data.vendorRisk, { key: 'compositeScore', dir: 'desc' })
   return (
-    <Panel title="Vendor Risk Roll-Up" icon={ShieldAlert} hint="Parties ranked by flag severity across all detectors · click a row for that party's transactions" bodyClassName="p-0">
+    <Panel title={t('panels.vendorRiskRollup')} icon={ShieldAlert} hint={t('panels.vendorRiskHint')} bodyClassName="p-0">
       <div className="max-h-144 overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SortTh label="Party" col="partyName" align="left" defaultDir="asc" />
-              <SortTh label="Flags" col="flagCount" />
-              <SortTh label="Flagged Amount" col="totalAmount" />
-              <th className="px-4 py-2 text-left font-medium">Flag Types</th>
-              <SortTh label="Risk Score" col="compositeScore" />
+              <SortTh label={t('table.party')} col="partyName" align="left" defaultDir="asc" />
+              <SortTh label={t('table.flags')} col="flagCount" />
+              <SortTh label={t('table.flaggedAmount')} col="totalAmount" />
+              <th className="px-4 py-2 text-left font-medium">{t('table.flagTypes')}</th>
+              <SortTh label={t('table.riskScore')} col="compositeScore" />
             </tr>
           </thead>
           <tbody>
             {sorted.map((v, i) => (
               <tr
                 key={`${v.partyId}-${i}`}
-                onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: `${v.flagCount} flags · ${money0(v.totalAmount)} flagged` }) : undefined}
+                onClick={v.partyId ? () => onDrill({ kind: 'party', id: v.partyId!, name: v.partyName, sub: t('vendors.drillSub', { flags: v.flagCount, amount: money0(v.totalAmount) }) }) : undefined}
                 className={cn('border-b border-slate-50 last:border-0 dark:border-slate-800/60', v.partyId && 'cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30')}
               >
                 <td className="max-w-56 truncate px-4 py-2 font-medium text-slate-800 dark:text-slate-200" title={v.partyName}>{v.partyName}</td>
@@ -773,8 +781,8 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
                 <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{money0(v.totalAmount)}</td>
                 <td className="px-4 py-2">
                   <span className="flex flex-wrap gap-1">
-                    {v.flagTypes.map((t) => (
-                      <span key={t} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', FLAG_BADGE[t as FlaggedDoc['flagType']]?.cls ?? 'bg-slate-100 text-slate-600')}>{FLAG_BADGE[t as FlaggedDoc['flagType']]?.label ?? t}</span>
+                    {v.flagTypes.map((ft) => (
+                      <span key={ft} className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', FLAG_BADGE_CLS[ft as FlaggedDoc['flagType']] ?? 'bg-slate-100 text-slate-600')}>{(FLAGGED_TYPES as readonly string[]).includes(ft) ? t(`flag.${ft}`) : ft}</span>
                     ))}
                   </span>
                 </td>
@@ -791,27 +799,28 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
 /* --------------------------------------------------------------- Audit Trail */
 
 function AuditTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const a = data.auditTrail
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <KpiCard icon={History} accent="sky" label="Audit Events" value={num(a.total)} sub="in period" />
-        <KpiCard icon={AlertTriangle} accent={a.deletes > 0 ? 'red' : 'emerald'} label="Deletions" value={num(a.deletes)} sub="records removed" tone={a.deletes > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={ShieldAlert} accent={a.sensitiveChanges > 0 ? 'amber' : 'emerald'} label="Sensitive Changes" value={num(a.sensitiveChanges)} sub="banking / contact / address" />
+        <KpiCard icon={History} accent="sky" label={t('kpi.auditEvents')} value={num(a.total)} sub={t('sub.inPeriod')} />
+        <KpiCard icon={AlertTriangle} accent={a.deletes > 0 ? 'red' : 'emerald'} label={t('kpi.deletions')} value={num(a.deletes)} sub={t('sub.recordsRemoved')} tone={a.deletes > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={ShieldAlert} accent={a.sensitiveChanges > 0 ? 'amber' : 'emerald'} label={t('kpi.sensitiveChanges')} value={num(a.sensitiveChanges)} sub={t('sub.bankingContactAddress')} />
       </div>
       <p className="flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/40 dark:text-slate-400">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span>Native audit log. Most records in this ledger were bulk-migrated, so change history begins at go-live — the trail grows as users work in openbooks.</span>
+        <span>{t('auditNote')}</span>
       </p>
-      <Panel title="High-Risk Audit Events" icon={History} bodyClassName="p-0">
+      <Panel title={t('panels.highRiskAudit')} icon={History} bodyClassName="p-0">
         <div className="max-h-128 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">When</th>
-                <th className="px-4 py-2 text-left font-medium">Table</th>
-                <th className="px-4 py-2 text-center font-medium">Action</th>
-                <th className="px-4 py-2 text-left font-medium">Change</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.when')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.table')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.action')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.change')}</th>
               </tr>
             </thead>
             <tbody>
@@ -823,7 +832,7 @@ function AuditTab({ data }: { data: SentinelData }) {
                   <td className="max-w-96 truncate px-4 py-2 text-xs text-slate-400 dark:text-slate-500" title={e.summary}>{e.summary || '—'}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />No high-risk audit events in this period</td></tr>
+                <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-400"><CheckCircle2 size={20} className="mx-auto mb-1.5 text-emerald-500" />{t('empty.noAuditEvents')}</td></tr>
               )}
             </tbody>
           </table>
@@ -836,17 +845,18 @@ function AuditTab({ data }: { data: SentinelData }) {
 /* ----------------------------------------------------------- Configuration */
 
 function ConfigTab({ data }: { data: SentinelData }) {
+  const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const c = data.config
   const items = [
-    { label: 'Duplicates', value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount)}`, note: 'Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity' },
-    { label: 'Benford conformity', value: 'MAD (Nigrini)', note: '1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033' },
-    { label: 'RSF', value: '≥10×', note: `Amount ÷ vendor 2nd-largest over a 36-month baseline (${money(100)} baseline floor)` },
-    { label: 'Z-score', value: '|z| ≥ 3', note: `Per-vendor mean/σ baseline, ≥5 transactions and σ > ${money(10)}` },
-    { label: 'Sequential runs', value: `≥${c.sequentialMinCount} refs · ≥${c.sequentialMinDays} days`, note: 'Gap-free vendor reference numbers; 30+ day spans rank high risk' },
-    { label: 'Threshold trap', value: '99 / 999 / 9999', note: 'Whole-dollar endings (.00 or .99 cents) just under round limits' },
-    { label: 'Weekend', value: 'Sat / Sun', note: 'Accounting document date (migrated data carries import timestamps, so system created-time is not meaningful here)' },
+    { label: t('detectors.duplicates'), value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount)}`, note: t('config.duplicatesNote') },
+    { label: t('config.benfordConformity'), value: 'MAD (Nigrini)', note: t('config.benfordNote') },
+    { label: t('flag.rsf'), value: '≥10×', note: t('config.rsfNote', { floor: money(100) }) },
+    { label: t('analysis.zscoreWord'), value: '|z| ≥ 3', note: t('config.zscoreNote', { sigma: money(10) }) },
+    { label: t('config.sequentialRuns'), value: `≥${c.sequentialMinCount} refs · ≥${c.sequentialMinDays} days`, note: t('config.sequentialNote') },
+    { label: t('benford.thresholdTrap'), value: '99 / 999 / 9999', note: t('config.trapNote') },
+    { label: t('flag.weekend'), value: 'Sat / Sun', note: t('config.weekendNote') },
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -854,15 +864,15 @@ function ConfigTab({ data }: { data: SentinelData }) {
         <ConfigEditor
           dashboard="sentinel"
           fields={[
-            { key: 'duplicateDays', label: 'Duplicate window (days)', help: 'Same vendor, kind and amount within this many days flags a pair', min: 1, max: 90, step: 1 },
-            { key: 'duplicateMinAmount', label: 'Duplicate minimum ($)', help: 'Pairs below this amount are ignored', min: 0, max: 100_000, step: 50 },
-            { key: 'sequentialMinCount', label: 'Sequential run minimum', help: 'Gap-free invoice-number runs need at least this many documents', min: 2, max: 50, step: 1 },
-            { key: 'sequentialMinDays', label: 'Sequential span (days)', help: 'Runs spread over fewer days are treated as batch entry, not a flag', min: 1, max: 365, step: 1 },
+            { key: 'duplicateDays', label: t('config.fields.duplicateDays.label'), help: t('config.fields.duplicateDays.help'), min: 1, max: 90, step: 1 },
+            { key: 'duplicateMinAmount', label: t('config.fields.duplicateMinAmount.label'), help: t('config.fields.duplicateMinAmount.help'), min: 0, max: 100_000, step: 50 },
+            { key: 'sequentialMinCount', label: t('config.fields.sequentialMinCount.label'), help: t('config.fields.sequentialMinCount.help'), min: 2, max: 50, step: 1 },
+            { key: 'sequentialMinDays', label: t('config.fields.sequentialMinDays.label'), help: t('config.fields.sequentialMinDays.help'), min: 1, max: 365, step: 1 },
           ]}
           values={c}
           defaults={{ duplicateDays: 14, duplicateMinAmount: 100, sequentialMinCount: 3, sequentialMinDays: 7 }}
         />
-        <Panel title="Detector Thresholds" icon={SlidersHorizontal} bodyClassName="p-0">
+        <Panel title={t('panels.detectorThresholds')} icon={SlidersHorizontal} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
               <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
@@ -876,16 +886,16 @@ function ConfigTab({ data }: { data: SentinelData }) {
           </ul>
         </Panel>
       </div>
-      <Panel title="Complete coverage" icon={Database}>
+      <Panel title={t('panels.completeCoverage')} icon={Database}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>Every check runs across your <span className="font-semibold">complete ledger</span> — no 30-day windows, no per-vendor shortcuts, no sampling. Nothing is skipped:</p>
+          <p>{t('coverage.intro')}<span className="font-semibold">{t('coverage.ledger')}</span>{t('coverage.introTail')}</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Benford</span> — flags amounts whose leading digits don’t follow natural spending patterns.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Relative size &amp; z-score</span> — compares each transaction to that vendor’s own history to surface outliers.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Sequential runs</span> — catches suspiciously unbroken sequences of vendor reference numbers.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Duplicates</span> — compares every pair of transactions to catch repeated or split payments.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('coverage.benfordBold')}</span>{t('coverage.benfordItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('coverage.rszBold')}</span>{t('coverage.rszItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('flag.sequential')}</span>{t('coverage.sequentialItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('detectors.duplicates')}</span>{t('coverage.duplicatesItem')}</li>
           </ul>
-          <p>This period: {num(data.meta.totalDocs)} documents ({money(data.meta.totalAmount)}) across {num(data.meta.days)} days, analyzed in {(data.meta.queryMs / 1000).toFixed(1)}s. Detail tables show the top matches per check; the counts and distributions always cover everything.</p>
+          <p>{t('coverage.outro', { docs: num(data.meta.totalDocs), amount: money(data.meta.totalAmount), days: num(data.meta.days), seconds: (data.meta.queryMs / 1000).toFixed(1) })}</p>
         </div>
       </Panel>
     </div>

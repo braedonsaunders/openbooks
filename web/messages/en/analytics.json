@@ -547,6 +547,264 @@
   },
   "sentinel": {
     "title": "Sentinel",
-    "backToHub": "Analytics"
+    "backToHub": "Analytics",
+    "tabs": {
+      "overview": "Overview",
+      "benford": "Benford",
+      "analysis": "Analysis",
+      "detection": "Detection",
+      "vendors": "Vendors",
+      "audit": "Audit Trail",
+      "config": "Configuration"
+    },
+    "risk": {
+      "high": "HIGH RISK",
+      "elevated": "ELEVATED",
+      "moderate": "MODERATE",
+      "low": "LOW RISK",
+      "caption": "integrity risk"
+    },
+    "kind": {
+      "vendor_bill": "Bill",
+      "vendor_credit": "Credit",
+      "vendor_payment": "Payment",
+      "check": "Check",
+      "expense_report": "Expense",
+      "journal": "Journal",
+      "customer_credit": "Cust. Credit"
+    },
+    "flag": {
+      "duplicate": "Duplicate",
+      "weekend": "Weekend",
+      "rsf": "RSF",
+      "zscore": "Z-Score",
+      "trap": "99-Trap",
+      "sequential": "Sequential"
+    },
+    "banner": {
+      "pre": "Analyzed across your ",
+      "ledger": "complete ledger",
+      "stats": "{docs} documents · {amount} · {days} days · in {seconds}s — no caps or date-range limits."
+    },
+    "kpi": {
+      "flagged": "Flagged",
+      "duplicatePairs": "Duplicate Pairs",
+      "benford": "Benford",
+      "shellSignals": "Shell Signals",
+      "amountsAnalyzed": "Amounts Analyzed",
+      "conformity": "Conformity",
+      "deviatingDigits": "Deviating Digits",
+      "digit1Share": "Digit 1 Share",
+      "anomalousPairs": "Anomalous Pairs",
+      "approvalLimitRisk": "Approval-Limit Risk",
+      "trapAmounts": "Trap Amounts",
+      "totalValue": "Total Value",
+      "endsIn": "Ends in {ending}",
+      "valueAtRisk": "Value at Risk",
+      "rule": "Rule",
+      "weekendDocuments": "Weekend Documents",
+      "saturday": "Saturday",
+      "sunday": "Sunday",
+      "signal": "Signal",
+      "auditEvents": "Audit Events",
+      "deletions": "Deletions",
+      "sensitiveChanges": "Sensitive Changes"
+    },
+    "sub": {
+      "atRisk": "{amount} at risk",
+      "twoD": "2D: {value}",
+      "ghostsSequential": "{ghosts} ghosts · {sequential} sequential",
+      "everyDocument": "every document, no caps",
+      "offExpected25": ">25% off expected",
+      "expected301": "expected 30.1%",
+      "twoDigitPairs": "first-two-digit pairs",
+      "offExpected50": ">50% off expected, n≥5",
+      "seeThresholdTrap": "see Threshold Trap",
+      "ending99": "ending 99 / 999 / 9999",
+      "limitGaming": "potential limit-gaming",
+      "allMatchingPairs": "all matching pairs",
+      "sumPairAmounts": "sum of pair amounts",
+      "documents": "documents",
+      "higherRiskWeighting": "higher risk weighting",
+      "inPeriod": "in period",
+      "recordsRemoved": "records removed",
+      "bankingContactAddress": "banking / contact / address"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "loading": "Loading…",
+    "error": {
+      "loadFailed": "Could not load transactions."
+    },
+    "chart": {
+      "observed": "Observed",
+      "expectedBenford": "Expected (Benford)",
+      "expected": "Expected"
+    },
+    "panels": {
+      "benfordFirstDigit": "Benford's Law — First Digit",
+      "benfordHint": "{amounts} amounts · MAD {mad} · {conformity}",
+      "highestRiskFlags": "Highest-Risk Flags",
+      "highestRiskHint": "Across all detectors · click a document to open it",
+      "topRiskAreas": "Top Risk Areas",
+      "detectorSummary": "Detector Summary",
+      "observedVsExpected": "Observed vs Expected Distribution",
+      "digitDetail": "Digit Detail",
+      "digitDetailHint": "Click a digit to see the transactions behind it",
+      "twoDigitDistribution": "First-Two-Digit Distribution (10–99)",
+      "anomalousPairs": "Anomalous Digit Pairs",
+      "thresholdTrapDocs": "Threshold-Trap Documents",
+      "rsfAnomalies": "RSF Anomalies ({count})",
+      "zscoreAnomalies": "Z-Score Anomalies ({count})",
+      "spendCalendar": "Spend Calendar",
+      "spendCalendarHint": "Daily spend intensity — weekend spikes and unusual clusters stand out",
+      "allFlaggedDocs": "All Flagged Documents (top {top} of {total})",
+      "potentialDuplicates": "Potential Duplicate Pairs",
+      "duplicatesHint": "Both documents open in their native module",
+      "weekendDated": "Weekend-Dated Documents (top 200 by amount)",
+      "sequentialRuns": "Sequential Invoice Runs",
+      "ghostMatches": "Ghost Vendor Matches ({count})",
+      "ghostVendors": "Ghost Vendors",
+      "vendorRiskRollup": "Vendor Risk Roll-Up",
+      "vendorRiskHint": "Parties ranked by flag severity across all detectors · click a row for that party's transactions",
+      "highRiskAudit": "High-Risk Audit Events",
+      "detectorThresholds": "Detector Thresholds",
+      "completeCoverage": "Complete coverage"
+    },
+    "table": {
+      "date": "Date",
+      "document": "Document",
+      "party": "Party",
+      "amount": "Amount",
+      "flag": "Flag",
+      "reason": "Reason",
+      "risk": "Risk",
+      "digit": "Digit",
+      "digits": "Digits",
+      "count": "Count",
+      "deviation": "Deviation",
+      "vendor": "Vendor",
+      "secondLargest": "2nd Largest",
+      "partyAvg": "Party Avg",
+      "z": "Z",
+      "doc1": "Doc 1",
+      "doc2": "Doc 2",
+      "daysApart": "Days Apart",
+      "confidence": "Confidence",
+      "employee": "Employee",
+      "match": "Match",
+      "flags": "Flags",
+      "flaggedAmount": "Flagged Amount",
+      "flagTypes": "Flag Types",
+      "riskScore": "Risk Score",
+      "when": "When",
+      "table": "Table",
+      "action": "Action",
+      "change": "Change"
+    },
+    "csv": {
+      "kind": "Kind"
+    },
+    "drill": {
+      "firstTwoDigits": "First two digits",
+      "leadingDigit": "Leading digit",
+      "documentsTotal": "{count} documents · {total}",
+      "top": "top {count}",
+      "noDocuments": "No documents lead with {digit}."
+    },
+    "analysis": {
+      "rsfFull": "Relative Size Factor",
+      "calendar": "Calendar",
+      "rsfNote": " = amount ÷ the vendor's historical 2nd-largest transaction (36-month baseline, computed in one window-function pass). RSF ≥ 10 means a transaction wildly out of scale for that vendor — a classic error/fraud signal.",
+      "zscoreWord": "Z-score",
+      "zscoreNote": " measures how many standard deviations a transaction sits from that vendor's own average (per-vendor baselines over 36 months, one aggregate pass). |z| ≥ 3 flags entity-specific outliers that global thresholds miss."
+    },
+    "duplicates": {
+      "ruleValue": "≤14 days",
+      "ruleNote": "same vendor + kind + amount, ≥{min}",
+      "sameMemo": "same memo"
+    },
+    "weekend": {
+      "signalValue": "Doc date",
+      "signalNote": "accounting date on Sat/Sun"
+    },
+    "sequential": {
+      "indicatorTitle": "Shell-company indicator:",
+      "indicatorNote1": " if a vendor's invoice numbers to you are perfectly sequential over weeks or months, you are likely their ",
+      "only": "only",
+      "indicatorNote2": " customer. Legitimate vendors have numbering gaps from invoicing others. Detected by scanning every vendor's reference numbers for unbroken runs.",
+      "runTotal": " — total {total} ({first} → {last})",
+      "more": "+{count} more"
+    },
+    "ghost": {
+      "title": "Ghost vendors",
+      "note": " are payee companies controlled by employees. Two-phase matching across the full party registry: employee names against vendor names, and normalized street addresses (line 1 + postal code) shared between a paid vendor and an employee. Name match scores 75, shared address 90, both 95."
+    },
+    "detectors": {
+      "duplicates": "Duplicates",
+      "ghostVendors": "Ghost Vendors",
+      "auditEvents": "Audit Events"
+    },
+    "empty": {
+      "nothingFlagged": "Nothing flagged",
+      "noElevatedRisk": "No elevated risk areas",
+      "noSequential": "No gap-free sequential runs detected",
+      "noGhostMatches": "No vendor–employee name or address matches found",
+      "noAuditEvents": "No high-risk audit events in this period"
+    },
+    "auditNote": "Native audit log. Most records in this ledger were bulk-migrated, so change history begins at go-live — the trail grows as users work in openbooks.",
+    "trapNote": "Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review.",
+    "vendors": {
+      "drillSub": "{flags} flags · {amount} flagged"
+    },
+    "benford": {
+      "conforming": "Conforming",
+      "marginal": "Marginal",
+      "nonConforming": "Non-Conforming",
+      "firstDigit1D": "First Digit (1D)",
+      "firstTwoDigits2D": "First Two Digits (2D)",
+      "thresholdTrap": "Threshold Trap"
+    },
+    "config": {
+      "duplicatesNote": "Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity",
+      "benfordConformity": "Benford conformity",
+      "benfordNote": "1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033",
+      "rsfNote": "Amount ÷ vendor 2nd-largest over a 36-month baseline ({floor} baseline floor)",
+      "zscoreNote": "Per-vendor mean/σ baseline, ≥5 transactions and σ > {sigma}",
+      "sequentialRuns": "Sequential runs",
+      "sequentialNote": "Gap-free vendor reference numbers; 30+ day spans rank high risk",
+      "trapNote": "Whole-dollar endings (.00 or .99 cents) just under round limits",
+      "weekendNote": "Accounting document date (migrated data carries import timestamps, so system created-time is not meaningful here)",
+      "fields": {
+        "duplicateDays": {
+          "label": "Duplicate window (days)",
+          "help": "Same vendor, kind and amount within this many days flags a pair"
+        },
+        "duplicateMinAmount": {
+          "label": "Duplicate minimum ($)",
+          "help": "Pairs below this amount are ignored"
+        },
+        "sequentialMinCount": {
+          "label": "Sequential run minimum",
+          "help": "Gap-free invoice-number runs need at least this many documents"
+        },
+        "sequentialMinDays": {
+          "label": "Sequential span (days)",
+          "help": "Runs spread over fewer days are treated as batch entry, not a flag"
+        }
+      }
+    },
+    "coverage": {
+      "intro": "Every check runs across your ",
+      "ledger": "complete ledger",
+      "introTail": " — no 30-day windows, no per-vendor shortcuts, no sampling. Nothing is skipped:",
+      "benfordBold": "Benford",
+      "benfordItem": " — flags amounts whose leading digits don’t follow natural spending patterns.",
+      "rszBold": "Relative size & z-score",
+      "rszItem": " — compares each transaction to that vendor’s own history to surface outliers.",
+      "sequentialItem": " — catches suspiciously unbroken sequences of vendor reference numbers.",
+      "duplicatesItem": " — compares every pair of transactions to catch repeated or split payments.",
+      "outro": "This period: {docs} documents ({amount}) across {days} days, analyzed in {seconds}s. Detail tables show the top matches per check; the counts and distributions always cover everything."
+    }
   }
 }
