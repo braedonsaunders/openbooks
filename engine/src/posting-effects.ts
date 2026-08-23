@@ -32,6 +32,7 @@ export type PostingEffectsRow = {
   posting_date: string;
   actor_id: string | null;
   attempt_count: number;
+  lease_token: string;
 };
 
 export class PostingEffectsTerminalFailureError extends Error {
@@ -48,7 +49,15 @@ export class PostingEffectsReplayError extends Error {
   }
 }
 
-type TerminalizedPostingEffectsRow = PostingEffectsRow & {
+export class PostingEffectsLeaseFencedError extends Error {
+  constructor(id: string) {
+    super(`posting-effects claim ${id} lost its lease and was fenced`);
+    this.name = "PostingEffectsLeaseFencedError";
+  }
+}
+
+type TerminalizedPostingEffectsRow = Omit<PostingEffectsRow, "lease_token"> & {
+  lease_token: null;
   terminal_failure_reason: string;
   terminal_failed_at: Date | string;
   terminal_failed_by: string;
@@ -140,6 +149,7 @@ export async function recoverStalePostingEffects(now = new Date()): Promise<numb
                          then 'terminal_failed' else 'failed' end,
              error=${staleReason},
              locked_at=null,
+             lease_token=null,
              finished_at=${now},
              next_attempt_at=${now},
              terminal_failure_reason = case
@@ -157,7 +167,7 @@ export async function recoverStalePostingEffects(now = new Date()): Promise<numb
          and locked_at is not null
          and locked_at < ${new Date(now.getTime() - STALE_POSTING_EFFECTS_MS)}
        returning id, org_id, document_id, kind, entry_id,
-                 posting_date::text as posting_date, actor_id, attempt_count,
+                 posting_date::text as posting_date, actor_id, attempt_count, lease_token,
                  terminal_failure_reason, terminal_failed_at, terminal_failed_by,
                  (attempt_count >= ${MAX_POSTING_EFFECTS_ATTEMPTS}
                   and terminal_failed_by = ${POSTING_EFFECTS_WORKER_IDENTITY}
@@ -184,6 +194,7 @@ export async function claimPostingEffectsForDocument(
        set status='running',
            attempt_count=attempt_count+1,
            locked_at=${now},
+           lease_token=gen_random_uuid(),
            last_attempt_at=${now},
            finished_at=null,
            error=null,
@@ -192,7 +203,8 @@ export async function claimPostingEffectsForDocument(
        and claimed.status in ('pending','failed')
        and claimed.attempt_count < ${MAX_POSTING_EFFECTS_ATTEMPTS}
      returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
-               claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count
+               claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
+               claimed.lease_token
   `);
   if (claimed.rows[0]) return claimed.rows[0];
   const existing = await db.execute<{ status: string }>(sql`
@@ -211,6 +223,7 @@ async function claimNextDuePostingEffects(now: Date): Promise<PostingEffectsRow 
        set status='running',
            attempt_count=attempt_count+1,
            locked_at=${now},
+           lease_token=gen_random_uuid(),
            last_attempt_at=${now},
            finished_at=null,
            error=null,
@@ -226,7 +239,8 @@ async function claimNextDuePostingEffects(now: Date): Promise<PostingEffectsRow 
       ) as due
      where claimed.id = due.id
      returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
-               claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count
+               claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
+               claimed.lease_token
   `);
   return claimed.rows[0] ?? null;
 }
@@ -235,12 +249,13 @@ export async function markPostingEffectsSucceeded(
   row: PostingEffectsRow,
   now = new Date(),
 ): Promise<void> {
-  await db.execute(sql`
+  const completed = await db.execute(sql`
     update posting_effects
-       set status='succeeded', error=null, locked_at=null, finished_at=${now},
+       set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},
            next_attempt_at=${now}, updated_at=now()
-     where id=${row.id} and status='running'
+     where id=${row.id} and lease_token=${row.lease_token} and status='running'
   `);
+  if (completed.rowCount !== 1) throw new PostingEffectsLeaseFencedError(row.id);
 }
 
 export async function markPostingEffectsFailed(
@@ -256,6 +271,7 @@ export async function markPostingEffectsFailed(
          set status=case when ${terminal} then 'terminal_failed' else 'failed' end,
              error=${message},
              locked_at=null,
+             lease_token=null,
              finished_at=${now},
              next_attempt_at=${new Date(now.getTime() + postingEffectsBackoffMs(row.attempt_count))},
              terminal_failure_reason = case when ${terminal}
@@ -265,9 +281,9 @@ export async function markPostingEffectsFailed(
              terminal_failed_by = case when ${terminal} and terminal_failed_at is null
                then ${POSTING_EFFECTS_WORKER_IDENTITY} else terminal_failed_by end,
              updated_at=now()
-       where id=${row.id} and status='running'
+       where id=${row.id} and lease_token=${row.lease_token} and status='running'
        returning id, org_id, document_id, kind, entry_id,
-                 posting_date::text as posting_date, actor_id, attempt_count,
+                 posting_date::text as posting_date, actor_id, attempt_count, lease_token,
                  terminal_failure_reason, terminal_failed_at, terminal_failed_by,
                  (${terminal}
                   and terminal_failed_by = ${POSTING_EFFECTS_WORKER_IDENTITY}
@@ -277,6 +293,7 @@ export async function markPostingEffectsFailed(
     if (terminalRow?.becameTerminal) await insertTerminalFailureAudit(tx, terminalRow);
     return terminalRow;
   });
+  if (!marked) throw new PostingEffectsLeaseFencedError(row.id);
   if (marked?.becameTerminal) emitTerminalFailure(marked);
 }
 
@@ -288,7 +305,7 @@ export async function processDuePostingEffects(
   now = new Date(),
   limit = 50,
   run?: PostingEffectsRunner,
-): Promise<{ processed: number; succeeded: number; failed: number }> {
+): Promise<{ processed: number; succeeded: number; failed: number; fenced: number }> {
   await recoverStalePostingEffects(now);
   const drain =
     run ??
@@ -303,6 +320,7 @@ export async function processDuePostingEffects(
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  let fenced = 0;
   for (let i = 0; i < batch; i++) {
     const row = await claimNextDuePostingEffects(now);
     if (!row) break;
@@ -323,13 +341,27 @@ export async function processDuePostingEffects(
       succeeded++;
       recordOutboxAttempt("posting_effects", row.kind, "succeeded", Date.now() - startedAt);
     } catch (error) {
-      await markPostingEffectsFailed(row, error, now);
+      if (error instanceof PostingEffectsLeaseFencedError) {
+        fenced++;
+        recordOutboxAttempt("posting_effects", row.kind, "failed", Date.now() - startedAt);
+        console.warn(`[posting-effects] ${row.kind} ${row.document_id} completion fenced`);
+        continue;
+      }
+      try {
+        await markPostingEffectsFailed(row, error, now);
+      } catch (completionError) {
+        if (!(completionError instanceof PostingEffectsLeaseFencedError)) throw completionError;
+        fenced++;
+        recordOutboxAttempt("posting_effects", row.kind, "failed", Date.now() - startedAt);
+        console.warn(`[posting-effects] ${row.kind} ${row.document_id} failure completion fenced`);
+        continue;
+      }
       failed++;
       recordOutboxAttempt("posting_effects", row.kind, "failed", Date.now() - startedAt);
       console.error(`[posting-effects] ${row.kind} ${row.document_id} failed:`, error);
     }
   }
-  return { processed, succeeded, failed };
+  return { processed, succeeded, failed, fenced };
 }
 
 export type FailedPostingEffect = {
@@ -418,7 +450,7 @@ export async function replayTerminalPostingEffect(input: {
     await tx.execute(sql`
       update posting_effects
          set status='pending', attempt_count=0, next_attempt_at=${now},
-             locked_at=null, last_attempt_at=null, finished_at=null, error=null,
+             locked_at=null, lease_token=null, last_attempt_at=null, finished_at=null, error=null,
              terminal_failure_reason=null, terminal_failed_at=null,
              terminal_failed_by=null, updated_at=now(), updated_by=${input.actorId}
        where id=${input.id} and org_id=${input.orgId} and status='terminal_failed'

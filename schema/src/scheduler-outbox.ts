@@ -46,6 +46,8 @@ export const schedulerOutbox = pgTable(
     attemptCount: integer("attempt_count").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /** Random token minted per claim; every completion must match it. */
+    leaseToken: uuid("lease_token"),
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     error: text("error"),

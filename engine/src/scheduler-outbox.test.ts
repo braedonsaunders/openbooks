@@ -62,3 +62,12 @@ test("dunning, billing, FX, and approval escalations no longer log-and-drop", ()
   assert.match(worker, /processDueSchedulerOutbox/);
   assert.doesNotMatch(worker, /bullmq.*dlq|dead.?letter/i);
 });
+
+test("scheduler completions are fenced by the active per-claim lease", () => {
+  const outbox = source("./scheduler-outbox.ts");
+  assert.match(outbox, /lease_token=gen_random_uuid\(\)/);
+  assert.match(outbox, /where id=\$\{row\.id\} and lease_token=\$\{row\.lease_token\} and status='running'/);
+  assert.match(outbox, /SchedulerOutboxLeaseFencedError/);
+  const recovery = outbox.slice(outbox.indexOf("recoverStaleSchedulerOutbox"));
+  assert.match(recovery, /lease_token=null/);
+});
