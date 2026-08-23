@@ -18,9 +18,9 @@ export const runtime = 'nodejs'
  *  cross-field rules stay in the engine's posting kernel. */
 const allocationInput = z.object({
   openLineId: z.string().min(1),
-  sourceTransactionAmount: exactMoney,
-  targetTransactionAmount: exactMoney,
-  targetBaseAmount: exactMoney.optional(),
+  sourceTransactionAmount: exactMoney(),
+  targetTransactionAmount: exactMoney(),
+  targetBaseAmount: exactMoney().optional(),
   settlementRate: z.string().min(1),
   settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
   settlementRateReference: z.string(),

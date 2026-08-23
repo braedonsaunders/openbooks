@@ -64,10 +64,18 @@ export async function parseJsonBody<S extends z.ZodType>(
  */
 
 /** Exact numeric(19,4)-scale money string ("1234.5", "-10", "0.0001"). */
-export const exactMoney = z
-  .union([z.string(), z.number()])
-  .refine((v) => toExactMoney(v) !== null, "must be an exact monetary amount")
-  .transform((v) => toExactMoney(v)!);
+export function exactMoney(message = "must be an exact monetary amount") {
+  return z
+    .preprocess(
+      // Absent/null amounts funnel through the same refusal as junk input,
+      // so a required-money field always fails with the caller's message.
+      (v) => (v === undefined || v === null ? "" : v),
+      z
+        .union([z.string(), z.number()])
+        .refine((v) => toExactMoney(v) !== null, message)
+        .transform((v) => toExactMoney(v)!),
+    );
+}
 
 function toExactMoney(v: string | number): string | null {
   const exact = canonicalDecimal(v, 4);
