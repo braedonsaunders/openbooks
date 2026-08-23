@@ -9,7 +9,7 @@ import { getUserRoleTier, dashboardSourceKeyForTier, dashboardSourceKeyForRole }
 import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
 import { canSeeWidget, canSeeInsightCards } from './_widget-access'
 import { WIDGETS } from './_widget-registry'
-import { isFeatureEnabled } from '@/lib/features'
+import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
   type QuickActionOption,
@@ -159,34 +159,17 @@ export async function listQuickActionOptions(): Promise<{
 
   const common: QuickActionOption[] = []
 
-  const featureKeys = [...new Set(
-    [
-      ...CURATED_QUICK_ACTIONS.map((action) => action.requiredFeature),
-      // NAV_MODULES Projects is not a curated create chip — still 404s /projects when off.
-      'projects',
-      // NAV_MODULES estimates/sales-orders/purchase-orders — still 404 when Orders is off.
-      'orders',
-      // NAV_MODULES assets/tax-depreciation — still 404 when Fixed Assets is off.
-      'fixedAssets',
-      // NAV_MODULES equipment — still 404s /assets/equipment when Equipment is off.
-      'equipment',
-      // NAV_MODULES budgets — still 404s /budgets when Budgets is off.
-      'budgets',
-      // NAV_MODULES continuous-close — still 404s /continuous-close when Continuous Close is off.
-      'continuousClose',
-      // NAV_MODULES approvals — still 404s /approvals when Flows is off.
-      'flows',
-    ].filter((key): key is string => key != null),
-  )]
-  const featureOn = new Map(
-    await Promise.all(
-      featureKeys.map(async (key) => [key, await isFeatureEnabled(authz.user.orgId, key)] as const),
-    ),
-  )
+  // One authoritative feature snapshot drives both curated create chips and
+  // navigate options. hiddenNavModules is the SAME mapping the sidebar
+  // resolver applies (web/lib/nav/resolve.ts), so the picker can never offer
+  // a navigate target whose page 404s with the feature off — including every
+  // module a future FEATURES entry adds to navModules.
+  const featureState = await resolvedFeatureState(authz.user.orgId)
+  const hiddenModules = hiddenNavModules(featureState)
 
   for (const action of CURATED_QUICK_ACTIONS) {
     if (action.requiredPermission && !can(authz, action.requiredPermission)) continue
-    if (action.requiredFeature && !featureOn.get(action.requiredFeature)) continue
+    if (action.requiredFeature && !featureEnabled(featureState, action.requiredFeature)) continue
     common.push({
       label: action.label,
       href: action.href,
@@ -199,24 +182,7 @@ export async function listQuickActionOptions(): Promise<{
   for (const mod of NAV_MODULES) {
     if (mod.key === 'dashboard' || mod.key === 'admin') continue
     if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue
-    // Same requiredFeature filter as d-expense: /expenses/reports 404s when Expenses is off.
-    if (mod.key === 'expenses' && !featureOn.get('expenses')) continue
-    // Same requiredFeature filter: /projects 404s when Projects is off.
-    if (mod.key === 'projects' && !featureOn.get('projects')) continue
-    // Same requiredFeature filter: /estimates|/sales-orders|/purchase-orders 404 when Orders is off.
-    if ((mod.key === 'estimates' || mod.key === 'sales-orders' || mod.key === 'purchase-orders') && !featureOn.get('orders')) continue
-    // Same requiredFeature filter: /assets|/assets?tab=tax-depreciation 404 when Fixed Assets is off.
-    if ((mod.key === 'assets' || mod.key === 'tax-depreciation') && !featureOn.get('fixedAssets')) continue
-    // Same requiredFeature filter: /assets/equipment 404s when Equipment is off.
-    if (mod.key === 'equipment' && !featureOn.get('equipment')) continue
-    // Same requiredFeature filter: /budgets 404s when Budgets is off.
-    if (mod.key === 'budgets' && !featureOn.get('budgets')) continue
-    // Same requiredFeature filter: /continuous-close 404s when Continuous Close is off.
-    if (mod.key === 'continuous-close' && !featureOn.get('continuousClose')) continue
-    // Same requiredFeature filter: /approvals 404s when Flows is off.
-    if (mod.key === 'approvals' && !featureOn.get('flows')) continue
-    // Same requiredFeature filter: /admin/flows 404s when Flows is off.
-    if (mod.key === 'flows' && !featureOn.get('flows')) continue
+    if (hiddenModules.has(mod.key)) continue
     common.push({
       label: mod.label,
       href: mod.href,
