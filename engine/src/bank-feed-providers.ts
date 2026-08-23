@@ -256,21 +256,30 @@ export function getBankFeedAdapter(provider: string): BankFeedAdapter | null {
   return (ADAPTERS as Record<string, BankFeedAdapter>)[provider] ?? null;
 }
 
-/** Test a connection's stored credentials (called by the "Test" button). */
+/**
+ * Test a connection's stored credentials (called by the "Test" button).
+ * ctx.orgId scopes the lookup: a connection id from another organization
+ * fails closed instead of probing its sealed credentials.
+ */
 export async function testBankFeedConnection(
   connectionId: string,
+  ctx: { orgId: string },
 ): Promise<{ ok: boolean; detail?: string }> {
   const row = await withBypass(async () =>
-    (await db.execute<{ provider: string; credentials: string | null }>(sql`
-      select c.provider, c.credentials
+    (await db.execute<{ orgId: string; provider: string; credentials: string | null }>(sql`
+      select c.org_id as "orgId", c.provider, c.credentials
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
+         and c.org_id = ${ctx.orgId}
          and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
     `)),
   );
   const conn = row.rows[0];
   if (!conn) return { ok: false, detail: "connection not found" };
+  // Defense-in-depth: withBypass skips RLS, so re-prove tenancy on the loaded
+  // row before unsealing anything.
+  if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
   const creds = unsealJson<Record<string, string>>(conn.credentials) ?? {};
@@ -396,8 +405,15 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
   return outcomes;
 }
 
-/** Force-sync one connection now (the "Sync now" button). */
-export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOutcome> {
+/**
+ * Force-sync one connection now (the "Sync now" button). ctx.orgId scopes the
+ * lookup: a foreign connection id fails closed before any tenant escalation
+ * or statement write can occur.
+ */
+export async function syncBankFeedNow(
+  connectionId: string,
+  ctx: { orgId: string },
+): Promise<FeedSyncOutcome> {
   const row = await withBypass(async () =>
     (await db.execute<{
         id: string;
@@ -413,11 +429,15 @@ export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOut
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.id = ${connectionId}
+         and c.org_id = ${ctx.orgId}
          and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
     `)),
   );
   const conn = row.rows[0];
   if (!conn) throw new FeedError("connection not found");
+  // Defense-in-depth: withBypass skips RLS, so re-prove tenancy on the loaded
+  // row before escalating into it via withOrg in syncOne.
+  if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   let outcome: FeedSyncOutcome;
   try {
     outcome = await syncOne(conn);
