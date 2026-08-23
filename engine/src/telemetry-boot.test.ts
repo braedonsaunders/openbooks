@@ -37,8 +37,8 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
       bytes += chunk.length;
     });
     request.on("end", () => {
-      if (bytes > 0 && path.endsWith("/v1/traces")) hits.traces++;
-      if (bytes > 0 && path.endsWith("/v1/metrics")) hits.metrics++;
+      if (bytes > 0 && path === "/shared/v1/traces?tenant=openbooks") hits.traces++;
+      if (bytes > 0 && path === "/custom/metrics?tenant=openbooks") hits.metrics++;
       response.writeHead(200, { "content-type": "application/x-protobuf" });
       response.end();
     });
@@ -48,7 +48,10 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
   const address = server.address();
   assert.ok(address && typeof address === "object", "collector did not start");
   const env: TelemetryEnv = {
-    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${address.port}`,
+    OTEL_EXPORTER_OTLP_ENDPOINT:
+      `http://127.0.0.1:${address.port}/shared?tenant=openbooks`,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
+      `http://127.0.0.1:${address.port}/custom/metrics?tenant=openbooks`,
     OTEL_SERVICE_NAME: "openbooks-telemetry-boot-test",
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=test",
     OTEL_METRIC_EXPORT_INTERVAL: "100",

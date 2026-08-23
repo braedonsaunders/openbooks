@@ -38,7 +38,7 @@ import {
 const source = (relative: string) =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
 
-test("a signal-specific endpoint alone enables telemetry and is used verbatim", () => {
+test("a signal-specific endpoint alone enables telemetry and preserves its explicit path", () => {
   const cases = [
     ["traces", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"],
     ["metrics", "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"],
@@ -58,12 +58,57 @@ test("a signal-specific endpoint alone enables telemetry and is used verbatim", 
   }
 });
 
+test("a pathless signal-specific endpoint uses the required root path", () => {
+  assert.equal(
+    resolveOtlpHttpEndpoint(
+      { OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://collector.example:4318" },
+      "traces",
+    ),
+    "http://collector.example:4318/",
+  );
+  assert.equal(
+    resolveOtlpHttpEndpoint(
+      {
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
+          "https://collector.example?tenant=openbooks#ingest",
+      },
+      "metrics",
+    ),
+    "https://collector.example/?tenant=openbooks#ingest",
+  );
+});
+
 test("a shared endpoint alone composes the standard path for every signal", () => {
   const env = { OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example/tenant/" };
   assert.equal(telemetryEnabled(env), true);
   assert.equal(resolveOtlpHttpEndpoint(env, "traces"), "https://collector.example/tenant/v1/traces");
   assert.equal(resolveOtlpHttpEndpoint(env, "metrics"), "https://collector.example/tenant/v1/metrics");
   assert.equal(resolveOtlpHttpEndpoint(env, "logs"), "https://collector.example/tenant/v1/logs");
+
+  const signalLookingBase = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example/v1/traces",
+  };
+  assert.equal(
+    resolveOtlpHttpEndpoint(signalLookingBase, "traces"),
+    "https://collector.example/v1/traces/v1/traces",
+  );
+  assert.equal(
+    resolveOtlpHttpEndpoint(signalLookingBase, "metrics"),
+    "https://collector.example/v1/traces/v1/metrics",
+  );
+});
+
+test("a shared endpoint appends to only the URL path", () => {
+  assert.equal(
+    resolveOtlpHttpEndpoint(
+      {
+        OTEL_EXPORTER_OTLP_ENDPOINT:
+          "https://collector.example/tenant//?token=one%2Ftwo#ingest",
+      },
+      "traces",
+    ),
+    "https://collector.example/tenant//v1/traces?token=one%2Ftwo#ingest",
+  );
 });
 
 test("a signal-specific endpoint takes precedence over the shared endpoint", () => {
