@@ -9,6 +9,7 @@ import {
   validateSourceSecret,
 } from "@openbooks/engine/src/sync/connection.ts";
 import { nextMirrorAt } from "@openbooks/engine/src/sync/mirror-schedule.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -49,7 +50,7 @@ export async function PATCH(
   if (body.config && typeof body.config === "object") {
     const merged = { ...existing.config, ...body.config };
     if (manifest) {
-      const configError = validateSourceConfig(manifest, merged);
+      const configError = validateSourceConfig(manifest, merged, { today: await businessToday(orgId) });
       if (configError)
         return NextResponse.json({ error: configError }, { status: 400 });
     }

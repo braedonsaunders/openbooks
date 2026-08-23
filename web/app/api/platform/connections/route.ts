@@ -9,6 +9,7 @@ import {
   validateSourceConfig,
   validateSourceSecret,
 } from "@openbooks/engine/src/sync/connection.ts";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
     String(body.displayName ?? "").trim() || manifest.displayName;
   const config = body.config ?? {};
 
-  const configError = validateSourceConfig(manifest, config);
+  const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
   if (configError)
     return NextResponse.json({ error: configError }, { status: 400 });
 
