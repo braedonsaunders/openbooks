@@ -36,26 +36,28 @@ Spans:
 | Name | Emitted around |
 | --- | --- |
 | `scheduler.tick` | One full scheduler pass on a replica that won the tick claim (worker/scheduler.ts). Every outbox attempt in the pass joins it as a child. |
-| `outbox.attempt` | One claimed scheduler_outbox row attempt (dunning, subscription/property billing, FX providers, approval escalations). |
+| `outbox.attempt` | One claimed `scheduler_outbox` row attempt (dunning, subscription/property billing, FX providers, approval escalations) or `posting_effects` row attempt. |
 | `report_run.process` | One scheduled report run: definition check, render, artifact retention, recipient outbox creation. |
 
 Metrics:
 
 | Name | Type | Attributes |
 | --- | --- | --- |
-| `openbooks.outbox.attempts` | counter | `openbooks.surface` (`scheduler_outbox` \| `report_runs`), `openbooks.kind`, `openbooks.outcome` (`succeeded` \| `failed`) |
+| `openbooks.outbox.attempts` | counter | `openbooks.surface` (`scheduler_outbox` \| `report_runs` \| `posting_effects`), `openbooks.kind`, `openbooks.outcome` (`succeeded` \| `failed`) |
 | `openbooks.outbox.attempt_duration` | histogram (ms) | surface + kind |
-| `openbooks.terminal_failures` | counter | `openbooks.surface` (`scheduler_outbox` \| `report_runs` \| `report_delivery_outbox`), `openbooks.kind` where the surface has one |
+| `openbooks.terminal_failures` | counter | `openbooks.surface` (`scheduler_outbox` \| `report_runs` \| `report_delivery_outbox` \| `posting_effects`), `openbooks.kind` where the surface has one |
 
 Suggested dashboard baselines: attempts by outcome (failure ratio per kind),
 attempt duration p95 per kind, and terminal failures flat at zero.
 
 ## Alerting on terminal failures
 
-Both outboxes stop retrying a row once its attempt ceiling is reached. That
-transition is never silent: the poison row itself is stamped durably with
-`terminal_failed_at`, `terminal_failed_by`, the last error, and the attempt
-count (exactly once, crash-safe — see `engine/src/terminal-failure.ts`), one
+Every durable-work surface stops retrying a row once its attempt ceiling is
+reached. That transition is never silent: the poison row itself is stamped
+durably with `terminal_failed_at`, `terminal_failed_by`, the last error, and
+the attempt count (exactly once, crash-safe — see
+`engine/src/terminal-failure.ts`). `posting_effects` additionally records
+`terminal_failure_reason` and changes `status` to `terminal_failed`. One
 structured log line `{"event":"scheduler.terminal_failure",…}` is emitted, and
 the `openbooks.terminal_failures` counter increments by exactly 1.
 
@@ -86,7 +88,13 @@ select id, org_id, recipient, error, attempt_count,
   from report_delivery_outbox
  where terminal_failed_at is not null
  order by terminal_failed_at desc;
+
+select id, org_id, document_id, kind, terminal_failure_reason,
+       attempt_count, terminal_failed_at, terminal_failed_by
+  from posting_effects
+ where status = 'terminal_failed'
+ order by terminal_failed_at desc;
 ```
 
-All three tables are partial-indexed on `terminal_failed_at` for that
+All four tables are partial-indexed on `terminal_failed_at` for that
 predicate.
