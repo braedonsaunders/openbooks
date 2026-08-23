@@ -157,12 +157,24 @@ export const reportRuns = pgTable(
     dispatchCount: integer("dispatch_count").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /**
+     * Stamped exactly once, by the attempt whose failure exhausts the run
+     * retry ceiling. Null while the run can still be retried, so operators
+     * can alert on poison runs without noise from transient failures
+     * (migration 0006_terminal_failure_surfacing).
+     */
+    terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
+    /** System identity of the worker attempt that recorded the terminal failure. */
+    terminalFailedBy: text("terminal_failed_by"),
     ...auditColumns,
   },
   (t) => [
     index("report_runs_definition").on(t.definitionId, t.createdAt),
     index("report_runs_schedule").on(t.scheduleId),
     index("report_runs_org_status").on(t.orgId, t.status),
+    index("report_runs_terminal_failed")
+      .on(t.terminalFailedAt)
+      .where(sql`${t.terminalFailedAt} is not null`),
     uniqueIndex("report_runs_schedule_occurrence")
       .on(t.scheduleId, t.scheduledFor)
       .where(sql`${t.scheduleId} is not null and ${t.scheduledFor} is not null`),
@@ -213,12 +225,24 @@ export const reportDeliveryOutbox = pgTable(
     emailLogId: uuid("email_log_id"),
     providerMessageId: text("provider_message_id"),
     error: text("error"),
+    /**
+     * Stamped exactly once when the queue gave up and attempt_count has also
+     * reached the delivery ceiling — after that no path re-enqueues the row.
+     * The operator alert query keys on this column
+     * (migration 0006_terminal_failure_surfacing).
+     */
+    terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
+    /** System identity of the worker attempt that recorded the terminal failure. */
+    terminalFailedBy: text("terminal_failed_by"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("report_delivery_outbox_run_recipient").on(t.runId, t.recipient),
     index("report_delivery_outbox_due").on(t.status, t.nextAttemptAt),
     index("report_delivery_outbox_org").on(t.orgId, t.createdAt),
+    index("report_delivery_outbox_terminal_failed")
+      .on(t.terminalFailedAt)
+      .where(sql`${t.terminalFailedAt} is not null`),
     check("report_delivery_outbox_status", sql`${t.status} in ('pending','enqueued','sending','sent','failed','suppressed')`),
     check("report_delivery_outbox_nonnegative_counts", sql`${t.dispatchCount} >= 0 and ${t.attemptCount} >= 0`),
     check("report_delivery_outbox_recipient", sql`length(btrim(${t.recipient})) > 3`),

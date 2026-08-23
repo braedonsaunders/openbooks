@@ -7,14 +7,46 @@ import { db } from "./db.ts";
 import {
   dispatchQueuedReportRuns,
   dispatchReportDeliveries,
+  markReportDeliveryFailed,
   markReportDeliverySent,
   markReportDeliveryStarted,
   materializeDueReportRuns,
+  MAX_DELIVERY_ATTEMPTS,
+  MAX_RUN_ATTEMPTS,
   processScheduledReportRun,
 } from "./report-delivery.ts";
+import {
+  EMAIL_DELIVERY_WORKER_IDENTITY,
+  REPORT_RUN_WORKER_IDENTITY,
+  TERMINAL_FAILURE_LOG_EVENT,
+} from "./terminal-failure.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+/** Capture console.log so structured terminal-failure emissions can be counted. */
+function captureConsoleLogs(): { lines: string[]; restore: () => void } {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map((value) => (typeof value === "string" ? value : JSON.stringify(value))).join(" "));
+  };
+  return { lines, restore: () => (console.log = original) };
+}
+
+type TerminalLog = { event: string; surface: string; id: string; attempts: number; markedBy: string };
+
+function terminalEvents(lines: string[]): TerminalLog[] {
+  return lines
+    .map((line) => {
+      try {
+        return JSON.parse(line) as TerminalLog;
+      } catch {
+        return null;
+      }
+    })
+    .filter((value): value is TerminalLog => value?.event === TERMINAL_FAILURE_LOG_EVENT);
+}
 
 test("scheduled reports materialize once and retain artifact and delivery evidence", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -162,6 +194,110 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
        where r.id=${retryRunId} group by r.id
     `));
     assert.deepEqual(retried.rows[0], { status: "succeeded", attempt_count: 2, artifacts: 1, deliveries: 1 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("exhausted report runs and deliveries are stamped terminal exactly once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'terminal-contract',
+              'Terminal contract', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'queued',
+              ${new Date(Date.now() - 60_000)}, '[]'::jsonb, now())
+    `);
+
+    // Fail MAX_RUN_ATTEMPTS times: the last failure is the single transition
+    // to terminal and must surface exactly one durable stamp + log line.
+    let emissions: TerminalLog[] = [];
+    for (let attempt = 1; attempt <= MAX_RUN_ATTEMPTS; attempt++) {
+      const captured = captureConsoleLogs();
+      await assert.rejects(
+        processScheduledReportRun(runId, async () => { throw new Error("renderer exploded"); }),
+        /renderer exploded/,
+      );
+      captured.restore();
+      emissions = emissions.concat(terminalEvents(captured.lines).filter((event) => event.id === runId));
+      const state = (await db.execute<{ attempt_count: number; terminal_failed_at: Date | null; terminal_failed_by: string | null }>(sql`
+        select attempt_count, terminal_failed_at, terminal_failed_by from report_runs where id=${runId}
+      `)).rows[0]!;
+      assert.equal(state.attempt_count, attempt);
+      if (attempt < MAX_RUN_ATTEMPTS) {
+        assert.equal(emissions.length, 0, "no terminal signal before the ceiling");
+        assert.equal(state.terminal_failed_at, null);
+      } else {
+        assert.equal(emissions.length, 1, `expected one terminal log line, got ${JSON.stringify(emissions)}`);
+        assert.ok(state.terminal_failed_at);
+        assert.equal(state.terminal_failed_by, REPORT_RUN_WORKER_IDENTITY);
+      }
+    }
+    // A terminal run is never claimed again — no further surfacing is possible.
+    assert.deepEqual(await processScheduledReportRun(runId, async () => Buffer.alloc(0)), { skipped: true });
+    assert.equal(emissions.length, 1);
+
+    const log = (await db.execute<{ id: string }>(sql`
+      insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
+      values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Terminal contract', 'failed', 'report')
+      returning id
+    `)).rows[0]!.id;
+
+    // A queue giveup only strands the row once attempts are also exhausted.
+    const deliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+      values (${deliveryId}, ${org.orgId}, ${runId}, 'audit@example.com', 'sending',
+              ${MAX_DELIVERY_ATTEMPTS - 1}, now())
+    `);
+    const early = captureConsoleLogs();
+    await markReportDeliveryFailed(org.orgId, deliveryId, log, "provider rejected", true);
+    early.restore();
+    const notTerminal = (await db.execute<{ status: string; terminal_failed_at: Date | null }>(sql`
+      select status, terminal_failed_at from report_delivery_outbox where id=${deliveryId}
+    `)).rows[0]!;
+    assert.equal(notTerminal.status, "failed");
+    assert.equal(notTerminal.terminal_failed_at, null);
+    assert.equal(terminalEvents(early.lines).length, 0, "a giveup below the ceiling is retryable, not poison");
+
+    // The scanner re-enqueues such a row; the extra attempt reaches the ceiling.
+    await db.execute(sql`
+      update report_delivery_outbox set status='sending', attempt_count=attempt_count+1
+       where id=${deliveryId}
+    `);
+    const finalCapture = captureConsoleLogs();
+    await markReportDeliveryFailed(org.orgId, deliveryId, log, "provider rejected again", true);
+    finalCapture.restore();
+    const stamped = (await db.execute<{ status: string; attempt_count: number; terminal_failed_at: Date | null; terminal_failed_by: string | null }>(sql`
+      select status, attempt_count, terminal_failed_at, terminal_failed_by
+        from report_delivery_outbox where id=${deliveryId}
+    `)).rows[0]!;
+    assert.equal(stamped.status, "failed");
+    assert.ok(stamped.terminal_failed_at, "delivery at the ceiling must be stamped terminal");
+    assert.equal(stamped.terminal_failed_by, EMAIL_DELIVERY_WORKER_IDENTITY);
+    const deliveryEmissions = terminalEvents(finalCapture.lines).filter((event) => event.id === deliveryId);
+    assert.equal(deliveryEmissions.length, 1);
+    assert.equal(deliveryEmissions[0]?.attempts, MAX_DELIVERY_ATTEMPTS);
+
+    // Re-reporting the same poison row never rewrites or duplicates the record.
+    const repeat = captureConsoleLogs();
+    await markReportDeliveryFailed(org.orgId, deliveryId, log, "provider rejected again", true);
+    repeat.restore();
+    const afterRepeat = (await db.execute<{ terminal_failed_at: Date | null }>(sql`
+      select terminal_failed_at from report_delivery_outbox where id=${deliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(afterRepeat.terminal_failed_at, stamped.terminal_failed_at);
+    assert.equal(terminalEvents(repeat.lines).length, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
