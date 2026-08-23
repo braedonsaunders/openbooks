@@ -1257,7 +1257,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     const actual = (await tx.execute<{ amount: string }>(sql`select coalesce(sum(jl.amount),0)::text as amount from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
       where jl.org_id=${orgId} and je.status='posted' and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`));
-    const actualAmount = normalizeMoney(actual.rows[0]?.amount ?? "0");
+    const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
     if (cmp(actualAmount, "0") < 0) throw new PropertyManagementError("CAM expense activity is net-negative; review the selected accounts before finalizing");
     const leases = (await tx.execute<any>(sql`select l.id,l.cam_share_percent,u.rentable_area,
       greatest(l.starts_on,coalesce(l.move_in_on,l.starts_on),${pool.period_starts_on}::date)::text as overlap_start,
