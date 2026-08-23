@@ -8,6 +8,7 @@ import {
   createCheckoutSession,
   createPaymentLink,
   handleProviderWebhook,
+  publicPaymentPage,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
 import { createPaymentDocument } from "./payments.ts";
@@ -405,6 +406,30 @@ test("redelivery resumes onto the reserved receipt draft after a mid-settlement 
       select open_balance from documents where id = ${fx.invoiceId}
     `));
     assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F2.1: the pay page must render the fee quoted at link creation, not a live
+ * re-resolution against whatever surcharge rules happen to be active today.
+ */
+test("pay page shows the stored link surcharge even after surcharge rules change", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-FEE");
+    // The rule landscape moves after the quote: 3% replaced by 10%.
+    await db.execute(sql`
+      update payment_surcharge_rules set percent = '10', effective_from = '2020-01-01'
+       where org_id = ${org.orgId}
+    `);
+
+    const page = await publicPaymentPage(fx.link.token);
+    assert.ok(page);
+    assert.equal(page.surchargeAmount, "3.0000", "pay page must show the stored quoted fee");
+    assert.equal(page.totalAmount, "103.0000");
+    assert.equal(page.invoiceAmount, "100.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

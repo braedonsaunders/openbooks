@@ -570,6 +570,9 @@ interface LinkWithContext {
   subsidiaryId: string;
   provider: AcceptanceProvider;
   bankAccountId: string;
+  /** Quoted at link creation; null only on rows predating the columns. */
+  amount: string | null;
+  surchargeAmount: string | null;
   currency: string;
   status: string;
   expiresOn: string | null;
@@ -597,6 +600,7 @@ async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
     db.execute(sql`
       select id, org_id as "orgId", token, document_id as "documentId", party_id as "partyId",
              subsidiary_id as "subsidiaryId", provider, bank_account_id as "bankAccountId",
+             amount, surcharge_amount as "surchargeAmount",
              currency, status, expires_on::text as "expiresOn"
         from payment_links where token = ${token} limit 1
     `)) as unknown as { rows: LinkWithContext[] };
@@ -616,7 +620,7 @@ export interface PublicPaymentPage {
   publishableKey: string | null;
 }
 
-/** Load the public, token-scoped view of a payment link (amounts re-derived). */
+/** Load the public, token-scoped view of a payment link (fee as quoted). */
 export async function publicPaymentPage(token: string): Promise<PublicPaymentPage | null> {
   const link = await loadLinkByToken(token);
   if (!link) return null;
@@ -628,7 +632,7 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
       return null;
     }
     const ctx = (await db.execute<{ orgName: string; documentNumber: string; partyName: string; openBalance: string }>(sql`
-      select o.name as "orgName", d.document_number as "documentNumber", p.name as "partyName",
+      select o.name as "orgName", d.document_number as "documentNumber", p.display_name as "partyName",
              d.open_balance as "openBalance"
         from orgs o, documents d, parties p
        where o.id = ${link.orgId} and d.id = ${link.documentId} and d.org_id = ${link.orgId}
@@ -637,19 +641,27 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
     const row = ctx.rows[0];
     if (!row) return null;
     const config = await loadProviderConfig(link.orgId, link.provider);
-    const surcharge = await resolveSurcharge(link.orgId, {
-      provider: link.provider,
-      amount: row.openBalance,
-      onDate: await businessToday(link.orgId),
-      configuredRuleId: config?.surcharge_rule_id ?? null,
-    });
+    // The fee the customer was quoted is frozen on the link at creation;
+    // surcharge rules changing (or expiring) afterwards must not move what
+    // the pay page shows, or checkout would charge a different total than
+    // displayed. Live resolution only covers rows with no stored value.
+    const surchargeAmount =
+      link.surchargeAmount ??
+      (
+        await resolveSurcharge(link.orgId, {
+          provider: link.provider,
+          amount: row.openBalance,
+          onDate: await businessToday(link.orgId),
+          configuredRuleId: config?.surcharge_rule_id ?? null,
+        })
+      ).amount;
     return {
       orgName: row.orgName,
       documentNumber: row.documentNumber,
       partyName: row.partyName,
       invoiceAmount: row.openBalance,
-      surchargeAmount: surcharge.amount,
-      totalAmount: add(row.openBalance, surcharge.amount),
+      surchargeAmount,
+      totalAmount: add(row.openBalance, surchargeAmount),
       currency: link.currency,
       status: cmp(row.openBalance, "0") <= 0 ? "paid" : "active",
       provider: link.provider,
