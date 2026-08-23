@@ -61,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const body = (await req.json().catch(() => ({}))) as { action?: string };
   if (body.action === "test") {
-    const result = await testBankFeedConnection(id);
+    const result = await testBankFeedConnection(id, { orgId: authz.user.orgId });
     // Reflect the probe result on the row so the list shows connection health.
     await db.execute(sql`
       update bank_feed_connections set status = ${result.ok ? "connected" : "error"},
@@ -71,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(result);
   }
   if (body.action === "sync") {
-    const outcome = await syncBankFeedNow(id);
+    const outcome = await syncBankFeedNow(id, { orgId: authz.user.orgId });
     return NextResponse.json(outcome, { status: outcome.error ? 422 : 200 });
   }
   return NextResponse.json({ error: "unknown action" }, { status: 400 });
