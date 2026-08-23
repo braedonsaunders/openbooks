@@ -57,7 +57,15 @@ export type OutboxRow = {
   subject_id: string | null;
   occurrence_key: string;
   attempt_count: number;
+  lease_token: string;
 };
+
+export class SchedulerOutboxLeaseFencedError extends Error {
+  constructor(id: string) {
+    super(`scheduler-outbox claim ${id} lost its lease and was fenced`);
+    this.name = "SchedulerOutboxLeaseFencedError";
+  }
+}
 
 export function schedulerOutboxBackoffMs(attemptCount: number): number {
   return Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, attemptCount - 1));
@@ -110,6 +118,7 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
        set status='failed',
            error=coalesce(error, 'stale lock recovered after crash'),
            locked_at=null,
+           lease_token=null,
            next_attempt_at=${now},
            terminal_failed_at = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
                                      then coalesce(terminal_failed_at, ${now})
@@ -122,7 +131,7 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
      where status='running'
        and locked_at is not null
        and locked_at < ${new Date(now.getTime() - STALE_SCHEDULER_OUTBOX_MS)}
-     returning id, org_id, kind, subject_id, occurrence_key, attempt_count,
+     returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token,
                (attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
                 and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
                 and terminal_failed_at = ${now}) as "becameTerminal"
@@ -172,21 +181,23 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
 
 async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
   if (row.kind === "approval_escalation") {
-    await db.execute(sql`
+    const completed = await db.execute(sql`
       update scheduler_outbox
-         set status='succeeded', error=null, locked_at=null, finished_at=${now},
+         set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},
              next_attempt_at=${now}, updated_at=now()
-       where id=${row.id}
+       where id=${row.id} and lease_token=${row.lease_token} and status='running'
     `);
+    if (completed.rowCount !== 1) throw new SchedulerOutboxLeaseFencedError(row.id);
     return;
   }
-  await db.execute(sql`
+  const completed = await db.execute(sql`
     update scheduler_outbox
-       set status='pending', error=null, locked_at=null, finished_at=${now},
+       set status='pending', error=null, locked_at=null, lease_token=null, finished_at=${now},
            attempt_count=0, next_attempt_at=${new Date(now.getTime() + SCAN_REQUEUE_MS)},
            updated_at=now()
-     where id=${row.id}
+     where id=${row.id} and lease_token=${row.lease_token} and status='running'
   `);
+  if (completed.rowCount !== 1) throw new SchedulerOutboxLeaseFencedError(row.id);
 }
 
 async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<void> {
@@ -201,6 +212,7 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
        set status='failed',
            error=${message},
            locked_at=null,
+           lease_token=null,
            finished_at=${now},
            next_attempt_at=${new Date(now.getTime() + schedulerOutboxBackoffMs(row.attempt_count))},
            terminal_failed_at = case when ${terminal}
@@ -210,11 +222,12 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
                                      then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
                                      else terminal_failed_by end,
            updated_at=now()
-     where id=${row.id}
+     where id=${row.id} and lease_token=${row.lease_token} and status='running'
      returning (${terminal}
                 and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
                 and terminal_failed_at = ${now}) as "becameTerminal"
   `));
+  if (!marked.rows[0]) throw new SchedulerOutboxLeaseFencedError(row.id);
   if (marked.rows[0]?.becameTerminal) {
     logTerminalFailure({
       surface: "scheduler_outbox",
@@ -241,7 +254,7 @@ export async function processDueSchedulerOutbox(
   now = new Date(),
   limit = 50,
   run: SchedulerOutboxRunner = runOutboxWork,
-): Promise<{ processed: number; succeeded: number; failed: number }> {
+): Promise<{ processed: number; succeeded: number; failed: number; fenced: number }> {
   await recoverStaleSchedulerOutbox(now);
   const due = (await db.execute<{ id: string }>(sql`
     select id from scheduler_outbox
@@ -254,19 +267,21 @@ export async function processDueSchedulerOutbox(
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
+  let fenced = 0;
   for (const candidate of due.rows) {
     const claimed = (await db.execute<OutboxRow>(sql`
       update scheduler_outbox
          set status='running',
              attempt_count=attempt_count+1,
              locked_at=${now},
+             lease_token=gen_random_uuid(),
              last_attempt_at=${now},
              error=null,
              updated_at=now()
        where id=${candidate.id}
          and status in ('pending','failed')
          and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
-       returning id, org_id, kind, subject_id, occurrence_key, attempt_count
+       returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token
     `));
     const row = claimed.rows[0];
     if (!row) continue;
@@ -287,13 +302,27 @@ export async function processDueSchedulerOutbox(
       succeeded++;
       recordOutboxAttempt("scheduler_outbox", row.kind, "succeeded", Date.now() - startedAt);
     } catch (error) {
-      await markFailed(row, error, now);
+      if (error instanceof SchedulerOutboxLeaseFencedError) {
+        fenced++;
+        recordOutboxAttempt("scheduler_outbox", row.kind, "failed", Date.now() - startedAt);
+        console.warn(`[scheduler-outbox] ${row.kind} ${row.id} completion fenced`);
+        continue;
+      }
+      try {
+        await markFailed(row, error, now);
+      } catch (completionError) {
+        if (!(completionError instanceof SchedulerOutboxLeaseFencedError)) throw completionError;
+        fenced++;
+        recordOutboxAttempt("scheduler_outbox", row.kind, "failed", Date.now() - startedAt);
+        console.warn(`[scheduler-outbox] ${row.kind} ${row.id} failure completion fenced`);
+        continue;
+      }
       failed++;
       recordOutboxAttempt("scheduler_outbox", row.kind, "failed", Date.now() - startedAt);
       console.error(`[scheduler-outbox] ${row.kind} ${row.id} failed:`, error);
     }
   }
-  return { processed, succeeded, failed };
+  return { processed, succeeded, failed, fenced };
 }
 
 /** Operator visibility after a crash: terminal and retrying failures stay here. */

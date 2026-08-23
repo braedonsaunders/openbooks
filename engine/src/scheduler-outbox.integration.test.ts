@@ -156,3 +156,52 @@ test("failed dunning and escalation rows stay visible and retry with backoff", {
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a recovered scheduler lease fences the stale worker completion", { skip: !DB }, async () => {
+  const occurrenceKey = `dunning-fence-${randomUUID()}`;
+  const firstNow = new Date("2026-07-20T10:00:00.000Z");
+  const recoveryNow = new Date(firstNow.getTime() + 16 * 60_000);
+  let releaseOld!: () => void;
+  let signalOldClaimed!: () => void;
+  const oldHeld = new Promise<void>((resolve) => { releaseOld = resolve; });
+  const oldClaimed = new Promise<void>((resolve) => { signalOldClaimed = resolve; });
+  let oldLease = "";
+  let replacementLease = "";
+  try {
+    await db.execute(sql`
+      insert into scheduler_outbox (kind, occurrence_key, status, next_attempt_at)
+      values ('dunning', ${occurrenceKey}, 'pending', '2000-01-01T00:00:00Z')
+    `);
+    const staleWorker = processDueSchedulerOutbox(firstNow, 1, async (row) => {
+      oldLease = row.lease_token;
+      signalOldClaimed();
+      await oldHeld;
+    });
+    await oldClaimed;
+    assert.ok(oldLease, "the first claim must carry a lease token");
+
+    assert.equal(await recoverStaleSchedulerOutbox(recoveryNow), 1);
+    const replacement = await processDueSchedulerOutbox(recoveryNow, 1, async (row) => {
+      replacementLease = row.lease_token;
+    });
+    assert.deepEqual(replacement, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+    assert.ok(replacementLease);
+    assert.notEqual(replacementLease, oldLease, "recovery must mint a different lease");
+
+    releaseOld();
+    const staleResult = await staleWorker;
+    assert.deepEqual(staleResult, { processed: 1, succeeded: 0, failed: 0, fenced: 1 });
+    const stored = await db.execute<{
+      status: string;
+      attempt_count: number;
+      lease_token: string | null;
+    }>(sql`
+      select status, attempt_count, lease_token
+        from scheduler_outbox where occurrence_key=${occurrenceKey}
+    `);
+    assert.deepEqual(stored.rows, [{ status: "pending", attempt_count: 0, lease_token: null }]);
+  } finally {
+    releaseOld?.();
+    await db.execute(sql`delete from scheduler_outbox where occurrence_key=${occurrenceKey}`);
+  }
+});

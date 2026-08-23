@@ -7,6 +7,7 @@ import {
   listFailedPostingEffects,
   MAX_POSTING_EFFECTS_ATTEMPTS,
   processDuePostingEffects,
+  recoverStalePostingEffects,
   replayTerminalPostingEffect,
 } from "./posting-effects.ts";
 import {
@@ -69,7 +70,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       throw new Error("inventory projection remained inconsistent");
     });
     console.log = originalLog;
-    assert.deepEqual(result, { processed: 1, succeeded: 0, failed: 1 });
+    assert.deepEqual(result, { processed: 1, succeeded: 0, failed: 1, fenced: 0 });
 
     const failed = await listFailedPostingEffects(org.orgId);
     assert.equal(failed.length, 1);
@@ -128,9 +129,75 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
     }]);
 
     const replayResult = await processDuePostingEffects(replayAt, 1, async () => {});
-    assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0 });
+    assert.deepEqual(replayResult, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
   } finally {
     console.log = originalLog;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a recovered posting-effect lease fences the stale worker completion", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const documentId = randomUUID();
+  const entryId = randomUUID();
+  const effectId = randomUUID();
+  const firstNow = new Date("2026-07-20T10:00:00.000Z");
+  const recoveryNow = new Date(firstNow.getTime() + 16 * 60_000);
+  let releaseOld!: () => void;
+  let signalOldClaimed!: () => void;
+  const oldHeld = new Promise<void>((resolve) => { releaseOld = resolve; });
+  const oldClaimed = new Promise<void>((resolve) => { signalOldClaimed = resolve; });
+  let oldLease = "";
+  let replacementLease = "";
+  try {
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+              ${`POSTFX-FENCE-${entryId}`}, ${org.date}, ${org.periodId}, 'draft', 'document')
+    `);
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, document_date, currency, status, custom)
+      values (${documentId}, ${org.orgId}, 'vendor_bill', ${`BILL-FENCE-${documentId}`},
+              ${org.date}, 'CAD', 'draft', '{}'::jsonb)
+    `);
+    await db.execute(sql`
+      insert into posting_effects
+        (id, org_id, document_id, kind, entry_id, posting_date, status, next_attempt_at)
+      values (${effectId}, ${org.orgId}, ${documentId}, 'vendor_bill', ${entryId},
+              ${org.date}, 'pending', '2000-01-01T00:00:00Z')
+    `);
+
+    const staleWorker = processDuePostingEffects(firstNow, 1, async (row) => {
+      oldLease = row.lease_token;
+      signalOldClaimed();
+      await oldHeld;
+    });
+    await oldClaimed;
+    assert.ok(oldLease, "the first claim must carry a lease token");
+
+    assert.equal(await recoverStalePostingEffects(recoveryNow), 1);
+    const replacement = await processDuePostingEffects(recoveryNow, 1, async (row) => {
+      replacementLease = row.lease_token;
+    });
+    assert.deepEqual(replacement, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+    assert.ok(replacementLease);
+    assert.notEqual(replacementLease, oldLease, "recovery must mint a different lease");
+
+    releaseOld();
+    const staleResult = await staleWorker;
+    assert.deepEqual(staleResult, { processed: 1, succeeded: 0, failed: 0, fenced: 1 });
+    const stored = await db.execute<{
+      status: string;
+      attempt_count: number;
+      lease_token: string | null;
+    }>(sql`
+      select status, attempt_count, lease_token from posting_effects where id=${effectId}
+    `);
+    assert.deepEqual(stored.rows, [{ status: "succeeded", attempt_count: 2, lease_token: null }]);
+  } finally {
+    releaseOld?.();
     await dropScratchOrg(org.orgId);
   }
 });

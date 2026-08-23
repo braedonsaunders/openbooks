@@ -40,6 +40,7 @@ import {
   enqueuePostingEffects,
   markPostingEffectsFailed,
   markPostingEffectsSucceeded,
+  PostingEffectsLeaseFencedError,
   PostingEffectsTerminalFailureError,
   type PostingEffectsRow,
 } from "./posting-effects.ts";
@@ -1724,6 +1725,7 @@ export async function runPostDocumentEffects(
       await markPostingEffectsSucceeded(claimed);
     }
   } catch (error) {
+    if (error instanceof PostingEffectsLeaseFencedError) throw error;
     if (claimed && !options.alreadyClaimed) {
       await markPostingEffectsFailed(claimed, error);
     }

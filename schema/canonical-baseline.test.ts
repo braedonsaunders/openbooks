@@ -20,6 +20,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0006_recurring_occurrence_guard.sql",
     "0006_terminal_failure_surfacing.sql",
     "0007_posting_effects_terminal_lifecycle.sql",
+    "0008_durable_work_lease_fencing.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

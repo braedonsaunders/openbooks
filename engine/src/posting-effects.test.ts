@@ -71,3 +71,12 @@ test("posting effects have an explicit terminal lifecycle and an audited operato
   assert.match(cli, /--actor=<uuid>/);
   assert.match(cli, /--reason=/);
 });
+
+test("posting-effect completions are fenced by the active per-claim lease", () => {
+  const outbox = source("./posting-effects.ts");
+  assert.match(outbox, /lease_token=gen_random_uuid\(\)/);
+  assert.match(outbox, /where id=\$\{row\.id\} and lease_token=\$\{row\.lease_token\} and status='running'/);
+  assert.match(outbox, /PostingEffectsLeaseFencedError/);
+  const recovery = outbox.slice(outbox.indexOf("recoverStalePostingEffects"));
+  assert.match(recovery, /lease_token=null/);
+});
