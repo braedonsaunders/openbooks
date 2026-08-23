@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../../util'
 
@@ -10,7 +10,7 @@ type Params = { params: Promise<{ id: string }> }
 
 /** Manual match: one statement line ↔ one or more journal lines. */
 export async function POST(req: Request, { params }: Params) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -41,7 +41,7 @@ export async function POST(req: Request, { params }: Params) {
 
 /** Unmatch a statement line (removes all its pairs in this session): ?statementLineId= */
 export async function DELETE(req: Request, { params }: Params) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params

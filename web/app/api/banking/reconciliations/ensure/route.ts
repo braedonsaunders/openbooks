@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { ensureOpenReconciliation } from '../../../../../lib/banking-rules'
 import { bankingErrorResponse } from '../../util'
@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 
 /** Find-or-create the open reconciliation for an account (Match Bank Data entry). */
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json().catch(() => ({}))) as { accountId?: string }

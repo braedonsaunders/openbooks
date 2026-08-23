@@ -13,7 +13,7 @@ import {
   type ParsedStatementLine,
 } from '@openbooks/engine/src/banking.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { bankingErrorResponse } from '../util'
 
@@ -49,7 +49,7 @@ function persistMoney(value: unknown): string | null | 'invalid' {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json()) as ImportBody

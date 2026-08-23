@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PostingError } from '@openbooks/engine/src/posting.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { addJournalMatchFromLine } from '../../../../../../lib/banking-rules'
 import { bankingErrorResponse } from '../../../util'
@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 
 /** Add a journal from an unmatched bank line and match it: { reconciliationId, offsetAccountId }. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
