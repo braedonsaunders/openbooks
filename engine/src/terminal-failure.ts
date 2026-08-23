@@ -1,5 +1,5 @@
 /**
- * Durable terminal-failure surfacing for the scheduler outboxes.
+ * Durable terminal-failure surfacing for background-work outboxes.
  *
  * The claim/run/fail/retry loops in scheduler-outbox.ts and report-delivery.ts
  * stop touching a row once its attempt ceiling is reached; before migration
@@ -34,7 +34,13 @@
  *    where terminal_failed_at is not null
  *    order by terminal_failed_at desc;
  *
- * All three are partial-indexed on terminal_failed_at for that predicate.
+ *   select id, org_id, document_id, kind, terminal_failure_reason,
+ *          attempt_count, terminal_failed_at, terminal_failed_by
+ *     from posting_effects
+ *    where status = 'terminal_failed'
+ *    order by terminal_failed_at desc;
+ *
+ * All four are partial-indexed on terminal_failed_at for that predicate.
  *
  * The same transition also increments the OpenTelemetry counter
  * `openbooks.terminal_failures` (tagged by surface/kind — see telemetry.ts), so
@@ -50,9 +56,14 @@ export const TERMINAL_FAILURE_LOG_EVENT = "scheduler.terminal_failure";
 export const SCHEDULER_OUTBOX_WORKER_IDENTITY = "scheduler-outbox-worker";
 export const REPORT_RUN_WORKER_IDENTITY = "report-run-worker";
 export const EMAIL_DELIVERY_WORKER_IDENTITY = "email-delivery-worker";
+export const POSTING_EFFECTS_WORKER_IDENTITY = "posting-effects-worker";
 
 export type TerminalFailureLogFields = {
-  surface: "scheduler_outbox" | "report_runs" | "report_delivery_outbox";
+  surface:
+    | "scheduler_outbox"
+    | "report_runs"
+    | "report_delivery_outbox"
+    | "posting_effects";
   /** Outbox discriminator: dunning / subscription_billing / fx_providers / … */
   kind?: string;
   id: string;

@@ -37,6 +37,7 @@
     "harness:ledger-parity": "tsx src/harness/ledger-parity/cli.ts",
     "harness:differential": "tsx src/harness/differential/cli.ts",
     "harness:replay": "tsx src/harness/replay/cli.ts",
+    "posting-effects:ops": "tsx src/posting-effects-cli.ts",
     "sim": "tsx src/sim/cli.ts",
     "samples": "tsx src/sample-companies/cli.ts",
     "typecheck": "tsc --noEmit"

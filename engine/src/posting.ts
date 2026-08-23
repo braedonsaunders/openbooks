@@ -40,6 +40,7 @@ import {
   enqueuePostingEffects,
   markPostingEffectsFailed,
   markPostingEffectsSucceeded,
+  PostingEffectsTerminalFailureError,
   type PostingEffectsRow,
 } from "./posting-effects.ts";
 
@@ -1628,6 +1629,9 @@ export async function runPostDocumentEffects(
   if (!options.alreadyClaimed) {
     const claim = await claimPostingEffectsForDocument(documentId);
     if (claim === "succeeded" || claim === "running") return;
+    if (claim === "terminal_failed") {
+      throw new PostingEffectsTerminalFailureError(documentId);
+    }
     claimed = claim;
   }
 

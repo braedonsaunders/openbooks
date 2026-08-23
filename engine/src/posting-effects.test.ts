@@ -48,3 +48,26 @@ test("posting writes a posting_effects row inside the transaction and drains via
   assert.match(worker, /processDuePostingEffects/);
   assert.doesNotMatch(worker, /bullmq.*dlq|dead.?letter/i);
 });
+
+test("posting effects have an explicit terminal lifecycle and an audited operator replay", () => {
+  const outbox = source("./posting-effects.ts");
+  assert.match(outbox, /status='terminal_failed'/);
+  assert.match(outbox, /terminal_failure_reason/);
+  assert.match(outbox, /terminal_failed_at/);
+  assert.match(outbox, /terminal_failed_by/);
+  assert.match(outbox, /logTerminalFailure/);
+  assert.match(outbox, /recordOutboxAttempt\("posting_effects"/);
+  assert.match(outbox, /listFailedPostingEffects/);
+  assert.match(outbox, /replayTerminalPostingEffect/);
+  assert.match(outbox, /posting_effects_terminal_failure/);
+  assert.match(outbox, /posting_effects_replay_authorized/);
+
+  const terminal = source("./terminal-failure.ts");
+  assert.match(terminal, /POSTING_EFFECTS_WORKER_IDENTITY/);
+  assert.match(terminal, /from posting_effects/);
+
+  const cli = source("./posting-effects-cli.ts");
+  assert.match(cli, /replay --org=<uuid> --id=<uuid>/);
+  assert.match(cli, /--actor=<uuid>/);
+  assert.match(cli, /--reason=/);
+});
