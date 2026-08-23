@@ -50,6 +50,18 @@ function persistRevisedScheduleValueInput(value: unknown): string {
   }
 }
 
+/** Persist a draw line's previous-completed input through exact decimal
+ * then ledger money. Fail closed: it is written onto pay_application_lines. */
+function persistPreviousCompleted(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ConstructionBillingError("previous completed must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new ConstructionBillingError("previous completed must be an exact decimal");
+  }
+}
+
 /** Persist a draw line's this-period-completed input through exact decimal
  * then ledger money. Fail closed: it is written onto pay_application_lines. */
 function persistThisPeriodCompleted(value: unknown): string {
@@ -160,7 +172,7 @@ export function revisedScheduleValue(
 export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   const computed: ComputedAppLine[] = lines.map((l) => {
     const scheduled = persistRevisedScheduleValueInput(l.scheduledValue || "0");
-    const previous = normalizeMoney(l.previousCompleted || "0");
+    const previous = persistPreviousCompleted(l.previousCompleted || "0");
     const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
     const thisPeriod = persistThisPeriodCompleted(l.thisPeriodCompleted || "0");
     const stored = persistMaterialsStored(l.materialsStored || "0");
