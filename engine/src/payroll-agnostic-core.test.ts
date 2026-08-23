@@ -18,6 +18,7 @@ import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
 import { payRunReadiness } from "./payroll-readiness.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
+  statutoryHolidayLinesForStub,
 } from "./payroll-run.ts";
 import { createScratchOrg, seedFlowActors } from "./test-fixtures.ts";
 
@@ -395,6 +396,77 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   assert.ok(massachusetts);
   assert.equal(massachusetts.date, "2026-07-03");
   assert.match(massachusetts.message, /US-MA/);
+});
+
+/* ------------------------------------------------------------------ */
+/* The stub-side holiday gate refuses before any database work         */
+/* ------------------------------------------------------------------ */
+
+test("the calculated stub's jurisdiction gate refuses before touching the transaction", async () => {
+  // The same gate, as the CALCULATION runs it — `statutoryHolidayLinesForStub`
+  // inside payroll-run.ts. Every refusal must happen before a single query and
+  // before any component lookup: a run that would pay a silent zero or honour
+  // a foreign calendar stops at the gate, not partway into the employee's
+  // calculation. Both stubs below throw if they are touched at all.
+  const untouchedTx = {
+    execute() { throw new Error("transaction used before the gate passed"); },
+  } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
+  const need = () => {
+    throw new Error("components looked up before the gate passed");
+  };
+  const emp = (labourJurisdiction: string | null): Record<string, string | null> => ({
+    party_id: "emp-1", display_name: "Ann", labour_jurisdiction: labourJurisdiction,
+  });
+
+  // An explicit labour jurisdiction no pack declares is refused outright —
+  // ahead of even the holiday probe, because an undeclared EXPLICIT key is a
+  // data-entry fault, not a gap in the packs.
+  await assert.rejects(
+    statutoryHolidayLinesForStub(untouchedTx, {
+      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+      emp: emp("CA-ZZ"), country: "CA", province: null,
+      periodStart: "2026-07-06", periodEnd: "2026-07-18",
+      payRate: null, need,
+    }),
+    /has a labour jurisdiction this payroll cannot honour/,
+  );
+
+  // Derived from the region instead (no explicit attribute): CA-ZZ with Canada
+  // Day in the period blocks with the same message readiness raises…
+  await assert.rejects(
+    statutoryHolidayLinesForStub(untouchedTx, {
+      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+      emp: emp(null), country: "CA", province: "ZZ",
+      periodStart: "2026-06-21", periodEnd: "2026-07-04",
+      payRate: null, need,
+    }),
+    /Canada Day/,
+  );
+
+  // …and with NO holiday in the period it calculates exactly as it always
+  // has — no lines, and provably no database work.
+  assert.deepEqual(
+    await statutoryHolidayLinesForStub(untouchedTx, {
+      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+      emp: emp(null), country: "CA", province: "ZZ",
+      periodStart: "2026-07-06", periodEnd: "2026-07-18",
+      payRate: null, need,
+    }),
+    [],
+  );
+
+  // A DECLARED jurisdiction passes the gate and only then reaches for its
+  // components — the lookups stay lazy, so an org without the phase wired up
+  // never pays their cost on a refusal path.
+  await assert.rejects(
+    statutoryHolidayLinesForStub(untouchedTx, {
+      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+      emp: emp(null), country: "CA", province: "ON",
+      periodStart: "2026-06-21", periodEnd: "2026-07-04",
+      payRate: null, need,
+    }),
+    /components looked up before the gate passed/,
+  );
 });
 
 /* ------------------------------------------------------------------ */
