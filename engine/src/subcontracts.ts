@@ -177,7 +177,7 @@ export function computeVendorApplication(
     const scheduled = persistSubcontractSovScheduledValue(input.scheduledValue);
     const previousEarned = persistVendorPayApplicationPreviousEarned(input.previousEarned);
     const previousStored = persistVendorPayApplicationPreviousMaterialsStored(input.previousMaterialsStored);
-    const work = normalizeMoney(input.workCompletedThisPeriod);
+    const work = persistVendorPayApplicationWorkCompletedThisPeriod(input.workCompletedThisPeriod);
     const currentStored = normalizeMoney(input.materialsStoredCurrent);
     const retainagePercent = normalizeMoney(input.retainagePercent);
     if ([scheduled, previousEarned, previousStored, work, currentStored].some((value) => cmp(value, "0") < 0)) {
