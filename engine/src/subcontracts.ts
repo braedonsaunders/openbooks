@@ -376,7 +376,7 @@ export async function createSubcontract(input: {
     if (!row.vendor_ok) throw new SubcontractError("Vendor is not active in this organization");
     if (!row.po_ok) throw new SubcontractError("Purchase order does not belong to this project and vendor");
     if (!row.currency) throw new SubcontractError("A transaction currency is required");
-    const result = (await tx.execute<{ id: string }>(sql`
+    const result = (await tx.execute<any>(sql`
       insert into subcontracts (
         org_id, project_id, vendor_id, number, title, description, currency,
         original_commitment, default_retainage_percent, purchase_order_id,
@@ -386,13 +386,13 @@ export async function createSubcontract(input: {
         ${input.description ?? null}, ${row.currency}, ${original}, ${retainage},
         ${input.purchaseOrderId ?? null}, ${input.startsOn ?? null}, ${input.endsOn ?? null},
         ${input.userId}, ${input.userId}
-      ) returning id
+      ) returning *
     `));
-    const id = result.rows[0]!.id;
-    await audit(tx, input.orgId, "subcontracts", id, "insert", {
-      after: { projectId: input.projectId, vendorId: input.vendorId, number, title, originalCommitment: original },
+    const created = result.rows[0];
+    await audit(tx, input.orgId, "subcontracts", String(created.id), "insert", {
+      after: created,
     }, input.userId);
-    return { id };
+    return { id: String(created.id) };
   });
 }
 
