@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 
@@ -39,8 +40,6 @@ const STATUS_VARIANT: Record<string, "default" | "warning" | "destructive" | "su
   failed: "destructive",
 };
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
 function formatBytes(n: number | null): string {
   if (n === null || n === undefined) return "—";
   if (n < 1024) return `${n} B`;
@@ -65,6 +64,7 @@ export function BackupManager({
   workerOnline: boolean;
 }) {
   const router = useRouter();
+  const t = useTranslations("admin.backupsManager");
   const [pending, start] = useTransition();
 
   const [enabled, setEnabled] = useState(policy?.enabled ?? false);
@@ -92,10 +92,10 @@ export function BackupManager({
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? "could not save the backup policy");
+        toast.error(body.error ?? t("errors.couldNotSave"));
         return;
       }
-      toast.success(enabled ? "Backup schedule saved" : "Scheduled backups turned off");
+      toast.success(enabled ? t("toasts.scheduleSaved") : t("toasts.scheduleOff"));
       router.refresh();
     });
 
@@ -104,25 +104,25 @@ export function BackupManager({
       const res = await fetch("/api/admin/backups/run", { method: "POST" });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? "could not start the backup");
+        toast.error(body.error ?? t("errors.couldNotStart"));
         return;
       }
-      toast.success("Backup started — it will appear below");
+      toast.success(t("toasts.started"));
       router.refresh();
     });
 
   const deleteRun = (run: BackupRunRow) => {
-    if (!window.confirm(`Delete the stored backup${run.fileName ? ` “${run.fileName}”` : ""}? This cannot be undone.`)) {
+    if (!window.confirm(t("deleteConfirm", { fileName: run.fileName ? ` “${run.fileName}”` : "" }))) {
       return;
     }
     start(async () => {
       const res = await fetch(`/api/admin/backups/${run.id}`, { method: "DELETE" });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        toast.error(body.error ?? "could not delete the backup");
+        toast.error(body.error ?? t("errors.couldNotDelete"));
         return;
       }
-      toast.success("Backup deleted");
+      toast.success(t("toasts.deleted"));
       router.refresh();
     });
   };
@@ -131,39 +131,39 @@ export function BackupManager({
     <div className="space-y-6">
       {!s3Enabled && (
         <Alert variant="warning">
-          <AlertTitle>Object storage is not configured</AlertTitle>
+          <AlertTitle>{t("alerts.noObjectStorageTitle")}</AlertTitle>
           <AlertDescription>
-            This deployment has no S3 object storage (S3_ENDPOINT / S3_BUCKET / credentials), so stored and
-            scheduled backups are unavailable. Browser-only streaming is intentionally disabled because it
-            cannot deliver restore-grade hash evidence. Use the operator <code>backup-local-cli.ts</code> workflow.
+            {t.rich("alerts.noObjectStorageBody", {
+              cli: (chunks) => <code>{chunks}</code>,
+            })}
           </AlertDescription>
         </Alert>
       )}
       {s3Enabled && !workerOnline && (
         <Alert variant="warning">
-          <AlertTitle>Background worker is offline</AlertTitle>
+          <AlertTitle>{t("alerts.workerOfflineTitle")}</AlertTitle>
           <AlertDescription>
-            Stored and scheduled backups run on the background worker, which has not reported in recently.
-            New runs will stay queued until it starts.
+            {t("alerts.workerOfflineBody")}
           </AlertDescription>
         </Alert>
       )}
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Restore-grade exports</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("exportsCard.title")}</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Create a stored backup below, then download both its <strong>Archive</strong> and <strong>Manifest</strong>.
-          The manifest carries the full SHA-256 and counts required by the restore CLI; keep both files together.
-          A raw browser stream without that evidence is not supported as a restore input.
+          {t.rich("exportsCard.body", {
+            archive: (chunks) => <strong>{chunks}</strong>,
+            manifest: (chunks) => <strong>{chunks}</strong>,
+          })}
         </p>
       </Card>
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Automatic backups</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("autoCard.title")}</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Back up to the deployment&apos;s S3 object storage on a schedule. Only the newest{" "}
-          <strong>keep</strong> backups are retained — older ones are rotated out automatically after each
-          successful run.
+          {t.rich("autoCard.body", {
+            keep: (chunks) => <strong>{chunks}</strong>,
+          })}
         </p>
         <div className="mt-4 flex flex-wrap items-end gap-3">
           <div className="flex items-center gap-2 pb-2">
@@ -175,33 +175,33 @@ export function BackupManager({
               disabled={!s3Enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
-            <Label htmlFor="bk-enabled">Enabled</Label>
+            <Label htmlFor="bk-enabled">{t("autoCard.enabled")}</Label>
           </div>
           <div>
-            <Label htmlFor="bk-frequency">Frequency</Label>
+            <Label htmlFor="bk-frequency">{t("autoCard.frequency")}</Label>
             <Select
               id="bk-frequency"
               value={frequency}
               disabled={!s3Enabled}
               onChange={(e) => setFrequency(e.target.value as BackupPolicyRow["frequency"])}
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="daily">{t("autoCard.daily")}</option>
+              <option value="weekly">{t("autoCard.weekly")}</option>
+              <option value="monthly">{t("autoCard.monthly")}</option>
             </Select>
           </div>
           {frequency === "weekly" && (
             <div>
-              <Label htmlFor="bk-dow">Day of week</Label>
+              <Label htmlFor="bk-dow">{t("autoCard.dayOfWeek")}</Label>
               <Select
                 id="bk-dow"
                 value={String(dayOfWeek)}
                 disabled={!s3Enabled}
                 onChange={(e) => setDayOfWeek(Number(e.target.value))}
               >
-                {WEEKDAYS.map((name, i) => (
-                  <option key={name} value={i}>
-                    {name}
+                {Array.from({ length: 7 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {t(`weekdays.${i}`)}
                   </option>
                 ))}
               </Select>
@@ -209,7 +209,7 @@ export function BackupManager({
           )}
           {frequency === "monthly" && (
             <div>
-              <Label htmlFor="bk-dom">Day of month</Label>
+              <Label htmlFor="bk-dom">{t("autoCard.dayOfMonth")}</Label>
               <Select
                 id="bk-dom"
                 value={String(dayOfMonth)}
@@ -225,7 +225,7 @@ export function BackupManager({
             </div>
           )}
           <div>
-            <Label htmlFor="bk-hour">Time (UTC)</Label>
+            <Label htmlFor="bk-hour">{t("autoCard.timeUtc")}</Label>
             <Select
               id="bk-hour"
               value={String(hourUtc)}
@@ -240,7 +240,7 @@ export function BackupManager({
             </Select>
           </div>
           <div>
-            <Label htmlFor="bk-keep">Keep newest</Label>
+            <Label htmlFor="bk-keep">{t("autoCard.keepNewest")}</Label>
             <Input
               id="bk-keep"
               type="number"
@@ -253,15 +253,15 @@ export function BackupManager({
             />
           </div>
           <Button disabled={pending || !s3Enabled} onClick={savePolicy}>
-            Save schedule
+            {t("autoCard.saveSchedule")}
           </Button>
         </div>
         {policy && (
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             {policy.enabled && policy.nextRunAt
-              ? `Next scheduled run: ${formatWhen(policy.nextRunAt)} (UTC schedule)`
-              : "Scheduled backups are off."}
-            {policy.lastRunAt ? ` · Last successful backup: ${formatWhen(policy.lastRunAt)}` : ""}
+              ? t("autoCard.nextRun", { when: formatWhen(policy.nextRunAt) })
+              : t("autoCard.off")}
+            {policy.lastRunAt ? t("autoCard.lastSuccess", { when: formatWhen(policy.lastRunAt) }) : ""}
           </p>
         )}
       </Card>
@@ -269,32 +269,31 @@ export function BackupManager({
       <Card className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Stored backups</h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("storedCard.title")}</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              The newest {policy?.maxKeep ?? maxKeep} completed backups are kept in object storage; the rest
-              are rotated out. Deleting a backup removes it from storage immediately.
+              {t("storedCard.body", { count: policy?.maxKeep ?? maxKeep })}
             </p>
           </div>
           <Button variant="default" disabled={pending || !s3Enabled || hasActiveRun} onClick={runNow}>
-            Back up now
+            {t("storedCard.backUpNow")}
           </Button>
         </div>
 
         {runs.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">No stored backups yet.</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">{t("storedCard.noneYet")}</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs tracking-wider text-slate-400 uppercase dark:border-slate-800 dark:text-slate-500">
-                  <th className="py-2 pr-4 font-medium">Created</th>
-                  <th className="py-2 pr-4 font-medium">Kind</th>
-                  <th className="py-2 pr-4 font-medium">Status</th>
-                  <th className="py-2 pr-4 font-medium">Size</th>
-                  <th className="py-2 pr-4 font-medium">Contents</th>
-                  <th className="py-2 pr-4 font-medium">SHA-256</th>
-                  <th className="py-2 pr-4 font-medium">Retention</th>
-                  <th className="py-2 font-medium"><span className="sr-only">Actions</span></th>
+                  <th className="py-2 pr-4 font-medium">{t("table.created")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.kind")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.status")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.size")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.contents")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.sha256")}</th>
+                  <th className="py-2 pr-4 font-medium">{t("table.retention")}</th>
+                  <th className="py-2 font-medium"><span className="sr-only">{t("table.actionsSr")}</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -322,7 +321,7 @@ export function BackupManager({
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
                         {run.rowCount !== null
-                          ? `${run.rowCount.toLocaleString()} rows · ${run.tableCount ?? 0} tables`
+                          ? t("table.rowsTables", { rows: run.rowCount.toLocaleString(), tables: run.tableCount ?? 0 })
                           : "—"}
                       </td>
                       <td className="max-w-72 py-2.5 pr-4 font-mono text-xs break-all text-slate-500 dark:text-slate-400">
@@ -331,10 +330,10 @@ export function BackupManager({
                       <td className="py-2.5 pr-4 whitespace-nowrap">
                         {run.purgedAt ? (
                           <span className="text-xs text-slate-500 dark:text-slate-400">
-                            purged ({run.purgeReason}) · {formatWhen(run.purgedAt)}
+                            {t("table.purged", { reason: run.purgeReason ?? "", when: formatWhen(run.purgedAt) })}
                           </span>
                         ) : (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">kept</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{t("table.kept")}</span>
                         )}
                       </td>
                       <td className="py-2.5 text-right whitespace-nowrap">
@@ -344,13 +343,13 @@ export function BackupManager({
                               href={`/api/admin/backups/${run.id}/download`}
                               className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
                             >
-                              Archive
+                              {t("table.archive")}
                             </a>
                             <a
                               href={`/api/admin/backups/${run.id}/manifest`}
                               className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
                             >
-                              Manifest
+                              {t("table.manifest")}
                             </a>
                             <button
                               type="button"
@@ -358,11 +357,11 @@ export function BackupManager({
                               onClick={() => deleteRun(run)}
                               className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
                             >
-                              Delete
+                              {t("table.delete")}
                             </button>
                           </>
                         )}
-                        {active && <span className="text-xs text-slate-400">in progress…</span>}
+                        {active && <span className="text-xs text-slate-400">{t("table.inProgress")}</span>}
                       </td>
                     </tr>
                   );
