@@ -19,11 +19,11 @@ export const runtime = 'nodejs'
 const allocationInput = z.object({
   openLineId: z.string().min(1),
   /** Amount consumed from the payment/credit source, in the payment currency. */
-  sourceTransactionAmount: exactMoney,
+  sourceTransactionAmount: exactMoney(),
   /** Amount extinguished on the invoice/bill, in the target open-item currency. */
-  targetTransactionAmount: exactMoney,
+  targetTransactionAmount: exactMoney(),
   /** Optional independently saved target carrying value, revalidated at posting. */
-  targetBaseAmount: exactMoney.optional(),
+  targetBaseAmount: exactMoney().optional(),
   /** Target-currency units for one source-currency unit. Required cross-currency. */
   settlementRate: z.string().min(1),
   settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),

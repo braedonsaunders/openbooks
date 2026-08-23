@@ -17,7 +17,7 @@ registerHooks({
   },
 });
 
-const { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } = await import("./json");
+const { exactMoney: exactMoneySchema, isoDate, nullableUuidId, parseJsonBody, uuidId } = await import("./json");
 
 function jsonRequest(body: unknown): Request {
   return new Request("http://localhost/api/test", {
@@ -28,7 +28,7 @@ function jsonRequest(body: unknown): Request {
 }
 
 test("parseJsonBody returns typed data for a valid object", async () => {
-  const schema = z.object({ documentId: uuidId, amount: exactMoney });
+  const schema = z.object({ documentId: uuidId, amount: exactMoneySchema() });
   const parsed = await parseJsonBody(
     jsonRequest({ documentId: "01890a5d-ac96-774b-bcce-b302099a8057", amount: "1250.25" }),
     schema,
@@ -85,21 +85,22 @@ test("parseJsonBody surfaces the first issue message and all issues", async () =
 });
 
 test("exactMoney canonicalizes signed decimals without IEEE-754 drift", () => {
-  assert.equal(exactMoney.parse("1234.5"), "1234.5000");
-  assert.equal(exactMoney.parse("-0"), "0.0000");
-  assert.equal(exactMoney.parse("10"), "10.0000");
-  assert.equal(exactMoney.parse(100.5), "100.5000");
-  assert.equal(exactMoney.parse("0.0001"), "0.0001");
-  assert.equal(exactMoney.parse("-12.34"), "-12.3400");
-  assert.equal(exactMoney.parse("10"), "10.0000");
-  assert.equal(exactMoney.parse(100.5), "100.5000");
-  assert.equal(exactMoney.parse("0.0001"), "0.0001");
-  assert.throws(() => exactMoney.parse("1.00001"));
-  assert.throws(() => exactMoney.parse("1e5"));
-  assert.throws(() => exactMoney.parse("abc"));
-  assert.throws(() => exactMoney.parse(""));
-  assert.throws(() => exactMoney.parse(null));
-  assert.throws(() => exactMoney.parse(true));
+  assert.equal(exactMoneySchema().parse("1234.5"), "1234.5000");
+  assert.equal(exactMoneySchema().parse("-0"), "0.0000");
+  assert.equal(exactMoneySchema().parse("10"), "10.0000");
+  assert.equal(exactMoneySchema().parse(100.5), "100.5000");
+  assert.equal(exactMoneySchema().parse("0.0001"), "0.0001");
+  assert.equal(exactMoneySchema().parse("-12.34"), "-12.3400");
+  assert.throws(() => exactMoneySchema().parse("1.00001"));
+  assert.throws(() => exactMoneySchema().parse("1e5"));
+  assert.throws(() => exactMoneySchema().parse("abc"));
+  assert.throws(() => exactMoneySchema().parse(""));
+  assert.throws(() => exactMoneySchema().parse(null));
+  assert.throws(() => exactMoneySchema().parse(true));
+  assert.throws(
+    () => exactMoneySchema("a numeric amount is required").parse("junk"),
+    (e: unknown) => e instanceof z.ZodError && e.issues[0]?.message === "a numeric amount is required",
+  );
 });
 
 test("uuidId accepts only canonical uuids", () => {

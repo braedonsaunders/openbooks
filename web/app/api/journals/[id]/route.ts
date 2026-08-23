@@ -26,7 +26,7 @@ const journalLineInput = z
   .object({
     accountId: uuidId,
     description: z.string().nullable().optional(),
-    amount: exactMoney,
+    amount: exactMoney(),
     partyId: nullableUuidId.optional(),
     departmentId: nullableUuidId.optional(),
     projectId: nullableUuidId.optional(),
