@@ -40,13 +40,26 @@ export async function POST(req: Request) {
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
   const nextRunAt = cron && body.isActive !== false ? computeNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
-    values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
-            ${cron}, ${nextRunAt}, ${Math.min(Number(body.timeoutMs) || 2000, 10_000)}, ${Number(body.sortOrder) || 100}, ${body.isActive !== false})
-    returning id
-  `))
-  return NextResponse.json({ id: r.rows[0]!.id })
+  // A script can mint or mutate posted documents on every matching event, so
+  // its creation is audited with the full row in the same transaction.
+  const row = await db.transaction(async (tx) => {
+    const created = (await tx.execute<Record<string, unknown>>(sql`
+      insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
+      values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
+              ${cron}, ${nextRunAt}, ${Math.min(Number(body.timeoutMs) || 2000, 10_000)}, ${Number(body.sortOrder) || 100}, ${body.isActive !== false})
+      returning *
+    `))
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${user.orgId}, 'user_scripts', ${String(created.rows[0]!.id)}, 'insert',
+         ${JSON.stringify({ after: created.rows[0] })}::jsonb,
+         ${user.id}, ${req.headers.get('X-Request-Id')})
+    `)
+    return created.rows[0]!
+  })
+  return NextResponse.json({ id: String(row.id) })
 }
 
 export async function PATCH(req: Request) {
@@ -61,14 +74,31 @@ export async function PATCH(req: Request) {
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
   const nextRunAt = cron && body.isActive !== false ? computeNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
-  await db.execute(sql`
-    update user_scripts set
-      name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},
-      endpoint_slug = ${slug},
-      source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
-      timeout_ms = ${Math.min(Number(body.timeoutMs) || 2000, 10_000)},
-      sort_order = ${Number(body.sortOrder) || 100}, is_active = ${body.isActive !== false}, updated_at = now()
-    where id = ${body.id} and org_id = ${user.orgId}
-  `)
+  const missing = await db.transaction(async (tx) => {
+    const before = (await tx.execute<Record<string, unknown>>(sql`
+      select * from user_scripts where id = ${body.id} and org_id = ${user.orgId}
+    `))
+    if (!before.rows[0]) return true
+    const updated = (await tx.execute<Record<string, unknown>>(sql`
+      update user_scripts set
+        name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},
+        endpoint_slug = ${slug},
+        source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
+        timeout_ms = ${Math.min(Number(body.timeoutMs) || 2000, 10_000)},
+        sort_order = ${Number(body.sortOrder) || 100}, is_active = ${body.isActive !== false}, updated_at = now()
+      where id = ${body.id} and org_id = ${user.orgId}
+      returning *
+    `))
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (${user.orgId}, 'user_scripts', ${String(updated.rows[0]!.id)}, 'update',
+         ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb,
+         ${user.id}, ${req.headers.get('X-Request-Id')})
+    `)
+    return false
+  })
+  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
