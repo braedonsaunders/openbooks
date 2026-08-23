@@ -249,6 +249,8 @@
       "pause": "Pause",
       "resume": "Resume",
       "delete": "Delete",
+      "actionFailed": "The recurring schedule action could not be completed.",
+      "generatedDocumentsDeleteConflict": "This recurring schedule cannot be deleted because it has generated documents. Their source history must be preserved.",
       "noneYet": "No recurring schedules yet."
     },
     "dunning": {
