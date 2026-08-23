@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
 import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "./money.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { buildAllRecognitionSchedules, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import { recognitionAccounts } from "./project-recognition.ts";
 

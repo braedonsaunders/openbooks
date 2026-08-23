@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, mul, normalizeMoney, toUnits } from "./money.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 

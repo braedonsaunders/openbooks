@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, fromUnits, isZero, neg, normalizeDecimal, normalizeMoney, sum, toUnits } from "./money.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { apportion } from "./revenue-recognition.ts";
 import {
   accreteToZero,

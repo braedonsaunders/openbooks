@@ -3,7 +3,7 @@ import { db, withBypass, withOrg } from "./db.ts";
 import { importStatement, type ParsedStatementLine } from "./banking.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { neg, normalizeMoney } from "./money.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 
 /**

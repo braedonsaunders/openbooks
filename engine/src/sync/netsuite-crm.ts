@@ -4,7 +4,7 @@ import { db } from '../db.ts'
 import { unsealJson } from '../secrets.ts'
 import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../netsuite.ts'
 import { ensureCrmDefaults } from '../crm.ts'
-import { canonicalDecimal } from '../../../web/lib/exact-decimal.ts'
+import { canonicalDecimal } from '../exact-decimal.ts'
 import { normalizeMoney } from '../money.ts'
 
 export interface CrmImportReport {

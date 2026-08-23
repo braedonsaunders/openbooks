@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { db } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";

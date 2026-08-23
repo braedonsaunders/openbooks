@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { canonicalDecimal } from "../../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "../exact-decimal.ts";
 import { businessToday } from "../business-date.ts";
 import { db, schema, withOrg, withOrgContext } from "../db.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money.ts";
