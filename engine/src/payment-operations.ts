@@ -121,6 +121,31 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   }
 }
 
+/** Audit-safe projection: sealed originator credentials never enter the trail. */
+function profileAuditView(row: Record<string, any>): Record<string, unknown> {
+  const { originator_secrets_encrypted, originatorSecretsEncrypted, ...rest } = row;
+  return {
+    ...rest,
+    hasOriginatorSecrets:
+      originator_secrets_encrypted != null || originatorSecretsEncrypted != null,
+  };
+}
+
+async function auditProfileChange(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  orgId: string,
+  rowId: string,
+  action: string,
+  changes: unknown,
+  actorId: string,
+): Promise<void> {
+  await tx.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'payment_bank_profiles', ${rowId}, ${action},
+            ${JSON.stringify(changes)}::jsonb, ${actorId})
+  `);
+}
+
 /** Creates a profile without ever persisting plaintext originator credentials. */
 export async function createPaymentBankProfile(
   orgId: string,
@@ -128,26 +153,33 @@ export async function createPaymentBankProfile(
   input: PaymentBankProfileInput,
 ): Promise<{ id: string }> {
   await validatePaymentBankProfileRefs(orgId, input);
-  const [profile] = await db.insert(schema.paymentBankProfiles).values({
-    orgId,
-    name: input.name.trim(),
-    bankAccountId: input.bankAccountId,
-    subsidiaryId: input.subsidiaryId ?? null,
-    paymentFormatId: input.paymentFormatId,
-    currency: input.currency,
-    country: input.country ?? null,
-    originatorSecretsEncrypted: input.originatorSecrets ? sealJson(input.originatorSecrets) : null,
-    settings: input.settings ?? {},
-    sftpServerId: input.sftpServerId ?? null,
-    sftpFolder: input.sftpFolder ?? null,
-    requireRunApproval: input.requireRunApproval ?? true,
-    requireFileApproval: input.requireFileApproval ?? false,
-    autoRemittance: input.autoRemittance ?? false,
-    isActive: input.isActive ?? true,
-    createdBy: userId,
-    updatedBy: userId,
-  }).returning({ id: schema.paymentBankProfiles.id });
-  return profile;
+  return db.transaction(async (tx) => {
+    const [profile] = await tx.insert(schema.paymentBankProfiles).values({
+      orgId,
+      name: input.name.trim(),
+      bankAccountId: input.bankAccountId,
+      subsidiaryId: input.subsidiaryId ?? null,
+      paymentFormatId: input.paymentFormatId,
+      currency: input.currency,
+      country: input.country ?? null,
+      originatorSecretsEncrypted: input.originatorSecrets ? sealJson(input.originatorSecrets) : null,
+      settings: input.settings ?? {},
+      sftpServerId: input.sftpServerId ?? null,
+      sftpFolder: input.sftpFolder ?? null,
+      requireRunApproval: input.requireRunApproval ?? true,
+      requireFileApproval: input.requireFileApproval ?? false,
+      autoRemittance: input.autoRemittance ?? false,
+      isActive: input.isActive ?? true,
+      createdBy: userId,
+      updatedBy: userId,
+    }).returning({ id: schema.paymentBankProfiles.id });
+    const stored = (await tx.execute<Record<string, any>>(sql`
+      select * from payment_bank_profiles where id = ${profile.id} and org_id = ${orgId}
+    `));
+    await auditProfileChange(tx, orgId, profile.id, "insert",
+      { after: profileAuditView(stored.rows[0]!) }, userId);
+    return profile;
+  });
 }
 
 export async function updatePaymentBankProfile(
@@ -156,46 +188,57 @@ export async function updatePaymentBankProfile(
   userId: string,
   input: Partial<PaymentBankProfileInput>,
 ): Promise<void> {
-  const existing = (await db.execute<{ id: string; originator_secrets_encrypted: string | null; bank_account_id: string; subsidiary_id: string | null; payment_format_id: string; currency: string; settings: Record<string, unknown>; sftp_server_id: string | null }>(sql`
-    select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
-  `));
-  if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
-  const current = existing.rows[0];
-  await validatePaymentBankProfileRefs(orgId, {
-    bankAccountId: input.bankAccountId ?? current.bank_account_id,
-    subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
-    paymentFormatId: input.paymentFormatId ?? current.payment_format_id,
-    currency: input.currency ?? current.currency,
-    settings: input.settings ?? current.settings,
-    sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
+  await db.transaction(async (tx) => {
+    const existing = (await tx.execute<Record<string, any>>(sql`
+      select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
+    `));
+    if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
+    const current = existing.rows[0];
+    await validatePaymentBankProfileRefs(orgId, {
+      bankAccountId: input.bankAccountId ?? current.bank_account_id,
+      subsidiaryId: input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId,
+      paymentFormatId: input.paymentFormatId ?? current.payment_format_id,
+      currency: input.currency ?? current.currency,
+      settings: input.settings ?? current.settings,
+      sftpServerId: input.sftpServerId === undefined ? current.sftp_server_id : input.sftpServerId,
+    });
+    const rotating = input.originatorSecrets !== undefined;
+    const secret = rotating
+      ? input.originatorSecrets === null
+        ? null
+        : sealJson({
+            ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
+            ...input.originatorSecrets,
+          })
+      : current.originator_secrets_encrypted;
+    await tx.execute(sql`
+      update payment_bank_profiles set
+        name = coalesce(${input.name?.trim() ?? null}, name),
+        bank_account_id = coalesce(${input.bankAccountId ?? null}::uuid, bank_account_id),
+        subsidiary_id = case when ${input.subsidiaryId === undefined} then subsidiary_id else ${input.subsidiaryId ?? null}::uuid end,
+        payment_format_id = coalesce(${input.paymentFormatId ?? null}::uuid, payment_format_id),
+        currency = coalesce(${input.currency ?? null}, currency),
+        country = case when ${input.country === undefined} then country else ${input.country ?? null} end,
+        originator_secrets_encrypted = ${secret},
+        settings = coalesce(${input.settings ? JSON.stringify(input.settings) : null}::jsonb, settings),
+        sftp_server_id = case when ${input.sftpServerId === undefined} then sftp_server_id else ${input.sftpServerId ?? null}::uuid end,
+        sftp_folder = case when ${input.sftpFolder === undefined} then sftp_folder else ${input.sftpFolder ?? null} end,
+        require_run_approval = coalesce(${input.requireRunApproval ?? null}, require_run_approval),
+        require_file_approval = coalesce(${input.requireFileApproval ?? null}, require_file_approval),
+        auto_remittance = coalesce(${input.autoRemittance ?? null}, auto_remittance),
+        is_active = coalesce(${input.isActive ?? null}, is_active),
+        updated_at = now(), updated_by = ${userId}
+      where id = ${id} and org_id = ${orgId}
+    `);
+    const updated = (await tx.execute<Record<string, any>>(sql`
+      select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
+    `));
+    await auditProfileChange(tx, orgId, id, "update", {
+      before: profileAuditView(current),
+      after: profileAuditView(updated.rows[0]!),
+      ...(rotating ? { originatorSecretsRotated: true } : {}),
+    }, userId);
   });
-  const secret = input.originatorSecrets === undefined
-    ? current.originator_secrets_encrypted
-    : input.originatorSecrets === null
-      ? null
-      : sealJson({
-          ...(unsealJson<Record<string, unknown>>(current.originator_secrets_encrypted) ?? {}),
-          ...input.originatorSecrets,
-        });
-  await db.execute(sql`
-    update payment_bank_profiles set
-      name = coalesce(${input.name?.trim() ?? null}, name),
-      bank_account_id = coalesce(${input.bankAccountId ?? null}::uuid, bank_account_id),
-      subsidiary_id = case when ${input.subsidiaryId === undefined} then subsidiary_id else ${input.subsidiaryId ?? null}::uuid end,
-      payment_format_id = coalesce(${input.paymentFormatId ?? null}::uuid, payment_format_id),
-      currency = coalesce(${input.currency ?? null}, currency),
-      country = case when ${input.country === undefined} then country else ${input.country ?? null} end,
-      originator_secrets_encrypted = ${secret},
-      settings = coalesce(${input.settings ? JSON.stringify(input.settings) : null}::jsonb, settings),
-      sftp_server_id = case when ${input.sftpServerId === undefined} then sftp_server_id else ${input.sftpServerId ?? null}::uuid end,
-      sftp_folder = case when ${input.sftpFolder === undefined} then sftp_folder else ${input.sftpFolder ?? null} end,
-      require_run_approval = coalesce(${input.requireRunApproval ?? null}, require_run_approval),
-      require_file_approval = coalesce(${input.requireFileApproval ?? null}, require_file_approval),
-      auto_remittance = coalesce(${input.autoRemittance ?? null}, auto_remittance),
-      is_active = coalesce(${input.isActive ?? null}, is_active),
-      updated_at = now(), updated_by = ${userId}
-    where id = ${id} and org_id = ${orgId}
-  `);
 }
 
 async function event(opts: {
