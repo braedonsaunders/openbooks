@@ -11,6 +11,13 @@ x-openbooks-runtime-environment: &openbooks-runtime-environment
   OPENBOOKS_INTERNAL_TOKEN: ${OPENBOOKS_INTERNAL_TOKEN:?OPENBOOKS_INTERNAL_TOKEN is required}
   OPENBOOKS_APP_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
   APP_BASE_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
+  # OpenTelemetry (optional, see docs/operations/observability.md): set
+  # OTEL_EXPORTER_OTLP_ENDPOINT to an OTLP/HTTP collector and the web + worker
+  # processes export traces/metrics; empty keeps them a free no-op.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-openbooks}
+  OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-}
   # Keep proxy-derived client addresses disabled unless every inbound request
   # crosses a trusted proxy that overwrites forwarding headers.
   OPENBOOKS_TRUST_PROXY: ${OPENBOOKS_TRUST_PROXY:-0}
