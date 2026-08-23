@@ -10,6 +10,7 @@ import {
   handleProviderWebhook,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
+import { createPaymentDocument } from "./payments.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -24,6 +25,78 @@ after(() => {
   else env.OPENBOOKS_DATA_KEY = priorDataKey;
 });
 
+/** Hosted checkout is feature-gated per org; acceptance tests need it on. */
+async function enableOnlinePayments(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs set settings = settings || '{"features":{"onlinePayments":true}}'::jsonb
+     where id = ${orgId}
+  `);
+}
+
+interface AcceptanceFixture {
+  userId: string;
+  invoiceId: string;
+  link: Awaited<ReturnType<typeof createPaymentLink>>;
+}
+
+/** Posted $100 CAD invoice + stripe config + 3% rule + active link. */
+async function seedAcceptance(org: Awaited<ReturnType<typeof createScratchOrg>>, memo: string): Promise<AcceptanceFixture> {
+  const userId = await createScratchUser(org.orgId, "Pay Tester", "admin");
+  await enableOnlinePayments(org.orgId);
+  // Receipts post on today's business date; make sure the scratch calendar
+  // covers it (the fixture pins its own historical period).
+  const today = new Date().toISOString().slice(0, 10);
+  if (today < "2026-07-01" || today > "2026-07-31") {
+    const [year, month] = today.split("-").map(Number) as [number, number, number];
+    const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    await db.execute(sql`
+      insert into accounting_periods
+        (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment)
+      select ${org.orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
+             ${startsOn}, ${endsOn}, false
+        from accounting_periods
+       where id = ${org.periodId}
+    `);
+  }
+  const invoiceId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+       document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', ${memo},
+            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+            '100', '0', '100', ${userId})`);
+  await db.execute(sql`
+    insert into document_lines
+      (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+    values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
+  await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+  await db.execute(sql`
+    insert into psp_provider_configs
+      (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
+    values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
+            ${sealJson({ apiKey: "sk_test_itest", webhookSecret: `whsec_${memo}` })}, ${userId}, ${userId})`);
+  await db.execute(sql`
+    insert into payment_surcharge_rules
+      (org_id, name, calculation, percent, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+    values (${org.orgId}, 'Card fee', 'percent', '3', ${org.accounts.revenue}, null, 'all', '2020-01-01', ${userId}, ${userId})`);
+  const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+  return { userId, invoiceId, link };
+}
+
+function signedStripeBody(secret: string, sessionId: string, linkToken: string): { body: string; headers: Record<string, string> } {
+  const body = JSON.stringify({
+    id: `evt_${sessionId}`,
+    type: "checkout.session.completed",
+    data: { object: { id: sessionId, client_reference_id: linkToken, amount_total: 10300 } },
+  });
+  const t = Math.floor(Date.now() / 1000);
+  const v1 = createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
+  return { body, headers: { "stripe-signature": `t=${t},v1=${v1}` } };
+}
+
 /**
  * The full acceptance loop against a real org: link → checkout → signed
  * webhook → posted receipt auto-applied to the invoice, surcharge as a
@@ -33,6 +106,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Pay Tester", "admin");
+    await enableOnlinePayments(org.orgId);
     // Online receipts post on the provider event date. Keep the fixed invoice
     // fixture date while ensuring the scratch calendar also covers today so
     // this boundary test remains valid when the suite runs after July 2026.
@@ -163,6 +237,174 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     // A forged signature never resolves an org.
     const forged = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body);
     assert.equal(forged, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F1.3: a claim that committed and a settlement that never ran (process died
+ * between them) used to strand the attempt at succeeded + journal_entry_id
+ * null forever — redelivery answered "duplicate", the collected money stayed
+ * unbooked, and the customer's retry minted a second charge. The redelivery
+ * must now resume settlement exactly once, with no reserved receipt draft
+ * (the crash preceded the reservation).
+ */
+test("redelivery recovers an attempt stranded by a crash after its claim committed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-KILL");
+    const session = await createCheckoutSession(fx.link.token, "https://app.test/pay/" + fx.link.token, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_kill_1", url: "https://checkout.stripe.test/cs_kill_1" }),
+    }));
+    assert.equal(session.redirectUrl, "https://checkout.stripe.test/cs_kill_1");
+
+    // Crash simulation: the claim committed, the settlement never started.
+    await db.execute(sql`
+      update payment_attempts
+         set status = 'succeeded', payment_document_id = null, journal_entry_id = null
+       where org_id = ${org.orgId} and external_ref = 'cs_kill_1'
+    `);
+
+    const delivery = signedStripeBody("whsec_INV-PAY-KILL", "cs_kill_1", fx.link.token);
+    const result = await handleProviderWebhook("stripe", delivery.headers, delivery.body);
+    assert.ok(result);
+    assert.equal(result.orgId, org.orgId);
+    assert.equal(result.status, "settled");
+
+    // Exactly one posted receipt, applied to the invoice.
+    const payments = (await db.execute<{ id: string; status: string; total: string }>(sql`
+      select id, status, total from documents
+       where org_id = ${org.orgId} and kind = 'customer_payment'
+    `));
+    assert.equal(payments.rows.length, 1);
+    assert.equal(payments.rows[0]!.status, "posted");
+    assert.equal(payments.rows[0]!.total, "103.0000");
+    const invoice = (await db.execute<{ open_balance: string }>(sql`
+      select open_balance from documents where id = ${fx.invoiceId}
+    `));
+    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+
+    // The completion marker is written: the attempt is terminal again.
+    const attempt = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+      select status, journal_entry_id from payment_attempts
+       where org_id = ${org.orgId} and external_ref = 'cs_kill_1'
+    `));
+    assert.equal(attempt.rows[0]!.status, "succeeded");
+    assert.ok(attempt.rows[0]!.journal_entry_id, "recovered attempt must record its journal entry");
+
+    // And the next redelivery dedupes — still one receipt, one journal entry.
+    const replay = await handleProviderWebhook("stripe", delivery.headers, delivery.body);
+    assert.equal(replay?.status, "duplicate");
+    const counts = (await db.execute<{ docs: number; entries: number }>(sql`
+      select (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as docs,
+             (select count(*)::int from journal_entries je
+                join documents d on d.id = je.source_document_id and d.org_id = je.org_id
+               where d.org_id = ${org.orgId} and d.kind = 'customer_payment') as entries
+    `));
+    assert.equal(counts.rows[0]!.docs, 1);
+    assert.equal(counts.rows[0]!.entries, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F1.3 concurrency: two simultaneous redeliveries of the same collection must
+ * serialize on the recovery claim so only one receipt is ever posted.
+ */
+test("concurrent double-resume of a stranded attempt posts exactly one journal entry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-RACE");
+    await createCheckoutSession(fx.link.token, "https://app.test/pay/" + fx.link.token, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_race_1", url: "https://checkout.stripe.test/cs_race_1" }),
+    }));
+    await db.execute(sql`
+      update payment_attempts
+         set status = 'succeeded', payment_document_id = null, journal_entry_id = null
+       where org_id = ${org.orgId} and external_ref = 'cs_race_1'
+    `);
+
+    // Two distinct deliveries of the same provider object, fired together.
+    const first = signedStripeBody("whsec_INV-PAY-RACE", "cs_race_1", fx.link.token);
+    const second = signedStripeBody("whsec_INV-PAY-RACE", "cs_race_1", fx.link.token);
+    const results = await Promise.all([
+      handleProviderWebhook("stripe", first.headers, first.body),
+      handleProviderWebhook("stripe", second.headers, second.body),
+    ]);
+    const statuses = results.map((r) => r?.status).sort();
+    assert.deepEqual(statuses, ["duplicate", "settled"]);
+
+    const counts = (await db.execute<{ docs: number; entries: number; marker: string | null }>(sql`
+      select (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as docs,
+             (select count(*)::int from journal_entries je
+                join documents d on d.id = je.source_document_id and d.org_id = je.org_id
+               where d.org_id = ${org.orgId} and d.kind = 'customer_payment') as entries,
+             (select journal_entry_id::text from payment_attempts
+               where org_id = ${org.orgId} and external_ref = 'cs_race_1') as marker
+    `));
+    assert.equal(counts.rows[0]!.docs, 1, "exactly one receipt despite concurrent resumers");
+    assert.equal(counts.rows[0]!.entries, 1, "exactly one journal entry despite concurrent resumers");
+    assert.ok(counts.rows[0]!.marker, "completion marker recorded");
+
+    const invoice = (await db.execute<{ open_balance: string }>(sql`
+      select open_balance from documents where id = ${fx.invoiceId}
+    `));
+    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F1.3, partial progress: the crash landed after the receipt draft was
+ * reserved but before it was built out and posted. Resume must reuse that
+ * exact draft — never mint a second receipt for the same collection.
+ */
+test("redelivery resumes onto the reserved receipt draft after a mid-settlement crash", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-DRAFT");
+    await createCheckoutSession(fx.link.token, "https://app.test/pay/" + fx.link.token, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_draft_1", url: "https://checkout.stripe.test/cs_draft_1" }),
+    }));
+    const draft = await createPaymentDocument({
+      orgId: org.orgId,
+      kind: "customer_payment",
+      createdBy: fx.userId,
+      partyId: org.customerId,
+      bankAccountId: org.accounts.bank,
+      documentDate: new Date().toISOString().slice(0, 10),
+      memo: `Online payment — INV-PAY-DRAFT`,
+      subsidiaryId: org.subsidiaryId,
+      currency: "CAD",
+    });
+    // Crash simulation: claim committed, draft reserved, settlement stalled.
+    await db.execute(sql`
+      update payment_attempts
+         set status = 'succeeded', payment_document_id = ${draft.id}, journal_entry_id = null
+       where org_id = ${org.orgId} and external_ref = 'cs_draft_1'
+    `);
+
+    const delivery = signedStripeBody("whsec_INV-PAY-DRAFT", "cs_draft_1", fx.link.token);
+    const result = await handleProviderWebhook("stripe", delivery.headers, delivery.body);
+    assert.ok(result);
+    assert.equal(result.status, "settled");
+
+    const payments = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from documents where org_id = ${org.orgId} and kind = 'customer_payment'
+    `));
+    assert.equal(payments.rows.length, 1, "resume must reuse the reserved draft, not mint another");
+    assert.equal(payments.rows[0]!.id, draft.id);
+    assert.equal(payments.rows[0]!.status, "posted");
+    const invoice = (await db.execute<{ open_balance: string }>(sql`
+      select open_balance from documents where id = ${fx.invoiceId}
+    `));
+    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
