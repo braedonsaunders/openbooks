@@ -166,6 +166,8 @@ export async function listQuickActionOptions(): Promise<{
       'projects',
       // NAV_MODULES estimates/sales-orders/purchase-orders — still 404 when Orders is off.
       'orders',
+      // NAV_MODULES assets/tax-depreciation — still 404 when Fixed Assets is off.
+      'fixedAssets',
     ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
@@ -195,6 +197,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.key === 'projects' && !featureOn.get('projects')) continue
     // Same requiredFeature filter: /estimates|/sales-orders|/purchase-orders 404 when Orders is off.
     if ((mod.key === 'estimates' || mod.key === 'sales-orders' || mod.key === 'purchase-orders') && !featureOn.get('orders')) continue
+    // Same requiredFeature filter: /assets|/assets?tab=tax-depreciation 404 when Fixed Assets is off.
+    if ((mod.key === 'assets' || mod.key === 'tax-depreciation') && !featureOn.get('fixedAssets')) continue
     common.push({
       label: mod.label,
       href: mod.href,
