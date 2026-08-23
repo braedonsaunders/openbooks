@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
@@ -203,21 +204,15 @@ function defaultPrefix(kind: string): string {
   }
 }
 
+/**
+ * Posting deps with ar/ap/bank fail-closed: an org missing control accounts
+ * refuses to post (ControlAccountsIncompleteError) instead of letting undefined
+ * account ids reach the kernel. The error surfaces through the runner's
+ * existing failure path — claim rollback + last_error for scheduler runs, and a
+ * 422-class refusal for "run now" — so the occurrence retries once configured.
+ */
 async function controlDeps(orgId: string): Promise<PostingDeps> {
-  const r = (await db.execute<{ c: Record<string, string> | null }>(
-    sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  ));
-  const c = r.rows[0]?.c ?? {};
-  return {
-    control: {
-      ar: c.ar!,
-      ap: c.ap!,
-      bank: c.bank!,
-      taxCollected: c.taxCollected,
-      taxPaid: c.taxPaid,
-      employeePayable: c.employeePayable,
-    },
-  };
+  return { control: await loadRequiredControlAccounts(orgId) };
 }
 
 export interface RecurringRunResult {
