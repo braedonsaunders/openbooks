@@ -32,6 +32,7 @@ for (const org of orgs.rows) {
             is_built_in = true,
             permissions = excluded.permissions,
             updated_at = now()
+        where app_roles.org_id = ${org.id}
     `);
   }
 
