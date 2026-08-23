@@ -2590,6 +2590,17 @@ function conditionMatches(expected: unknown, actual: unknown): boolean {
     : expected === actual;
 }
 
+/** Whole calendar days from one ISO date to another. */
+function calendarDaysBetween(fromIso: string, toIso: string): number {
+  const [fromYear, fromMonth, fromDay] = fromIso.split("-").map(Number);
+  const [toYear, toMonth, toDay] = toIso.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(toYear!, toMonth! - 1, toDay!) -
+      Date.UTC(fromYear!, fromMonth! - 1, fromDay!)) /
+      86_400_000,
+  );
+}
+
 /** Execute tenant-authored close automation with an idempotent database claim.
  * A failed action is retained for audit and never reported as successful. */
 export async function runCloseAutomations(
@@ -2618,12 +2629,20 @@ export async function runCloseAutomations(
   `));
   let completed = 0;
   let failed = 0;
+  let automationDate: string | null = null;
   for (const rule of rules.rows) {
     const conditions = (rule.conditions ?? {}) as Record<string, unknown>;
-    const daysUntilDeadline = Math.ceil(
-      (new Date(`${run.target_close_date}T00:00:00Z`).getTime() - Date.now()) /
-        86_400_000,
-    );
+    const withinDays = typeof conditions.withinDays === "number"
+      ? conditions.withinDays
+      : null;
+    let outsideDeadlineWindow = false;
+    if (withinDays !== null) {
+      automationDate ??= await businessToday(context.orgId);
+      outsideDeadlineWindow = calendarDaysBetween(
+        automationDate,
+        String(run.target_close_date),
+      ) > withinDays;
+    }
     if (
       !conditionMatches(conditions.runStatus, run.status) ||
       !conditionMatches(conditions.taskKey, run.task_key) ||
@@ -2634,8 +2653,7 @@ export async function runCloseAutomations(
         Number(run.readiness_score) < conditions.minReadiness) ||
       (typeof conditions.maxReadiness === "number" &&
         Number(run.readiness_score) > conditions.maxReadiness) ||
-      (typeof conditions.withinDays === "number" &&
-        daysUntilDeadline > conditions.withinDays)
+      outsideDeadlineWindow
     )
       continue;
 
