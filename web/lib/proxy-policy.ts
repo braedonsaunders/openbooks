@@ -37,3 +37,16 @@ export function isPublicPath(pathname: string): boolean {
     || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root))
     || matchesSegment(pathname, "/_next");
 }
+
+/**
+ * Surfaces the CSRF gate must skip: every request here authenticates with an
+ * explicit credential (API key, internal token, provider HMAC signature, or a
+ * secret link token) that browsers never attach to cross-site requests, so
+ * those routes have no ambient-cookie forgery surface. `/mcp` carries the same
+ * API-key model (see EXACT_PUBLIC_PATHS). Everything else — including public
+ * browser forms like /api/login and /api/password-reset — is origin-checked.
+ */
+export function isCsrfExemptPath(pathname: string): boolean {
+  return pathname === "/mcp"
+    || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root));
+}
