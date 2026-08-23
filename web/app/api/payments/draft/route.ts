@@ -1,24 +1,31 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createPaymentDocument } from '@openbooks/engine/src/payments.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { isPaymentKind, paymentErrorResponse, paymentPermission } from '../lib'
+import { parseJsonBody } from '../../../../lib/api/json'
+import { paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
 
+const draftBody = z.object({
+  kind: z.enum(['vendor_payment', 'customer_payment'], {
+    error: 'kind must be vendor_payment or customer_payment',
+  }),
+})
+
 /** Instant-into-draft: create an empty draft payment/receipt, return its id. */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { kind?: string }
-  if (!isPaymentKind(body.kind)) {
-    return NextResponse.json({ error: 'kind must be vendor_payment or customer_payment' }, { status: 400 })
-  }
-  const gate = await guardPermission(paymentPermission(body.kind))
+  const parsed = await parseJsonBody(req, draftBody)
+  if (!parsed.ok) return parsed.response
+  const kind = parsed.data.kind
+  const gate = await guardPermission(paymentPermission(kind))
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
   try {
     const doc = await createPaymentDocument({
       orgId: user.orgId,
-      kind: body.kind,
+      kind,
       createdBy: user.id,
     })
     return NextResponse.json(doc)

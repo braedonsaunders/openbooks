@@ -1,18 +1,38 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   postPaymentWithApplications,
-  type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
+import { exactMoney, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
+
+/** One open-item application (engine AllocationInput), shape-checked here;
+ *  cross-field rules stay in the engine's posting kernel. */
+const allocationInput = z.object({
+  openLineId: z.string().min(1),
+  sourceTransactionAmount: exactMoney,
+  targetTransactionAmount: exactMoney,
+  targetBaseAmount: exactMoney.optional(),
+  settlementRate: z.string().min(1),
+  settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
+  settlementRateReference: z.string(),
+})
+
+const postWithApplicationsBody = z.object({
+  documentId: z.string({ error: 'documentId is required' }).refine(
+    (v) => uuidId.safeParse(v).success,
+    'documentId is required',
+  ),
+  allocations: z.array(allocationInput).optional(),
+})
 
 /**
  * Explicit "Pay & post": posts the payment document through the kernel and
@@ -23,14 +43,13 @@ export async function POST(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  const body = (await req.json()) as { documentId?: string; allocations?: AllocationInput[] }
-  if (!body.documentId || !isUuid(body.documentId)) {
-    return NextResponse.json({ error: 'documentId is required' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, postWithApplicationsBody)
+  if (!parsed.ok) return parsed.response
+  const { documentId, allocations } = parsed.data
 
   const r = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
     select kind, status from documents
-     where id = ${body.documentId} and kind in ('vendor_payment', 'customer_payment')
+     where id = ${documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
   `))
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -43,7 +62,7 @@ export async function POST(req: Request) {
     const outcome = await withOrgTransaction(authz.user.orgId, async () => {
       const locked = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
         select kind, status from documents
-         where id = ${body.documentId} and org_id = ${authz.user.orgId}
+         where id = ${documentId} and org_id = ${authz.user.orgId}
            and kind in ('vendor_payment', 'customer_payment')
          for update
       `))
@@ -53,7 +72,7 @@ export async function POST(req: Request) {
       if (previousStatus === 'draft') {
         const submission = await submitAndReleaseIfUngated(
           payment.kind,
-          body.documentId!,
+          documentId,
           authz.user.id,
         )
         if (submission.flowError) {
@@ -66,8 +85,8 @@ export async function POST(req: Request) {
         return { kind: 'invalid_status' as const, status: previousStatus }
       }
       const result = await postPaymentWithApplications(
-        body.documentId!,
-        body.allocations,
+        documentId,
+        allocations,
         authz.user.id,
         'ui',
         { deferEffects: true },
@@ -95,7 +114,7 @@ export async function POST(req: Request) {
         { status: 422 },
       )
     }
-    await runPostDocumentEffects(body.documentId, outcome.previousStatus)
+    await runPostDocumentEffects(documentId, outcome.previousStatus)
     return NextResponse.json({ ok: true, ...outcome.result })
   } catch (e) {
     return paymentErrorResponse(e)

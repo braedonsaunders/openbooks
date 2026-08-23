@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
   PaymentAcceptanceError,
@@ -9,8 +10,21 @@ import {
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
+import { parseJsonBody, uuidId } from "../../../../lib/api/json";
 
 export const runtime = "nodejs";
+
+const createLinkBody = z.object({
+  provider: z.enum(["stripe", "adyen", "gocardless"], {
+    error: "provider must be stripe, adyen or gocardless",
+  }),
+  documentId: z
+    .string({ error: "documentId is required" })
+    .refine((v) => uuidId.safeParse(v).success, "documentId is required"),
+  bankAccountId: z.string().nullable().optional(),
+  expiresOn: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+});
 
 export async function GET(req: Request) {
   const gate = await guardPermission("ar.read");
@@ -40,21 +54,16 @@ export async function POST(req: Request) {
   if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const provider = body.provider;
-  if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
-    return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
-  }
-  if (typeof body.documentId !== "string" || !isUuid(body.documentId)) {
-    return NextResponse.json({ error: "documentId is required" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(req, createLinkBody);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   try {
     const link = await createPaymentLink(gate.user.orgId, gate.user.id, {
       documentId: body.documentId,
-      provider,
-      bankAccountId: typeof body.bankAccountId === "string" ? body.bankAccountId : null,
-      expiresOn: typeof body.expiresOn === "string" ? body.expiresOn : null,
-      memo: typeof body.memo === "string" ? body.memo : null,
+      provider: body.provider,
+      bankAccountId: body.bankAccountId ?? null,
+      expiresOn: body.expiresOn ?? null,
+      memo: body.memo ?? null,
     });
     return NextResponse.json(link, { status: 201 });
   } catch (e) {

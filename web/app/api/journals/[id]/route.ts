@@ -1,28 +1,17 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
-import { normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
-import { canonicalDecimal } from '../../../../lib/exact-decimal'
-import { isUuid } from '../../../../lib/list-params'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
-
-/** Exact numeric(19,4) money string, or 'invalid'. */
-function exactMoney(v: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
-  try {
-    return normalizeMoney(exact)
-  } catch {
-    return 'invalid'
-  }
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.read')
@@ -33,20 +22,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(journal)
 }
 
-interface JournalLineInput {
-  accountId: string
-  description?: string | null
-  /** Signed base amount: + debit / − credit. */
-  amount: string
-  /** Line entity: the customer/vendor/employee this leg belongs to. */
-  partyId?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  /** Intercompany line override (null = the header's subsidiary). */
-  subsidiaryId?: string | null
-  extraDims?: Record<string, string | null>
-  custom?: Record<string, unknown>
-}
+const journalLineInput = z
+  .object({
+    accountId: uuidId,
+    description: z.string().nullable().optional(),
+    amount: exactMoney,
+    partyId: nullableUuidId.optional(),
+    departmentId: nullableUuidId.optional(),
+    projectId: nullableUuidId.optional(),
+    subsidiaryId: nullableUuidId.optional(),
+    extraDims: z.record(z.string(), z.string().nullable()).optional(),
+    custom: z.record(z.string(), z.unknown()).optional(),
+  })
+  // A zero leg carries no financial meaning; reject it instead of silently
+  // dropping a submitted line at the posting boundary.
+  .refine((line) => toUnits(line.amount) !== 0n, 'journal line amounts cannot be zero')
+
+const journalPatchBody = z.object({
+  partyId: nullableUuidId.optional(),
+  documentDate: isoDate().optional(),
+  referenceNumber: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+  /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
+  subsidiaryId: nullableUuidId.optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  lines: z.array(journalLineInput).optional(),
+})
 
 /**
  * Autosave a manual-journal draft. Once it enters approval or posts, the
@@ -68,24 +70,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 422 },
     )
   }
-  const body = (await req.json()) as {
-    partyId?: string | null
-    documentDate?: string
-    referenceNumber?: string | null
-    memo?: string | null
-    /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
-    subsidiaryId?: string | null
-    extraDims?: Record<string, string | null>
-    custom?: Record<string, unknown>
-    lines?: JournalLineInput[]
-  }
+  const parsed = await parseJsonBody(req, journalPatchBody, { status: 422 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   const requestedSubsidiaries = [...new Set([
     ...(body.subsidiaryId ? [body.subsidiaryId] : []),
     ...(body.lines ?? []).flatMap((line) => line.subsidiaryId ? [line.subsidiaryId] : []),
   ])]
-  if (requestedSubsidiaries.some((subsidiaryId) => !isUuid(subsidiaryId))) {
-    return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
-  }
   if (requestedSubsidiaries.length) {
     const subsidiaries = (await db.execute(sql`
       select id from subsidiaries
@@ -112,23 +103,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // Pre-validate + prepare lines (read-only) before touching the DB, so a bad
-  // line returns 422 without a partial write.
+  // line returns 422 without a partial write. Amounts, account references, and
+  // line shape are already canonical here (the zod boundary above); custom
+  // fields and segments are org-configured and validated against live defs.
   // journal totals = sum of debits (positive line amounts); tax never applies
   let totalDebits: string | null = null
   let preparedLines: { accountId: string; description: string | null; amount: string; partyId: string | null; departmentId: string | null; projectId: string | null; subsidiaryId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[] | null = null
   if (body.lines) {
-    const valid: typeof body.lines = []
-    for (const line of body.lines) {
-      const amount = exactMoney(line.amount)
-      if (amount === 'invalid') {
-        return NextResponse.json({ error: 'Journal lines contain an invalid monetary amount' }, { status: 422 })
-      }
-      if (line.accountId && toUnits(amount) !== 0n) valid.push({ ...line, amount })
-    }
-    totalDebits = sum(valid.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
+    const submitted = body.lines
+    totalDebits = sum(submitted.map((line) => (toUnits(line.amount) > 0n ? line.amount : '0')))
     preparedLines = []
-    for (let i = 0; i < valid.length; i++) {
-      const l = valid[i]!
+    for (let i = 0; i < submitted.length; i++) {
+      const l = submitted[i]!
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) {
         return NextResponse.json(
