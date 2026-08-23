@@ -1422,37 +1422,37 @@ test('the surfaces this test was written for are covered', () => {
     'item catalog PATCH must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /orgFeatureEnabled\([^,]+, 'timeTracking'\)/,
     'items import must refuse show-on-timesheet when Time Tracking is off — existing flags stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /showOnTimesheet !== undefined/,
     'items import must refuse — not persist — show-on-timesheet when Time Tracking is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /orgFeatureEnabled\([^,]+, 'fixedAssets'\)/,
     'properties import must refuse fixedAsset when Fixed Assets is off — existing links stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /fixedAsset !== undefined/,
     'properties import must refuse — not persist — fixedAsset when Fixed Assets is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /propertyFields\([\s\S]{0,80}orgFeatureEnabled\([^,]+, 'multiCurrency'\)/,
     'properties import must refuse currency when Multi-currency is off — existing values stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /!multiCurrencyOn && src\.currency !== undefined/,
     'properties import must refuse — not persist — currency when Multi-currency is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /multiCurrencyOn \|\| field\.key !== 'currency'/,
     'properties import must hide currency when Multi-currency is off',
   )
@@ -1537,32 +1537,32 @@ test('the surfaces this test was written for are covered', () => {
     'REST/MCP item writes must 404 — not persist — equipment_charge when Equipment is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /orgFeatureEnabled\([^,]+, 'inventory'\)/,
     'items import must refuse inventory kinds when Inventory is off — existing kinds stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /INVENTORY_ITEM_KINDS\.has\(nextKind\)[\s\S]{0,400}kind is not available/,
     'items import must refuse — not persist — new inventory/assembly/kit kinds when Inventory is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /c\.key === 'kind' && !inventoryOn[\s\S]{0,80}INVENTORY_ITEM_KINDS\.has\(o\.value\)/,
     'items import must hide inventory/assembly/kit kind values when Inventory is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /orgFeatureEnabled\([^,]+, 'equipment'\)/,
     'items import must refuse equipment_charge when Equipment is off — existing kinds stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /ITEM_EQUIPMENT_KINDS\.has\(nextKind\)[\s\S]{0,400}kind is not available/,
     'items import must refuse — not persist — new equipment_charge kinds when Equipment is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /c\.key === 'kind' && !equipmentOn[\s\S]{0,80}ITEM_EQUIPMENT_KINDS\.has\(o\.value\)/,
     'items import must hide equipment_charge kind values when Equipment is off',
   )
@@ -1797,7 +1797,7 @@ test('the surfaces this test was written for are covered', () => {
     'time-type setup must 404 — not persist — showOnFieldTicket when Field Tickets is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/setup-resources.ts'),
     /showOnFieldTicket is not available/,
     'time-type import must refuse showOnFieldTicket when Field Tickets is off — existing flags stay',
   )
@@ -1912,17 +1912,17 @@ test('the surfaces this test was written for are covered', () => {
     'the lease-charge form must not send itemId — stored charges stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /leaseChargeFields\(await orgFeatureEnabled\([^,]+, 'inventory'\)\)/,
     'lease-charge import must refuse inventory/assembly/kit items when Inventory is off — stored charges stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /INVENTORY_ITEM_KINDS\.has[\s\S]{0,80}item is not available/,
     'lease-charge import must refuse — not persist — inventory/assembly/kit items when Inventory is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/property-resources.ts'),
     /field\.key !== 'item'/,
     'lease-charge import must hide item when Inventory is off',
   )
@@ -1992,12 +1992,12 @@ test('the surfaces this test was written for are covered', () => {
     'the company form must hide the fair-value range policy when Revenue Recognition is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /orgFeatureEnabled\([^,]+, 'multiCurrency'\)/,
     'accounts import must refuse currencyRestriction when Multi-currency is off — existing values stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/master-data-resources.ts'),
     /currencyRestriction !== undefined/,
     'accounts import must refuse — not persist — currencyRestriction when Multi-currency is off',
   )
@@ -2037,12 +2037,12 @@ test('the surfaces this test was written for are covered', () => {
     'the accounts page must not load currency pickers when Multi-currency is off',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/transaction-resources.ts'),
     /src\.currency !== undefined/,
     'transaction import must refuse currency when Multi-currency is off — existing values stay',
   )
   assert.match(
-    read('lib/data-io/resources.ts'),
+    read('lib/data-io/transaction-resources.ts'),
     /f\.key !== 'currency'/,
     'transaction import must hide currency when Multi-currency is off',
   )
