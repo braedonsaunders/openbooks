@@ -406,9 +406,20 @@ function persistPoolOpeningBalance(value: unknown): string {
   }
 }
 
+/** Persist pool additions through exact decimal then ledger money. Fail closed. */
+function persistPoolAdditions(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("additions must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("additions must be an exact decimal");
+  }
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
-  const additions = normalizeMoney(input.additions);
+  const additions = persistPoolAdditions(input.additions);
   const dispositions = normalizeMoney(input.dispositions);
   const requestedImmediateExpense = nonnegative(normalizeMoney(input.immediateExpense ?? "0"));
   const shortYear = String(input.shortYearFactor ?? 1);
