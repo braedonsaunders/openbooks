@@ -215,6 +215,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.key === 'continuous-close' && !featureOn.get('continuousClose')) continue
     // Same requiredFeature filter: /approvals 404s when Flows is off.
     if (mod.key === 'approvals' && !featureOn.get('flows')) continue
+    // Same requiredFeature filter: /admin/flows 404s when Flows is off.
+    if (mod.key === 'flows' && !featureOn.get('flows')) continue
     common.push({
       label: mod.label,
       href: mod.href,
