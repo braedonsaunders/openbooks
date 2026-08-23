@@ -106,6 +106,25 @@ test("deposit balance cannot mistake an unsupported transaction for a decrease",
   assert.throws(() => depositBalance([{ kind: "unknown", amount: "10" }]), /Unsupported deposit transaction type/);
 });
 
+test("assessLeaseLateFees persists a fixed late-fee value through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(
+    join(repoRoot, "engine/src/property-management.ts"),
+    "utf8",
+  );
+  const helperStart = source.indexOf("function exactMoney");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "exactMoney helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+
+  const start = source.indexOf("export async function assessLeaseLateFees");
+  const next = source.indexOf("export async function recordSecurityDeposit");
+  const body = source.slice(start, next);
+  assert.match(body, /exactMoney\(row\.late_fee_value, "Late-fee value"\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(row\.late_fee_value\)/);
+});
+
 test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
   assert.equal(overlapDayCount("2026-01-15", "2026-03-15", "2026-01-01", "2026-12-31"), 60);
   assert.equal(overlapDayCount("2025-01-01", "2025-12-31", "2026-01-01", "2026-12-31"), 0);
