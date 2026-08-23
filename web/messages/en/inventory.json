@@ -76,5 +76,65 @@
       "value": "By value",
       "quantity": "By quantity"
     }
+  },
+  "advanced": {
+    "errors": {
+      "failed": "Failed"
+    },
+    "toasts": {
+      "saved": "Saved"
+    },
+    "transfers": {
+      "newOrder": "New transfer order",
+      "from": "From",
+      "to": "To",
+      "item": "Item",
+      "qty": "Qty",
+      "inTransitAccount": "In-transit account (optional override)",
+      "useControlAccount": "Use control account",
+      "createDraft": "Create draft",
+      "help": "Ship posts DR inventory-in-transit / CR inventory. Receive clears in-transit at destination. Set controlAccounts.inventoryInTransit when not overriding.",
+      "table": {
+        "number": "Number",
+        "fromTo": "From → To",
+        "status": "Status",
+        "ordered": "Ordered"
+      },
+      "ship": "Ship",
+      "receive": "Receive",
+      "noneYet": "No transfer orders yet."
+    },
+    "landed": {
+      "newVoucher": "Multi-receipt landed cost voucher",
+      "amount": "Amount",
+      "basis": "Basis",
+      "basisValue": "By value",
+      "basisQuantity": "By quantity",
+      "basisWeight": "By weight",
+      "freightAccount": "Freight account",
+      "targetItem": "Target item",
+      "location": "Location",
+      "addTarget": "Add target",
+      "remove": "remove",
+      "postVoucher": "Post voucher",
+      "table": {
+        "number": "Number",
+        "date": "Date",
+        "basis": "Basis",
+        "amount": "Amount",
+        "status": "Status"
+      },
+      "noneYet": "No landed cost vouchers yet."
+    },
+    "lots": {
+      "lotNumber": "Lot number",
+      "openRecallReport": "Open recall report",
+      "table": {
+        "lot": "Lot",
+        "item": "Item",
+        "expiry": "Expiry"
+      },
+      "noneYet": "No lots yet — receive stock with a lot number."
+    }
   }
 }
