@@ -36,6 +36,7 @@ await db.transaction(async (tx) => {
     values (${org.rows[0].id}, ${email.toLowerCase()}, ${name}, ${hash})
     on conflict (org_id, email) do update
       set password_hash = ${hash}, is_active = true, updated_at = now()
+    where users.org_id = ${org.rows[0].id}
     returning id
   `));
   await tx.execute(sql`
