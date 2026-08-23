@@ -84,7 +84,10 @@ async function call(url: string, body: Record<string, unknown>) {
 export function CloseWizard(props: Props) {
   const t = useTranslations("close");
   const router = useRouter();
-  const visibleStages = props.advancedClose || props.run.status === "published"
+  // readonly Stage[] not the narrowed filter type: the published/advanced
+  // branch serves every stage including publish, and a requested publish stage
+  // is legitimate.
+  const visibleStages: readonly Stage[] = props.advancedClose || props.run.status === "published"
     ? STAGES
     : STAGES.filter((stage) => stage !== "publish");
   const requested: Stage = STAGES.includes(props.stage as Stage)
