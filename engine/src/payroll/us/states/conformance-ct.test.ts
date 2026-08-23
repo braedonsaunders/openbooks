@@ -18,24 +18,15 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { CT_CERTIFICATE, CT_REGION } from "./ct-declaration.ts";
 import {
-  CT_RATES_2026, CT_WITHHOLDING,
-  ctInitialTax, ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
+  CT_CERTIFICATE, CT_REGION, CT_RATES_2026, CT_WITHHOLDING, ctInitialTax, ctPersonalCredit,
+  ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
 } from "./ct.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: CT_CERTIFICATE,
-    stored: [{ certificateKey: CT_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(CT_CERTIFICATE, answers);
 
 test("CT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(CT_CERTIFICATE), null);

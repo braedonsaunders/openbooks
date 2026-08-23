@@ -26,9 +26,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  payrollCertificate, resolveCertificate, type ResolvedCertificate,
-} from "../../certificates.ts";
+import { payrollCertificate, type ResolvedCertificate } from "../../certificates.ts";
 // The PACK publishes the US declarations now (its `certificates` / `withholding` /
 // `reciprocity` members). Importing `us/jurisdictions.ts` for its side effect is
 // exactly what made those declarations look alive while nothing in the product
@@ -49,19 +47,10 @@ import {
   ohSchoolDistrict, ohSchoolDistrictWithholding,
 } from "./oh.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-/** numeric(19,4) canonical form, as the engines return. */
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(key: string, answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: payrollCertificate("US", key),
-    stored: [{ certificateKey: key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (key: string, answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(payrollCertificate("US", key), answers);
 
 /* ===================================================================== */
 /* TRANSCRIPTION HELPERS                                                 */

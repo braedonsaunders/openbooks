@@ -11,21 +11,12 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { MT_CERTIFICATE, MT_REGION } from "./mt-declaration.ts";
-import { MT_RATES_2026, MT_WITHHOLDING, mtPeriodTax } from "./mt.ts";
+import { MT_CERTIFICATE, MT_REGION, MT_RATES_2026, MT_WITHHOLDING, mtPeriodTax } from "./mt.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: MT_CERTIFICATE,
-    stored: [{ certificateKey: MT_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(MT_CERTIFICATE, answers);
 
 test("MT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(MT_CERTIFICATE), null);

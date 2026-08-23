@@ -13,24 +13,15 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { IN_CERTIFICATE, IN_REGION } from "./in-declaration.ts";
 import {
-  IN_COUNTIES_2026, IN_RATES_2026, IN_WITHHOLDING,
-  inApplicableCounty, inCounty, inCountyWithholding, inPeriodTaxable,
+  IN_CERTIFICATE, IN_REGION, IN_COUNTIES_2026, IN_RATES_2026, IN_WITHHOLDING, inApplicableCounty,
+  inCounty, inCountyWithholding, inPeriodTaxable,
 } from "./in.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: IN_CERTIFICATE,
-    stored: [{ certificateKey: IN_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(IN_CERTIFICATE, answers);
 
 const EXAMPLE_EXEMPTIONS = {
   personal: 5,

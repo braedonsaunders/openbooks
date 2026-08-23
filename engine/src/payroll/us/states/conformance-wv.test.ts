@@ -16,20 +16,13 @@ import {
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
-import { WV_CERTIFICATE, WV_REGION } from "./wv-declaration.ts";
-import { WV_RATES_2026, WV_WITHHOLDING, wvPercentageMethod, wvRoundToDollar } from "./wv.ts";
+import {
+  WV_CERTIFICATE, WV_REGION, WV_RATES_2026, WV_WITHHOLDING, wvPercentageMethod, wvRoundToDollar,
+} from "./wv.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: WV_CERTIFICATE,
-    stored: [{ certificateKey: WV_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(WV_CERTIFICATE, answers);
 
 test("WV certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(WV_CERTIFICATE), null);

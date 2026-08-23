@@ -11,21 +11,12 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { OK_CERTIFICATE, OK_REGION } from "./ok-declaration.ts";
-import { OK_RATES_2026, OK_WITHHOLDING, okPeriodTax } from "./ok.ts";
+import { OK_CERTIFICATE, OK_REGION, OK_RATES_2026, OK_WITHHOLDING, okPeriodTax } from "./ok.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: OK_CERTIFICATE,
-    stored: [{ certificateKey: OK_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(OK_CERTIFICATE, answers);
 
 test("OK certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(OK_CERTIFICATE), null);

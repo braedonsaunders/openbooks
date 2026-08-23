@@ -13,21 +13,12 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { NE_CERTIFICATE, NE_REGION } from "./ne-declaration.ts";
-import { NE_RATES_2026, NE_WITHHOLDING, neAnnualTax } from "./ne.ts";
+import { NE_CERTIFICATE, NE_REGION, NE_RATES_2026, NE_WITHHOLDING, neAnnualTax } from "./ne.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: NE_CERTIFICATE,
-    stored: [{ certificateKey: NE_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(NE_CERTIFICATE, answers);
 
 test("NE certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(NE_CERTIFICATE), null);
