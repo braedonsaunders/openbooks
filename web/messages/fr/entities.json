@@ -26,6 +26,53 @@
     "searchPlaceholder": "Rechercher nom, code, courriel…",
     "shortCode": "Code court",
     "phone": "Téléphone",
-    "customerStatuses": { "existing": "Clients existants", "potential": "Clients potentiels" }
+    "customerStatuses": {
+      "existing": "Clients existants",
+      "potential": "Clients potentiels"
+    }
+  },
+  "propertyManagement": {
+    "workspace": {
+      "healthAria": "Property health",
+      "tabs": {
+        "properties": "Properties",
+        "rentRoll": "Rent Roll",
+        "cam": "CAM",
+        "depositReconciliation": "Deposit Reconciliation"
+      },
+      "metrics": {
+        "occupiedUnits": "Occupied units",
+        "activeLeasesHint": "{count} active leases",
+        "monthlyBaseRent": "Monthly base rent",
+        "currentChargesHint": "Current active charges",
+        "rentPastDue": "Rent billed past due",
+        "agingHint": "Invoice schedule aging",
+        "depositsHeld": "Security deposits held",
+        "depositLiabilityHint": "Tenant deposit liability"
+      },
+      "sectionsAria": "Property management sections",
+      "newProperty": "New property",
+      "newCamPool": "New CAM pool",
+      "assessLateFees": "Assess late fees",
+      "billDueRent": "Bill due rent",
+      "loading": "Loading property portfolio…",
+      "toasts": {
+        "lateFeesAssessed": "Portfolio late fees assessed",
+        "rentBilled": "Portfolio rent billed",
+        "propertyCreated": "Property created",
+        "propertyUpdated": "Property updated",
+        "propertyDeleted": "Property deleted",
+        "unitAdded": "Unit added",
+        "unitUpdated": "Unit updated",
+        "unitDeleted": "Unit deleted",
+        "leaseCreated": "Lease created",
+        "leaseUpdated": "Lease updated",
+        "camPoolCreated": "CAM pool created",
+        "camPoolUpdated": "CAM pool updated",
+        "camPoolReopened": "CAM pool reopened for correction",
+        "couldNotLoad": "Could not load properties",
+        "actionFailed": "Action failed"
+      }
+    }
   }
 }
