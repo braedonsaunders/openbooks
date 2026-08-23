@@ -11,6 +11,7 @@ import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 import { orgInfo } from '../../lib/data'
+import { isFeatureEnabled } from '../../lib/features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { BusinessDateProvider } from '../../components/business-date-provider'
 import { MoneyProvider } from '../../components/money-provider'
@@ -21,13 +22,14 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
     shellEnvironments(authz),
     orgInfo(authz.user.orgId),
     businessToday(authz.user.orgId),
+    isFeatureEnabled(authz.user.orgId, 'crm'),
   ])
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const jar = await cookies()
@@ -80,7 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           }}
           canReadParties={can(authz, 'parties.read')}
           canManageParties={can(authz, 'parties.manage')}
-          canReadActivities={can(authz, 'crm.activities.read')}
+          canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           >
             {authz.user.envKind !== 'production' && (

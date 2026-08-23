@@ -103,7 +103,7 @@ export default async function Parties({
       ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
       : total
 
-  const [openParty, pickers, payrollEnabled, multiCurrency] = await Promise.all([
+  const [openParty, pickers, payrollEnabled, multiCurrency, crmEnabled] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
     partyId
       ? Promise.all([
@@ -122,6 +122,7 @@ export default async function Parties({
       : null,
     isFeatureEnabled(orgId, 'payroll'),
     isFeatureEnabled(orgId, 'multiCurrency'),
+    isFeatureEnabled(orgId, 'crm'),
   ])
   const resolvedPartyForm = openParty && pickers && role
     ? await resolveFormLayout({
@@ -221,7 +222,7 @@ export default async function Parties({
           taxCodes={pickers[6].rows}
           salesReps={pickers[7].rows}
           canManage={canManage}
-          canReadActivities={can(authz, 'crm.activities.read')}
+          canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           payrollEnabled={payrollEnabled}
           multiCurrency={multiCurrency}
