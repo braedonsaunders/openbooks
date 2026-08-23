@@ -161,5 +161,121 @@
       "void": "void",
       "expired": "expired"
     }
+  },
+  "collections": {
+    "tabs": {
+      "recurring": "Recurring invoices",
+      "subscriptions": "Subscriptions",
+      "advanced": "Advanced lifecycle",
+      "dunning": "Dunning ladders"
+    },
+    "errors": {
+      "actionFailed": "Action failed",
+      "couldNotCreate": "Could not create"
+    },
+    "subscriptions": {
+      "mrr": "Monthly recurring revenue",
+      "summary": "{active} active · {plans, plural, one {# plan} other {# plans}}",
+      "plansTitle": "Plans",
+      "plansTable": {
+        "plan": "Plan",
+        "price": "Price",
+        "billing": "Billing"
+      },
+      "archived": "(archived)",
+      "every": "every {count}{unit}",
+      "delete": "Delete",
+      "noPlans": "No plans yet.",
+      "planNamePlaceholder": "Plan name",
+      "pricePlaceholder": "Price",
+      "everyNPlaceholder": "every N",
+      "defaultIncomeAccount": "Default income account",
+      "addPlan": "Add plan",
+      "subsTitle": "Subscriptions",
+      "subsTable": {
+        "customer": "Customer",
+        "plan": "Plan",
+        "qty": "Qty",
+        "mrr": "MRR",
+        "nextBill": "Next bill",
+        "status": "Status"
+      },
+      "noSubs": "No subscriptions yet.",
+      "customerPlaceholder": "Customer…",
+      "planPlaceholder": "Plan…",
+      "qtyPlaceholder": "Qty",
+      "priceOverridePlaceholder": "Price override (optional)",
+      "firstFullBill": "First full bill",
+      "prorateFirstPeriod": "Prorate first period",
+      "autoPostInvoices": "Auto-post invoices",
+      "addSubscription": "Add subscription",
+      "prorateHint": "Set a first-bill date after the start and tick “prorate” to bill only the partial first period now.",
+      "apply": "Apply",
+      "billNow": "Bill now",
+      "changeQty": "Change qty",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancelSub": "Cancel",
+      "toasts": {
+        "prorated": "Proration {adjustment} → {documentNumber}",
+        "qtyUpdatedNoProration": "Quantity updated (no proration due)",
+        "billed": "Billed {documentNumber}",
+        "firstInvoiceProrated": "Prorated first invoice {documentNumber} for {amount}"
+      }
+    },
+    "recurring": {
+      "newSchedule": "New recurring schedule",
+      "templateDocLabel": "Template document #",
+      "templateDocPlaceholder": "INV-000123",
+      "cadenceLabel": "Cadence",
+      "cronLabel": "Cron",
+      "firstRunLabel": "First run",
+      "autoPostCheckbox": "Auto-post generated documents",
+      "createSchedule": "Create schedule",
+      "table": {
+        "template": "Template",
+        "customer": "Customer",
+        "cadence": "Cadence",
+        "nextRun": "Next run",
+        "runs": "Runs",
+        "autoPost": "Auto-post",
+        "status": "Status"
+      },
+      "yes": "Yes",
+      "no": "No",
+      "active": "Active",
+      "paused": "Paused",
+      "runNow": "Run now",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "noneYet": "No recurring schedules yet."
+    },
+    "dunning": {
+      "blankStageName": "First reminder",
+      "newPolicy": "New dunning policy",
+      "policyNameLabel": "Policy name",
+      "policyNamePlaceholder": "Standard net-30 collections",
+      "gracePeriodLabel": "Grace period (days past due)",
+      "reminderLadder": "Reminder ladder",
+      "addStage": "+ Add stage",
+      "newStageName": "Reminder {n}",
+      "stageLabels": {
+        "name": "Name",
+        "daysPastDue": "Days past due",
+        "sequence": "Sequence"
+      },
+      "subjectLabel": "Subject",
+      "bodyLabel": "Body",
+      "removeStage": "Remove stage",
+      "tokensHint": "Tokens:",
+      "createPolicy": "Create policy",
+      "policySummary": "{count, plural, one {# stage} other {# stages}} · grace {grace}d",
+      "off": "Off",
+      "delete": "Delete",
+      "stageDay": "· Day {day}: {name}",
+      "noneYet": "No dunning policies yet.",
+      "activeBadge": "Active"
+    }
   }
 }

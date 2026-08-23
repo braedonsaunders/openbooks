@@ -2,6 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 
@@ -66,22 +67,23 @@ export function CollectionsClient({
   incomeAccounts?: Opt[];
 }) {
   const [tab, setTab] = useState<"recurring" | "subscriptions" | "advanced" | "dunning">("recurring");
+  const t = useTranslations("ar.collections");
   return (
     <div className="mt-6">
       <div className="mb-4 flex flex-wrap gap-2">
         <Button variant={tab === "recurring" ? "default" : "ghost"} onClick={() => setTab("recurring")}>
-          Recurring invoices
+          {t("tabs.recurring")}
         </Button>
         {subscriptionsEnabled && (
           <Button variant={tab === "subscriptions" ? "default" : "ghost"} onClick={() => setTab("subscriptions")}>
-            Subscriptions
+            {t("tabs.subscriptions")}
           </Button>
         )}
         {advancedSubscriptionsEnabled && (
-          <Button variant={tab === "advanced" ? "default" : "ghost"} onClick={() => setTab("advanced")}>Advanced lifecycle</Button>
+          <Button variant={tab === "advanced" ? "default" : "ghost"} onClick={() => setTab("advanced")}>{t("tabs.advanced")}</Button>
         )}
         <Button variant={tab === "dunning" ? "default" : "ghost"} onClick={() => setTab("dunning")}>
-          Dunning ladders
+          {t("tabs.dunning")}
         </Button>
       </div>
       {tab === "recurring" && <RecurringPanel />}
@@ -94,6 +96,7 @@ export function CollectionsClient({
 
 function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; incomeAccounts: Opt[] }) {
   const { money } = useMoney()
+  const t = useTranslations("ar.collections.subscriptions");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [mrr, setMrr] = useState("0.0000");
@@ -114,7 +117,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
     setError(null); setMsg(null);
     const r = await fetch("/api/subscriptions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
     const b = await r.json().catch(() => ({}));
-    if (!r.ok) { setError(b.error ?? "Action failed"); return null; }
+    if (!r.ok) { setError(b.error ?? t("errors.actionFailed")); return null; }
     await load();
     return b;
   };
@@ -122,8 +125,8 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   return (
     <div className="space-y-6">
       <Card className="flex items-center justify-between p-4">
-        <div><div className="text-xs text-muted-foreground">Monthly recurring revenue</div><div className="text-2xl font-semibold">{money(mrr)}</div></div>
-        <div className="text-sm text-muted-foreground">{subs.filter((s) => s.status === "active").length} active · {plans.length} plan{plans.length === 1 ? "" : "s"}</div>
+        <div><div className="text-xs text-muted-foreground">{t("mrr")}</div><div className="text-2xl font-semibold">{money(mrr)}</div></div>
+        <div className="text-sm text-muted-foreground">{t("summary", { active: subs.filter((s) => s.status === "active").length, plans: plans.length })}</div>
       </Card>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -131,46 +134,46 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 
       {/* Plans */}
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">Plans</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t("plansTitle")}</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground"><tr><th className="py-1">Plan</th><th className="text-right">Price</th><th>Billing</th><th></th></tr></thead>
+            <thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("plansTable.plan")}</th><th className="text-right">{t("plansTable.price")}</th><th>{t("plansTable.billing")}</th><th></th></tr></thead>
             <tbody>
               {plans.map((p) => (
                 <tr key={p.id} className="border-t">
-                  <td className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">(archived)</span>}</td>
+                  <td className="py-1 font-medium">{p.name}{!p.isActive && <span className="ml-1 text-xs text-slate-400">{t("archived")}</span>}</td>
                   <td className="text-right tabular-nums">{money(p.amount, { currency: p.currency ?? undefined })}</td>
-                  <td>every {p.intervalCount > 1 ? `${p.intervalCount} ` : ""}{p.interval.replace("ly", p.intervalCount > 1 ? "s" : "")}</td>
-                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>Delete</Button></td>
+                  <td>{t("every", { count: p.intervalCount > 1 ? `${p.intervalCount} ` : "", unit: p.interval.replace("ly", p.intervalCount > 1 ? "s" : "") })}</td>
+                  <td className="text-right"><Button size="sm" variant="ghost" onClick={() => post({ action: "deletePlan", id: p.id })}>{t("delete")}</Button></td>
                 </tr>
               ))}
-              {plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">No plans yet.</td></tr>}
+              {plans.length === 0 && <tr><td colSpan={4} className="py-3 text-center text-muted-foreground">{t("noPlans")}</td></tr>}
             </tbody>
           </table>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-5">
-          <Input placeholder="Plan name" value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="sm:col-span-2" />
-          <Input placeholder="Price" type="number" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
+          <Input placeholder={t("planNamePlaceholder")} value={planForm.name} onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })} className="sm:col-span-2" />
+          <Input placeholder={t("pricePlaceholder")} type="number" value={planForm.amount} onChange={(e) => setPlanForm({ ...planForm, amount: e.target.value })} />
           <Select value={planForm.interval} onChange={(e) => setPlanForm({ ...planForm, interval: e.target.value })}>
             {INTERVALS.map((i) => <option key={i} value={i}>{i}</option>)}
           </Select>
-          <Input placeholder="every N" type="number" value={planForm.intervalCount} onChange={(e) => setPlanForm({ ...planForm, intervalCount: e.target.value })} />
+          <Input placeholder={t("everyNPlaceholder")} type="number" value={planForm.intervalCount} onChange={(e) => setPlanForm({ ...planForm, intervalCount: e.target.value })} />
         </div>
         <div className="mt-2 flex items-center gap-2">
           <Select value={planForm.incomeAccountId} onChange={(e) => setPlanForm({ ...planForm, incomeAccountId: e.target.value })} className="max-w-xs">
-            <option value="">Default income account</option>
+            <option value="">{t("defaultIncomeAccount")}</option>
             {incomeAccounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
           </Select>
-          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>Add plan</Button>
+          <Button size="sm" disabled={!planForm.name || !planForm.amount} onClick={async () => { await post({ action: "addPlan", ...planForm, intervalCount: Number(planForm.intervalCount || 1), incomeAccountId: planForm.incomeAccountId || null }); setPlanForm({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" }); }}>{t("addPlan")}</Button>
         </div>
       </Card>
 
       {/* Subscriptions */}
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">Subscriptions</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t("subsTitle")}</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="text-left text-muted-foreground"><tr><th className="py-1">Customer</th><th>Plan</th><th className="text-right">Qty</th><th className="text-right">MRR</th><th>Next bill</th><th>Status</th><th></th></tr></thead>
+            <thead className="text-left text-muted-foreground"><tr><th className="py-1">{t("subsTable.customer")}</th><th>{t("subsTable.plan")}</th><th className="text-right">{t("subsTable.qty")}</th><th className="text-right">{t("subsTable.mrr")}</th><th>{t("subsTable.nextBill")}</th><th>{t("subsTable.status")}</th><th></th></tr></thead>
             <tbody>
               {subs.map((s) => (
                 <tr key={s.id} className="border-t align-top">
@@ -184,48 +187,48 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                     {s.status === "active" && changing === s.id ? (
                       <span className="inline-flex items-center gap-1">
                         <Input type="number" value={changeQty} onChange={(e) => setChangeQty(e.target.value)} className="h-7 w-16" />
-                        <Button size="sm" onClick={async () => { const r = await post({ action: "changeSubscription", id: s.id, quantity: changeQty }); if (r) setMsg(r.documentNumber ? `Proration ${money(r.adjustment)} → ${r.documentNumber}` : "Quantity updated (no proration due)"); setChanging(null); }}>Apply</Button>
+                        <Button size="sm" onClick={async () => { const r = await post({ action: "changeSubscription", id: s.id, quantity: changeQty }); if (r) setMsg(r.documentNumber ? t("toasts.prorated", { adjustment: money(r.adjustment), documentNumber: r.documentNumber }) : t("toasts.qtyUpdatedNoProration")); setChanging(null); }}>{t("apply")}</Button>
                         <Button size="sm" variant="ghost" onClick={() => setChanging(null)}>×</Button>
                       </span>
                     ) : (
                       <>
-                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(`Billed ${r.documentNumber}`); }}>Bill now</Button>
-                        {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>Change qty</Button>}
+                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(t("toasts.billed", { documentNumber: r.documentNumber })); }}>{t("billNow")}</Button>
+                        {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>{t("changeQty")}</Button>}
                         {s.status === "active"
-                          ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>Pause</Button>
+                          ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>{t("pause")}</Button>
                           : s.status === "paused"
-                            ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>Resume</Button>
+                            ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>{t("resume")}</Button>
                             : null}
-                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>Cancel</Button>}
+                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>{t("cancelSub")}</Button>}
                       </>
                     )}
                   </td>
                 </tr>
               ))}
-              {subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">No subscriptions yet.</td></tr>}
+              {subs.length === 0 && <tr><td colSpan={7} className="py-3 text-center text-muted-foreground">{t("noSubs")}</td></tr>}
             </tbody>
           </table>
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-6">
           <Select value={subForm.customerId} onChange={(e) => setSubForm({ ...subForm, customerId: e.target.value })} className="sm:col-span-2">
-            <option value="">Customer…</option>
+            <option value="">{t("customerPlaceholder")}</option>
             {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
           <Select value={subForm.planId} onChange={(e) => setSubForm({ ...subForm, planId: e.target.value })} className="sm:col-span-2">
-            <option value="">Plan…</option>
+            <option value="">{t("planPlaceholder")}</option>
             {plans.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </Select>
-          <Input placeholder="Qty" type="number" value={subForm.quantity} onChange={(e) => setSubForm({ ...subForm, quantity: e.target.value })} />
+          <Input placeholder={t("qtyPlaceholder")} type="number" value={subForm.quantity} onChange={(e) => setSubForm({ ...subForm, quantity: e.target.value })} />
           <Input type="date" value={subForm.startOn} onChange={(e) => setSubForm({ ...subForm, startOn: e.target.value })} />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <Input placeholder="Price override (optional)" type="number" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
-          <label className="flex items-center gap-1 text-sm">First full bill <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> Prorate first period</label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> Auto-post invoices</label>
-          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if ((r as any)?.proration?.documentNumber) setMsg(`Prorated first invoice ${(r as any).proration.documentNumber} for ${money((r as any).proration.amount)}`); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>Add subscription</Button>
+          <Input placeholder={t("priceOverridePlaceholder")} type="number" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
+          <label className="flex items-center gap-1 text-sm">{t("firstFullBill")} <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> {t("prorateFirstPeriod")}</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> {t("autoPostInvoices")}</label>
+          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if ((r as any)?.proration?.documentNumber) setMsg(t("toasts.firstInvoiceProrated", { documentNumber: (r as any).proration.documentNumber, amount: money((r as any).proration.amount) })); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>{t("addSubscription")}</Button>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">Set a first-bill date after the start and tick “prorate” to bill only the partial first period now.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t("prorateHint")}</p>
       </Card>
     </div>
   );
@@ -236,6 +239,7 @@ function RecurringPanel() {
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("ar.collections.recurring");
 
   const load = async () => {
     const r = await fetch("/api/recurring");
@@ -258,7 +262,7 @@ function RecurringPanel() {
       }),
     });
     setBusy(false);
-    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? "Could not create"); return; }
+    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? t("couldNotCreate")); return; }
     setForm({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
     void load();
   };
@@ -275,40 +279,40 @@ function RecurringPanel() {
   return (
     <div className="space-y-6">
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">New recurring schedule</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t("newSchedule")}</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <Label>Template document #</Label>
+            <Label>{t("templateDocLabel")}</Label>
             <Input
-              placeholder="INV-000123"
+              placeholder={t("templateDocPlaceholder")}
               value={form.templateDocumentNumber}
               onChange={(e) => setForm({ ...form, templateDocumentNumber: e.target.value })}
             />
           </div>
           <div>
-            <Label>Cadence</Label>
+            <Label>{t("cadenceLabel")}</Label>
             <Select value={form.cadence} onChange={(e) => setForm({ ...form, cadence: e.target.value })}>
               {CADENCES.map((c) => <option key={c} value={c}>{c}</option>)}
             </Select>
           </div>
           {form.cadence === "custom_cron" && (
             <div>
-              <Label>Cron</Label>
+              <Label>{t("cronLabel")}</Label>
               <Input placeholder="0 9 1 * *" value={form.cron} onChange={(e) => setForm({ ...form, cron: e.target.value })} />
             </div>
           )}
           <div>
-            <Label>First run</Label>
+            <Label>{t("firstRunLabel")}</Label>
             <Input type="date" value={form.nextRunOn} onChange={(e) => setForm({ ...form, nextRunOn: e.target.value })} />
           </div>
           <label className="flex items-center gap-2 self-end text-sm">
             <input type="checkbox" checked={form.autoPost} onChange={(e) => setForm({ ...form, autoPost: e.target.checked })} />
-            Auto-post generated documents
+            {t("autoPostCheckbox")}
           </label>
         </div>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         <div className="mt-3">
-          <Button onClick={create} disabled={busy || !form.templateDocumentNumber}>Create schedule</Button>
+          <Button onClick={create} disabled={busy || !form.templateDocumentNumber}>{t("createSchedule")}</Button>
         </div>
       </Card>
 
@@ -316,8 +320,8 @@ function RecurringPanel() {
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr>
-              <th className="py-2">Template</th><th>Customer</th><th>Cadence</th><th>Next run</th>
-              <th>Runs</th><th>Auto-post</th><th>Status</th><th></th>
+              <th className="py-2">{t("table.template")}</th><th>{t("table.customer")}</th><th>{t("table.cadence")}</th><th>{t("table.nextRun")}</th>
+              <th>{t("table.runs")}</th><th>{t("table.autoPost")}</th><th>{t("table.status")}</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -328,18 +332,18 @@ function RecurringPanel() {
                 <td>{s.cadence}{s.cron ? ` (${s.cron})` : ""}</td>
                 <td>{s.nextRunOn}</td>
                 <td>{s.runCount}{s.lastError ? <span className="ml-1 text-red-600" title={s.lastError}>⚠</span> : null}</td>
-                <td>{s.autoPost ? "Yes" : "No"}</td>
-                <td>{s.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Paused</Badge>}</td>
+                <td>{s.autoPost ? t("yes") : t("no")}</td>
+                <td>{s.isActive ? <Badge>{t("active")}</Badge> : <Badge variant="secondary">{t("paused")}</Badge>}</td>
                 <td className="whitespace-nowrap text-right">
-                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "POST")}>Run now</Button>
+                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "POST")}>{t("runNow")}</Button>
                   <Button size="sm" variant="ghost" onClick={() => act(s.id, "PATCH", { isActive: !s.isActive })}>
-                    {s.isActive ? "Pause" : "Resume"}
+                    {s.isActive ? t("pause") : t("resume")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "DELETE")}>Delete</Button>
+                  <Button size="sm" variant="ghost" onClick={() => act(s.id, "DELETE")}>{t("delete")}</Button>
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">No recurring schedules yet.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -362,6 +366,8 @@ function DunningPanel() {
     name: "", gracePeriodDays: 0, stages: [BLANK_STAGE],
   });
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("ar.collections.dunning");
+  const tErrors = useTranslations("ar.collections.errors");
 
   const load = async () => {
     const r = await fetch("/api/dunning");
@@ -376,7 +382,7 @@ function DunningPanel() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(draft),
     });
-    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? "Could not create"); return; }
+    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? tErrors("couldNotCreate")); return; }
     setDraft({ name: "", gracePeriodDays: 0, stages: [BLANK_STAGE] });
     void load();
   };
@@ -389,45 +395,45 @@ function DunningPanel() {
   return (
     <div className="space-y-6">
       <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold">New dunning policy</h3>
+        <h3 className="mb-3 text-sm font-semibold">{t("newPolicy")}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label>Policy name</Label>
-            <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Standard net-30 collections" />
+            <Label>{t("policyNameLabel")}</Label>
+            <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t("policyNamePlaceholder")} />
           </div>
           <div>
-            <Label>Grace period (days past due)</Label>
+            <Label>{t("gracePeriodLabel")}</Label>
             <Input type="number" value={draft.gracePeriodDays} onChange={(e) => setDraft({ ...draft, gracePeriodDays: Number(e.target.value) })} />
           </div>
         </div>
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Reminder ladder</span>
-            <Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, stages: [...draft.stages, { ...BLANK_STAGE, sequence: draft.stages.length + 1, name: `Reminder ${draft.stages.length + 1}`, offsetDays: (draft.stages.at(-1)?.offsetDays ?? 0) + 14 }] })}>
-              + Add stage
+            <span className="text-sm font-medium">{t("reminderLadder")}</span>
+            <Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, stages: [...draft.stages, { ...BLANK_STAGE, sequence: draft.stages.length + 1, name: t("newStageName", { n: draft.stages.length + 1 }), offsetDays: (draft.stages.at(-1)?.offsetDays ?? 0) + 14 }] })}>
+              {t("addStage")}
             </Button>
           </div>
           {draft.stages.map((s, i) => (
             <div key={i} className="rounded border p-3">
               <div className="grid gap-2 sm:grid-cols-3">
-                <div><Label>Name</Label><Input value={s.name} onChange={(e) => setStage(i, { name: e.target.value })} /></div>
-                <div><Label>Days past due</Label><Input type="number" value={s.offsetDays} onChange={(e) => setStage(i, { offsetDays: Number(e.target.value) })} /></div>
-                <div><Label>Sequence</Label><Input type="number" value={s.sequence} onChange={(e) => setStage(i, { sequence: Number(e.target.value) })} /></div>
+                <div><Label>{t("stageLabels.name")}</Label><Input value={s.name} onChange={(e) => setStage(i, { name: e.target.value })} /></div>
+                <div><Label>{t("stageLabels.daysPastDue")}</Label><Input type="number" value={s.offsetDays} onChange={(e) => setStage(i, { offsetDays: Number(e.target.value) })} /></div>
+                <div><Label>{t("stageLabels.sequence")}</Label><Input type="number" value={s.sequence} onChange={(e) => setStage(i, { sequence: Number(e.target.value) })} /></div>
               </div>
-              <div className="mt-2"><Label>Subject</Label><Input value={s.subjectTemplate} onChange={(e) => setStage(i, { subjectTemplate: e.target.value })} /></div>
+              <div className="mt-2"><Label>{t("subjectLabel")}</Label><Input value={s.subjectTemplate} onChange={(e) => setStage(i, { subjectTemplate: e.target.value })} /></div>
               <div className="mt-2">
-                <Label>Body</Label>
+                <Label>{t("bodyLabel")}</Label>
                 <textarea className="w-full rounded border px-2 py-1 text-sm" rows={4} value={s.bodyTemplate} onChange={(e) => setStage(i, { bodyTemplate: e.target.value })} />
               </div>
               {draft.stages.length > 1 && (
-                <Button size="sm" variant="ghost" className="mt-2" onClick={() => setDraft({ ...draft, stages: draft.stages.filter((_, j) => j !== i) })}>Remove stage</Button>
+                <Button size="sm" variant="ghost" className="mt-2" onClick={() => setDraft({ ...draft, stages: draft.stages.filter((_, j) => j !== i) })}>{t("removeStage")}</Button>
               )}
             </div>
           ))}
-          <p className="text-xs text-muted-foreground">Tokens: {"{{party}} {{invoice}} {{amount}} {{dueDate}} {{daysOverdue}} {{orgName}}"}</p>
+          <p className="text-xs text-muted-foreground">{t("tokensHint")} {"{{party}} {{invoice}} {{amount}} {{dueDate}} {{daysOverdue}} {{orgName}}"}</p>
         </div>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        <div className="mt-3"><Button onClick={create} disabled={!draft.name}>Create policy</Button></div>
+        <div className="mt-3"><Button onClick={create} disabled={!draft.name}>{t("createPolicy")}</Button></div>
       </Card>
 
       <div className="space-y-3">
@@ -437,22 +443,22 @@ function DunningPanel() {
               <div>
                 <span className="font-medium">{p.name}</span>
                 <span className="ml-2 text-sm text-muted-foreground">
-                  {p.stages.length} stage{p.stages.length === 1 ? "" : "s"} · grace {p.gracePeriodDays}d
+                  {t("policySummary", { count: p.stages.length, grace: p.gracePeriodDays })}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {p.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Off</Badge>}
-                <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>Delete</Button>
+                {p.isActive ? <Badge>{t("activeBadge")}</Badge> : <Badge variant="secondary">{t("off")}</Badge>}
+                <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>{t("delete")}</Button>
               </div>
             </div>
             <ul className="mt-2 text-sm text-muted-foreground">
               {[...p.stages].sort((a, b) => a.sequence - b.sequence).map((s) => (
-                <li key={s.sequence}>· Day {s.offsetDays}: {s.name}</li>
+                <li key={s.sequence}>{t("stageDay", { day: s.offsetDays, name: s.name })}</li>
               ))}
             </ul>
           </Card>
         ))}
-        {policies.length === 0 && <p className="text-center text-muted-foreground">No dunning policies yet.</p>}
+        {policies.length === 0 && <p className="text-center text-muted-foreground">{t("noneYet")}</p>}
       </div>
     </div>
   );
