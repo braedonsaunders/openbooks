@@ -244,12 +244,16 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (amount === 'invalid') {
           return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
         }
+        const taxInputAmount = exactOrderMoney(l.taxInputAmount)
+        if (taxInputAmount === 'invalid') {
+          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
+        }
         preparedLines.push({
           ...l,
           quantity: l.quantity ?? '0',
           unitPrice: l.unitPrice ?? '0',
           amount,
-          taxInputAmount: normalizeMoney(l.taxInputAmount),
+          taxInputAmount,
           taxAmount: normalizeMoney(l.taxAmount),
           extraDims: lineDims.cleaned,
         })
