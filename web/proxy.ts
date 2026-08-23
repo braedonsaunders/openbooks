@@ -6,7 +6,8 @@ import {
   buildContentSecurityPolicy,
   createContentSecurityPolicyNonce,
 } from "./lib/content-security-policy";
-import { isPublicPath } from "./lib/proxy-policy";
+import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
+import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
 
 /**
  * Session gate. Edge runtime: verify the HMAC cookie with Web Crypto —
@@ -51,6 +52,18 @@ export async function proxy(req: NextRequest) {
     response.headers.set("Content-Security-Policy", contentSecurityPolicy);
     return response;
   };
+
+  // CSRF gate: forged cross-site mutations ride the session cookie, so every
+  // unsafe-method request on a cookie-authenticated surface must present an
+  // Origin/Referer matching this deployment. Token-authenticated surfaces are
+  // exempt (isCsrfExemptPath) and non-browser clients send no Origin.
+  if (isUnsafeMethod(req.method) && !isCsrfExemptPath(pathname) && !hasTrustedOrigin(req)) {
+    return secured(
+      pathname.startsWith("/api/")
+        ? NextResponse.json({ error: "forbidden" }, { status: 403 })
+        : new NextResponse("cross-origin request rejected", { status: 403 }),
+    );
+  }
 
   if (isPublicPath(pathname)) {
     return secured(next());
