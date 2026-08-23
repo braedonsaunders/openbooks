@@ -129,7 +129,7 @@ test('project actions link the existing General Ledger to the complete project p
   const drawer = source('app/(app)/projects/ProjectDrawer.tsx')
   const loader = source('app/(app)/projects/_cockpit-data.ts')
   const report = source('app/(app)/reports/general-ledger/page.tsx')
-  const reports = source('lib/reports.ts')
+  const reports = source('lib/reports/filters.ts')
 
   assert.match(drawer, /reports\/general-ledger/)
   assert.match(drawer, /project: String\(pr\.id\)/)
