@@ -63,6 +63,7 @@ export function CashCockpit({
 }) {
   const { money, moneyCompact } = useMoney()
   const t = useTranslations('banking.cash')
+  const tCharts = useTranslations('analytics.charts')
   const router = useRouter()
   const searchParams = useSearchParams()
   const [showConfig, setShowConfig] = useState(false)
@@ -85,11 +86,26 @@ export function CashCockpit({
   const lowestDate = new Date(data.lowestWeek + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
   const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
   const runwayTone = data.runwayStatus === 'critical' ? 'negative' : data.runwayStatus === 'caution' ? 'warning' : 'positive'
+  const bridgeLabels = {
+    start: tCharts('bridge.start'),
+    inflows: tCharts('bridge.inflows'),
+    outflows: tCharts('bridge.outflows'),
+    projectedEnd: tCharts('bridge.projectedEnd'),
+  }
+  const forecastLabels = {
+    endingCash: tCharts('weekly.endingCash'),
+    lowest: tCharts('weekly.lowest'),
+    in: tCharts('weekly.in'),
+    out: tCharts('weekly.out'),
+    net: tCharts('weekly.net'),
+    ending: tCharts('weekly.ending'),
+  }
   const bridge = useMemo(
-    () => cashBridgeOption(data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact),
+    () => cashBridgeOption(data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact, bridgeLabels),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact],
   )
-  const forecast = useMemo(() => cashForecastOption(data.weeks, moneyCompact), [data.weeks, moneyCompact])
+  const forecast = useMemo(() => cashForecastOption(data.weeks, moneyCompact, forecastLabels), [data.weeks, moneyCompact])
 
   // Distinct menu labels — the timeline table and forecast chart share a
   // panel title on the page, which would be ambiguous in the layout list.

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { InsightChart } from '@openbooks/analytics/viz'
 import { useAnalyticsMoney } from './format'
 
@@ -102,19 +103,20 @@ export function ForecastChart({
   height?: number
 }) {
   const money = useChartMoney()
+  const t = useTranslations('analytics.charts')
   const bandBase = low.map((v) => (v == null ? null : v))
   const bandSpan = low.map((v, i) => (v == null || high[i] == null ? null : (high[i] as number) - v))
   const option: EChartsOption = {
     grid: { ...baseGrid, top: 30 },
     tooltip: { ...tooltip, formatter: (ps: any[]) => [ps[0]?.axisValue, ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${p.seriesName}: ${money(p.value)}`)].join('<br/>') },
-    legend: { top: 0, right: 0, data: ['History', 'Forecast'], textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
+    legend: { top: 0, right: 0, data: [t('history'), t('forecast')], textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
     xAxis: catAxis(labels),
     yAxis: valAxis(money),
     series: [
       { name: '_base', type: 'line', stack: 'band', data: bandBase, lineStyle: { opacity: 0 }, symbol: 'none', silent: true },
       { name: '_band', type: 'line', stack: 'band', data: bandSpan, lineStyle: { opacity: 0 }, areaStyle: { color: 'rgba(13,148,136,0.12)' }, symbol: 'none', silent: true },
-      { name: 'History', type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2.5, color: PALETTE[0] }, itemStyle: { color: PALETTE[0] }, data: history },
-      { name: 'Forecast', type: 'line', smooth: true, showSymbol: true, symbolSize: 5, lineStyle: { width: 2.5, color: PALETTE[1], type: 'dashed' }, itemStyle: { color: PALETTE[1] }, data: forecast },
+      { name: t('history'), type: 'line', smooth: true, showSymbol: false, lineStyle: { width: 2.5, color: PALETTE[0] }, itemStyle: { color: PALETTE[0] }, data: history },
+      { name: t('forecast'), type: 'line', smooth: true, showSymbol: true, symbolSize: 5, lineStyle: { width: 2.5, color: PALETTE[1], type: 'dashed' }, itemStyle: { color: PALETTE[1] }, data: forecast },
     ],
   }
   return <Chart option={option} height={height} />
@@ -259,16 +261,24 @@ export function Donut({
   return <Chart option={option} height={height} />
 }
 
+/** Labels for the cash-bridge waterfall steps (translated by the caller). */
+export interface CashBridgeLabels {
+  start: string
+  inflows: string
+  outflows: string
+  projectedEnd: string
+}
+
 /** Waterfall bridge: Start → +Inflows → −Outflows → Projected End (the
  * cashflow dashboard's signature chart, shared by analytics and the Cash
  * cockpit — moved verbatim from CashflowView). */
-export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number, money: MoneyLabel): EChartsOption {
+export function cashBridgeOption(startCash: number, inflows: number, outflows: number, end: number, money: MoneyLabel, labels: CashBridgeLabels): EChartsOption {
   const afterIn = startCash + inflows
   const steps = [
-    { label: 'Start', from: 0, to: startCash, color: '#94a3b8' },
-    { label: 'Inflows', from: startCash, to: afterIn, color: '#10b981' },
-    { label: 'Outflows', from: afterIn, to: end, color: '#ef4444' },
-    { label: 'Projected End', from: 0, to: end, color: '#0d9488' },
+    { label: labels.start, from: 0, to: startCash, color: '#94a3b8' },
+    { label: labels.inflows, from: startCash, to: afterIn, color: '#10b981' },
+    { label: labels.outflows, from: afterIn, to: end, color: '#ef4444' },
+    { label: labels.projectedEnd, from: 0, to: end, color: '#0d9488' },
   ]
   const base = steps.map((s) => Math.min(s.from, s.to))
   const bar = steps.map((s) => Math.abs(s.to - s.from))
@@ -285,12 +295,23 @@ export function cashBridgeOption(startCash: number, inflows: number, outflows: n
   }
 }
 
+/** Labels for the weekly cash-forecast chart (translated by the caller). */
+export interface CashForecastLabels {
+  endingCash: string
+  lowest: string
+  in: string
+  out: string
+  net: string
+  ending: string
+}
+
 /** Weekly cash-position forecast: teal area over ending cash with a zero
  * guard-line and the lowest week flagged; tooltip breaks each week into
  * in / out / net / ending. */
 export function cashForecastOption(
   weeks: { label: string; inflow: number; outflow: number; net: number; endingCash: number }[],
   money: MoneyLabel,
+  labels: CashForecastLabels,
 ): EChartsOption {
   const ending = weeks.map((w) => w.endingCash)
   const min = Math.min(0, ...ending)
@@ -304,10 +325,10 @@ export function cashForecastOption(
         if (!w) return ''
         return [
           w.label,
-          `In: ${money(w.inflow)}`,
-          `Out: ${money(w.outflow)}`,
-          `Net: ${money(w.net)}`,
-          `<b>Ending: ${money(w.endingCash)}</b>`,
+          `${labels.in}: ${money(w.inflow)}`,
+          `${labels.out}: ${money(w.outflow)}`,
+          `${labels.net}: ${money(w.net)}`,
+          `<b>${labels.ending}: ${money(w.endingCash)}</b>`,
         ].join('<br/>')
       },
     },
@@ -315,7 +336,7 @@ export function cashForecastOption(
     yAxis: { ...valAxis(money), min },
     series: [
       {
-        name: 'Ending cash',
+        name: labels.endingCash,
         type: 'line',
         smooth: true,
         showSymbol: false,
@@ -338,7 +359,7 @@ export function cashForecastOption(
           symbolSize: 44,
           label: { fontSize: 9, color: '#fff', formatter: (p: any) => money(p.value) },
           itemStyle: { color: ending[lowestIdx]! < 0 ? NEG : '#f59e0b' },
-          data: [{ name: 'Lowest', coord: [lowestIdx, ending[lowestIdx]], value: ending[lowestIdx] }],
+          data: [{ name: labels.lowest, coord: [lowestIdx, ending[lowestIdx]], value: ending[lowestIdx] }],
         },
       },
     ],

@@ -1626,5 +1626,23 @@
       "searchCardAccounts": "Search card accounts…",
       "searchBankAccounts": "Search bank accounts…"
     }
+  },
+  "charts": {
+    "history": "History",
+    "forecast": "Forecast",
+    "bridge": {
+      "start": "Start",
+      "inflows": "Inflows",
+      "outflows": "Outflows",
+      "projectedEnd": "Projected End"
+    },
+    "weekly": {
+      "endingCash": "Ending cash",
+      "lowest": "Lowest",
+      "in": "In",
+      "out": "Out",
+      "net": "Net",
+      "ending": "Ending"
+    }
   }
 }
