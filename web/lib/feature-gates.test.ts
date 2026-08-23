@@ -2632,6 +2632,41 @@ test('the surfaces this test was written for are covered', () => {
     'the global party drawer must hide CRM activities when CRM is off — stored activities stay',
   )
   assert.match(
+    read('app/(app)/layout.tsx'),
+    /isFeatureEnabled\(authz\.user\.orgId, 'orders'\)[\s\S]{0,400}isFeatureEnabled\(authz\.user\.orgId, 'expenses'\)/,
+    'the shell must resolve the Orders and Expenses switches for the create menu',
+  )
+  assert.match(
+    read('app/(app)/layout.tsx'),
+    /expenses: can\(authz, 'expenses\.create'\) && expensesEnabled/,
+    'the global create menu must hide Expense when Expenses is off — the draft API 404s',
+  )
+  assert.match(
+    read('app/(app)/layout.tsx'),
+    /projects: can\(authz, 'projects\.manage'\) && projectsEnabled/,
+    'the global create menu must hide Project when Projects is off — the draft API refuses',
+  )
+  assert.match(
+    read('app/(app)/layout.tsx'),
+    /assets: can\(authz, 'assets\.manage'\) && assetsEnabled/,
+    'the global create menu must hide Asset when Fixed Assets is off — the draft API 404s',
+  )
+  assert.match(
+    read('app/(app)/layout.tsx'),
+    /orders: ordersEnabled/,
+    'the global create menu must receive the Orders switch — quotes/SOs/POs must disappear when it is off',
+  )
+  assert.match(
+    read('components/global-create-menu.tsx'),
+    /p\.accountsReceivable && p\.orders/,
+    'the create menu must hide estimate/sales-order when Orders is off',
+  )
+  assert.match(
+    read('components/global-create-menu.tsx'),
+    /p\.accountsPayable && p\.orders/,
+    'the create menu must hide purchase-order when Orders is off',
+  )
+  assert.match(
     read('app/(app)/parties/PartyDrawer.tsx'),
     /initialTab === 'activities' && !canReadActivities/,
     'the party drawer must omit the activities tab when CRM is off — stored activities stay',
