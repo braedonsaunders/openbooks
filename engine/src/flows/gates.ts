@@ -19,15 +19,15 @@ import { emailActionUrls } from "./email-tokens.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
- * in process (no worker outbox): the
- * decide is an atomic conditional UPDATE (pending → decided, so two
- * concurrent approvals can never both resume the branch), quorum evaluation
- * (quorum.ts) picks the branch, and planFromGate → executeFlowPlan re-runs on
- * the SAME runId — flow_run_effects checkpoints keep earlier nodes from
- * double-firing.
+ * in process: the decide is an atomic conditional UPDATE (pending → decided,
+ * so two concurrent approvals can never both resume the branch), quorum
+ * evaluation (quorum.ts) picks the branch, and planFromGate → executeFlowPlan
+ * re-runs on the SAME runId — flow_run_effects checkpoints keep earlier nodes
+ * from double-firing.
  *
- * Reminders/escalations (remind_at / escalate_at on flow_gates) run off the
- * 60s scheduler tick via processGateTimers().
+ * Reminders still stamp flow_gates.reminded_at. Escalations enqueue a durable
+ * scheduler_outbox row (claim / fail with reason / backoff) so a crash cannot
+ * drop the hop.
  */
 
 type GateRow = typeof schema.flowGates.$inferSelect;
@@ -666,10 +666,10 @@ export async function delegateGate(gateId: string, fromUserId: string, toUserId:
  * reminded_at (fires once; the stamp is the claim, released on notify failure
  * so the next tick retries).
  *
- * Escalations: escalate_at <= now, still pending → resolve the gate node's
- * escalateTo target (fallback: the submitter's supervisor; last resort:
- * org admins), insert replacement pending rows in the same group, flip the
- * overdue row to 'escalated'.
+ * Escalations: escalate_at <= now, still pending → enqueue a scheduler_outbox
+ * row. The outbox runner resolves escalateTo (fallback: supervisor, then org
+ * admins), inserts replacement pending rows, and flips the overdue row to
+ * 'escalated'. A thrown hop stays failed with a reason for retry.
  */
 export async function processGateTimers(now: Date = new Date()): Promise<{
   reminded: number;
@@ -733,9 +733,12 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   }
 
   // --- Escalations -----------------------------------------------------------
+  // Enqueue a durable outbox row per due gate. The runner claims that row;
+  // a throw leaves status=failed + error so the next tick retries.
+  const { enqueueApprovalEscalation } = await import("../scheduler-outbox.ts");
   const dueEscalations = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`
-    select gate.id from flow_gates gate
+    db.execute<{ id: string; orgId: string }>(sql`
+    select gate.id, gate.org_id as "orgId" from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
        and organization.env_kind = 'production'
@@ -744,12 +747,9 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
      limit 100
   `));
 
-  for (const { id } of dueEscalations.rows) {
-    try {
-      if (await escalateGate(id, now)) escalated++;
-    } catch (e) {
-      console.error(`[flows] gate ${id} escalation failed:`, e);
-    }
+  for (const { id, orgId } of dueEscalations.rows) {
+    await withBypassContext(() => enqueueApprovalEscalation({ orgId, gateId: id }));
+    escalated++;
   }
 
   return { reminded, escalated };
@@ -813,6 +813,10 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
  * nothing resolves, org admins are notified once (escalate_at clears so the
  * scan does not hammer) and the row stays pending.
  */
+export async function escalateDueGate(gateId: string, now: Date = new Date()): Promise<boolean> {
+  return escalateGate(gateId, now);
+}
+
 async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   // Called from the contextless scheduler tick with only a gate id: this probe
   // discovers WHICH tenant owns it, so it crosses a trusted boundary. Every

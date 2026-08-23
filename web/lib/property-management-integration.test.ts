@@ -44,8 +44,8 @@ test('property management has feature-switch, navigation, scheduler, and help wi
   const featureWorkspace = source('../app/(app)/admin/setup/features/FeaturesWorkspace.tsx')
   assert.match(featureWorkspace, /propertyManagement: Building2/)
 
-  const scheduler = source('../../engine/src/scheduler.ts')
-  assert.match(scheduler, /runDuePropertyBilling/)
+  const schedulerOutbox = source('../../engine/src/scheduler-outbox.ts')
+  assert.match(schedulerOutbox, /runDuePropertyBilling/)
 
   const article = getArticle('property-management')
   assert.equal(article?.title, 'Property Management')

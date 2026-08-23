@@ -124,31 +124,19 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] recurring billing scan failed:", e);
     }
 
-    // Dunning: fire the due collections-ladder stage on each overdue invoice.
-    // Idempotent via the dunning_log unique (document, stage) index.
+    // Dunning, subscription/property billing, FX scans, and approval
+    // escalations go through scheduler_outbox (claim / run / fail+reason /
+    // backoff). A crash leaves the row — Redis is not the source of truth.
     try {
-      const { runDunning } = await import("./dunning.ts");
-      await runDunning();
+      const { ensureScanOutboxRows, processDueSchedulerOutbox } = await import("./scheduler-outbox.ts");
+      await withBypassContext(() => ensureScanOutboxRows());
+      const { processGateTimers } = await import("./flows/gates.ts");
+      await processGateTimers();
+      await withBypassContext(() => processDueSchedulerOutbox());
+      const { processDuePostingEffects } = await import("./posting-effects.ts");
+      await withBypassContext(() => processDuePostingEffects());
     } catch (e) {
-      console.error("[scheduler] dunning scan failed:", e);
-    }
-
-    // Subscription billing: invoice each due subscription (only for orgs with
-    // the subscriptionBilling feature on) and advance its next bill date.
-    try {
-      const { runDueSubscriptions } = await import("./subscription-billing.ts");
-      await runDueSubscriptions();
-    } catch (e) {
-      console.error("[scheduler] subscription billing scan failed:", e);
-    }
-
-    // Property management: extend active lease schedules, assess governed late
-    // fees, and create native tenant invoices for every due charge.
-    try {
-      const { runDuePropertyBilling } = await import("./property-management.ts");
-      await runDuePropertyBilling();
-    } catch (e) {
-      console.error("[scheduler] property billing scan failed:", e);
+      console.error("[scheduler] durable outbox tick failed:", e);
     }
 
     // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
@@ -159,14 +147,6 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] scheduled flows scan failed:", e);
     }
 
-    // Flows: gate reminder/escalation timers (flow_gates.remind_at/escalate_at).
-    try {
-      const { processGateTimers } = await import("./flows/gates.ts");
-      await processGateTimers();
-    } catch (e) {
-      console.error("[scheduler] gate timer scan failed:", e);
-    }
-
     // Period close: expire temporary reopen windows and execute deadline rules.
     try {
       const { recloseExpiredReopens, runDueCloseAutomations } = await import("./close.ts");
@@ -174,16 +154,6 @@ export async function tick(): Promise<void> {
       await runDueCloseAutomations();
     } catch (e) {
       console.error("[scheduler] close automation scan failed:", e);
-    }
-
-    // Tenant-configured foreign-exchange feeds. Each due row is claimed with
-    // compare-and-swap before its external request, so multiple app servers do
-    // not import the same observation concurrently.
-    try {
-      const { runDueFxProviders } = await import("./fx-providers.ts");
-      await runDueFxProviders();
-    } catch (e) {
-      console.error("[scheduler] FX provider scan failed:", e);
     }
 
     // Tenant-controlled Accounting and Finance continuous-close agents.

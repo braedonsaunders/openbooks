@@ -20,6 +20,7 @@ export {
   decideGate,
   delegateGate,
   processGateTimers,
+  escalateDueGate,
   worklistGates,
   gateDecisionCapability,
   GateError,
