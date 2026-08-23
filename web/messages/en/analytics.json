@@ -269,7 +269,281 @@
   },
   "spendVelocity": {
     "title": "Spend Velocity",
-    "backToHub": "Analytics"
+    "backToHub": "Analytics",
+    "tabs": {
+      "overview": "Overview",
+      "velocity": "Velocity",
+      "detectors": "Detectors",
+      "accounts": "Accounts",
+      "trends": "Trends",
+      "config": "Configuration"
+    },
+    "health": {
+      "healthy": "HEALTHY",
+      "watch": "WATCH",
+      "elevated": "ELEVATED",
+      "atRisk": "AT RISK",
+      "caption": "spend health"
+    },
+    "kpi": {
+      "totalSpend": "Total Spend",
+      "avgVelocity": "Avg Velocity",
+      "savingsPotential": "Savings Potential",
+      "alerts": "Alerts"
+    },
+    "sub": {
+      "accountsCount": "{count} accounts",
+      "acceleratingCount": "{count} accelerating",
+      "creepAndZombies": "from creep + zombies",
+      "noIssues": "no issues found",
+      "anomaliesCount": "{count} anomalies"
+    },
+    "trend": {
+      "accelerating": "Accelerating",
+      "high": "High",
+      "rising": "Rising",
+      "declining": "Declining",
+      "stable": "Stable",
+      "new": "New"
+    },
+    "scatter": {
+      "xAxis": "Velocity %",
+      "yAxis": "Accel",
+      "tooltipVelocity": "Velocity: {pct}%",
+      "tooltipAccel": "Accel: {pct}%",
+      "tooltipSpend": "Spend: {amount}"
+    },
+    "chart": {
+      "spend": "Spend",
+      "priorYear": "Prior Year"
+    },
+    "panels": {
+      "velocityVsAccel": "Velocity vs Acceleration",
+      "velocityVsAccelHint": "Velocity = monthly spend change · Acceleration = change in velocity · size = spend",
+      "top10BySpend": "Top 10 by Spend",
+      "monthlyTrend": "Monthly Trend",
+      "highestVelocity": "Highest Velocity Accounts",
+      "insights": "Insights",
+      "detectorSummary": "Detector Summary",
+      "accountVelocity": "Expense Account Velocity",
+      "vendorDrillDown": "Vendor Drill-Down",
+      "alertDetails": "Alert Details",
+      "deepAnalysis": "Account Deep Analysis",
+      "deepAnalysisHint": "{count} accounts · click a row for transactions",
+      "monthlySpendVelocity": "Monthly Spend Velocity",
+      "monthlySpendVelocityHint": "Current vs same month prior year",
+      "seasonalPatterns": "Seasonal Patterns",
+      "monthlySummary": "Monthly Summary",
+      "modelThresholds": "Model & Thresholds",
+      "dataSources": "Data sources"
+    },
+    "table": {
+      "account": "Account",
+      "spend": "Spend",
+      "velocity": "Velocity",
+      "trend": "Trend",
+      "vendor": "Vendor",
+      "billsExp": "Bills/Exp",
+      "accel": "Accel.",
+      "sparkline": "Sparkline",
+      "current": "Current",
+      "prior": "Prior",
+      "change": "Change",
+      "projected": "Projected",
+      "month": "Month",
+      "totalSpend": "Total Spend",
+      "priorYear": "Prior Year",
+      "yoyChange": "YoY Change",
+      "txns": "Txns",
+      "vendors": "Vendors",
+      "detector": "Detector",
+      "item": "Item",
+      "severity": "Severity",
+      "impact": "Impact",
+      "details": "Details"
+    },
+    "row": {
+      "txnsMonths": "{txns} txns · {months} months",
+      "txns": "{txns} txns"
+    },
+    "chips": {
+      "all": "All",
+      "increases": "↑ Increases",
+      "decreases": "↓ Decreases",
+      "highVel": "🔥 High Vel",
+      "new": "+ New"
+    },
+    "sort": {
+      "spend": "Sort: Spend",
+      "velocity": "Sort: Velocity",
+      "changePct": "Sort: Change %",
+      "accel": "Sort: Accel"
+    },
+    "period": {
+      "current": "Current Period",
+      "prior": "Prior Period",
+      "twoBack": "2 Periods Back",
+      "projectedNext": "Projected Next",
+      "basedOnTrend": "based on trend"
+    },
+    "searchPlaceholder": "Search accounts…",
+    "csv": {
+      "current": "Current",
+      "prior": "Prior",
+      "twoBack": "2 Back",
+      "changePct": "Change %",
+      "projected": "Projected",
+      "velocityPctMo": "Velocity %/mo"
+    },
+    "newBadge": "NEW",
+    "detectors": {
+      "frog": {
+        "label": "Boiling Frog",
+        "sub": "annual impact",
+        "desc": "Silent cost creep"
+      },
+      "anomaly": {
+        "label": "Anomalies",
+        "sub": "critical",
+        "desc": "Statistical outliers (>2.5σ)"
+      },
+      "zombie": {
+        "label": "Zombies",
+        "sub": "annual cost",
+        "desc": "Unchanged recurring costs"
+      },
+      "fragmentation": {
+        "label": "Fragmentation",
+        "sub": "fragmented spend",
+        "desc": "Many small purchases"
+      },
+      "concentration": {
+        "label": "Concentration",
+        "sub": "top 5 share",
+        "desc": "Category over-reliance"
+      },
+      "cliff": {
+        "label": "Commit. Cliff",
+        "sub": "PO velocity",
+        "desc": "PO vs SO velocity gap"
+      },
+      "seasonal": {
+        "label": "Seasonal",
+        "sub": "off-pattern months",
+        "desc": "Off-pattern spending"
+      },
+      "shadow": {
+        "label": "Shadow IT",
+        "sub": "not available",
+        "desc": "Viral software adoption"
+      }
+    },
+    "details": {
+      "frog": "+{rate}%/mo for {months} months",
+      "anomaly": "{sigma}σ from mean in {month}",
+      "zombie": "{amount}/mo unchanged for {months} months",
+      "concentration": "{share}% of spend, {trend}",
+      "fragmentation": "{txns} txns/mo, avg {avg}",
+      "seasonal": "{deviation}% vs average month",
+      "cliffItem": "PO vs SO velocity",
+      "cliff": "gap {gap}%, ratio {ratio}×"
+    },
+    "severity": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "banner": {
+      "count": "{total} total alerts",
+      "rest": " across 8 detectors — click a card to filter"
+    },
+    "clearFilter": "Clear filter · {key}",
+    "empty": {
+      "noAnomalies": "No anomalies detected",
+      "noAlerts": "No alerts detected",
+      "forDetector": " for this detector",
+      "noSeasonal": "No significant seasonal patterns detected"
+    },
+    "shadowIt": {
+      "title": "Shadow IT",
+      "body": " is unavailable in openbooks: {reason}"
+    },
+    "deviationNote": "Monthly deviation from average",
+    "unit": {
+      "months": "months"
+    },
+    "config": {
+      "velocityThresholds": {
+        "label": "Velocity thresholds",
+        "note": "Rising / high monthly CAGR cutoffs"
+      },
+      "anomalyThreshold": {
+        "label": "Anomaly threshold",
+        "note": "Z-score for statistical outliers (critical at 3σ)"
+      },
+      "boilingFrog": {
+        "label": "Boiling frog",
+        "note": "Minimum months of small (<10%) monotonic increases"
+      },
+      "zombieWindow": {
+        "label": "Zombie window",
+        "note": "Identical recurring vendor totals (<1% deviation)"
+      },
+      "fragmentation": {
+        "label": "Fragmentation",
+        "note": "Transactions per month / avg transaction size"
+      },
+      "velocityEngine": {
+        "label": "Velocity engine",
+        "value": "Monthly CAGR",
+        "note": "(end/start)^(1/periods) − 1 with {minBase} minimum base"
+      },
+      "fields": {
+        "highVelocity": {
+          "label": "High velocity (%/mo)",
+          "help": "Monthly CAGR above this classifies as accelerating/high"
+        },
+        "mediumVelocity": {
+          "label": "Medium velocity (%/mo)",
+          "help": "Monthly CAGR above this classifies as rising"
+        },
+        "anomalySigma": {
+          "label": "Anomaly σ",
+          "help": "Months beyond this many standard deviations flag as anomalies"
+        },
+        "boilingFrogMonths": {
+          "label": "Boiling frog months",
+          "help": "Minimum months of sustained small increases"
+        },
+        "zombieMonths": {
+          "label": "Zombie months",
+          "help": "Identical monthly vendor totals for at least this many months"
+        },
+        "fragmentationTxns": {
+          "label": "Fragmentation txns/mo",
+          "help": "Monthly transaction count above this (below the size cap) flags fragmentation"
+        },
+        "fragmentationAvgSize": {
+          "label": "Fragmentation average size",
+          "help": "Average transaction size cap for the fragmentation detector"
+        }
+      }
+    },
+    "sources": {
+      "intro": "Spend = expense/COGS journal lines from the four spend document types:",
+      "li1Bold1": "Vendor bills, expense reports, checks",
+      "li1Mid": " add to spend; ",
+      "li1Bold2": "vendor credits",
+      "li1Tail": " net against it.",
+      "li2Bold": "Commitment cliff",
+      "li2Tail": " compares purchase-order vs sales-order monthly velocity.",
+      "li3Bold": "Revenue normalisation",
+      "li3Tail": " uses GL income for the OpEx ratio ({ratio}%).",
+      "li4Bold": "Shadow IT",
+      "li4Tail": " — unavailable: {reason}",
+      "outro": "Drill-downs fetch that account or vendor's full activity for the period on click (searchable, with monthly trend and breakdown); each row links to the real record in its native module."
+    }
   },
   "sentinel": {
     "title": "Sentinel",
