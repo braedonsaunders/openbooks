@@ -693,6 +693,16 @@ test('the surfaces this test was written for are covered', () => {
     'AP capture PATCH must 404 — not persist new inventory/assembly/kit items — when Inventory is off',
   )
   assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /isFeatureEnabled\([^,]+, 'equipment'\)/,
+    'AP capture PATCH must refuse equipment_charge when Equipment is off — stored lines stay',
+  )
+  assert.match(
+    read('app/api/ap-capture/[id]/route.ts'),
+    /kind === 'equipment_charge'[\s\S]{0,200}status: 404/,
+    'AP capture PATCH must 404 — not persist new equipment_charge items — when Equipment is off',
+  )
+  assert.match(
     read('app/api/labor-rate-cards/[id]/route.ts'),
     /\["inventory", "assembly", "kit"\]/,
     'labor rate-card line writes must name the inventory kinds the Features switch refuses',

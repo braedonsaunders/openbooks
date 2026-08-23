@@ -127,6 +127,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
   }
+  // Stored equipment_charge lines stay. Turning Equipment off must
+  // 404 a write that would persist a new one of those kinds.
+  if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+    const storedIds = new Set(
+      (current.rows[0].normalized.lines ?? [])
+        .map((line) => line.itemId)
+        .filter((itemId): itemId is string => Boolean(itemId)),
+    )
+    for (const line of normalized.lines) {
+      if (!line.itemId || storedIds.has(line.itemId)) continue
+      const item = (await db.execute<{ kind: string }>(sql`
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+    }
+  }
   const nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
   if (
     nextPurchaseOrderId
