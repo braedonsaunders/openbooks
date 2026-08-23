@@ -266,6 +266,23 @@ test("computeVendorApplication persists materialsStoredCurrent through canonical
   assert.doesNotMatch(body, /normalizeMoney\(input\.materialsStoredCurrent\)/);
 });
 
+test("computeVendorApplication persists retainagePercent through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistVendorPayApplicationRetainagePercent");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationRetainagePercent helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 4\)/);
+  assert.match(helper, /normalizeMoney\(exact\)/);
+  assert.match(helper, /SubcontractError/);
+
+  const start = source.indexOf("export function computeVendorApplication");
+  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
+  const body = source.slice(start, next);
+  assert.match(body, /persistVendorPayApplicationRetainagePercent\(input\.retainagePercent\)/);
+  assert.doesNotMatch(body, /normalizeMoney\(input\.retainagePercent\)/);
+});
+
 test("updateVendorPayApplicationLines persists workCompletedThisPeriod through canonicalDecimal then normalizeMoney", () => {
   const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
   const helperStart = source.indexOf("function persistVendorPayApplicationWorkCompletedThisPeriod");
