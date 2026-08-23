@@ -159,6 +159,16 @@ test(
         attribution_complete: true,
       });
 
+      // Every generation in the same month carries a distinct number under
+      // journal_entries_org_number while keeping the TRUEUP-{month}- shape.
+      const trueupNumbers = (await db.execute<{ n: number; distinct: number }>(sql`
+        select count(*)::int as n, count(distinct entry_number)::int as distinct
+          from journal_entries
+         where org_id = ${org.orgId}
+           and entry_number like 'TRUEUP-2026-07-%'
+      `));
+      assert.deepEqual(trueupNumbers.rows[0], { n: 3, distinct: 3 });
+
       sourceRows = [
         { accountRef: "A", month: "2026-07", amount: "151.0000" },
         { accountRef: "MISSING", month: "2026-07", amount: "-151.0000" },

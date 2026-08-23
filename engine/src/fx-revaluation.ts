@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, isZero, mulRate, neg, sum } from "./money.ts";
@@ -417,8 +418,13 @@ async function postRevaluationEntry(
       return eid;
     };
 
+    // journal_entries_org_number is org-wide while the duplicate check above
+    // is scoped to one (book, period, subsidiary): another subsidiary (or a
+    // re-posted generation) must not collide, so every physical journal —
+    // adjustment and its -R mirror alike — carries its own number.
+    const entryNumber = `FXREVAL-${periodName}-${randomUUID().slice(0, 8)}`;
     const entryId = await insertEntry(
-      `FXREVAL-${periodName}`,
+      entryNumber,
       `Unrealized FX revaluation — ${periodName}`,
       asOfDate,
       periodId,
@@ -430,7 +436,7 @@ async function postRevaluationEntry(
       throw new RevaluationError(missingReversalPeriodReason());
     }
     const reversalEntryId = await insertEntry(
-      `FXREVAL-${periodName}-R`,
+      `${entryNumber}-R`,
       `Unrealized FX revaluation reversal — ${periodName}`,
       nextStartsOn,
       nextPeriodId,

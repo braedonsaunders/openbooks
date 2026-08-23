@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
@@ -146,11 +147,14 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     lines.push({ accountId: settings.accountId, amount: neg(total), projectId: null, memo: "Overhead applied — contra" });
 
     const postingDate = maxDate || await businessToday(orgId);
+    // A released group (reverseOverheadForTime) can be re-applied with the
+    // same date and first member, so the entry number must be unique per
+    // physical journal under journal_entries_org_number.
     const entryId = await postProjectGlEntryWithinTransaction(tx, {
       orgId,
       actorId,
       origin: "overhead_applied",
-      entryNumber: `OVH-${postingDate}-${carried[0].slice(0, 8)}`,
+      entryNumber: `OVH-${postingDate}-${carried[0].slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       postingDate,
       memo: "Overhead applied with approved hours (net-zero pair)",
       lines,
