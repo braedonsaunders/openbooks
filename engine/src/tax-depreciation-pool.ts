@@ -25,6 +25,7 @@
  */
 
 import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { taxConventionHalfMonths } from "./depreciation-conventions.ts";
 
 type ExactDecimal = string | number;
@@ -394,8 +395,19 @@ const nonnegative = (value: string) => cmp(value, zeroMoney) < 0 ? zeroMoney : v
 const minMoney = (left: string, right: string) => cmp(left, right) <= 0 ? left : right;
 const s = (value: string) => formatMoney(value, 2);
 
+/** Persist pool opening balance through exact decimal then ledger money. Fail closed. */
+function persistPoolOpeningBalance(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("opening balance must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("opening balance must be an exact decimal");
+  }
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
-  const opening = normalizeMoney(input.openingBalance);
+  const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = normalizeMoney(input.additions);
   const dispositions = normalizeMoney(input.dispositions);
   const requestedImmediateExpense = nonnegative(normalizeMoney(input.immediateExpense ?? "0"));
