@@ -83,6 +83,17 @@ function persistSubcontractPaymentControlAmountLimit(value: unknown): string {
   }
 }
 
+/** Persist leftover vendor-application previous-earned through exact decimal then ledger money. Fail closed. */
+function persistVendorPayApplicationPreviousEarned(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("previous earned must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("previous earned must be an exact decimal");
+  }
+}
+
 /** Persist leftover vendor-application work-completed-this-period through exact decimal then ledger money. Fail closed. */
 function persistVendorPayApplicationWorkCompletedThisPeriod(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -153,7 +164,7 @@ export function computeVendorApplication(
 ): ComputedVendorApplication {
   const lines = inputs.map((input) => {
     const scheduled = persistSubcontractSovScheduledValue(input.scheduledValue);
-    const previousEarned = normalizeMoney(input.previousEarned);
+    const previousEarned = persistVendorPayApplicationPreviousEarned(input.previousEarned);
     const previousStored = normalizeMoney(input.previousMaterialsStored);
     const work = normalizeMoney(input.workCompletedThisPeriod);
     const currentStored = normalizeMoney(input.materialsStoredCurrent);
