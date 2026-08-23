@@ -61,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
-  const missing = await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     // Snapshot first: deleting a schedule removes the only record of what was
     // set to post automatically. Lock it so the audit evidence is the exact
     // state that this transaction deletes.
@@ -69,7 +69,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       select * from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}
        for update
     `));
-    if (!existing.rows[0]) return true;
+    if (!existing.rows[0]) return "not_found" as const;
+    const lineage = (await tx.execute<{ linked: boolean }>(sql`
+      select true as linked
+        from recurring_occurrence_documents
+       where schedule_id = ${id} and org_id = ${authz.user.orgId}
+       limit 1
+    `));
+    if (lineage.rows[0]) return "generated_documents_exist" as const;
     await tx.execute(
       sql`delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}`,
     );
@@ -80,9 +87,18 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         (${authz.user.orgId}, 'recurring_schedules', ${id}, 'delete',
          ${JSON.stringify({ before: existing.rows[0], after: null })}::jsonb, ${authz.user.id})
     `);
-    return false;
+    return "deleted" as const;
   });
-  if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (outcome === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (outcome === "generated_documents_exist") {
+    return NextResponse.json(
+      {
+        error: "This recurring schedule cannot be deleted because generated documents exist; their immutable lineage must be preserved.",
+        code: "generated_documents_exist",
+      },
+      { status: 409 },
+    );
+  }
   return NextResponse.json({ ok: true });
 }
 

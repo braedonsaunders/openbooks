@@ -268,11 +268,23 @@ function RecurringPanel() {
   };
 
   const act = async (id: string, method: "PATCH" | "DELETE" | "POST", body?: unknown) => {
-    await fetch(`/api/recurring/${id}`, {
+    setError(null);
+    const r = await fetch(`/api/recurring/${id}`, {
       method,
       headers: body ? { "content-type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
+    const result = await r.json().catch(() => ({})) as { code?: unknown; error?: unknown };
+    if (!r.ok) {
+      setError(
+        result.code === "generated_documents_exist"
+          ? t("generatedDocumentsDeleteConflict")
+          : typeof result.error === "string"
+            ? result.error
+            : t("actionFailed"),
+      );
+      return;
+    }
     void load();
   };
 
