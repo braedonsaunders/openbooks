@@ -114,7 +114,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
     'app/api/banking/bank-feeds',
     'app/api/banking/sftp',
   ],
-  crm: ['app/api/crm'],
+  crm: ['app/api/crm', 'app/api/parties/[id]/activities'],
   subcontractorCompliance: ['app/api/compliance'],
   scripts: ['app/api/scripts'],
   onlinePayments: ['app/api/payments/links', 'app/api/admin/setup/payment-providers'],
@@ -2560,6 +2560,31 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/parties/PartyDrawer.tsx'),
     /\{multiCurrency \? <div className=\{field\}><Label>\{tc\('labels\.currency'\)\}<\/Label><Select value=\{draft\.currency/,
     'the party bank-account create must hide the currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('app/api/parties/[id]/activities/route.ts'),
+    /guardFeaturePermission\('crm.activities.read', 'crm'\)/,
+    'party activity sublist must 404 when CRM is off — stored activities stay',
+  )
+  assert.match(
+    read('app/(app)/parties/page.tsx'),
+    /crmEnabled && can\(authz, 'crm.activities.read'\)/,
+    'the parties page must hide CRM activities when CRM is off — stored activities stay',
+  )
+  assert.match(
+    read('app/(app)/entities/[role]/page.tsx'),
+    /crmEnabled && can\(authz, 'crm.activities.read'\)/,
+    'entities must hide CRM activities when CRM is off — stored activities stay',
+  )
+  assert.match(
+    read('app/(app)/layout.tsx'),
+    /crmEnabled && can\(authz, 'crm.activities.read'\)/,
+    'the global party drawer must hide CRM activities when CRM is off — stored activities stay',
+  )
+  assert.match(
+    read('app/(app)/parties/PartyDrawer.tsx'),
+    /initialTab === 'activities' && !canReadActivities/,
+    'the party drawer must omit the activities tab when CRM is off — stored activities stay',
   )
 })
 

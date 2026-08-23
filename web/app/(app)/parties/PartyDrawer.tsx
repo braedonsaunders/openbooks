@@ -248,7 +248,8 @@ export function PartyDrawer({
   const searchParams = useSearchParams()
   const allowedInitialTab =
     (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
-    (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll))
+    (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll)) ||
+    (initialTab === 'activities' && !canReadActivities)
       ? 'overview'
       : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)

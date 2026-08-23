@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -12,7 +12,7 @@ const STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled'])
 
 /** Searchable, filtered CRM activity sublist for a customer flyout. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.activities.read')
+  const gate = await guardFeaturePermission('crm.activities.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({}, { status: 404 })

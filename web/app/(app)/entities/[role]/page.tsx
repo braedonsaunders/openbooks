@@ -45,6 +45,7 @@ export default async function EntityRole({
   const authz = await requirePermission('parties.read')
   const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
   const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
+  const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
 
@@ -96,7 +97,7 @@ export default async function EntityRole({
           key={String(openParty.party.id)}
           payload={openParty as any}
           canManage={canManage}
-          canReadActivities={can(authz, 'crm.activities.read')}
+          canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           canManagePayroll={payrollEnabled && can(authz, 'payroll.manage')}
           payrollEnabled={payrollEnabled}
