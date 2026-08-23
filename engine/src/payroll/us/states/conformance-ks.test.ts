@@ -12,21 +12,14 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { KS_CERTIFICATE, KS_REGION } from "./ks-declaration.ts";
-import { KS_TABLES, KS_WITHHOLDING, ksAllowance, ksPeriodTax } from "./ks.ts";
+import {
+  KS_CERTIFICATE, KS_REGION, KS_TABLES, KS_WITHHOLDING, ksAllowance, ksPeriodTax,
+} from "./ks.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: KS_CERTIFICATE,
-    stored: [{ certificateKey: KS_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(KS_CERTIFICATE, answers);
 
 test("KS certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(KS_CERTIFICATE), null);

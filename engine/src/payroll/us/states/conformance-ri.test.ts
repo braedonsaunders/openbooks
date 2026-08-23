@@ -12,21 +12,12 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { RI_CERTIFICATE, RI_REGION } from "./ri-declaration.ts";
-import { RI_WITHHOLDING, riPeriodTax } from "./ri.ts";
+import { RI_CERTIFICATE, RI_REGION, RI_WITHHOLDING, riPeriodTax } from "./ri.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: RI_CERTIFICATE,
-    stored: [{ certificateKey: RI_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(RI_CERTIFICATE, answers);
 
 test("RI certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(RI_CERTIFICATE), null);

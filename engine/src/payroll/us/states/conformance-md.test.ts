@@ -22,25 +22,14 @@ import {
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION,
-} from "./md-declaration.ts";
-import {
-  MD_COUNTIES_2026, MD_RATES_2026, MD_WITHHOLDING,
-  addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax, mdCombinedRate,
-  mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
+  MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION, MD_COUNTIES_2026,
+  MD_RATES_2026, MD_WITHHOLDING, addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax,
+  mdCombinedRate, mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
 } from "./md.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: MD_CERTIFICATE,
-    stored: [{ certificateKey: MD_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(MD_CERTIFICATE, answers);
 
 test("MD certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(MD_CERTIFICATE), null);

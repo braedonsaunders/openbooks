@@ -11,23 +11,15 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { AR_CERTIFICATE, AR_REGION } from "./ar-declaration.ts";
 import {
-  AR_RATES_2026, AR_WITHHOLDING, arAnnualGrossTax, arMidrangeLookup, arRoundToDollar,
+  AR_CERTIFICATE, AR_REGION, AR_RATES_2026, AR_WITHHOLDING, arAnnualGrossTax, arMidrangeLookup,
+  arRoundToDollar,
 } from "./ar.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: AR_CERTIFICATE,
-    stored: [{ certificateKey: AR_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(AR_CERTIFICATE, answers);
 
 test("AR certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(AR_CERTIFICATE), null);
