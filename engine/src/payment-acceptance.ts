@@ -90,6 +90,10 @@ const defaultFetch: FetchFn = (url, init) => fetch(url, init);
 /** Currencies with no minor unit (provider amount = major units as-is). */
 const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 
+/** Adyen's currency table differs from Stripe/ISO for CLP, CVE, IDR, and ISK. */
+const ADYEN_ZERO_DECIMAL = new Set(["CVE", "DJF", "GNF", "IDR", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
+const ADYEN_THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "OMR", "TND"]);
+
 /** Major-unit money string → provider minor units (exact; rejects sub-minor precision). */
 export function toMinorUnits(amount: string, currency: string): string {
   const units = toUnits(amount); // 1e4 scale
@@ -99,6 +103,28 @@ export function toMinorUnits(amount: string, currency: string): string {
   }
   if (units % 100n !== 0n) throw new PaymentAcceptanceError(`amount ${amount} has sub-cent precision`);
   return (units / 100n).toString();
+}
+
+function adyenMinorUnitDecimals(currency: string): 0 | 2 | 3 {
+  const code = currency.toUpperCase();
+  if (ADYEN_ZERO_DECIMAL.has(code)) return 0;
+  if (ADYEN_THREE_DECIMAL.has(code)) return 3;
+  return 2;
+}
+
+function toAdyenMinorUnits(amount: string, currency: string): string {
+  const decimals = adyenMinorUnitDecimals(currency);
+  const divisor = 10n ** BigInt(4 - decimals);
+  const units = toUnits(amount);
+  if (units % divisor !== 0n) {
+    throw new PaymentAcceptanceError(`${currency} amounts cannot exceed ${decimals}-decimal minor-unit precision`);
+  }
+  return (units / divisor).toString();
+}
+
+function fromAdyenMinorUnits(amount: bigint, currency: string): string {
+  const decimals = adyenMinorUnitDecimals(currency);
+  return fromUnits(amount * 10n ** BigInt(4 - decimals));
 }
 
 function hmacSha256Hex(secret: string | Buffer, payload: string): string {
@@ -226,6 +252,8 @@ const adyenAdapter: PaymentProviderAdapter = {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("adyen API key is not configured");
     if (!secrets.merchantAccount) throw new PaymentAcceptanceError("adyen merchant account is not configured");
     const total = add(req.invoiceAmount, req.surchargeAmount);
+    const amountValue = Number(toAdyenMinorUnits(total, req.currency));
+    if (!Number.isSafeInteger(amountValue)) throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
     const base = secrets.apiBase ?? "https://checkout-test.adyen.com/v71";
     const res = await fetchFn(`${base}/sessions`, {
       method: "POST",
@@ -233,7 +261,7 @@ const adyenAdapter: PaymentProviderAdapter = {
       body: JSON.stringify({
         merchantAccount: secrets.merchantAccount,
         reference: req.linkToken,
-        amount: { currency: req.currency.toUpperCase(), value: Number(toMinorUnits(total, req.currency)) },
+        amount: { currency: req.currency.toUpperCase(), value: amountValue },
         returnUrl: req.returnUrl,
         description: req.description.slice(0, 250),
         mode: "hosted",
@@ -274,7 +302,10 @@ const adyenAdapter: PaymentProviderAdapter = {
         externalRef: String(item.pspReference ?? ""),
         linkToken: item.merchantReference ?? null,
         status: "succeeded",
-        paidAmount: item.amount?.value != null ? fromUnits(BigInt(item.amount.value) * 100n) : null,
+        paidAmount:
+          item.amount?.value != null && item.amount?.currency
+            ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
+            : null,
         raw: payload,
       };
     }
