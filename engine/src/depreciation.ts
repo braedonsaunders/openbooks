@@ -1,11 +1,23 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, fromUnits, isZero, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./depreciation-formula.ts";
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { assertFinalKernelBalance } from "./posting.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
+
+/** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
+function persistDepreciationInputValue(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("depreciation value must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("depreciation value must be an exact decimal");
+  }
+}
 
 /**
  * Fixed-asset depreciation.
@@ -532,7 +544,7 @@ export async function recordDepreciationInput(
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(args.evidenceFileId)) {
     throw new Error("an attached evidence file is required");
   }
-  const value = normalizeMoney(args.value);
+  const value = persistDepreciationInputValue(args.value);
 
   return db.transaction(async (tx) => {
     const schedule = (await tx.execute<{
