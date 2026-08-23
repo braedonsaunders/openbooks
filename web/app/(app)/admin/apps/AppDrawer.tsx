@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import {
   Braces,
@@ -45,11 +46,16 @@ import { APP_PLATFORM_PERMISSIONS } from '@/lib/apps/manifest'
 
 export function AppsToolbar() {
   const router = useRouter()
+  const t = useTranslations('apps.drawer')
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
   async function newApp() {
-    const name = await promptDialog({ title: 'New app', label: 'App name', placeholder: 'Expense Insights' })
+    const name = await promptDialog({
+      title: t('toolbar.newAppPromptTitle'),
+      label: t('toolbar.newAppPromptLabel'),
+      placeholder: t('toolbar.newAppPromptPlaceholder'),
+    })
     if (!name) return
     setBusy(true)
     try {
@@ -60,7 +66,7 @@ export function AppsToolbar() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'create failed')
-      toast.success(`Created “${name}”`)
+      toast.success(t('toasts.createdApp', { name }))
       router.push(`/admin/apps?app=${encodeURIComponent(data.key)}`)
       router.refresh()
     } catch (e) {
@@ -78,7 +84,7 @@ export function AppsToolbar() {
       const res = await fetch('/api/apps', { method: 'POST', body: form })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'import failed')
-      toast.success(`Imported “${data.key}”`)
+      toast.success(t('toasts.importedApp', { key: data.key }))
       router.push(`/admin/apps?app=${encodeURIComponent(data.key)}`)
       router.refresh()
     } catch (e) {
@@ -102,10 +108,10 @@ export function AppsToolbar() {
         }}
       />
       <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
-        <Upload size={15} /> Import .zip
+        <Upload size={15} /> {t('toolbar.importZip')}
       </Button>
       <Button disabled={busy} onClick={newApp}>
-        <Plus size={15} /> New app
+        <Plus size={15} /> {t('toolbar.newApp')}
       </Button>
     </div>
   )
@@ -185,35 +191,17 @@ function editorExtensions(path: string) {
 
 const TABS = ['overview', 'files', 'runs'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', files: 'Files', runs: 'Runs' }
 
-const CAPABILITY_COPY: Record<string, { label: string; help: string }> = {
-  'records.read': { label: 'Read custom records', help: 'Read published custom record types' },
-  'records.create': { label: 'Manage custom records', help: 'Create, update, and delete custom records' },
-  'gl.read': { label: 'Read the general ledger', help: 'Read accounts and posted journal entries' },
-  'gl.post': { label: 'Create and post journals', help: 'Create governed balanced journals' },
-  'ap.read': { label: 'Read payables', help: 'Read vendor bills' },
-  'ap.create': { label: 'Manage vendor bills', help: 'Create, update, submit, and delete bills' },
-  'ap.post': { label: 'Post vendor bills', help: 'Post governed vendor bills to the ledger' },
-  'ap.pay': { label: 'Read payments', help: 'Read payment documents' },
-  'ar.read': { label: 'Read receivables', help: 'Read customer invoices' },
-  'ar.create': { label: 'Manage customer invoices', help: 'Create, update, submit, and delete invoices' },
-  'ar.post': { label: 'Post customer invoices', help: 'Post governed customer invoices to the ledger' },
-  'parties.read': { label: 'Read parties', help: 'Read customers, vendors, and employees' },
-  'parties.manage': { label: 'Manage parties', help: 'Create, update, and delete parties' },
-  'items.read': { label: 'Read items and services', help: 'Read the item catalog' },
-  'items.manage': { label: 'Manage items and services', help: 'Create, update, and delete catalog items' },
-  'projects.read': { label: 'Read projects', help: 'Read projects and jobs' },
-  'projects.manage': { label: 'Manage projects', help: 'Create, update, and delete projects' },
-  'assets.read': { label: 'Read fixed assets', help: 'Read fixed assets' },
-  'assets.manage': { label: 'Manage fixed assets', help: 'Create, update, and delete fixed assets' },
+// Map a permission slug like 'records.read' to a message key segment
+// ('records.read'); non-alphanumeric separators inside a segment camel-case.
+function capabilityMessageKey(permission: string) {
+  return permission
+    .split('.')
+    .map((segment) =>
+      segment.replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase()),
+    )
+    .join('.')
 }
-
-const CAPABILITIES = APP_PLATFORM_PERMISSIONS.map((key) => ({
-  key,
-  label: CAPABILITY_COPY[key]?.label ?? key,
-  help: CAPABILITY_COPY[key]?.help ?? `Allow ${key}`,
-}))
 
 interface AppDetail {
   key: string
@@ -250,8 +238,26 @@ export function AppDrawer({
   isPublished: boolean
 }) {
   const router = useRouter()
+  const t = useTranslations('apps.drawer')
+  const tCapabilities = useTranslations('apps.drawer.capabilities')
   const [tab, setTab] = useState<Tab>('overview')
   const [busy, setBusy] = useState(false)
+
+  const capabilities = useMemo(
+    () =>
+      APP_PLATFORM_PERMISSIONS.map((key) => {
+        const messageKey = capabilityMessageKey(key)
+        const hasCopy = tCapabilities.has(`copy.${messageKey}.label`)
+        return {
+          key,
+          label: hasCopy ? tCapabilities(`copy.${messageKey}.label`) : key,
+          help: hasCopy
+            ? tCapabilities(`copy.${messageKey}.help`)
+            : tCapabilities('allowFallback', { permission: key }),
+        }
+      }),
+    [tCapabilities],
+  )
 
   // -- Overview form state ---------------------------------------------------
   const [name, setName] = useState(app.name)
@@ -280,9 +286,9 @@ export function AppDrawer({
     })
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      toast.success('App settings saved')
+      toast.success(t('toasts.settingsSaved'))
       router.refresh()
-    } else toast.error(data.error || 'Save failed')
+    } else toast.error(data.error || t('errors.saveFailed'))
     setBusy(false)
   }
 
@@ -293,9 +299,9 @@ export function AppDrawer({
       body: JSON.stringify({ status }),
     })
     if (res.ok) {
-      toast.success(status === 'disabled' ? 'App disabled' : 'App enabled')
+      toast.success(status === 'disabled' ? t('toasts.appDisabled') : t('toasts.appEnabled'))
       router.refresh()
-    } else toast.error('Update failed')
+    } else toast.error(t('errors.updateFailed'))
   }
 
   async function publish() {
@@ -306,25 +312,25 @@ export function AppDrawer({
     })
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      toast.success('Published to the marketplace')
+      toast.success(t('toasts.published'))
       router.refresh()
-    } else toast.error(data.error || 'Publish failed')
+    } else toast.error(data.error || t('errors.publishFailed'))
   }
 
   async function uninstall() {
     const ok = await confirmDialog({
-      title: `Uninstall “${app.name}”?`,
-      message: 'Removes the app, its files, storage, and run history. Provisioned record types are kept.',
-      confirmLabel: 'Uninstall',
+      title: t('confirm.uninstallTitle', { name: app.name }),
+      message: t('confirm.uninstallMessage'),
+      confirmLabel: t('actions.uninstall'),
       tone: 'danger',
     })
     if (!ok) return
     const res = await fetch(`/api/apps/${encodeURIComponent(app.key)}`, { method: 'DELETE' })
     if (res.ok) {
-      toast.success('Uninstalled')
+      toast.success(t('toasts.uninstalled'))
       router.push('/admin/apps')
       router.refresh()
-    } else toast.error('Uninstall failed')
+    } else toast.error(t('errors.uninstallFailed'))
   }
 
   // -- Files state -------------------------------------------------------------
@@ -373,9 +379,9 @@ export function AppDrawer({
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
       setFileDirty(false)
-      toast.success(`Saved ${loadedPath}`)
+      toast.success(t('toasts.fileSaved', { path: loadedPath }))
       router.refresh()
-    } else toast.error(data.error || 'Save failed')
+    } else toast.error(data.error || t('errors.saveFailed'))
     setSavingFile(false)
   }
 
@@ -383,7 +389,11 @@ export function AppDrawer({
 
   async function newFile() {
     const suggestion = selectedDir ? `${selectedDir}/` : 'frontend/'
-    const path = await promptDialog({ title: 'New file', label: 'Path', initialValue: suggestion })
+    const path = await promptDialog({
+      title: t('prompt.newFileTitle'),
+      label: t('prompt.pathLabel'),
+      initialValue: suggestion,
+    })
     if (!path) return
     const res = await fetch(`/api/apps/${encodeURIComponent(app.key)}/files`, {
       method: 'POST',
@@ -392,10 +402,10 @@ export function AppDrawer({
     })
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      toast.success(`Created ${path}`)
+      toast.success(t('toasts.fileCreated', { path }))
       setSelected(path)
       router.refresh()
-    } else toast.error(data.error || 'Create failed')
+    } else toast.error(data.error || t('errors.createFailed'))
   }
 
   async function uploadFile(file: globalThis.File) {
@@ -405,15 +415,19 @@ export function AppDrawer({
     const res = await fetch(`/api/apps/${encodeURIComponent(app.key)}/files`, { method: 'POST', body: form })
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      toast.success(`Uploaded ${data.path}`)
+      toast.success(t('toasts.fileUploaded', { path: data.path }))
       router.refresh()
-    } else toast.error(data.error || 'Upload failed')
+    } else toast.error(data.error || t('errors.uploadFailed'))
     if (uploadRef.current) uploadRef.current.value = ''
   }
 
   async function deleteFile() {
     if (!selected) return
-    const ok = await confirmDialog({ message: `Delete ${selected}?`, confirmLabel: 'Delete', tone: 'danger' })
+    const ok = await confirmDialog({
+      message: t('confirm.deleteFileMessage', { path: selected }),
+      confirmLabel: t('actions.deleteFileTitleAttr'),
+      tone: 'danger',
+    })
     if (!ok) return
     const res = await fetch(
       `/api/apps/${encodeURIComponent(app.key)}/files/${selected.split('/').map(encodeURIComponent).join('/')}`,
@@ -421,10 +435,10 @@ export function AppDrawer({
     )
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
-      toast.success('Deleted')
+      toast.success(t('toasts.deleted'))
       setSelected(null)
       router.refresh()
-    } else toast.error(data.error || 'Delete failed')
+    } else toast.error(data.error || t('errors.deleteFailed'))
   }
 
   function toggleDir(path: string) {
@@ -493,18 +507,18 @@ export function AppDrawer({
           {app.status === 'installed' && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/apps/${encodeURIComponent(app.key)}`}>
-                <ExternalLink size={14} /> Open
+                <ExternalLink size={14} /> {t('actions.open')}
               </Link>
             </Button>
           )}
           {tab === 'overview' && (
             <Button size="sm" disabled={busy || !dirtyMeta || !name.trim()} onClick={saveMeta}>
-              {busy ? 'Saving…' : 'Save settings'}
+              {busy ? t('actions.saving') : t('actions.saveSettings')}
             </Button>
           )}
           {tab === 'files' && (
             <Button size="sm" disabled={savingFile || !fileDirty || !loadedPath} onClick={saveFile}>
-              {savingFile ? 'Saving…' : fileDirty ? 'Save file' : 'Saved'}
+              {savingFile ? t('actions.saving') : fileDirty ? t('actions.saveFile') : t('actions.saved')}
             </Button>
           )}
         </>
@@ -524,7 +538,7 @@ export function AppDrawer({
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200',
               )}
             >
-              {TAB_LABELS[k]}
+              {t(`tabs.${k}`)}
               {k === 'runs' && runs.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-500 dark:bg-slate-800">
                   {runs.length}
@@ -539,30 +553,29 @@ export function AppDrawer({
             <div className="space-y-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Name</Label>
+                  <Label>{t('labels.name')}</Label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Status</Label>
+                  <Label>{t('labels.status')}</Label>
                   <div className="flex items-center gap-2 pt-1.5">
                     <Badge variant={app.status === 'installed' ? 'success' : 'outline'}>{app.status}</Badge>
-                    {isPublished && <Badge variant="secondary">on marketplace</Badge>}
+                    {isPublished && <Badge variant="secondary">{t('onMarketplace')}</Badge>}
                   </div>
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Description</Label>
+                  <Label>{t('labels.description')}</Label>
                   <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Capabilities</Label>
+                <Label>{t('labels.capabilities')}</Label>
                 <p className="text-xs text-slate-500">
-                  Everything else is denied by default; the app's backend and bridge calls are checked against these
-                  grants (always intersected with the calling user's own permissions).
+                  {t('capabilitiesHelp')}
                 </p>
                 <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-                  {CAPABILITIES.map((c) => (
+                  {capabilities.map((c) => (
                     <label key={c.key} className="flex items-start gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -586,19 +599,18 @@ export function AppDrawer({
               </div>
 
               <div className="space-y-2">
-                <Label>Navigation</Label>
+                <Label>{t('labels.navigation')}</Label>
                 <p className="text-xs text-slate-500">
-                  This app remains installed independently of its menu shortcuts. Add, remove, rename, or move a
-                  shortcut in Navigation settings.
+                  {t('navigationHelp')}
                 </p>
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/admin/navigation">Manage navigation shortcuts</Link>
+                  <Link href="/admin/navigation">{t('actions.manageNavigation')}</Link>
                 </Button>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Backend endpoints</Label>
+                  <Label>{t('labels.endpoints')}</Label>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -609,16 +621,18 @@ export function AppDrawer({
                       ])
                     }
                   >
-                    <Plus size={14} /> Add endpoint
+                    <Plus size={14} /> {t('actions.addEndpoint')}
                   </Button>
                 </div>
                 <p className="text-xs text-slate-500">
-                  The frontend calls these with <code>openbooks.callBackend(name, payload)</code>; each runs its file's{' '}
-                  <code>handler(request)</code> in the sandbox.
+                  {t.rich('endpointsHelp', {
+                    call: (chunks) => <code>{chunks}</code>,
+                    handler: (chunks) => <code>{chunks}</code>,
+                  })}
                 </p>
                 {endpoints.length === 0 ? (
                   <p className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-800">
-                    No endpoints — this app is frontend-only.
+                    {t('noEndpoints')}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -630,7 +644,7 @@ export function AppDrawer({
                             setEndpoints((prev) => prev.map((x, j) => (j === i ? { ...x, name: ev.target.value } : x)))
                           }
                           className="w-40 font-mono text-[13px]"
-                          placeholder="name"
+                          placeholder={t('endpointNamePlaceholder')}
                         />
                         <Select
                           value={e.file}
@@ -671,13 +685,13 @@ export function AppDrawer({
 
               <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
                 <Button variant="outline" size="sm" onClick={publish}>
-                  {isPublished ? 'Republish to marketplace' : 'Publish to marketplace'}
+                  {isPublished ? t('actions.republish') : t('actions.publish')}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setStatus(app.status === 'installed' ? 'disabled' : 'installed')}>
-                  {app.status === 'installed' ? 'Disable' : 'Enable'}
+                  {app.status === 'installed' ? t('actions.disable') : t('actions.enable')}
                 </Button>
                 <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700 dark:text-red-400" onClick={uninstall}>
-                  <Trash2 size={14} /> Uninstall
+                  <Trash2 size={14} /> {t('actions.uninstall')}
                 </Button>
               </div>
             </div>
@@ -697,13 +711,13 @@ export function AppDrawer({
                       if (f) void uploadFile(f)
                     }}
                   />
-                  <Button size="sm" variant="ghost" title="New file" onClick={newFile}>
+                  <Button size="sm" variant="ghost" title={t('actions.newFileTitleAttr')} onClick={newFile}>
                     <FilePlus2 size={14} />
                   </Button>
-                  <Button size="sm" variant="ghost" title="Upload file" onClick={() => uploadRef.current?.click()}>
+                  <Button size="sm" variant="ghost" title={t('actions.uploadFileTitleAttr')} onClick={() => uploadRef.current?.click()}>
                     <Upload size={14} />
                   </Button>
-                  <Button size="sm" variant="ghost" title="Delete file" disabled={!selected} onClick={deleteFile}>
+                  <Button size="sm" variant="ghost" title={t('actions.deleteFileTitleAttr')} disabled={!selected} onClick={deleteFile}>
                     <Trash2 size={14} />
                   </Button>
                 </div>
@@ -713,17 +727,17 @@ export function AppDrawer({
               {/* Editor pane */}
               <div className="min-w-0 flex-1 bg-white dark:bg-slate-950">
                 {!selected ? (
-                  <div className="grid h-full place-items-center text-sm text-slate-400">Select a file to edit.</div>
+                  <div className="grid h-full place-items-center text-sm text-slate-400">{t('files.selectToEdit')}</div>
                 ) : selectedRow?.isBinary ? (
                   <div className="grid h-full place-items-center">
                     <div className="text-center text-sm text-slate-500">
                       <FileImage size={32} className="mx-auto mb-2 text-slate-300" />
                       <p className="font-mono text-xs">{selected}</p>
-                      <p className="mt-1 text-xs">Binary file · {selectedRow.contentType} · {selectedRow.size.toLocaleString()} bytes</p>
+                      <p className="mt-1 text-xs">{t('files.binaryInfo', { contentType: selectedRow.contentType, size: selectedRow.size.toLocaleString() })}</p>
                     </div>
                   </div>
                 ) : loadedPath !== selected ? (
-                  <div className="grid h-full place-items-center text-sm text-slate-400">Loading…</div>
+                  <div className="grid h-full place-items-center text-sm text-slate-400">{t('files.loading')}</div>
                 ) : (
                   <div className="flex h-full flex-col">
                     <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-1.5 dark:border-slate-800">
@@ -761,7 +775,7 @@ export function AppDrawer({
           {tab === 'runs' ? (
             runs.length === 0 ? (
               <p className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-slate-800">
-                No runs yet — the backend has never been called.
+                {t('runs.empty')}
               </p>
             ) : (
               <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -770,7 +784,7 @@ export function AppDrawer({
                     <Badge variant={r.status === 'ok' ? 'success' : 'destructive'}>{r.status}</Badge>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {dateTime(r.at)} · <code>{r.endpoint}</code> · {r.units} units · {r.duration_ms}ms
+                        {dateTime(r.at)} · <code>{r.endpoint}</code> · {t('runs.units', { units: r.units })} · {r.duration_ms}ms
                       </p>
                       {r.error_message ? (
                         <p className="text-xs text-red-600 dark:text-red-400">{r.error_message}</p>
