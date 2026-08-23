@@ -761,6 +761,14 @@ export interface CreateObligationsResult {
   obligationIds: string[];
 }
 
+export function revenueContractPostingEffectKey(documentId: string): string {
+  return `posting-effect:revenue-contract:document:${documentId}`;
+}
+
+export function revenueObligationPostingEffectKey(documentLineId: string): string {
+  return `posting-effect:revenue-obligation:document-line:${documentLineId}`;
+}
+
 /**
  * After a customer invoice posts, create one performance obligation per rev-rec
  * line (item carries a recognition rule), allocate the deferred transaction
@@ -843,19 +851,26 @@ export async function createObligationsFromInvoice(
 
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
-    // One contract per invoice, reused on replay.
-    const existingContract = (await tx.execute<{ id: string }>(sql`
-      select id from revenue_contracts where org_id = ${orgId} and contract_number = ${doc.document_number} limit 1`));
-    let cId: string;
-    if (existingContract.rows[0]) {
-      cId = existingContract.rows[0].id;
-    } else {
-      const ins = (await tx.execute<{ id: string }>(sql`
-        insert into revenue_contracts (org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${doc.party_id}, ${doc.document_number}, 'active', ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
-        returning id`));
-      cId = ins.rows[0].id;
-    }
+    // One contract per invoice. The unique storage key is the concurrency
+    // authority; contract_number remains business display data, not a mutex.
+    const contractKey = revenueContractPostingEffectKey(documentId);
+    const insertedContract = await tx.execute<{ id: string }>(sql`
+      insert into revenue_contracts
+        (org_id, customer_id, contract_number, idempotency_key, status, starts_on,
+         currency, total_transaction_price, created_by, updated_by)
+      values (${orgId}, ${doc.party_id}, ${doc.document_number}, ${contractKey}, 'active',
+              ${doc.document_date}, ${doc.currency}, ${bundleTotal}, ${actorId}, ${actorId})
+      on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
+      returning id
+    `);
+    const existingContract = insertedContract.rows[0]
+      ? null
+      : await tx.execute<{ id: string }>(sql`
+          select id from revenue_contracts
+           where org_id=${orgId} and idempotency_key=${contractKey}
+        `);
+    const cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id;
+    if (!cId) throw new Error("revenue contract idempotency winner was not visible");
 
     for (const l of lines) {
       const startsOn = (l.line_custom?.recognitionStartsOn as string) ?? doc.document_date;
@@ -863,22 +878,24 @@ export async function createObligationsFromInvoice(
       const deferred = l.item_deferred ?? l.rule_deferred;
       const recognized = l.rule_recognized ?? l.income_account_id;
       const allocated = allocByLine.get(l.line_id) ?? l.amount;
+      const obligationKey = revenueObligationPostingEffectKey(l.line_id);
       const fvFlag = rangePolicy === "warn"
         ? fairValueRangeFlag(allocated, l.quantity, l.fair_value_low, l.fair_value_high)
         : null;
       const insObl = (await tx.execute<{ id: string }>(sql`
         insert into performance_obligations
-          (org_id, contract_id, document_line_id, item_id, description, recognition_rule_id,
+          (org_id, contract_id, document_line_id, idempotency_key, item_id, description, recognition_rule_id,
            booked_amount, standalone_selling_price, allocated_price,
            fair_value_flag, fair_value_low, fair_value_high,
            recognition_starts_on, recognition_ends_on,
            deferred_account_id, recognized_account_id, status, created_by, updated_by)
-        values (${orgId}, ${cId}, ${l.line_id}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
+        values (${orgId}, ${cId}, ${l.line_id}, ${obligationKey}, ${l.item_id}, ${l.description ?? "Revenue"}, ${l.rule_id},
                 ${l.amount}, ${l.item_ssp ?? l.fair_value}, ${allocated},
                 ${fvFlag}, ${fvFlag ? l.fair_value_low : null}, ${fvFlag ? l.fair_value_high : null},
                 ${startsOn}, ${endsOn}, ${deferred}, ${recognized}, 'open', ${actorId}, ${actorId})
+        on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
         returning id`));
-      obligationIds.push(insObl.rows[0].id);
+      if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);
     }
     return cId;
   });

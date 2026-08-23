@@ -97,6 +97,15 @@ function persistReceiptMoney(value: unknown, label: string): string {
   }
 }
 
+function normalizeMovementIdempotencyKey(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const normalized = value.trim();
+  if (normalized.length < 1 || normalized.length > 500) {
+    throw new InventoryError("inventory movement idempotency key must be between 1 and 500 characters");
+  }
+  return normalized;
+}
+
 async function resolveProfile(
   orgId: string,
   itemId: string,
@@ -404,6 +413,8 @@ export interface ReceiveInput {
   offsetAccountId?: string;
   date: string;
   documentLineId?: string | null;
+  /** Stable source-effect identity; storage rejects duplicate non-null keys. */
+  idempotencyKey?: string | null;
   lotId?: string | null;
   serialId?: string | null;
   departmentId?: string | null;
@@ -432,6 +443,7 @@ export async function receiveInventory(
   actorId: string | null,
   input: ReceiveInput,
 ): Promise<MovementResult> {
+  const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("receipt quantity must be positive");
   const profile = await resolveProfile(orgId, input.itemId);
@@ -628,10 +640,11 @@ export async function receiveInventory(
     const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
-         document_line_id, journal_entry_id, status, memo, created_by, updated_by)
+         document_line_id, journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${receiptQuantity}, ${receiptUnitCost}, ${assetDelta},
-              ${input.documentLineId ?? null}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
+              ${input.documentLineId ?? null}, ${entryId}, ${idempotencyKey},
+              'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0].id;
 
@@ -734,6 +747,8 @@ export interface IssueInput {
   offsetAccountId?: string;
   date: string;
   documentLineId?: string | null;
+  /** Stable source-effect identity; storage rejects duplicate non-null keys. */
+  idempotencyKey?: string | null;
   lotId?: string | null;
   serialId?: string | null;
   departmentId?: string | null;
@@ -752,6 +767,7 @@ export async function issueInventory(
   actorId: string | null,
   input: IssueInput,
 ): Promise<MovementResult> {
+  const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("issue quantity must be positive");
   const profile = await resolveProfile(orgId, input.itemId);
@@ -856,10 +872,11 @@ export async function issueInventory(
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
          quantity, unit_cost, total_value,
-         document_line_id, journal_entry_id, status, memo, created_by, updated_by)
+         document_line_id, journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
       values (${orgId}, ${input.itemId}, 'issue', ${input.date}, ${input.stockLocationId},
               ${input.lotId ?? null}, ${input.serialId ?? null},
               ${neg(issueQuantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
+              ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0].id;
@@ -2614,6 +2631,7 @@ export async function applyInventoryReceiptsForBill(
       linkEntryId: billEntryId,
       date,
       documentLineId: l.lineId,
+      idempotencyKey: inventoryPostingEffectKey(l.lineId, "receipt"),
       memo: "Inventory receipt (bill)",
     });
     count++;
@@ -2647,6 +2665,7 @@ export async function applyInventoryIssuesForInvoice(
       subsidiaryId,
       date,
       documentLineId: l.lineId,
+      idempotencyKey: inventoryPostingEffectKey(l.lineId, "issue"),
       memo: "COGS (invoice)",
     });
     count++;
@@ -2655,6 +2674,13 @@ export async function applyInventoryIssuesForInvoice(
 }
 
 export { cmp as compareMoney };
+
+export function inventoryPostingEffectKey(
+  documentLineId: string,
+  kind: "receipt" | "issue",
+): string {
+  return `posting-effect:inventory:${kind}:document-line:${documentLineId}`;
+}
 
 // ---------------------------------------------------------------------------
 // Lot / serial tracking
