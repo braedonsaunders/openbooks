@@ -1,4 +1,4 @@
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { normalizeDecimal } from "./money.ts";
 
 /**

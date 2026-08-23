@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { TAX_DEPRECIATION_REGIMES } from "./tax-depreciation-pool.ts";
 
 const source = readFileSync(new URL("./tax-depreciation-packs.ts", import.meta.url), "utf8");

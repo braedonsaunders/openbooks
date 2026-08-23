@@ -4,7 +4,7 @@ import { add, fromUnits, mul, mulRatio, normalizeDecimal, normalizeMoney, toUnit
 import { sealJson, unsealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 import { businessToday } from "./business-date.ts";
-import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 
 /**
  * External sales-tax rate providers. Quotes are persisted as immutable evidence;
