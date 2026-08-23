@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { buildScheduleWithRunner } from "./depreciation.ts";
@@ -592,10 +593,13 @@ export async function remeasureAsset(
   const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
   const entryId = await db.transaction(async (tx) => {
+    // An asset can be remeasured repeatedly; the entry number must be unique
+    // per physical journal under journal_entries_org_number.
+    const entryNumber = `${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}-${randomUUID().slice(0, 8)}`;
     const entryRes = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries
         (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${`${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}`},
+      values (${orgId}, ${bookId}, ${asset.subsidiary_id}, ${entryNumber},
               ${opts.date},
               (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
                  and starts_on <= ${opts.date} and ends_on >= ${opts.date} limit 1),

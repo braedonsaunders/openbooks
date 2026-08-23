@@ -2195,13 +2195,26 @@ export async function regenerateGlImpactTx(
     })
     .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
 
+  // Repeated corrections of one document reverse the prior replacement and
+  // post a new one; number each generation past its predecessors so the
+  // insert cannot collide under journal_entries_org_number.
+  const priorCorrections = (await tx.execute<{ n: number }>(sql`
+    select count(*)::int as n
+      from journal_entries
+     where org_id = ${doc.orgId} and source_document_id = ${doc.id}
+       and reverses_entry_id is null
+       and custom->>'mode' = 'append_only_source_correction'`));
+  const correctionGen = (priorCorrections.rows[0]?.n ?? 0) + 1;
   const [replacement] = await tx
     .insert(schema.journalEntries)
     .values({
       orgId: doc.orgId,
       bookId: entry.bookId,
       subsidiaryId: subApplied.docSubId,
-      entryNumber: `${doc.documentNumber}-SOURCE-CORR`,
+      entryNumber:
+        correctionGen === 1
+          ? `${doc.documentNumber}-SOURCE-CORR`
+          : `${doc.documentNumber}-SOURCE-CORR-${correctionGen}`,
       postingDate,
       periodId: period.id,
       memo: doc.memo,
