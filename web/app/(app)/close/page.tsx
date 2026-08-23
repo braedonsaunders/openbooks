@@ -18,6 +18,7 @@ import { FilterChips } from "../../../components/filter-bar";
 import { SearchInput } from "../../../components/search-input";
 import { Pagination } from "../../../components/pagination";
 import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 import { currentFiscalYear } from "../../../lib/fiscal";
 import { clamp, isUuid, pickString } from "../../../lib/list-params";
 import { StartCloseButton } from "./StartCloseButton";
@@ -35,6 +36,10 @@ export default async function PeriodClose({
 }) {
   const authz = await requirePermission("close.read");
   const { orgId, id: actorId } = authz.user;
+  // The Continuous Close switch is the authoritative parent gate for the whole
+  // /close segment: nav hiding alone leaves direct URLs reachable, which is
+  // UI-only enforcement.
+  await requireFeatureEnabled(orgId, "continuousClose");
   const sp = await searchParams;
   const subsidiaryEnabled = await subsidiaryFeatureEnabled(orgId);
   const featureState = await resolvedFeatureState(orgId);
