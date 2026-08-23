@@ -11,7 +11,8 @@ test("automatic source deletions preserve settlement evidence", () => {
   );
   assert.match(automatic, /update applications a[\s\S]*unapplied_at = now\(\)/);
   assert.doesNotMatch(automatic, /delete from applications/i);
-  assert.match(automatic, /captureTransactionAuditSnapshot\(tx, document\.id\)/);
+  assert.match(automatic, /captureTransactionAuditSnapshot\(tx, document\.id, input\.orgId\)/);
+  assert.doesNotMatch(automatic, /captureTransactionAuditSnapshot\(tx, document\.id\)/);
   assert.match(automatic, /recordTransactionAudit\(tx,/);
   assert.doesNotMatch(automatic, /delete from documents/i);
 });
