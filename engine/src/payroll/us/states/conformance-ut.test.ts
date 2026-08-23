@@ -6,26 +6,16 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
-} from "../../certificates.ts";
+import { certificateDeclarationProblem, type ResolvedCertificate } from "../../certificates.ts";
 import "../../packs.ts";
 import {
   UT_CERTIFICATE, UT_REGION, UT_EDITION_2025, UT_EDITION_2026, UT_WITHHOLDING, utScheduleFor,
 } from "./ut.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: UT_CERTIFICATE,
-    stored: [{ certificateKey: UT_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(UT_CERTIFICATE, answers);
 
 test("UT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(UT_CERTIFICATE), null);

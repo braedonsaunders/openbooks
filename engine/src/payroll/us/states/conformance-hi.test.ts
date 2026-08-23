@@ -13,18 +13,10 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { HI_CERTIFICATE, HI_REGION, HI_RATES_2026, HI_WITHHOLDING, hiAnnualTax } from "./hi.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: HI_CERTIFICATE,
-    stored: [{ certificateKey: HI_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(HI_CERTIFICATE, answers);
 
 test("HI certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(HI_CERTIFICATE), null);

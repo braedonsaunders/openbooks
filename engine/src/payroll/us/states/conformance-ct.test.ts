@@ -23,18 +23,10 @@ import {
   ctPersonalExemption, ctPhaseOutAddBack, ctTaxRecapture,
 } from "./ct.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: CT_CERTIFICATE,
-    stored: [{ certificateKey: CT_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(CT_CERTIFICATE, answers);
 
 test("CT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(CT_CERTIFICATE), null);

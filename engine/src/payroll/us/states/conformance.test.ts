@@ -33,20 +33,11 @@ import {
   PA_RATES_2026, PA_WITHHOLDING, PHILADELPHIA_WITHHOLDING,
   act32LocalEit, localServicesTaxPerPeriod, paUcEmployeeWithholding, philadelphiaRateFor,
 } from "./pa.ts";
-
-/** numeric(19,4) canonical form, as the engines return. */
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
 /** A certificate resolved from answers, exactly as the run-time path builds it. */
-function cert(key: string, answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: payrollCertificate("US", key),
-    stored: [{ certificateKey: key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (key: string, answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(payrollCertificate("US", key), answers);
 
 /* ===================================================================== */
 /* CALIFORNIA — 2026 Withholding Schedules, Method B, Examples A–F       */

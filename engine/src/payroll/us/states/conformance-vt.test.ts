@@ -13,18 +13,10 @@ import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { VT_CERTIFICATE, VT_REGION, VT_WITHHOLDING, vtPeriodTax } from "./vt.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: VT_CERTIFICATE,
-    stored: [{ certificateKey: VT_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(VT_CERTIFICATE, answers);
 
 test("VT certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(VT_CERTIFICATE), null);

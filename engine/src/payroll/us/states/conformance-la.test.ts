@@ -15,18 +15,10 @@ import {
   LA_CERTIFICATE, LA_REGION, LA_RATES_2026, LA_WITHHOLDING, laDeductionPerPeriod, laPeriodTax,
 } from "./la.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: LA_CERTIFICATE,
-    stored: [{ certificateKey: LA_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(LA_CERTIFICATE, answers);
 
 test("LA certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(LA_CERTIFICATE), null);

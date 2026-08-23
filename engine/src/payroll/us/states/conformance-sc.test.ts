@@ -15,18 +15,10 @@ import {
   SC_CERTIFICATE, SC_REGION, SC_RATES_2026, SC_WITHHOLDING, scAnnualTax, scStandardDeduction,
 } from "./sc.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: SC_CERTIFICATE,
-    stored: [{ certificateKey: SC_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(SC_CERTIFICATE, answers);
 
 test("SC certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(SC_CERTIFICATE), null);

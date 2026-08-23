@@ -17,18 +17,10 @@ import { pctToRate } from "./transcription.ts";
 import {
   VA_CERTIFICATE, VA_REGION, VA_RATES_2026, VA_WITHHOLDING, vaSupplementalFlat,
 } from "./va.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: VA_CERTIFICATE,
-    stored: [{ certificateKey: VA_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(VA_CERTIFICATE, answers);
 
 test("VA certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(VA_CERTIFICATE), null);

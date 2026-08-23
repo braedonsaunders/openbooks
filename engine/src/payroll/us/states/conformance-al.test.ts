@@ -18,18 +18,10 @@ import {
   alPersonalExemption, alStandardDeduction, alSupplementalFlat,
 } from "./al.ts";
 import { pctToRate } from "./transcription.ts";
+import { money, resolvedCertificate } from "./conformance-support.ts";
 
-const money = (value: string) => {
-  const [whole, fraction = ""] = value.split(".");
-  return `${whole}.${(fraction + "0000").slice(0, 4)}`;
-};
-
-function cert(answers: Record<string, string> = {}): ResolvedCertificate {
-  return resolveCertificate({
-    certificate: AL_CERTIFICATE,
-    stored: [{ certificateKey: AL_CERTIFICATE.key, answers, effectiveFrom: null }],
-  });
-}
+const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
+  resolvedCertificate(AL_CERTIFICATE, answers);
 
 test("AL certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(AL_CERTIFICATE), null);
