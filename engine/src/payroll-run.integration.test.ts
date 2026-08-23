@@ -40,6 +40,7 @@ test(
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
           payroll: {
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
@@ -208,6 +209,7 @@ test(
       const fringePayable = await account("2340", "Union fringes payable", "liability_current");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
           payroll: {
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: fringeExpense,
             netPayAccountId: netPayable, cppPayableAccountId: craPayable,
@@ -368,6 +370,7 @@ test(
       const statePayable = await account("2360", "State income tax payable", "liability_current");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
           payroll: {
             wageExpenseAccountId: wageExpense,
             burdenExpenseAccountId: burdenExpense,
@@ -579,6 +582,10 @@ test(
       await seedPayrollComponents(org.orgId, actorId, "CA");
       // Both packs: the US entity's employee needs the US pack's components.
       await seedPayrollComponents(org.orgId, actorId, "US");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
+        })}::jsonb where id = ${org.orgId}`);
       const usSubId = randomUUID();
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -685,6 +692,10 @@ test(
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       await seedPayrollComponents(org.orgId, actorId, "CA");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
+        })}::jsonb where id = ${org.orgId}`);
       const employeeId = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
