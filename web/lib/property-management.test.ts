@@ -6,6 +6,28 @@ import test from "node:test";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(join(webRoot, path), "utf8");
+const pmSource = (...names: string[]) =>
+  names
+    .map((name) => source(`app/(app)/property-management/${name}`))
+    .join("\n");
+const pmModules = [
+  "PropertyManagementWorkspace.tsx",
+  "workspace-ui.tsx",
+  "PropertiesTable.tsx",
+  "RentRollTable.tsx",
+  "LeaseTables.tsx",
+  "DepositReconciliationWorkspace.tsx",
+  "CamTable.tsx",
+  "PropertyDrawer.tsx",
+  "PropertyDetailDrawer.tsx",
+  "UnitDrawer.tsx",
+  "UnitRecordDrawer.tsx",
+  "LeaseDrawer.tsx",
+  "LeaseRecordDrawer.tsx",
+  "LeaseDetail.tsx",
+  "LeaseSections.tsx",
+  "CamDrawers.tsx",
+];
 
 test("property-management page is feature gated and subsidiary scoped", () => {
   const page = source("app/(app)/property-management/page.tsx");
@@ -38,8 +60,9 @@ test("property-management API gates reads, accounting effects, and subsidiary re
 });
 
 test("property-management workspace keeps exactly four KPIs in one desktop row", () => {
-  const workspace = source(
-    "app/(app)/property-management/PropertyManagementWorkspace.tsx",
+  const workspace = pmSource(
+    "PropertyManagementWorkspace.tsx",
+    "workspace-ui.tsx",
   );
   const healthStart = workspace.indexOf('aria-label="Property health"');
   const health = workspace.slice(
@@ -71,8 +94,9 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
 });
 
 test("property-management UI exposes the complete operator entry points", () => {
-  const workspace = source(
-    "app/(app)/property-management/PropertyManagementWorkspace.tsx",
+  const workspace = pmSource(...pmModules);
+  const propertiesTable = source(
+    "app/(app)/property-management/PropertiesTable.tsx",
   );
 
   for (const label of [
@@ -102,9 +126,6 @@ test("property-management UI exposes the complete operator entry points", () => 
     /\["properties", "leases", "rent", "deposits", "cam"\]/,
   );
   assert.match(workspace, /onKeyDown=\{\(event\)/);
-  const propertiesTable = workspace.slice(
-    workspace.indexOf("function PropertiesTable"),
-  );
   assert.match(propertiesTable, /role="button"/);
   assert.match(propertiesTable, /onOpen\(property\.id\)/);
   assert.doesNotMatch(propertiesTable, /onAddUnit/);
