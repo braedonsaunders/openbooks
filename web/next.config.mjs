@@ -30,6 +30,15 @@ const config = {
     "pdfkit",
     "exceljs",
     "ssh2",
+    // OpenTelemetry must stay external so the whole process shares ONE
+    // @opentelemetry/api instance: global tracer/meter providers registered by
+    // engine telemetry.ts are invisible across duplicated API copies.
+    "@opentelemetry/api",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/sdk-metrics",
+    "@opentelemetry/exporter-trace-otlp-http",
+    "@opentelemetry/exporter-metrics-otlp-http",
   ],
   // Docker image: self-contained server bundle. The tracing root is the
   // monorepo root so workspace deps (@openbooks/*) land in the output.
