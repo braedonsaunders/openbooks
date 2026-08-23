@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org, today, crmEnabled, ordersEnabled, expensesEnabled, projectsEnabled, assetsEnabled] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
@@ -30,6 +30,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     orgInfo(authz.user.orgId),
     businessToday(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'crm'),
+    // The shell create menu must follow the same switches as the nav: a
+    // feature that is off disappears from the menu instead of POSTing into a
+    // 404 from its gated draft API.
+    isFeatureEnabled(authz.user.orgId, 'orders'),
+    isFeatureEnabled(authz.user.orgId, 'expenses'),
+    isFeatureEnabled(authz.user.orgId, 'projects'),
+    isFeatureEnabled(authz.user.orgId, 'fixedAssets'),
   ])
   if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const jar = await cookies()
@@ -74,11 +81,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             journal: can(authz, 'gl.post'),
             customerPayments: can(authz, 'ar.pay'),
             vendorPayments: can(authz, 'ap.pay'),
-            expenses: can(authz, 'expenses.create'),
+            expenses: can(authz, 'expenses.create') && expensesEnabled,
             parties: can(authz, 'parties.manage'),
             items: can(authz, 'items.manage'),
-            projects: can(authz, 'projects.manage'),
-            assets: can(authz, 'assets.manage'),
+            projects: can(authz, 'projects.manage') && projectsEnabled,
+            assets: can(authz, 'assets.manage') && assetsEnabled,
+            orders: ordersEnabled,
           }}
           canReadParties={can(authz, 'parties.read')}
           canManageParties={can(authz, 'parties.manage')}
