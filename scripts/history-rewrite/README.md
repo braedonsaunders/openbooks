@@ -6,6 +6,28 @@ execution slice, during a scheduler-owned repository freeze. The tooling in
 this directory never needs or records plaintext prohibited identifiers; it
 loads only their SHA-256 fingerprints from `../check-history-hygiene.mjs`.
 
+## Verification tooling
+
+`npm run test:history-rewrite` is the machine-checkable rehearsal for this
+tooling. It proves, before any destructive step is contemplated:
+
+- callback generation parses the gate's hash set and fails closed on
+  malformed, duplicated, or empty sets;
+- the redaction simulation clears every violation the gate flags while
+  leaving unflagged values byte-identical, and is idempotent;
+- executing the generated Python callbacks under `python3` matches the
+  JavaScript simulation byte for byte;
+- a throwaway fixture repository under the system temp directory — never this
+  repository — rehearsed with the real pinned `git-filter-repo` produces
+  exactly the simulated survivors (deep nesting purged, lookalike names such
+  as `objects-list.md` kept), zero residual violations, preserved commit
+  count, tags, branches, blob contents, and a complete commit map; and
+- the read-only dry-run passes against the current history.
+
+The suite asserts the canonical repository's HEAD is unchanged across the
+rehearsal. If `git-filter-repo` is absent the rehearsal reports an explicit
+skip; every other check still runs.
+
 ## Preconditions and freeze
 
 The scheduler/operator must confirm all of the following before creating any
@@ -29,6 +51,8 @@ recovery artifact or running the rewrite:
 - `/opt/homebrew/bin/git-filter-repo` exists. Record its version with
   `/opt/homebrew/bin/git-filter-repo --version`; retest this tooling if the
   version differs from the rehearsed version.
+- `npm run test:history-rewrite` passes immediately before the rewrite. Stop if
+  any check fails or reports an unexpected skip on this platform.
 - `node scripts/history-rewrite/dry-run.mjs` exits 0 immediately before the
   rewrite. Stop if it reports an uncovered path, an unexpected purge match, a
   residual violation, or a sibling self-audit failure.
