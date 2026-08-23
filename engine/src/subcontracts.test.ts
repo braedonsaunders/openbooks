@@ -334,10 +334,46 @@ test("generateVendorPayApplicationBill persists line.gross through canonicalDeci
   assert.doesNotMatch(body, /normalizeMoney\(line\.gross\)/);
 });
 
+test("revisedSubcontractSovValue persists inputs through canonicalDecimal then normalizeMoney", () => {
+  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
+  for (const helper of [
+    "persistRevisedSubcontractSovCurrentScheduledValue",
+    "persistRevisedSubcontractSovChangeAmount",
+    "persistRevisedSubcontractSovEarnedToDate",
+  ] as const) {
+    const helperStart = source.indexOf(`function ${helper}`);
+    const helperEnd = source.indexOf("\n}", helperStart);
+    assert.ok(helperStart >= 0 && helperEnd > helperStart, `${helper} helper is defined`);
+    const body = source.slice(helperStart, helperEnd + 2);
+    assert.match(body, /canonicalDecimal\(value, 4\)/);
+    assert.match(body, /normalizeMoney\(exact\)/);
+    assert.match(body, /SubcontractError/);
+  }
+
+  const start = source.indexOf("export function revisedSubcontractSovValue");
+  const next = source.indexOf("async function assertFeatureEnabled");
+  const fnBody = source.slice(start, next);
+  assert.match(fnBody, /persistRevisedSubcontractSovCurrentScheduledValue\(currentScheduledValue\)/);
+  assert.match(fnBody, /persistRevisedSubcontractSovChangeAmount\(changeAmount\)/);
+  assert.match(fnBody, /persistRevisedSubcontractSovEarnedToDate\(earnedToDate\)/);
+  assert.doesNotMatch(fnBody, /normalizeMoney\(currentScheduledValue\)/);
+  assert.doesNotMatch(fnBody, /normalizeMoney\(changeAmount\)/);
+  assert.doesNotMatch(fnBody, /normalizeMoney\(earnedToDate\)/);
+});
+
 test("deductive change cannot erase earned work", () => {
   assert.equal(revisedSubcontractSovValue("1000", "-200", "750"), "800.0000");
+  assert.equal(revisedSubcontractSovValue("1000.00", "-200.0000", "750"), "800.0000");
   assert.throws(
     () => revisedSubcontractSovValue("1000", "-300", "750"),
+    SubcontractError,
+  );
+  assert.throws(
+    () => revisedSubcontractSovValue("not-a-number", "-200", "750"),
+    SubcontractError,
+  );
+  assert.throws(
+    () => revisedSubcontractSovValue("1000", "-200", "0.00005"),
     SubcontractError,
   );
 });

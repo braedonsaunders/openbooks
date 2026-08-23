@@ -61,6 +61,39 @@ function persistSubcontractChangeOrderAmount(value: unknown): string {
   }
 }
 
+/** Persist revised-SOV current scheduled value through exact decimal then ledger money. Fail closed. */
+function persistRevisedSubcontractSovCurrentScheduledValue(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("current scheduled value must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("current scheduled value must be an exact decimal");
+  }
+}
+
+/** Persist revised-SOV change amount through exact decimal then ledger money. Fail closed. */
+function persistRevisedSubcontractSovChangeAmount(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("change amount must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("change amount must be an exact decimal");
+  }
+}
+
+/** Persist revised-SOV earned-to-date through exact decimal then ledger money. Fail closed. */
+function persistRevisedSubcontractSovEarnedToDate(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new SubcontractError("earned to date must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new SubcontractError("earned to date must be an exact decimal");
+  }
+}
+
 /** Persist leftover retainage-release amount through exact decimal then ledger money. Fail closed. */
 function persistSubcontractRetainageReleaseAmount(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -234,8 +267,11 @@ export function revisedSubcontractSovValue(
   changeAmount: string,
   earnedToDate: string,
 ): string {
-  const revised = add(normalizeMoney(currentScheduledValue), normalizeMoney(changeAmount));
-  if (cmp(revised, "0") <= 0 || cmp(revised, normalizeMoney(earnedToDate)) < 0) {
+  const scheduled = persistRevisedSubcontractSovCurrentScheduledValue(currentScheduledValue);
+  const change = persistRevisedSubcontractSovChangeAmount(changeAmount);
+  const earned = persistRevisedSubcontractSovEarnedToDate(earnedToDate);
+  const revised = add(scheduled, change);
+  if (cmp(revised, "0") <= 0 || cmp(revised, earned) < 0) {
     throw new SubcontractError("The change would reduce the SOV line below its earned value");
   }
   return revised;
