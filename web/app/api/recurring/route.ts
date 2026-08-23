@@ -73,13 +73,25 @@ export async function POST(req: Request) {
   const templateDocumentId = tpl.rows[0]!.id;
 
   const nextRunOn = body.nextRunOn ?? await businessToday(authz.user.orgId);
-  const created = (await db.execute<{ id: string }>(sql`
-    insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
-                                     auto_post, name, created_by, updated_by)
-    values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
-            ${nextRunOn}, ${body.endsOn ?? null}, ${body.autoPost ?? false}, ${body.name ?? null},
-            ${authz.user.id}, ${authz.user.id})
-    returning id
-  `));
-  return NextResponse.json({ id: created.rows[0]!.id }, { status: 201 });
+  const created = await db.transaction(async (tx) => {
+    const row = (await tx.execute<Record<string, unknown>>(sql`
+      insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
+                                       auto_post, name, created_by, updated_by)
+      values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
+              ${nextRunOn}, ${body.endsOn ?? null}, ${body.autoPost ?? false}, ${body.name ?? null},
+              ${authz.user.id}, ${authz.user.id})
+      returning *
+    `));
+    // A schedule mints real documents on every due date, so its creation is
+    // recorded in the same transaction.
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${authz.user.orgId}, 'recurring_schedules', ${(row.rows[0] as any).id as string}, 'insert',
+         ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${authz.user.id})
+    `);
+    return row.rows[0]!;
+  });
+  return NextResponse.json({ id: (created as any).id as string }, { status: 201 });
 }
