@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
 import { add, sum } from "./money.ts";
@@ -274,10 +275,12 @@ async function findOccurrenceDocument(
  * next_run_on.
  */
 export async function runDueRecurringSchedules(asOf?: string): Promise<RecurringRunResult> {
-  // Org-spanning scan keeps a UTC-day cutoff — no tenant is in scope yet; each
-  // generated document below dates itself by the owning org's business day.
-  const scanCutoff = asOf ?? toIso(new Date());
+  // The org-spanning query is only a bounded candidate scan. UTC+14 can already
+  // be on tomorrow's calendar date, so include that horizon; the authoritative
+  // due gate below uses each candidate's org business day before claiming it.
+  const scanCutoff = asOf ?? addDays(toIso(now()), 1);
   const result: RecurringRunResult = { generated: 0, posted: 0, failed: 0, documents: [] };
+  const orgBusinessDates = new Map<string, string>();
 
   const due = await withBypass(async () => {
     return (await db.execute<{
@@ -312,6 +315,13 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
   });
 
   for (const s of due.rows) {
+    let today = asOf ?? orgBusinessDates.get(s.orgId);
+    if (!today) {
+      today = await withOrg(s.orgId, () => businessToday(s.orgId));
+      orgBusinessDates.set(s.orgId, today);
+    }
+    if (s.nextRunOn > today) continue;
+
     const occurrenceDate = s.nextRunOn;
     const advanced = advanceCadence(occurrenceDate, s.cadence, s.cron);
     // Deactivate once we pass ends_on rather than looping forever.
@@ -339,7 +349,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     let gen: { documentId: string; documentNumber: string; posted: boolean };
     try {
       gen = await withOrg(s.orgId, async () =>
-        generateFromTemplate(s.orgId, s.templateId, asOf ?? (await businessToday(s.orgId)), s.autoPost, {
+        generateFromTemplate(s.orgId, s.templateId, today, s.autoPost, {
           scheduleId: s.id,
           occurrenceOn: occurrenceDate,
         }),

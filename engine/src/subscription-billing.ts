@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, withBypass, withOrg } from "./db.ts";
-import { businessToday } from "./business-date.ts";
+import { addCalendarDays, businessToday } from "./business-date.ts";
+import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
@@ -455,8 +456,12 @@ export interface SubscriptionRunResult {
  * that have the subscriptionBilling feature on.
  */
 export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRunResult> {
-  const today = asOf ?? toIso(new Date());
+  // This is only a bounded cross-org candidate horizon. The exact due gate is
+  // evaluated per tenant below; UTC+14 requires tomorrow's UTC date to be in
+  // the candidate set even though tenants west of UTC may still be on today.
+  const scanCutoff = asOf ?? addCalendarDays(toIso(now()), 1);
   const result: SubscriptionRunResult = { billed: 0, posted: 0, failed: 0 };
+  const orgBusinessDates = new Map<string, string>();
 
   const due = await withBypass(async () =>
     (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null; interval: Interval; intervalCount: number }>(sql`
@@ -468,7 +473,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
         left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
         join orgs o on o.id = s.org_id
-       where s.status = 'active' and s.next_bill_on <= ${today}
+       where s.status = 'active' and s.next_bill_on <= ${scanCutoff}
          and o.env_kind = 'production'
          and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
          and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
@@ -476,6 +481,13 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   );
 
   for (const row of due.rows) {
+    let today = asOf ?? orgBusinessDates.get(row.orgId);
+    if (!today) {
+      today = await withOrg(row.orgId, () => businessToday(row.orgId));
+      orgBusinessDates.set(row.orgId, today);
+    }
+    if (row.nextBillOn > today) continue;
+
     try {
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
