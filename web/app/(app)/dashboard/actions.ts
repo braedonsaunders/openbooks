@@ -160,9 +160,11 @@ export async function listQuickActionOptions(): Promise<{
   const common: QuickActionOption[] = []
 
   const featureKeys = [...new Set(
-    CURATED_QUICK_ACTIONS
-      .map((action) => action.requiredFeature)
-      .filter((key): key is string => key != null),
+    [
+      ...CURATED_QUICK_ACTIONS.map((action) => action.requiredFeature),
+      // NAV_MODULES Projects is not a curated create chip — still 404s /projects when off.
+      'projects',
+    ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
     await Promise.all(
@@ -187,6 +189,8 @@ export async function listQuickActionOptions(): Promise<{
     if (mod.requiredPermission && !can(authz, mod.requiredPermission)) continue
     // Same requiredFeature filter as d-expense: /expenses/reports 404s when Expenses is off.
     if (mod.key === 'expenses' && !featureOn.get('expenses')) continue
+    // Same requiredFeature filter: /projects 404s when Projects is off.
+    if (mod.key === 'projects' && !featureOn.get('projects')) continue
     common.push({
       label: mod.label,
       href: mod.href,
