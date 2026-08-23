@@ -6,6 +6,19 @@ import test from "node:test";
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path: string) => readFileSync(join(webRoot, path), "utf8");
+const propertyMessages = (
+  JSON.parse(source("messages/en/entities.json")) as {
+    propertyManagement: Record<string, unknown>;
+  }
+).propertyManagement;
+const propertyMessage = (path: string): unknown =>
+  path.split(".").reduce<unknown>(
+    (node, segment) =>
+      node && typeof node === "object"
+        ? (node as Record<string, unknown>)[segment]
+        : undefined,
+    propertyMessages,
+  );
 const pmSource = (...names: string[]) =>
   names
     .map((name) => source(`app/(app)/property-management/${name}`))
@@ -64,13 +77,14 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
     "PropertyManagementWorkspace.tsx",
     "workspace-ui.tsx",
   );
-  const healthStart = workspace.indexOf('aria-label="Property health"');
+  const healthStart = workspace.indexOf('aria-label={t("healthAria")}');
   const health = workspace.slice(
     healthStart,
     workspace.indexOf("</section>", healthStart),
   );
 
   assert.notEqual(healthStart, -1);
+  assert.equal(propertyMessage("workspace.healthAria"), "Property health");
   assert.match(health, /lg:grid-cols-4/);
   assert.equal((health.match(/<Metric\b/g) ?? []).length, 4);
   assert.equal((workspace.match(/<HomeStatTile\b/g) ?? []).length, 1);
@@ -95,6 +109,7 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
 
 test("property-management UI exposes the complete operator entry points", () => {
   const workspace = pmSource(...pmModules);
+  const workspaceOrCopy = `${workspace}\n${JSON.stringify(propertyMessages)}`;
   const propertiesTable = source(
     "app/(app)/property-management/PropertiesTable.tsx",
   );
@@ -111,15 +126,25 @@ test("property-management UI exposes the complete operator entry points", () => 
     "Reopen for correction",
     "Deposit Reconciliation",
   ]) {
-    assert.match(workspace, new RegExp(label));
+    assert.match(workspaceOrCopy, new RegExp(label));
   }
-  assert.match(workspace, /aria-label="Property management sections"/);
+  assert.match(
+    workspace,
+    /useTranslations\("entities\.propertyManagement\.workspace"\)/,
+  );
+  assert.match(workspace, /aria-label=\{t\("sectionsAria"\)\}/);
+  assert.equal(
+    propertyMessage("workspace.sectionsAria"),
+    "Property management sections",
+  );
   assert.match(workspace, /label="Lease details"/);
-  assert.match(workspace, /key: "rentRoll", label: "Rent Roll"/);
+  assert.match(workspace, /\{ key: "rentRoll" \}/);
+  assert.match(workspace, /t\(`tabs\.\$\{item\.key\}`\)/);
+  assert.equal(propertyMessage("workspace.tabs.rentRoll"), "Rent Roll");
   assert.match(workspace, /function RentRollTable/);
-  assert.match(workspace, /Search rent roll/);
-  assert.match(workspace, /Monthly charges/);
-  assert.match(workspace, /Past due/);
+  assert.match(workspaceOrCopy, /Search rent roll/);
+  assert.match(workspaceOrCopy, /Monthly charges/);
+  assert.match(workspaceOrCopy, /Past due/);
   assert.match(workspace, /historical leases stay on/);
   assert.doesNotMatch(
     workspace,
@@ -139,17 +164,17 @@ test("property-management UI exposes the complete operator entry points", () => 
   assert.match(workspace, /stacked=\{!!selectedProperty \|\| !!selectedUnit\}/);
   assert.match(workspace, /onClick=\{\(\) => onOpenUnit\(unit\.id\)\}/);
   assert.match(workspace, /propertyId: property\.id/);
-  assert.match(workspace, /CAM reconciliations/);
+  assert.match(workspaceOrCopy, /CAM reconciliations/);
   assert.match(workspace, /propertyId=\{property\.id\}/);
   assert.match(workspace, /initialPropertyId=\{createCam\?\.propertyId\}/);
-  assert.match(workspace, /Deactivate property/);
-  assert.match(workspace, /Reactivate property/);
-  assert.match(workspace, /Delete property/);
-  assert.match(workspace, /Take unit offline/);
-  assert.match(workspace, /Delete unit/);
-  assert.match(workspace, /Cancel lease/);
-  assert.match(workspace, /Terminate lease/);
-  assert.match(workspace, /Post reversal/);
+  assert.match(workspaceOrCopy, /Deactivate property/);
+  assert.match(workspaceOrCopy, /Reactivate property/);
+  assert.match(workspaceOrCopy, /Delete property/);
+  assert.match(workspaceOrCopy, /Take unit offline/);
+  assert.match(workspaceOrCopy, /Delete unit/);
+  assert.match(workspaceOrCopy, /Cancel lease/);
+  assert.match(workspaceOrCopy, /Terminate lease/);
+  assert.match(workspaceOrCopy, /Post reversal/);
   assert.match(workspace, /action: "reverseDeposit"/);
   assert.match(workspace, /action: "updateCamPool"/);
   assert.match(workspace, /action: "cancelCamPool"/);
