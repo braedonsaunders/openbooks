@@ -22,8 +22,10 @@ import {
   ATTR_OUTCOME,
   ATTR_SURFACE,
   recordOutboxAttempt,
+  resolveOtlpHttpEndpoint,
   runInSpan,
   TELEMETRY_SCOPE,
+  telemetryEnabled,
 } from "./telemetry.ts";
 import {
   EMAIL_DELIVERY_WORKER_IDENTITY,
@@ -34,6 +36,62 @@ import {
 
 const source = (relative: string) =>
   readFileSync(new URL(relative, import.meta.url), "utf8");
+
+test("a signal-specific endpoint alone enables telemetry and is used verbatim", () => {
+  const cases = [
+    ["traces", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"],
+    ["metrics", "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"],
+    ["logs", "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"],
+  ] as const;
+
+  for (const [signal, variable] of cases) {
+    const exactEndpoint = `https://${signal}.collector.example/custom/path/`;
+    const env = { [variable]: exactEndpoint };
+    assert.equal(telemetryEnabled(env), true, `${variable} must enable telemetry`);
+    assert.equal(resolveOtlpHttpEndpoint(env, signal), exactEndpoint);
+    for (const [otherSignal] of cases) {
+      if (otherSignal !== signal) {
+        assert.equal(resolveOtlpHttpEndpoint(env, otherSignal), undefined);
+      }
+    }
+  }
+});
+
+test("a shared endpoint alone composes the standard path for every signal", () => {
+  const env = { OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example/tenant/" };
+  assert.equal(telemetryEnabled(env), true);
+  assert.equal(resolveOtlpHttpEndpoint(env, "traces"), "https://collector.example/tenant/v1/traces");
+  assert.equal(resolveOtlpHttpEndpoint(env, "metrics"), "https://collector.example/tenant/v1/metrics");
+  assert.equal(resolveOtlpHttpEndpoint(env, "logs"), "https://collector.example/tenant/v1/logs");
+});
+
+test("a signal-specific endpoint takes precedence over the shared endpoint", () => {
+  const env = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: "https://shared.collector.example/base",
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "https://metrics.collector.example/exact/",
+  };
+  assert.equal(telemetryEnabled(env), true);
+  assert.equal(
+    resolveOtlpHttpEndpoint(env, "metrics"),
+    "https://metrics.collector.example/exact/",
+  );
+  assert.equal(
+    resolveOtlpHttpEndpoint(env, "traces"),
+    "https://shared.collector.example/base/v1/traces",
+  );
+});
+
+test("telemetry is disabled when no endpoint is configured", () => {
+  const env = {
+    OTEL_EXPORTER_OTLP_ENDPOINT: "",
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "   ",
+  };
+  assert.equal(telemetryEnabled(env), false);
+  assert.equal(resolveOtlpHttpEndpoint(env, "traces"), undefined);
+  assert.equal(resolveOtlpHttpEndpoint(env, "metrics"), undefined);
+  assert.equal(resolveOtlpHttpEndpoint(env, "logs"), undefined);
+});
 
 // The in-process SDK stand-in for startTelemetry(): the same globals the boot
 // registers, but exporting into memory. Instruments bind to the current global
