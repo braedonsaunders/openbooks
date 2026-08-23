@@ -1284,7 +1284,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     const shares: string[] = [];
     for (const [index, lease] of weighted.entries()) {
       if (pool.allocation_basis === "custom") {
-        shares.push(mulRatio(normalizeMoney(lease.cam_share_percent), BigInt(lease.days), BigInt(poolDays)));
+        shares.push(mulRatio(exactMoney(lease.cam_share_percent, "CAM share"), BigInt(lease.days), BigInt(poolDays)));
       } else if (index === weighted.length - 1) {
         shares.push(add("100", neg(sum(shares))));
       } else {
