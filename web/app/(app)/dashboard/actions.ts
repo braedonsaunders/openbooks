@@ -168,6 +168,8 @@ export async function listQuickActionOptions(): Promise<{
       'orders',
       // NAV_MODULES assets/tax-depreciation — still 404 when Fixed Assets is off.
       'fixedAssets',
+      // NAV_MODULES equipment — still 404s /assets/equipment when Equipment is off.
+      'equipment',
     ].filter((key): key is string => key != null),
   )]
   const featureOn = new Map(
@@ -199,6 +201,8 @@ export async function listQuickActionOptions(): Promise<{
     if ((mod.key === 'estimates' || mod.key === 'sales-orders' || mod.key === 'purchase-orders') && !featureOn.get('orders')) continue
     // Same requiredFeature filter: /assets|/assets?tab=tax-depreciation 404 when Fixed Assets is off.
     if ((mod.key === 'assets' || mod.key === 'tax-depreciation') && !featureOn.get('fixedAssets')) continue
+    // Same requiredFeature filter: /assets/equipment 404s when Equipment is off.
+    if (mod.key === 'equipment' && !featureOn.get('equipment')) continue
     common.push({
       label: mod.label,
       href: mod.href,
