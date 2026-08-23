@@ -35,6 +35,13 @@ import {
 } from "./transaction-audit.ts";
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
+import {
+  claimPostingEffectsForDocument,
+  enqueuePostingEffects,
+  markPostingEffectsFailed,
+  markPostingEffectsSucceeded,
+  type PostingEffectsRow,
+} from "./posting-effects.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -1558,52 +1565,25 @@ export async function postDocument(
       });
     }
 
+    // Product subledgers drain after commit. Write the outbox row in this
+    // transaction so a crash leaves a durable retry for runPostDocumentEffects.
+    await enqueuePostingEffects(tx, {
+      orgId: doc.orgId,
+      documentId: doc.id,
+      kind: doc.kind,
+      entryId: entry.id,
+      postingDate,
+      actorId: options.audit?.actorId ?? null,
+    });
+
     return entry.id;
   });
 
-  // Product subledgers are part of posting semantics regardless of whether
-  // posting was initiated by the UI, API, a flow action, or a scheduler.
-  // Each service is idempotent by document line, so a retry repairs a
-  // post-commit interruption without duplicating inventory or obligations.
-  const effectActorId = options.audit?.actorId ?? null;
-  if (doc.kind === "customer_invoice") {
-    await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
-    if (effectiveDoc.subsidiaryId) {
-      await applyInventoryIssuesForInvoice(
-        doc.orgId,
-        effectActorId,
-        doc.id,
-        postingDate,
-        effectiveDoc.subsidiaryId,
-      );
-    }
-  } else if (doc.kind === "vendor_bill" && effectiveDoc.subsidiaryId) {
-    await applyInventoryReceiptsForBill(
-      doc.orgId,
-      effectActorId,
-      doc.id,
-      entryId,
-      postingDate,
-      effectiveDoc.subsidiaryId,
-    );
-  }
-
-  if (!options.deferEffects && !options.suppressAutomation) {
-    await runTriggerScripts(
-      "after_post",
-      { ...scriptCtx, trigger: "after_post" },
-      doc.id,
-    );
-    // -- flows: after_post + the status transition (never throws) -----------
-    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
-      orgId: doc.orgId,
+  if (!options.deferEffects) {
+    await runPostDocumentEffects(doc.id, doc.status, {
+      suppressAutomation: options.suppressAutomation,
+      actorId: options.audit?.actorId ?? null,
     });
-    await emitStatusChange(
-      doc.kind,
-      doc.id,
-      { from: doc.status, to: "posted" },
-      { orgId: doc.orgId },
-    );
   }
   return entryId;
 }
@@ -1612,49 +1592,120 @@ export async function postDocument(
  * Emit post-commit effects for a caller that used `deferEffects` so a larger
  * accounting unit (for example payment + applications + realized FX) could
  * commit atomically before any automation observes it.
+ *
+ * Obligations and inventory also run here. `postDocument` writes a
+ * `posting_effects` row in the posting transaction; this function drains it.
+ * A crash after commit leaves the row for `processDuePostingEffects`.
  */
 export async function runPostDocumentEffects(
   documentId: string,
   previousStatus = "draft",
-  options: { suppressAutomation?: boolean } = {},
+  options: {
+    suppressAutomation?: boolean;
+    actorId?: string | null;
+    alreadyClaimed?: PostingEffectsRow;
+  } = {},
 ): Promise<void> {
+  let claimed: PostingEffectsRow | null = options.alreadyClaimed ?? null;
+  if (!options.alreadyClaimed) {
+    const claim = await claimPostingEffectsForDocument(documentId);
+    if (claim === "succeeded" || claim === "running") return;
+    claimed = claim;
+  }
+
   const [doc] = await db
     .select()
     .from(schema.documents)
     .where(eq(schema.documents.id, documentId));
-  if (!doc || doc.status !== "posted") return;
-  const lines = await db
-    .select()
-    .from(schema.documentLines)
-    .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
-    .orderBy(asc(schema.documentLines.lineNumber));
-  const [org] = await db
-    .select()
-    .from(schema.orgs)
-    .where(eq(schema.orgs.id, doc.orgId));
-  if (!org) return;
-  const ctx: ScriptContext = {
-    trigger: "after_post",
-    document: doc as unknown as Record<string, unknown>,
-    lines: lines as unknown as Record<string, unknown>[],
-    org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
-  };
-  if (!options.suppressAutomation) {
-    await runTriggerScripts("after_post", ctx, doc.id);
-    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
-      orgId: doc.orgId,
-    });
-    await emitStatusChange(
-      doc.kind,
-      doc.id,
-      { from: previousStatus, to: "posted" },
-      { orgId: doc.orgId },
-    );
+  if (!doc || doc.status !== "posted") {
+    const error = new Error("document is not posted");
+    if (claimed && !options.alreadyClaimed) {
+      await markPostingEffectsFailed(claimed, error);
+      return;
+    }
+    if (options.alreadyClaimed) throw error;
+    return;
   }
-  if (doc.kind === "customer_payment") {
-    const { finalizePaymentAcceptanceForDocument } =
-      await import("./payment-acceptance.ts");
-    await finalizePaymentAcceptanceForDocument(doc.id);
+
+  try {
+    // Product subledgers are part of posting semantics regardless of whether
+    // posting was initiated by the UI, API, a flow action, or a scheduler.
+    // Each service is idempotent by document line, so a retry repairs a
+    // post-commit interruption without duplicating inventory or obligations.
+    const effectActorId = options.actorId ?? claimed?.actor_id ?? null;
+    const postingDate = doc.postingDate ?? claimed?.posting_date ?? doc.documentDate;
+    const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
+    if (doc.kind === "customer_invoice") {
+      await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
+      if (doc.subsidiaryId) {
+        await applyInventoryIssuesForInvoice(
+          doc.orgId,
+          effectActorId,
+          doc.id,
+          postingDate,
+          doc.subsidiaryId,
+        );
+      }
+    } else if (doc.kind === "vendor_bill" && doc.subsidiaryId && entryId) {
+      await applyInventoryReceiptsForBill(
+        doc.orgId,
+        effectActorId,
+        doc.id,
+        entryId,
+        postingDate,
+        doc.subsidiaryId,
+      );
+    }
+
+    const lines = await db
+      .select()
+      .from(schema.documentLines)
+      .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
+      .orderBy(asc(schema.documentLines.lineNumber));
+    const [org] = await db
+      .select()
+      .from(schema.orgs)
+      .where(eq(schema.orgs.id, doc.orgId));
+    if (!org) {
+      const error = new Error("organization not found");
+      if (claimed && !options.alreadyClaimed) {
+        await markPostingEffectsFailed(claimed, error);
+        return;
+      }
+      if (options.alreadyClaimed) throw error;
+      return;
+    }
+    const ctx: ScriptContext = {
+      trigger: "after_post",
+      document: doc as unknown as Record<string, unknown>,
+      lines: lines as unknown as Record<string, unknown>[],
+      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    };
+    if (!options.suppressAutomation) {
+      await runTriggerScripts("after_post", ctx, doc.id);
+      await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
+        orgId: doc.orgId,
+      });
+      await emitStatusChange(
+        doc.kind,
+        doc.id,
+        { from: previousStatus, to: "posted" },
+        { orgId: doc.orgId },
+      );
+    }
+    if (doc.kind === "customer_payment") {
+      const { finalizePaymentAcceptanceForDocument } =
+        await import("./payment-acceptance.ts");
+      await finalizePaymentAcceptanceForDocument(doc.id);
+    }
+    if (claimed && !options.alreadyClaimed) {
+      await markPostingEffectsSucceeded(claimed);
+    }
+  } catch (error) {
+    if (claimed && !options.alreadyClaimed) {
+      await markPostingEffectsFailed(claimed, error);
+    }
+    throw error;
   }
 }
 

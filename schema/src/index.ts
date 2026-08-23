@@ -39,6 +39,7 @@ export * from "./forms";
 export * from "./custom-records";
 export * from "./reporting";
 export * from "./scheduler-outbox";
+export * from "./posting-effects";
 export * from "./insights";
 export * from "./views";
 export * from "./file-cabinet";

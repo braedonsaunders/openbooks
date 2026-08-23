@@ -16,6 +16,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0002_kernel_hardening.sql",
     "0003_pay_application_invoice_fk.sql",
     "0004_scheduler_outbox.sql",
+    "0005_posting_effects.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
