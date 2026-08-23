@@ -13,6 +13,7 @@ import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { loadControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
 
 /**
  * Unified line-based posting-document machinery.
@@ -76,18 +77,7 @@ async function orgBaseCurrency(orgId: string): Promise<string> {
 
 /** Org-level control accounts from orgs.settings.controlAccounts. */
 export async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
-  const c = r.rows[0]?.c ?? {}
-  return {
-    control: {
-      ar: c.ar,
-      ap: c.ap,
-      bank: c.bank,
-      taxCollected: c.taxCollected,
-      taxPaid: c.taxPaid,
-      employeePayable: c.employeePayable,
-    },
-  }
+  return { control: await loadControlAccounts(orgId) }
 }
 
 /** Instant-into-draft: mint an empty draft document for a kind, return id + number. */

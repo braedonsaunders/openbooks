@@ -3,6 +3,7 @@ import { canonicalDecimal } from "../../web/lib/exact-decimal.ts";
 import { db, schema, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
+import { loadControlAccounts } from "./control-accounts.ts";
 import { postDocument, runPostDocumentEffects } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
@@ -129,13 +130,6 @@ export function validateJournalInput(input: ScriptJournalInput): {
   };
 }
 
-/** Same shape web/lib/documents.ts controlDeps() builds — posting rule deps. */
-async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any;
-  const c = r.rows[0]?.c ?? {};
-  return { control: { ar: c.ar, ap: c.ap, bank: c.bank, taxCollected: c.taxCollected, taxPaid: c.taxPaid } };
-}
-
 /**
  * Create a balanced draft journal from sandboxed code, optionally posting it.
  * Account codes resolve within the org; unknown/inactive accounts are refused.
@@ -243,7 +237,7 @@ export async function createScriptJournal(
     if (submission.gated) return { approvalPending: true as const };
     const entryId = await postDocument(
       docId.id,
-      await controlDeps(orgId),
+      { control: await loadControlAccounts(orgId) },
       { deferEffects: true },
     );
     return { approvalPending: false as const, entryId };
