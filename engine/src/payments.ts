@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
@@ -129,6 +130,17 @@ export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
 // Draft payment documents
 // ---------------------------------------------------------------------------
 
+/** Persist-time payment FX rate: exact decimal at numeric(19,10). Fail closed. */
+function persistPaymentFxRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 10);
+  if (exact === null) throw new PaymentError("exchange rate must be an exact decimal");
+  try {
+    return normalizeDecimal(exact, 10);
+  } catch {
+    throw new PaymentError("exchange rate must be an exact decimal");
+  }
+}
+
 export async function createPaymentDocument(opts: {
   orgId: string;
   kind: PaymentKind;
@@ -150,12 +162,7 @@ export async function createPaymentDocument(opts: {
     ) as id`));
   const subsidiaryId = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind], subsidiaryId);
-  let fxRate: string;
-  try {
-    fxRate = normalizeDecimal(opts.fxRate ?? "1", 10);
-  } catch {
-    throw new PaymentError("exchange rate must be an exact decimal");
-  }
+  const fxRate = persistPaymentFxRate(opts.fxRate ?? "1");
   const [doc] = await db
     .insert(schema.documents)
     .values({
