@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, Input, Label, Select } from '@openbooks/ui'
 
@@ -23,6 +24,7 @@ export function InventoryAdvancedPanels({
   canManage: boolean
 }) {
   const router = useRouter()
+  const t = useTranslations('inventory.advanced')
   const [rows, setRows] = useState<any[]>([])
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -64,11 +66,11 @@ export function InventoryAdvancedPanels({
     const d = await r.json().catch(() => ({}))
     setBusy(false)
     if (!r.ok) {
-      setErr(d.error ?? 'Failed')
-      toast.error(d.error ?? 'Failed')
+      setErr(d.error ?? t('errors.failed'))
+      toast.error(d.error ?? t('errors.failed'))
       return null
     }
-    toast.success('Saved')
+    toast.success(t('toasts.saved'))
     void load()
     router.refresh()
     return d
@@ -80,10 +82,10 @@ export function InventoryAdvancedPanels({
         {err && <p className="text-sm text-red-600">{err}</p>}
         {canManage ? (
           <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-semibold">New transfer order</h3>
+            <h3 className="text-sm font-semibold">{t('transfers.newOrder')}</h3>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <Label>From</Label>
+                <Label>{t('transfers.from')}</Label>
                 <Select value={fromId} onChange={(e) => setFromId(e.target.value)}>
                   <option value="">…</option>
                   {locations.map((l) => (
@@ -94,7 +96,7 @@ export function InventoryAdvancedPanels({
                 </Select>
               </div>
               <div>
-                <Label>To</Label>
+                <Label>{t('transfers.to')}</Label>
                 <Select value={toId} onChange={(e) => setToId(e.target.value)}>
                   <option value="">…</option>
                   {locations.map((l) => (
@@ -105,7 +107,7 @@ export function InventoryAdvancedPanels({
                 </Select>
               </div>
               <div>
-                <Label>Item</Label>
+                <Label>{t('transfers.item')}</Label>
                 <Select value={itemId} onChange={(e) => setItemId(e.target.value)}>
                   <option value="">…</option>
                   {items.map((i) => (
@@ -117,13 +119,13 @@ export function InventoryAdvancedPanels({
                 </Select>
               </div>
               <div>
-                <Label>Qty</Label>
+                <Label>{t('transfers.qty')}</Label>
                 <Input value={qty} onChange={(e) => setQty(e.target.value)} />
               </div>
               <div className="sm:col-span-2">
-                <Label>In-transit account (optional override)</Label>
+                <Label>{t('transfers.inTransitAccount')}</Label>
                 <Select value={inTransitAcct} onChange={(e) => setInTransitAcct(e.target.value)}>
-                  <option value="">Use control account</option>
+                  <option value="">{t('transfers.useControlAccount')}</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.number} {a.name}
@@ -145,11 +147,10 @@ export function InventoryAdvancedPanels({
                 })
               }
             >
-              Create draft
+              {t('transfers.createDraft')}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Ship posts DR inventory-in-transit / CR inventory. Receive clears in-transit at destination.
-              Set controlAccounts.inventoryInTransit when not overriding.
+              {t('transfers.help')}
             </p>
           </Card>
         ) : null}
@@ -157,10 +158,10 @@ export function InventoryAdvancedPanels({
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr>
-                <th className="py-1">Number</th>
-                <th>From → To</th>
-                <th>Status</th>
-                <th>Ordered</th>
+                <th className="py-1">{t('transfers.table.number')}</th>
+                <th>{t('transfers.table.fromTo')}</th>
+                <th>{t('transfers.table.status')}</th>
+                <th>{t('transfers.table.ordered')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -178,12 +179,12 @@ export function InventoryAdvancedPanels({
                   <td className="space-x-1 text-right">
                     {canManage && r.status === 'draft' ? (
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void post({ action: 'shipTransfer', id: r.id })}>
-                        Ship
+                        {t('transfers.ship')}
                       </Button>
                     ) : null}
                     {canManage && r.status === 'in_transit' ? (
                       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void post({ action: 'receiveTransfer', id: r.id })}>
-                        Receive
+                        {t('transfers.receive')}
                       </Button>
                     ) : null}
                   </td>
@@ -192,7 +193,7 @@ export function InventoryAdvancedPanels({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-4 text-center text-muted-foreground">
-                    No transfer orders yet.
+                    {t('transfers.noneYet')}
                   </td>
                 </tr>
               ) : null}
@@ -209,22 +210,22 @@ export function InventoryAdvancedPanels({
         {err && <p className="text-sm text-red-600">{err}</p>}
         {canManage ? (
           <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-semibold">Multi-receipt landed cost voucher</h3>
+            <h3 className="text-sm font-semibold">{t('landed.newVoucher')}</h3>
             <div className="grid gap-2 sm:grid-cols-3">
               <div>
-                <Label>Amount</Label>
+                <Label>{t('landed.amount')}</Label>
                 <Input value={amount} onChange={(e) => setAmount(e.target.value)} />
               </div>
               <div>
-                <Label>Basis</Label>
+                <Label>{t('landed.basis')}</Label>
                 <Select value={basis} onChange={(e) => setBasis(e.target.value)}>
-                  <option value="value">By value</option>
-                  <option value="quantity">By quantity</option>
-                  <option value="weight">By weight</option>
+                  <option value="value">{t('landed.basisValue')}</option>
+                  <option value="quantity">{t('landed.basisQuantity')}</option>
+                  <option value="weight">{t('landed.basisWeight')}</option>
                 </Select>
               </div>
               <div>
-                <Label>Freight account</Label>
+                <Label>{t('landed.freightAccount')}</Label>
                 <Select value={freightId} onChange={(e) => setFreightId(e.target.value)}>
                   <option value="">…</option>
                   {accounts.map((a) => (
@@ -237,7 +238,7 @@ export function InventoryAdvancedPanels({
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <div>
-                <Label>Target item</Label>
+                <Label>{t('landed.targetItem')}</Label>
                 <Select value={tItem} onChange={(e) => setTItem(e.target.value)}>
                   <option value="">…</option>
                   {items.map((i) => (
@@ -249,7 +250,7 @@ export function InventoryAdvancedPanels({
                 </Select>
               </div>
               <div>
-                <Label>Location</Label>
+                <Label>{t('landed.location')}</Label>
                 <Select value={tLoc} onChange={(e) => setTLoc(e.target.value)}>
                   <option value="">…</option>
                   {locations.map((l) => (
@@ -269,16 +270,16 @@ export function InventoryAdvancedPanels({
                   setTLoc('')
                 }}
               >
-                Add target
+                {t('landed.addTarget')}
               </Button>
             </div>
             {targets.length > 0 ? (
               <ul className="text-xs text-muted-foreground">
-                {targets.map((t, i) => (
+                {targets.map((tgt, i) => (
                   <li key={i}>
-                    {items.find((x) => x.id === t.itemId)?.name} @ {locations.find((x) => x.id === t.stockLocationId)?.code}{' '}
+                    {items.find((x) => x.id === tgt.itemId)?.name} @ {locations.find((x) => x.id === tgt.stockLocationId)?.code}{' '}
                     <button className="ml-2 text-red-600" type="button" onClick={() => setTargets((cur) => cur.filter((_, j) => j !== i))}>
-                      remove
+                      {t('landed.remove')}
                     </button>
                   </li>
                 ))}
@@ -297,7 +298,7 @@ export function InventoryAdvancedPanels({
                 })
               }
             >
-              Post voucher
+              {t('landed.postVoucher')}
             </Button>
           </Card>
         ) : null}
@@ -305,11 +306,11 @@ export function InventoryAdvancedPanels({
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr>
-                <th className="py-1">Number</th>
-                <th>Date</th>
-                <th>Basis</th>
-                <th className="text-right">Amount</th>
-                <th>Status</th>
+                <th className="py-1">{t('landed.table.number')}</th>
+                <th>{t('landed.table.date')}</th>
+                <th>{t('landed.table.basis')}</th>
+                <th className="text-right">{t('landed.table.amount')}</th>
+                <th>{t('landed.table.status')}</th>
               </tr>
             </thead>
             <tbody>
@@ -325,7 +326,7 @@ export function InventoryAdvancedPanels({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-4 text-center text-muted-foreground">
-                    No landed cost vouchers yet.
+                    {t('landed.noneYet')}
                   </td>
                 </tr>
               ) : null}
@@ -340,7 +341,7 @@ export function InventoryAdvancedPanels({
     <div className="space-y-4">
       <Card className="flex flex-wrap items-end gap-2 p-4">
         <div>
-          <Label>Lot number</Label>
+          <Label>{t('lots.lotNumber')}</Label>
           <Input value={lotNumber} onChange={(e) => setLotNumber(e.target.value)} />
         </div>
         <Button
@@ -352,16 +353,16 @@ export function InventoryAdvancedPanels({
             window.location.href = `/reports/lot-recall?${qs.toString()}`
           }}
         >
-          Open recall report
+          {t('lots.openRecallReport')}
         </Button>
       </Card>
       <Card className="p-4">
         <table className="w-full text-sm">
           <thead className="text-left text-muted-foreground">
             <tr>
-              <th className="py-1">Lot</th>
-              <th>Item</th>
-              <th>Expiry</th>
+              <th className="py-1">{t('lots.table.lot')}</th>
+              <th>{t('lots.table.item')}</th>
+              <th>{t('lots.table.expiry')}</th>
             </tr>
           </thead>
           <tbody>
@@ -378,7 +379,7 @@ export function InventoryAdvancedPanels({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={3} className="py-4 text-center text-muted-foreground">
-                  No lots yet — receive stock with a lot number.
+                  {t('lots.noneYet')}
                 </td>
               </tr>
             ) : null}
