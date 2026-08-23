@@ -61,6 +61,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/payroll/remittances': 'payroll',
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',
+  '/close': 'continuousClose',
 }
 
 /**

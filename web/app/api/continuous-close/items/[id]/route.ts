@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { can, getAuthz } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../../../../../lib/continuous-close";
 
@@ -21,12 +20,9 @@ const ALLOWED_ACTIONS = {
 } as const;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await isFeatureEnabled(authz.user.orgId, 'continuousClose'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
-  }
-  if (!can(authz, "assistant.write")) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const gate = await guardFeaturePermission("assistant.write", "continuousClose");
+  if (gate instanceof NextResponse) return gate;
+  const authz = gate;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const access = await loadWorkItemAccess(authz.user.orgId, id);
