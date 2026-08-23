@@ -126,8 +126,6 @@ test("every JSON mutation route parses its body through the shared zod boundary"
   assert.equal(
     failures.length,
     0,
-    failures.length === 0
-      ? undefined
-      : `${failures.length} mutation route boundary violation(s):\n${failures.map((failure) => `- ${failure}`).join("\n")}`,
+    `${failures.length} mutation route boundary violation(s):\n${failures.map((failure) => `- ${failure}`).join("\n")}`,
   );
 });
