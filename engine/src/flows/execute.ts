@@ -28,7 +28,13 @@ import { renderFlowPdf } from "./pdf-hook.ts";
  *   • Checkpoints live in flow_run_effects keyed `${flowId}:action:${nodeId}`
  *     — re-executing a run
  *     (a resume after a gate, or a retry after a failure) skips completed
- *     effects instead of double-sending.
+ *     effects instead of double-sending. A checkpoint is CLAIMED with an
+ *     atomic INSERT … ON CONFLICT DO NOTHING RETURNING before its side
+ *     effect runs, so two concurrent executions of one run can never both
+ *     fire the same notification/email/gate — exactly one claim wins; the
+ *     loser sees zero returned rows and skips the node. On failure the claim
+ *     is released (no checkpoint is left behind — unchanged semantics: a
+ *     failed node leaves no effect row, so retries resume from it).
  *   • Gates fan out to MULTIPLE flow_gates rows (one per resolved assignee,
  *     shared groupKey, quorum any/all) with reminder/escalation timestamps —
  *     and configurable quorum.
@@ -118,11 +124,35 @@ export async function executeFlowPlan(
       .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.orgId, ctx.orgId)));
     for (const row of rows) completedEffects.add(row.effectKey);
   }
+
+  // Atomically CLAIM a checkpoint BEFORE performing its side effect. The
+  // unique index on (run_id, effect_key) makes this a compare-and-set: only
+  // the winning INSERT returns its row, so concurrent executions of one run
+  // serialize here instead of racing a read against a later write.
+  const claimEffect = async (effectKey: string): Promise<boolean> => {
+    const claimed = await db
+      .insert(schema.flowRunEffects)
+      .values({ orgId: ctx.orgId, runId, effectKey })
+      .onConflictDoNothing()
+      .returning({ effectKey: schema.flowRunEffects.effectKey });
+    return claimed.length > 0;
+  };
+
+  // Failure semantics unchanged: a failed node leaves NO checkpoint behind,
+  // so a future retry re-runs it. If even the release fails, the lingering
+  // claim fails that node closed on retries (logged for operators).
+  const releaseEffect = async (effectKey: string): Promise<void> => {
+    await db
+      .delete(schema.flowRunEffects)
+      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)));
+  };
+
+  // Stamp the outcome onto the already-claimed checkpoint (never inserts).
   const markEffectComplete = async (effectKey: string, detail: Record<string, unknown>) => {
     await db
-      .insert(schema.flowRunEffects)
-      .values({ orgId: ctx.orgId, runId, effectKey, detail })
-      .onConflictDoNothing();
+      .update(schema.flowRunEffects)
+      .set({ detail })
+      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)));
     completedEffects.add(effectKey);
   };
 
@@ -300,6 +330,9 @@ export async function executeFlowPlan(
   for (const { nodeId, action } of plan.actionNodes) {
     const effectKey = `${flow.id}:action:${nodeId}`;
     if (completedEffects.has(effectKey)) continue;
+    // Claim before acting — a racing execution of this run gets zero rows
+    // and skips, so the effect fires exactly once.
+    if (!(await claimEffect(effectKey))) continue;
     try {
       const desc = await runAction(nodeId, action);
       completed.push(desc);
@@ -309,6 +342,11 @@ export async function executeFlowPlan(
     } catch (e) {
       // defined semantics: record the failure and STOP the chain — later
       // actions likely depend on this one; effects allow resuming here.
+      try {
+        await releaseEffect(effectKey);
+      } catch (releaseError) {
+        console.error(`[flows] effect claim release failed for ${effectKey} (run ${runId}):`, releaseError);
+      }
       const reason = e instanceof Error ? e.message : String(e);
       failed.push(`${action.action} (${reason})`);
       break;
@@ -322,6 +360,7 @@ export async function executeFlowPlan(
     for (const { nodeId, gate } of plan.gates) {
       const effectKey = `${flow.id}:gate:${nodeId}`;
       if (completedEffects.has(effectKey)) continue;
+      if (!(await claimEffect(effectKey))) continue;
       try {
         const n = await createGate(ctx, adapter, {
           flow,
@@ -337,6 +376,11 @@ export async function executeFlowPlan(
         await markEffectComplete(effectKey, { gate: gate.title, assignees: n });
         completed.push(`gate "${gate.title}"→${n}`);
       } catch (e) {
+        try {
+          await releaseEffect(effectKey);
+        } catch (releaseError) {
+          console.error(`[flows] effect claim release failed for ${effectKey} (run ${runId}):`, releaseError);
+        }
         const reason = e instanceof Error ? e.message : String(e);
         failed.push(`gate (${reason})`);
         break;
