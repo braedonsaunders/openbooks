@@ -240,11 +240,15 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (!lineDims.ok) {
           return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
         }
+        const amount = exactOrderMoney(l.amount)
+        if (amount === 'invalid') {
+          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
+        }
         preparedLines.push({
           ...l,
           quantity: l.quantity ?? '0',
           unitPrice: l.unitPrice ?? '0',
-          amount: normalizeMoney(l.amount),
+          amount,
           taxInputAmount: normalizeMoney(l.taxInputAmount),
           taxAmount: normalizeMoney(l.taxAmount),
           extraDims: lineDims.cleaned,
