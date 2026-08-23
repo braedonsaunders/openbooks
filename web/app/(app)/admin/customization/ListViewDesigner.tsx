@@ -63,6 +63,7 @@ export function ListViewDesigner({
   showInListDefs,
   filterOptions,
   inventoryEnabled,
+  crmEnabled,
 }: {
   recordType: string
   def: ViewDef | null
@@ -71,6 +72,7 @@ export function ListViewDesigner({
   showInListDefs: CustomFieldDefClient[]
   filterOptions: Record<string, { value: string; label: string }[]>
   inventoryEnabled: boolean
+  crmEnabled: boolean
 }) {
   const t = useTranslations('customization')
   const tCommon = useTranslations('common')
@@ -79,7 +81,7 @@ export function ListViewDesigner({
   const creating = !def?.id
   const catalog = getRecordType(recordType)
   const meta = catalog
-    ? recordTypeForFeatureState(catalog, { inventory: inventoryEnabled })
+    ? recordTypeForFeatureState(catalog, { inventory: inventoryEnabled, crm: crmEnabled })
     : catalog
 
   const initial = useMemo<ListViewConfig>(() => {

@@ -16,18 +16,33 @@ export interface EntityAdhoc {
   /** Quick-filter values keyed by the customization registry filter key. */
   filters?: Record<string, string | undefined>
   showInactive?: boolean
+  /** When false, customer lists must not read or filter on CRM lifecycle — stored profiles stay. */
+  crmEnabled?: boolean
 }
 
 /* ------------------------------------------------------------------ */
 /* Customers                                                           */
 /* ------------------------------------------------------------------ */
 
-/** Customer role and CRM lifecycle data for the canonical party row. */
-export const CUSTOMER_BASE_JOINS = sql`
-  join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
-  left join crm_account_profiles cap on cap.party_id = p.id and cap.org_id = p.org_id and cap.is_active`
+const CUSTOMER_ROLE_JOINS = sql`
+  join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active`
 
-export const CUSTOMER_STATUS_EXPR = sql`coalesce(cap.lifecycle_stage, 'customer')`
+/** Customer role plus optional CRM lifecycle join for the canonical party row. */
+export function customerBaseJoins(crmOn: boolean): SQL {
+  if (!crmOn) return CUSTOMER_ROLE_JOINS
+  return sql`${CUSTOMER_ROLE_JOINS}
+  left join crm_account_profiles cap on cap.party_id = p.id and cap.org_id = p.org_id and cap.is_active`
+}
+
+/** CRM-on lists expose stored lifecycle stages; CRM-off lists treat every customer as existing. */
+export function customerStatusExpr(crmOn: boolean): SQL {
+  return crmOn ? sql`coalesce(cap.lifecycle_stage, 'customer')` : sql`'customer'`
+}
+
+/** Default joins when CRM is on — entity-list-view overrides when the switch is off. */
+export const CUSTOMER_BASE_JOINS = customerBaseJoins(true)
+
+export const CUSTOMER_STATUS_EXPR = customerStatusExpr(true)
 
 export const PARTY_ACTIVE_STATUS_EXPR = sql`case when p.is_active then 'active' else 'inactive' end`
 
@@ -44,21 +59,31 @@ export const PARTY_SORTS: Record<string, SQL> = {
   code: sql`p.short_code`,
 }
 
-export const CUSTOMER_BUILT_IN_EXPR: Record<string, SQL> = {
-  display_name: sql`p.display_name`,
-  short_code: sql`p.short_code`,
-  email: sql`p.email`,
-  phone: sql`p.phone`,
-  status: CUSTOMER_STATUS_EXPR,
+export function customerBuiltInExpr(crmOn: boolean): Record<string, SQL> {
+  const status = customerStatusExpr(crmOn)
+  return {
+    display_name: sql`p.display_name`,
+    short_code: sql`p.short_code`,
+    email: sql`p.email`,
+    phone: sql`p.phone`,
+    status,
+  }
 }
 
-export const CUSTOMER_SORTS: Record<string, SQL> = {
-  name: sql`p.display_name`,
-  code: sql`p.short_code`,
-  status: CUSTOMER_STATUS_EXPR,
+export const CUSTOMER_BUILT_IN_EXPR = customerBuiltInExpr(true)
+
+export function customerSorts(crmOn: boolean): Record<string, SQL> {
+  const status = customerStatusExpr(crmOn)
+  return {
+    name: sql`p.display_name`,
+    code: sql`p.short_code`,
+    status,
+  }
 }
 
-function customerFilterPredicate(clause: FilterClause): SQL | null {
+export const CUSTOMER_SORTS = customerSorts(true)
+
+function customerFilterPredicate(clause: FilterClause, statusExpr: SQL): SQL | null {
   const { key, operator } = clause
   const value = clause.value
   const single = (v: unknown) => (Array.isArray(v) ? String(v[0] ?? '') : String(v ?? ''))
@@ -70,9 +95,9 @@ function customerFilterPredicate(clause: FilterClause): SQL | null {
   }
 
   if (key !== 'status') return null
-  if (operator === 'eq') return sql`${CUSTOMER_STATUS_EXPR} = ${single(value)}`
-  if (operator === 'ne') return sql`${CUSTOMER_STATUS_EXPR} <> ${single(value)}`
-  if (operator === 'in' || operator === 'not_in') return inList(CUSTOMER_STATUS_EXPR)
+  if (operator === 'eq') return sql`${statusExpr} = ${single(value)}`
+  if (operator === 'ne') return sql`${statusExpr} <> ${single(value)}`
+  if (operator === 'in' || operator === 'not_in') return inList(statusExpr)
   return null
 }
 
@@ -89,11 +114,19 @@ export function customerWhere(
     const ids = [...allowedSubsidiaryIds]
     parts.push(ids.length ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
   }
+  const crmOn = adhoc.crmEnabled !== false
+  const statusExpr = customerStatusExpr(crmOn)
   for (const filter of view.filters) {
-    const predicate = customerFilterPredicate(filter)
+    const predicate = customerFilterPredicate(filter, statusExpr)
     if (predicate) parts.push(sql`and ${predicate}`)
   }
-  if (adhoc.filters?.status) parts.push(sql`and ${CUSTOMER_STATUS_EXPR} = ${adhoc.filters.status}`)
+  if (adhoc.filters?.status) {
+    if (!crmOn && adhoc.filters.status !== 'customer') {
+      parts.push(sql`and false`)
+    } else {
+      parts.push(sql`and ${statusExpr} = ${adhoc.filters.status}`)
+    }
+  }
   if (adhoc.q) {
     const query = `%${adhoc.q}%`
     parts.push(sql`and (p.display_name ilike ${query} or p.short_code ilike ${query} or p.email ilike ${query})`)

@@ -33,9 +33,10 @@ export default async function CustomizationPage({
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageOrg = can(authz, 'admin.customization.manage')
-  const [subsidiaryUiEnabled, inventoryEnabled] = await Promise.all([
+  const [subsidiaryUiEnabled, inventoryEnabled, crmEnabled] = await Promise.all([
     subsidiaryFeatureEnabled(authz.user.orgId),
     isFeatureEnabled(authz.user.orgId, 'inventory'),
+    isFeatureEnabled(authz.user.orgId, 'crm'),
   ])
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
@@ -341,7 +342,7 @@ export default async function CustomizationPage({
       )}
 
       {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} subsidiaryEnabled={subsidiaryUiEnabled} /> : null}
-      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as any} filterOptions={listFilterOptions} inventoryEnabled={inventoryEnabled} /> : null}
+      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as any} filterOptions={listFilterOptions} inventoryEnabled={inventoryEnabled} crmEnabled={crmEnabled} /> : null}
     </ListPageLayout>
   )
 }

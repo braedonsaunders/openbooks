@@ -347,3 +347,14 @@ test('item list-filter options drop inventory kinds when Inventory is off', () =
     .listFilters.find((filter) => filter.key === 'kind')?.options?.map((option) => option.value) ?? []
   assert.ok(shown.includes('inventory') && shown.includes('assembly') && shown.includes('kit'))
 })
+
+test('customer list-filter options drop prospect when CRM is off', () => {
+  const customer = getRecordType('customer')
+  assert.ok(customer)
+  const hidden = recordTypeForFeatureState(customer, { inventory: true, crm: false })
+    .listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value) ?? []
+  assert.deepEqual(hidden, ['customer'])
+  const shown = recordTypeForFeatureState(customer, { inventory: true, crm: true })
+    .listFilters.find((filter) => filter.key === 'status')?.options?.map((option) => option.value) ?? []
+  assert.deepEqual(shown, ['customer', 'prospect'])
+})
