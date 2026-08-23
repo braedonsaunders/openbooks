@@ -64,6 +64,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   await db.transaction(async (tx) => {
+    // Snapshot the current policy and its ladder before anything changes.
+    const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
+      select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}
+    `));
+    const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
+      select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
+    `));
     const sets = [];
     if ("name" in body) sets.push(sql`name = ${body.name as string}`);
     if ("appliesToKind" in body) sets.push(sql`applies_to_kind = ${body.appliesToKind as string}`);
@@ -71,25 +78,46 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (minBalance !== undefined) sets.push(sql`min_balance = ${minBalance}`);
     if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
     if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
+    let afterPolicy: Record<string, unknown> | undefined;
     if (sets.length) {
-      await tx.execute(sql`
+      const updated = (await tx.execute<Record<string, unknown>>(sql`
         update dunning_policies set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
          where id = ${id} and org_id = ${authz.user.orgId}
-      `);
+        returning *
+      `));
+      afterPolicy = updated.rows[0];
     }
+    let afterStages: Record<string, unknown>[] | undefined;
     if (stages) {
       // Replace the ladder as one unit. dunning_log rows are append-only and
       // keep their own copy of what was sent, so pruning stages is safe.
       await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
+      afterStages = [];
       for (const s of stages) {
-        await tx.execute(sql`
+        const stageRow = (await tx.execute<Record<string, unknown>>(sql`
           insert into dunning_stages (org_id, policy_id, sequence, name, offset_days, subject_template,
                                       body_template, escalate, created_by, updated_by)
           values (${authz.user.orgId}, ${id}, ${s.sequence}, ${s.name}, ${s.offsetDays},
                   ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
-        `);
+          returning *
+        `));
+        afterStages.push(stageRow.rows[0]!);
       }
     }
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${authz.user.orgId}, 'dunning_policies', ${id}, 'update',
+         ${JSON.stringify({
+           before: { ...beforePolicy.rows[0], stages: beforeStages.rows },
+           after: {
+             ...(afterPolicy ?? beforePolicy.rows[0]),
+             stages: afterStages ?? beforeStages.rows,
+           },
+         })}::jsonb,
+         ${authz.user.id})
+    `);
   });
   return NextResponse.json({ ok: true });
 }
@@ -98,8 +126,25 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const authz = await requirePermission("documents.manage");
   const { id } = await params;
   await db.transaction(async (tx) => {
+    // Snapshot policy and ladder first: deletion removes the only record of
+    // how this org chased overdue invoices.
+    const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
+      select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}
+    `));
+    if (!beforePolicy.rows[0]) return;
+    const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
+      select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
+    `));
     await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
     await tx.execute(sql`delete from dunning_policies where id = ${id} and org_id = ${authz.user.orgId}`);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${authz.user.orgId}, 'dunning_policies', ${id}, 'delete',
+         ${JSON.stringify({ before: { ...beforePolicy.rows[0], stages: beforeStages.rows } })}::jsonb,
+         ${authz.user.id})
+    `);
   });
   return NextResponse.json({ ok: true });
 }
