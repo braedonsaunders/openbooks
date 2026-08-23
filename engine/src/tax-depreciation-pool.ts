@@ -247,6 +247,17 @@ function persistMacrsSection179(value: unknown): string {
   }
 }
 
+/** Persist MACRS business-use percent through exact decimal then ledger money. Fail closed. */
+function persistMacrsBusinessUsePercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("businessUsePercent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("businessUsePercent must be an exact decimal");
+  }
+}
+
 /**
  * Compute one calendar tax year for an asset under MACRS without relying on a
  * hard-coded percentage table. DB methods switch to straight line when that
@@ -264,7 +275,7 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
     if (cmp(normalized, "0") < 0) return "0.0000";
     return cmp(normalized, "100") > 0 ? "100.0000" : normalized;
   };
-  const originalBasis = mulPercent(persistMacrsBasis(input.basis), percent(input.businessUsePercent, "100"));
+  const originalBasis = mulPercent(persistMacrsBasis(input.basis), persistMacrsBusinessUsePercent(input.businessUsePercent ?? "100"));
   const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
   const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
   const after179 = add(originalBasis, neg(section179Cap));
