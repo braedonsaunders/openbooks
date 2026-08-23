@@ -73,6 +73,109 @@
         "couldNotLoad": "Could not load properties",
         "actionFailed": "Action failed"
       }
+    },
+    "leaseSections": {
+      "charges": {
+        "table": {
+          "charge": "Charge",
+          "frequency": "Frequency",
+          "effective": "Effective",
+          "amount": "Amount",
+          "open": "Open"
+        },
+        "addTitle": "Add recurring charge",
+        "labels": {
+          "type": "Type",
+          "description": "Description",
+          "amount": "Amount",
+          "frequency": "Frequency",
+          "effectiveFrom": "Effective from",
+          "effectiveTo": "Effective to",
+          "incomeAccount": "Income account"
+        },
+        "types": {
+          "cam": "CAM",
+          "parking": "Parking",
+          "storage": "Storage",
+          "utility": "Utility",
+          "other": "Other"
+        },
+        "frequencies": {
+          "monthly": "Monthly",
+          "quarterly": "Quarterly",
+          "annually": "Annually",
+          "one_time": "One time"
+        },
+        "propertyDefault": "Property default",
+        "addCharge": "Add charge"
+      },
+      "escalations": {
+        "table": {
+          "effective": "Effective",
+          "method": "Method",
+          "value": "Value",
+          "result": "Result",
+          "status": "Status"
+        },
+        "apply": "Apply",
+        "emptyTitle": "No rent escalations",
+        "emptyDetail": "Schedule contractual percent, fixed-dollar, or replacement-rent changes.",
+        "scheduleTitle": "Schedule escalation",
+        "labels": {
+          "effectiveOn": "Effective on",
+          "method": "Method",
+          "value": "Value"
+        },
+        "methods": {
+          "percent": "Percent increase",
+          "fixed": "Fixed increase",
+          "new_amount": "New monthly amount"
+        },
+        "schedule": "Schedule"
+      },
+      "deposits": {
+        "required": "Required",
+        "held": "Held",
+        "notice": "Deposit entries post immediately and cannot be edited or deleted. Reverse an incorrect entry, then post its corrected replacement below.",
+        "emptyTitle": "No deposit activity",
+        "emptyDetail": "Record the receipt to establish the tenant deposit liability.",
+        "reverseTitle": "Reverse deposit transaction",
+        "reverseLabels": {
+          "reversalDate": "Reversal date",
+          "reason": "Reason"
+        },
+        "cancel": "Cancel",
+        "postReversal": "Post reversal",
+        "recordTitle": "Record deposit transaction",
+        "labels": {
+          "transaction": "Transaction",
+          "date": "Date",
+          "amount": "Amount",
+          "bankAccount": "Bank account",
+          "tenantInvoice": "Tenant invoice",
+          "offsetAccount": "Offset account",
+          "memo": "Memo"
+        },
+        "kinds": {
+          "received": "Received",
+          "interest": "Interest credited",
+          "applied": "Apply to tenant invoice",
+          "refunded": "Refunded",
+          "adjustment_increase": "Adjustment increase",
+          "adjustment_decrease": "Adjustment decrease"
+        },
+        "propertyDefault": "Property default",
+        "selectPostedInvoice": "Select posted invoice",
+        "selectAccount": "Select account",
+        "postTransaction": "Post transaction"
+      },
+      "toasts": {
+        "chargeAdded": "Lease charge added",
+        "escalationApplied": "Rent escalation applied",
+        "escalationScheduled": "Escalation scheduled",
+        "depositReversed": "Deposit transaction reversed",
+        "depositPosted": "Deposit transaction posted"
+      }
     }
   }
 }
