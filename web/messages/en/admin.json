@@ -3674,5 +3674,78 @@
       "title": "Subcontractor compliance",
       "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
     }
+  },
+  "backupsManager": {
+    "errors": {
+      "couldNotSave": "could not save the backup policy",
+      "couldNotStart": "could not start the backup",
+      "couldNotDelete": "could not delete the backup"
+    },
+    "toasts": {
+      "scheduleSaved": "Backup schedule saved",
+      "scheduleOff": "Scheduled backups turned off",
+      "started": "Backup started — it will appear below",
+      "deleted": "Backup deleted"
+    },
+    "deleteConfirm": "Delete the stored backup{fileName}? This cannot be undone.",
+    "alerts": {
+      "noObjectStorageTitle": "Object storage is not configured",
+      "noObjectStorageBody": "This deployment has no S3 object storage (S3_ENDPOINT / S3_BUCKET / credentials), so stored and scheduled backups are unavailable. Browser-only streaming is intentionally disabled because it cannot deliver restore-grade hash evidence. Use the operator <cli>backup-local-cli.ts</cli> workflow.",
+      "workerOfflineTitle": "Background worker is offline",
+      "workerOfflineBody": "Stored and scheduled backups run on the background worker, which has not reported in recently. New runs will stay queued until it starts."
+    },
+    "exportsCard": {
+      "title": "Restore-grade exports",
+      "body": "Create a stored backup below, then download both its <archive>Archive</archive> and <manifest>Manifest</manifest>. The manifest carries the full SHA-256 and counts required by the restore CLI; keep both files together. A raw browser stream without that evidence is not supported as a restore input."
+    },
+    "autoCard": {
+      "title": "Automatic backups",
+      "body": "Back up to the deployment's S3 object storage on a schedule. Only the newest <keep>keep</keep> backups are retained — older ones are rotated out automatically after each successful run.",
+      "enabled": "Enabled",
+      "frequency": "Frequency",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "dayOfWeek": "Day of week",
+      "dayOfMonth": "Day of month",
+      "timeUtc": "Time (UTC)",
+      "keepNewest": "Keep newest",
+      "saveSchedule": "Save schedule",
+      "nextRun": "Next scheduled run: {when} (UTC schedule)",
+      "off": "Scheduled backups are off.",
+      "lastSuccess": " · Last successful backup: {when}"
+    },
+    "storedCard": {
+      "title": "Stored backups",
+      "body": "The newest {count} completed backups are kept in object storage; the rest are rotated out. Deleting a backup removes it from storage immediately.",
+      "backUpNow": "Back up now",
+      "noneYet": "No stored backups yet."
+    },
+    "weekdays": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
+    "table": {
+      "created": "Created",
+      "kind": "Kind",
+      "status": "Status",
+      "size": "Size",
+      "contents": "Contents",
+      "sha256": "SHA-256",
+      "retention": "Retention",
+      "actionsSr": "Actions",
+      "rowsTables": "{rows} rows · {tables} tables",
+      "purged": "purged ({reason}) · {when}",
+      "kept": "kept",
+      "archive": "Archive",
+      "manifest": "Manifest",
+      "delete": "Delete",
+      "inProgress": "in progress…"
+    }
   }
 }
