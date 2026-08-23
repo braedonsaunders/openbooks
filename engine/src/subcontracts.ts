@@ -178,7 +178,7 @@ export function computeVendorApplication(
     const previousEarned = persistVendorPayApplicationPreviousEarned(input.previousEarned);
     const previousStored = persistVendorPayApplicationPreviousMaterialsStored(input.previousMaterialsStored);
     const work = persistVendorPayApplicationWorkCompletedThisPeriod(input.workCompletedThisPeriod);
-    const currentStored = normalizeMoney(input.materialsStoredCurrent);
+    const currentStored = persistVendorPayApplicationMaterialsStoredCurrent(input.materialsStoredCurrent);
     const retainagePercent = normalizeMoney(input.retainagePercent);
     if ([scheduled, previousEarned, previousStored, work, currentStored].some((value) => cmp(value, "0") < 0)) {
       throw new SubcontractError("Schedule and application amounts cannot be negative");
