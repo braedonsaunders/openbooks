@@ -694,6 +694,132 @@
       "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
       "lastSync": "Last sync",
       "never": "Never"
+    },
+    "client": {
+      "title": "Bank Feeds",
+      "description": "Connect each bank account for automated statement import — live feeds, SFTP file drops, or manual upload. Everything imports through the same reconciliation pipeline.",
+      "addConnection": "+ Add connection",
+      "empty": {
+        "none": "No bank connections yet.",
+        "connectFirst": "Connect your first bank"
+      },
+      "connection": {
+        "paused": "paused",
+        "synced": "synced {date}",
+        "test": "Test",
+        "sync": "Sync",
+        "pause": "Pause",
+        "resume": "Resume",
+        "remove": "Remove"
+      },
+      "feedMessages": {
+        "verified": "Connection verified.",
+        "testFailed": "Test failed: {detail}",
+        "unknownError": "unknown error",
+        "syncFailed": "Sync failed: {error}",
+        "imported": "Imported {imported} new, {duplicates} duplicate."
+      },
+      "sftpCard": {
+        "badge": "SFTP file drop",
+        "login": "login",
+        "routesTo": "routes to {count, plural, one {# account} other {# accounts}}",
+        "routing": "Routing",
+        "done": "Done",
+        "remove": "Remove",
+        "routingTitle": "Import routing — which folder feeds which account",
+        "noRouting": "No routing yet — add one below.",
+        "folderPlaceholder": "folder",
+        "addRoute": "Add route"
+      },
+      "sftpEndpoint": {
+        "title": "SFTP receiving endpoint",
+        "description": "Point your bank's file delivery here. Each SFTP connection above is a login on this endpoint.",
+        "host": "Host",
+        "port": "Port",
+        "status": "Status",
+        "hostKey": "Host key",
+        "enabled": "enabled",
+        "disabled": "disabled"
+      },
+      "chooseBank": {
+        "title": "Choose your bank",
+        "cancel": "Cancel",
+        "searchPlaceholder": "Search banks…",
+        "allCountries": "All countries",
+        "notListed": "Not listed? Choose how statements arrive",
+        "otherBank": "Other bank (live feed)",
+        "otherBankHint": "Plaid / GoCardless / TrueLayer",
+        "sftpDrop": "SFTP file drop",
+        "sftpDropHint": "Bank pushes statement files",
+        "manualUpload": "Manual upload",
+        "manualUploadHint": "Upload OFX / CSV by hand"
+      },
+      "configure": {
+        "back": "← Back",
+        "newConnection": "New connection",
+        "kindLive": "Live feed",
+        "kindFileDrop": "File drop",
+        "kindManual": "Manual",
+        "providerQuestion": "Which open-banking provider?",
+        "providerGocardless": "GoCardless — free, Europe",
+        "providerPlaid": "Plaid — US / Canada / UK",
+        "providerTruelayer": "TrueLayer — UK / EU",
+        "explainerAutoFeed": "Automatic feed via {provider}",
+        "explainerSftp": "SFTP file drop",
+        "explainerManual": "Manual upload",
+        "stepAccount": "1 · Which account",
+        "connectionName": "Connection name",
+        "connectionNamePlaceholder": "e.g. Operating account — daily",
+        "bankGlAccount": "Bank / GL account",
+        "credentialsStep": "2 · {provider} credentials",
+        "providerAccountId": "Provider account id",
+        "providerAccountIdPlaceholder": "the account's id at the provider",
+        "importHowOften": "Import how often?",
+        "cadenceDaily": "Automatically, daily",
+        "cadenceHourly": "Automatically, hourly",
+        "cadenceManual": "Only when I click Sync",
+        "sftpStepTitle": "2 · Create the SFTP login",
+        "sftpStepHelp": "We'll create a dedicated login and route its <inbound>/inbound</inbound> folder to the account above. You'll get the host, username, and a one-time password to give your bank. Manage extra folders under the connection afterwards.",
+        "createSftpLogin": "Create SFTP login",
+        "addConnection": "Add connection",
+        "cancel": "Cancel"
+      },
+      "errors": {
+        "couldNotCreateSftp": "Could not create SFTP login",
+        "couldNotCreateConnection": "Could not create connection",
+        "failed": "Failed"
+      },
+      "sftpSecret": {
+        "title": "SFTP login created",
+        "description": "Give these to your bank. The password is shown once — copy it now.",
+        "hostLabel": "host:",
+        "portLabel": "port:",
+        "usernameLabel": "username:",
+        "passwordLabel": "password:",
+        "done": "Done",
+        "createdToast": "SFTP connection created.",
+        "addedToast": "{name} added."
+      },
+      "method": {
+        "plaid": {
+          "blurb": "openbooks pulls new transactions automatically through Plaid, an open-banking aggregator. You connect once with your Plaid API keys; there are no files to manage.",
+          "docsLabel": "Get keys in the Plaid dashboard"
+        },
+        "gocardless": {
+          "blurb": "openbooks pulls transactions through GoCardless Bank Account Data (formerly Nordigen) — a free European open-banking feed. Create a Secret ID and Secret Key in their dashboard.",
+          "docsLabel": "Get credentials from GoCardless"
+        },
+        "truelayer": {
+          "blurb": "openbooks pulls transactions through TrueLayer, a UK/EU open-banking provider. Paste an access token from your TrueLayer console.",
+          "docsLabel": "Open the TrueLayer console"
+        },
+        "sftp": {
+          "blurb": "Your bank pushes statement files (OFX/CSV/CAMT/BAI2/MT940) to openbooks over SFTP. We create a dedicated login for this bank; you hand the host, username, and password to your bank, and files that land are imported automatically."
+        },
+        "manual": {
+          "blurb": "No automation — you'll upload statement files by hand from the account's page in Banking whenever you have them. Good for accounts your bank can't feed."
+        }
+      }
     }
   },
   "pspSettlements": {
