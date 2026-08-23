@@ -43,7 +43,7 @@ export default async function PayrollSeparationsPage({
     (filing) => filing.cadence === 'separation' && (filing.installed || filing.data.rows.length > 0),
   )
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/separations')
+  const moduleTabs = await groupTabs('payroll', '/payroll/separations', { orgId: authz.user.orgId })
 
   return (
     <ListPageLayout

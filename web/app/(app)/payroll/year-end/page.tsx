@@ -47,7 +47,7 @@ export default async function PayrollYearEndPage({
     (filing) => filing.cadence !== 'separation' && (filing.installed || filing.data.rows.length > 0),
   )
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/year-end')
+  const moduleTabs = await groupTabs('payroll', '/payroll/year-end', { orgId: authz.user.orgId })
 
   return (
     <ListPageLayout

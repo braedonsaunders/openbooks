@@ -63,7 +63,7 @@ export default async function PurchasingHomePage({
 
   const groupItems = navGroups.find((g) => g.id === 'purchasing')?.items ?? []
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = await groupTabs('purchasing', '/purchasing', { subQs })
+  const tabs = await groupTabs('purchasing', '/purchasing', { subQs, orgId: authz.user.orgId })
 
   const badgeFor = (href: string): DirectoryItem['badge'] => {
     switch (href) {

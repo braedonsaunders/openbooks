@@ -59,6 +59,7 @@ export default async function AccountingHomePage() {
   const groupItems = navGroups.find((g) => g.id === 'accounting')?.items ?? []
   const tabs = await groupTabs('accounting', '/accounting', {
     exclude: can(authz, 'reports.read') ? [] : ['/analytics/financial-health'],
+    orgId: authz.user.orgId,
   })
 
   const badgeFor = (href: string): DirectoryItem['badge'] => {

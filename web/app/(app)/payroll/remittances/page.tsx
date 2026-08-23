@@ -40,7 +40,7 @@ export default async function PayrollRemittancesPage({
 
   const groups = await payrollRemittanceSummary(authz.user.orgId, { from, to })
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/remittances')
+  const moduleTabs = await groupTabs('payroll', '/payroll/remittances', { orgId: authz.user.orgId })
 
   return (
     <ListPageLayout

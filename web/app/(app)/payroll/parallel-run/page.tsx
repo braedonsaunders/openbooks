@@ -56,7 +56,7 @@ export default async function PayrollParallelRunPage() {
     parallelTolerances(orgId),
     comparableSlots(orgId),
   ])
-  const tabs = await groupTabs('payroll', '/payroll/parallel-run')
+  const tabs = await groupTabs('payroll', '/payroll/parallel-run', { orgId })
 
   return (
     <ListPageLayout

@@ -68,7 +68,7 @@ export default async function PayRunsPage({
     ? <NewRunButton schedules={schedules} finalPayCandidates={finalPayCandidates} today={await businessToday(orgId)} />
     : undefined
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/runs')
+  const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 
   return (
     <ListPageLayout

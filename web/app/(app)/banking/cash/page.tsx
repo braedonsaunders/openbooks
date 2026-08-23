@@ -72,7 +72,7 @@ export default async function BankingCashPage({
                 label={tBanking('home.subsidiary')}
               />
               {/* The group's unified route-tab strip (shared with /banking). */}
-              <ModuleHomeTabs tabs={await groupTabs('banking', '/banking/cash', { subQs: sp.sub ? `?sub=${sp.sub}` : '' })} />
+              <ModuleHomeTabs tabs={await groupTabs('banking', '/banking/cash', { subQs: sp.sub ? `?sub=${sp.sub}` : '', orgId: authz.user.orgId })} />
             </div>
           }
         />

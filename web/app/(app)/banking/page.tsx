@@ -72,7 +72,7 @@ export default async function BankingHomePage({
   // resolved banking group, so hidden items vanish and custom labels hold.
   const groupItems = navGroups.find((g) => g.id === 'banking')?.items ?? []
   const subQs = sp.sub ? `?sub=${sp.sub}` : ''
-  const tabs = await groupTabs('banking', '/banking', { subQs })
+  const tabs = await groupTabs('banking', '/banking', { subQs, orgId: authz.user.orgId })
 
   const lastImportAge = daysSince(data.badges.lastImportedAt)
   const badgeFor = (href: string): DirectoryItem['badge'] => {
