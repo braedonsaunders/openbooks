@@ -157,3 +157,52 @@ test("createSubscriptionInvoice persists line quantity and unitPrice through per
   assert.doesNotMatch(body, /normalizeDecimal\(input\.quantity/);
   assert.doesNotMatch(body, /normalizeDecimal\(input\.unitPrice/);
 });
+
+test("billOne guards EVERY billing path through subscription_period_invoices", () => {
+  // Plain plan-based subscriptions previously fell through with no dedupe: a
+  // tick whose success bookkeeping failed after posting rolled its claim back
+  // and the retry cut a second invoice for the same period. The guard must be
+  // one mechanism for both paths (no parallel sources of truth), derived BEFORE
+  // any invoice is created.
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const billOne = source.indexOf("async function billOne");
+  const guard = source.indexOf("const guard = advanced", billOne);
+  const plainBranch = source.indexOf(
+    "advanceSubscription(billingDate, sub.interval, sub.intervalCount)",
+    guard,
+  );
+  const priorCheck = source.indexOf("from subscription_period_invoices pi join documents d", guard);
+  const replay = source.indexOf("if (prior.rows[0]) return", priorCheck);
+  const invoice = source.indexOf("createSubscriptionInvoice({", guard);
+  const insert = source.indexOf("insert into subscription_period_invoices", invoice);
+  const end = source.indexOf("return generated;", invoice);
+  assert.ok(guard > billOne && source.indexOf("startsOn: advanced.periodStartsOn", guard) > guard,
+    "advanced lifecycles keep their frozen period + revision key");
+  assert.ok(plainBranch > guard && plainBranch < priorCheck,
+    "plain plan-based subs derive the same guard shape deterministically from the billed date");
+  assert.ok(priorCheck < invoice, "the committed period invoice is looked up before any creation");
+  assert.ok(replay > priorCheck && replay < invoice, "an existing period invoice is replayed, not re-cut");
+  assert.ok(insert > invoice && insert < end, "the guard row commits in the same transaction as its invoice");
+});
+
+test("success bookkeeping can never roll the claim back after an invoice exists", () => {
+  // The rollback catch restores next_bill_on ONLY when billing itself threw;
+  // it must hand control back (continue) before the success-bookkeeping block,
+  // whose failure path touches last_error alone — never next_bill_on.
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueSubscriptions");
+  const claim = source.indexOf("set next_bill_on = ${advanced}", run);
+  const rollbackCatch = source.indexOf("} catch (e) {", claim);
+  const skipBookkeeping = source.indexOf("continue;", rollbackCatch);
+  const bookkeeping = source.indexOf("set run_count = run_count + 1", skipBookkeeping);
+  const bookkeepingCatch = source.indexOf("} catch (e) {", bookkeeping);
+  const loopEnd = source.indexOf("return result;", run);
+  assert.ok(skipBookkeeping > rollbackCatch, "the rollback catch skips success bookkeeping");
+  assert.ok(bookkeeping > skipBookkeeping && bookkeeping < loopEnd,
+    "bookkeeping runs in its own scope after the rollback catch");
+  const bookkeepingFailurePath = source.slice(bookkeepingCatch, loopEnd);
+  assert.match(bookkeepingFailurePath, /last_error/,
+    "a bookkeeping failure still surfaces through last_error");
+  assert.doesNotMatch(bookkeepingFailurePath, /next_bill_on/,
+    "a bookkeeping failure never restores next_bill_on once an invoice was produced");
+});
