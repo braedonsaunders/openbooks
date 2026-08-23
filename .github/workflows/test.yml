@@ -1,7 +1,8 @@
 name: test
 
-# Test gate for the monorepo. deploy.yml typechecks and builds; this workflow
-# runs the actual suites and publishes coverage. Jobs:
+# Test gate for the monorepo. Jobs:
+#   typecheck   — fast, no database; fails on any workspace tsc error or a
+#                 product-neutrality violation so broken code cannot reach main
 #   unit        — fast, no database; integration files self-skip
 #   integration — full suite against a throwaway postgres:16, with a canary
 #                 that fails the job if the DB-backed tests silently skipped
@@ -29,6 +30,23 @@ env:
   ORG_CURRENCY: USD
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Product-neutrality audit
+        run: npm run check:product-neutrality
+      - name: Typecheck every workspace
+        # Fails the job if any workspace with a `typecheck` script errors;
+        # workspaces without one are skipped by --if-present.
+        run: npm run typecheck --workspaces --if-present
+
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
