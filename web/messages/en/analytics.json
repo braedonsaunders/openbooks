@@ -1413,5 +1413,113 @@
       "duplicatesItem": " — compares every pair of transactions to catch repeated or split payments.",
       "outro": "This period: {docs} documents ({amount}) across {days} days, analyzed in {seconds}s. Detail tables show the top matches per check; the counts and distributions always cover everything."
     }
+  },
+  "cashWeek": {
+    "drawerDescription": "Net {net} · ending {ending}",
+    "netChange": "Net Change",
+    "coverageRatio": "Coverage Ratio",
+    "breakdown": {
+      "startingCash": "Starting Cash",
+      "safeApCapacity": "Safe AP Capacity",
+      "inflowAr": "Inflow (AR)",
+      "inflowOther": "Inflow (Other)",
+      "outflowAp": "Outflow (AP)",
+      "outCategory": "Out: {name}",
+      "deferredBacklog": "Deferred (Backlog)",
+      "netChange": "Net Change",
+      "endingCash": "Ending Cash"
+    },
+    "tabs": {
+      "arInflows": "AR Inflows",
+      "apOutflows": "AP Outflows"
+    },
+    "search": {
+      "transactions": "Search {party} or document #…",
+      "customers": "customers",
+      "vendors": "vendors",
+      "sourceItems": "Search source items…"
+    },
+    "empty": {
+      "noMatches": "No matches for your search.",
+      "noneThisWeek": "No {side} predicted this week.",
+      "inflows": "inflows",
+      "outflows": "outflows",
+      "noSourceItems": "No source items behind this estimate."
+    },
+    "table": {
+      "id": "ID",
+      "customer": "Customer",
+      "vendor": "Vendor",
+      "predicted": "Predicted",
+      "method": "Method",
+      "status": "Status",
+      "amount": "Amount",
+      "entityDescription": "Entity / Description",
+      "date": "Date",
+      "type": "Type"
+    },
+    "paymentHistoryTitle": "Payment history & reliability",
+    "pagination": {
+      "showing": "Showing {from}–{to} of {total}"
+    },
+    "category": {
+      "thisWeek": "This Week",
+      "totalForecast": "Total Forecast",
+      "method": "Method",
+      "sourceItems": "Source Items",
+      "exportCsvTitle": "Export CSV",
+      "export": "Export"
+    },
+    "csvHeaders": {
+      "entityDescription": "Entity/Description",
+      "date": "Date",
+      "amount": "Amount",
+      "type": "Type"
+    },
+    "meta": {
+      "sourceTotal": "Source total",
+      "weeksUsed": "Weeks used",
+      "rawAverage": "Raw avg",
+      "adjustmentPct": "Adjustment %",
+      "finalAverage": "Weekly avg",
+      "monthlyMedian": "Monthly median",
+      "finalWeekly": "Weekly est",
+      "vendors": "Vendors",
+      "vendor": "Vendor",
+      "amount": "Amount",
+      "frequency": "Frequency",
+      "detectedPaymentDay": "Pays on day",
+      "medianPayment": "Median payment",
+      "avgPayment": "Avg payment",
+      "currentBalance": "Card balance",
+      "daysSinceLastPayment": "Days since paid",
+      "dailyBurnRate": "Daily burn",
+      "monthlySpendRate": "Monthly spend",
+      "paymentTrend": "Trend",
+      "monthsAnalyzed": "Months analyzed",
+      "accountsIncluded": "Accounts",
+      "nextPaymentDate": "Next payment",
+      "projectedGrowth": "Projected growth",
+      "samples": "Samples",
+      "interval": "Interval (days)",
+      "avgAmount": "Avg amount",
+      "bankAccounts": "Bank accounts",
+      "historyWeeks": "History weeks",
+      "currentWeekApplied": "Applied this week",
+      "memoKeywords": "Memo filter"
+    },
+    "actionBar": {
+      "summary": "{count} {kind} · {total}",
+      "bills": "bills",
+      "invoices": "invoices",
+      "buildPayRun": "Build pay run",
+      "buildCollectionRun": "Build collection run"
+    },
+    "methods": {
+      "history": "History",
+      "dueDate": "Due Date",
+      "average": "Average",
+      "pushed": "Pushed"
+    }
   }
 }
