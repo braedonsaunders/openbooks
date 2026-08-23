@@ -993,7 +993,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../packages/customization/src/registry.ts'),
-    /function recordTypeForFeatureState[\s\S]{0,400}ITEM_INVENTORY_KIND_VALUES/,
+    /function recordTypeForFeatureState[\s\S]{0,800}ITEM_INVENTORY_KIND_VALUES/,
     'item list-filter options must drop inventory/assembly/kit when Inventory is off',
   )
   assert.match(
@@ -2580,6 +2580,36 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/parties/PartyDrawer.tsx'),
     /\{multiCurrency \? <div className=\{field\}><Label>\{tc\('labels\.currency'\)\}<\/Label><Select value=\{draft\.currency/,
     'the party bank-account create must hide the currency picker when Multi-currency is off',
+  )
+  assert.match(
+    read('lib/customization/entity-list-query.ts'),
+    /function customerBaseJoins[\s\S]{0,200}crm_account_profiles/,
+    'customer list queries must name the CRM profile join the Features switch omits',
+  )
+  assert.match(
+    read('lib/customization/entity-list-query.ts'),
+    /function customerStatusExpr[\s\S]{0,120}crmOn \? sql`coalesce\(cap\.lifecycle_stage[\s\S]{0,80}'customer'/,
+    'customer list queries must not read CRM lifecycle when CRM is off — stored profiles stay',
+  )
+  assert.match(
+    read('lib/customization/entity-list-query.ts'),
+    /!crmOn && adhoc\.filters\.status !== 'customer'[\s\S]{0,80}and false/,
+    'customer list queries must not filter by prospect when CRM is off',
+  )
+  assert.match(
+    read('components/entity-list-view.tsx'),
+    /isFeatureEnabled\(orgId, 'crm'\)/,
+    'the entity list must read the CRM switch before rendering customer lifecycle',
+  )
+  assert.match(
+    read('components/entity-list-view.tsx'),
+    /recordTypeForFeatureState\(catalog, \{ inventory: inventoryOn, crm: crmOn \}\)/,
+    'the entity list must hide customer prospect filters when CRM is off',
+  )
+  assert.match(
+    read('../packages/customization/src/registry.ts'),
+    /features\.crm === false && out\.key === ['"]customer['"][\s\S]{0,400}option\.value === ['"]customer['"]/,
+    'customer list customization must drop prospect when CRM is off',
   )
   assert.match(
     read('app/api/parties/[id]/activities/route.ts'),

@@ -1700,21 +1700,36 @@ export const ITEM_INVENTORY_KIND_VALUES = ["inventory", "assembly", "kit"] as co
 /** Apply Features-gated list-filter options. The registry stays static. */
 export function recordTypeForFeatureState(
   meta: RecordTypeMeta,
-  features: { inventory: boolean },
+  features: { inventory: boolean; crm?: boolean },
 ): RecordTypeMeta {
-  if (features.inventory || meta.key !== "item") return meta;
-  return {
-    ...meta,
-    listFilters: meta.listFilters.map((filter) => {
-      if (filter.key !== "kind" || !filter.options?.length) return filter;
-      return {
-        ...filter,
-        options: filter.options.filter((option) =>
-          !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option.value),
-        ),
-      };
-    }),
-  };
+  let out = meta
+  if (!features.inventory && meta.key === 'item') {
+    out = {
+      ...out,
+      listFilters: out.listFilters.map((filter) => {
+        if (filter.key !== 'kind' || !filter.options?.length) return filter
+        return {
+          ...filter,
+          options: filter.options.filter((option) =>
+            !(ITEM_INVENTORY_KIND_VALUES as readonly string[]).includes(option.value),
+          ),
+        }
+      }),
+    }
+  }
+  if (features.crm === false && out.key === 'customer') {
+    out = {
+      ...out,
+      listFilters: out.listFilters.map((filter) => {
+        if (filter.key !== 'status' || !filter.options?.length) return filter
+        return {
+          ...filter,
+          options: filter.options.filter((option) => option.value === 'customer'),
+        }
+      }),
+    }
+  }
+  return out
 }
 
 /** Features switch this record type follows, if any. Core types return null. */

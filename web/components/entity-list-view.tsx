@@ -20,6 +20,12 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
 import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import {
+  customerBaseJoins,
+  customerBuiltInExpr,
+  customerSorts,
+  customerStatusExpr,
+} from '../lib/customization/entity-list-query'
 import { entityListSource } from '../lib/list/entity-sources'
 
 /**
@@ -66,11 +72,17 @@ export async function EntityListView({
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
   const catalog = getRecordType(recordType)
+  const [inventoryOn, crmOn] = await Promise.all([
+    isFeatureEnabled(orgId, 'inventory'),
+    recordType === 'customer' ? isFeatureEnabled(orgId, 'crm') : Promise.resolve(true),
+  ])
   const meta = catalog
-    ? recordTypeForFeatureState(catalog, { inventory: await isFeatureEnabled(orgId, 'inventory') })
+    ? recordTypeForFeatureState(catalog, { inventory: inventoryOn, crm: crmOn })
     : catalog
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
   const basePath = source.basePath
+  const builtInExpr = recordType === 'customer' ? customerBuiltInExpr(crmOn) : source.builtInExpr
+  const sorts = recordType === 'customer' ? customerSorts(crmOn) : source.sorts
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')
@@ -133,7 +145,7 @@ export async function EntityListView({
   const labels: Record<string, string> = { actions: tCommon('labels.actions') }
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
 
-  const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels, source.customFieldAlias ?? source.alias)
+  const cols = columnDescriptors(recordType, view, showInListDefs, builtInExpr, labels, source.customFieldAlias ?? source.alias)
   const selectCols = sql.join(
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
@@ -142,23 +154,34 @@ export async function EntityListView({
     allowedSubsidiaryIds(userId),
     businessToday(orgId),
   ])
-  const adhoc = { q: params.q, filters: quickValues, showInactive }
+  const adhoc = {
+    q: params.q,
+    filters: quickValues,
+    showInactive,
+    crmEnabled: recordType === 'customer' ? crmOn : undefined,
+  }
   const where = source.where(view, adhoc, orgId, allowedSubs)
   // Counts ignore the ad-hoc status selection so every status remains visible
   // in the picker, while retaining saved-view scope and entity de-duplication.
   const countFilterKey = source.countFilterKey ?? 'status'
   const countView = { ...view, filters: view.filters.filter((filter) => filter.key !== countFilterKey) }
   const countWhere = source.where(countView, { showInactive, filters: {} }, orgId, allowedSubs)
-  const orderExpr = source.sorts[params.sort] ?? source.defaultSort
+  const orderExpr = sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
   const idExpr = source.idExpr ?? sql`${aliasSql}.id`
   const tableSql = typeof source.table === 'function'
     ? sql`${source.table(orgId)} ${sql.raw(source.alias)}`
     : sql.raw(`${source.table} ${source.alias}`)
-  const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
-  const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins
+  const statusExpr = recordType === 'customer'
+    ? customerStatusExpr(crmOn)
+    : (source.statusExpr ?? sql`${aliasSql}.status`)
+  const baseJoins = recordType === 'customer'
+    ? customerBaseJoins(crmOn)
+    : (typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins)
   const countJoinsSource = source.countJoins ?? source.baseJoins
-  const countJoins = typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource
+  const countJoins = recordType === 'customer'
+    ? customerBaseJoins(crmOn)
+    : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
   const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
     db.execute(sql`
@@ -294,7 +317,7 @@ export async function EntityListView({
     <>
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={tCommon('actions.search')} />
-        {quickFilters.map((filter) => filter.options.length ? (
+        {quickFilters.map((filter) => filter.options.length > 1 ? (
           <FilterChips
             key={filter.paramKey}
             basePath={basePath}
