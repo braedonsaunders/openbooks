@@ -236,6 +236,27 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       ),
       "reversing one member releases every source row carried by the reversed group",
     );
+
+    // Rerun after release: the released group re-posts with the same date and
+    // same first member, so the second generation must land distinct entry
+    // numbers under journal_entries_org_number (org-wide unique).
+    const laborSecond = await postProjectLaborCost(org.orgId, actorId, timeEntryIds);
+    assert.equal(laborSecond.length, 1, "released time posts a second labor generation");
+    const overheadSecond = await applyOverheadForTime(org.orgId, actorId, timeEntryIds);
+    assert.ok(overheadSecond.entryId, "released time posts a second overhead generation");
+    const generations = (await db.execute<{ origin: string; entry_number: string }>(sql`
+      select origin, entry_number
+        from journal_entries
+       where org_id = ${org.orgId}
+         and origin in ('labor_burden', 'overhead_applied')
+         and reverses_entry_id is null
+       order by origin, created_at, id`));
+    const numbers = generations.rows.map((row) => row.entry_number);
+    assert.equal(new Set(numbers).size, numbers.length, "every generation carries a distinct entry number");
+    assert.ok(
+      numbers.every((n) => /^(LAB|OVH)-/.test(n)),
+      `entry numbers keep their family prefixes: ${numbers.join(", ")}`,
+    );
   } finally {
     await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`);
     await db.execute(sql`delete from overhead_rates where org_id = ${org.orgId}`);
