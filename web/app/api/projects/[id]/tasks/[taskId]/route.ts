@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -27,9 +28,9 @@ export async function PATCH(
   }
 
   try {
-    const rawBody = await request.json().catch(() => {
-      throw new ProjectWorkBreakdownError('Task details must be valid JSON')
-    })
+    const parsedBody = await parseJsonBody(request, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    const rawBody = parsedBody.data
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
       throw new ProjectWorkBreakdownError('Task details are required')
     }

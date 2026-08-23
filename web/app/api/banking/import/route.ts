@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   BankingError,
@@ -52,7 +53,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json()) as ImportBody
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as ImportBody
   const mode = body.mode ?? 'preview'
 
   if (!body.text?.trim()) {

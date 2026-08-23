@@ -8,7 +8,19 @@ import { fileURLToPath } from "node:url";
  * Reviewed non-JSON mutation routes. Every entry needs a narrow reason because
  * this is the only escape hatch from the shared zod request boundary.
  */
-const EXEMPT_ROUTES: Readonly<Record<string, string>> = {};
+const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
+  "web/app/api/banking/reconciliations/[id]/auto-match/route.ts": "bodyless lifecycle action; reconciliation id is a path parameter",
+  "web/app/api/banking/reconciliations/[id]/sign-off/route.ts": "bodyless lifecycle action; reconciliation id is a path parameter",
+  "web/app/api/journals/draft/route.ts": "bodyless draft factory",
+  "web/app/api/payments/runs/[id]/file/route.ts": "bodyless artifact-generation action; run id is a path parameter",
+  "web/app/api/payments/runs/[id]/files/[fileId]/reprocess/route.ts": "bodyless artifact-reprocessing action; identifiers are path parameters",
+  "web/app/api/payments/runs/[id]/post/route.ts": "bodyless lifecycle action; run id is a path parameter",
+  "web/app/api/payments/runs/[id]/submit/route.ts": "bodyless lifecycle action; run id is a path parameter",
+  "web/app/api/payments/webhooks/[provider]/route.ts": "signature verification requires the unparsed raw text body",
+  "web/app/api/payroll/runs/[id]/bank-file/[fileId]/route.ts": "bodyless audited artifact-release action; identifiers are path parameters",
+  "web/app/api/payroll/runs/[id]/cheques-pdf/route.ts": "bodyless audited print action; run id is a path parameter",
+  "web/app/api/projects/draft/route.ts": "bodyless draft factory",
+};
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(TEST_DIR, "../..");

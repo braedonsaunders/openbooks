@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { loadDaemonConfig, updateDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -23,7 +24,9 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { enabled?: boolean; port?: number; advertisedHost?: string | null }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { enabled?: boolean; port?: number; advertisedHost?: string | null }
   if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
     return NextResponse.json({ error: 'port must be between 1 and 65535' }, { status: 400 })
   }

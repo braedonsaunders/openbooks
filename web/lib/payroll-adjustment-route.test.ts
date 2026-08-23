@@ -7,8 +7,9 @@ const wizard = readFileSync('web/app/(app)/payroll/runs/[id]/RunWizard.tsx', 'ut
 
 test('every pay-run adjustment mutation uses one permission-gated engine boundary', () => {
   const permission = route.indexOf("guardFeaturePermission('payroll.run', 'payroll')")
-  const body = route.indexOf('await req.json()')
+  const body = route.indexOf('parseJsonBody(req, jsonObject)')
   assert.ok(permission >= 0 && permission < body, 'payroll.run is enforced before action dispatch')
+  assert.doesNotMatch(route, /req\.json\(/)
   assert.match(route, /mutatePayRunAdjustment/)
   assert.doesNotMatch(route, /insert into pay_run_adjustments/)
   assert.doesNotMatch(route, /delete from pay_run_adjustments/)

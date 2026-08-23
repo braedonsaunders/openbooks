@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -64,7 +65,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
-  const body = (await req.json()) as { projectId?: string; referenceNumber?: string; lines?: ChargeLineInput[] }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { projectId?: string; referenceNumber?: string; lines?: ChargeLineInput[] }
   if (!body?.projectId || !isUuid(String(body.projectId))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   }

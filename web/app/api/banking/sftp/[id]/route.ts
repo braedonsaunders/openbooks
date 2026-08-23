@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -15,7 +16,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = (await req.json().catch(() => ({}))) as { action?: string; isActive?: boolean }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { action?: string; isActive?: boolean }
   if (body.action === 'rotate') {
     const password = randomBytes(18).toString('base64url')
     const r = (await db.execute<{ username: string }>(sql`

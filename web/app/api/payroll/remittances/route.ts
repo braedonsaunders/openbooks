@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll-remittance.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
@@ -31,7 +32,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   if (body.action !== 'create-bill') return NextResponse.json({ error: 'unknown action' }, { status: 400 })
   const { partyId, from, to } = body
   const filingAccountId = body.filingAccountId ?? null

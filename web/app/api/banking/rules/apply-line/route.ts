@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { PostingError } from '@openbooks/engine/src/posting.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -12,7 +13,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     statementLineId?: string
     ruleId?: string
     reconciliationId?: string

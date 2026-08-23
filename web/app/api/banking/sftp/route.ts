@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -26,7 +27,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json().catch(() => ({}))) as { name?: string; rootPrefix?: string; authorizedKeys?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { name?: string; rootPrefix?: string; authorizedKeys?: string }
   if (!body.name || String(body.name).trim() === '') {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }

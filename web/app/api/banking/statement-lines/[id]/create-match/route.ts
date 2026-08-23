@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { PostingError } from '@openbooks/engine/src/posting.ts'
@@ -15,7 +16,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = (await req.json().catch(() => ({}))) as { reconciliationId?: string; offsetAccountId?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { reconciliationId?: string; offsetAccountId?: string }
   if (!body.reconciliationId || !isUuid(body.reconciliationId) || !body.offsetAccountId || !isUuid(body.offsetAccountId)) {
     return NextResponse.json({ error: 'reconciliationId and offsetAccountId are required' }, { status: 400 })
   }

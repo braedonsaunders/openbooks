@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -27,7 +28,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = (await req.json().catch(() => ({}))) as { sftpServerId?: string; accountId?: string; format?: string; folder?: string; csvMapping?: unknown }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { sftpServerId?: string; accountId?: string; format?: string; folder?: string; csvMapping?: unknown }
   if (!body.sftpServerId || !isUuid(body.sftpServerId) || !body.accountId || !isUuid(body.accountId)) {
     return NextResponse.json({ error: 'sftpServerId and accountId are required' }, { status: 400 })
   }

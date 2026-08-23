@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
@@ -15,7 +16,9 @@ export async function POST(req: Request, { params }: Params) {
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = (await req.json()) as { statementLineId?: string; journalLineIds?: string[] }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { statementLineId?: string; journalLineIds?: string[] }
   if (
     !body.statementLineId ||
     !isUuid(body.statementLineId) ||

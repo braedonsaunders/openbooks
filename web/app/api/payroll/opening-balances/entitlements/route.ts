@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll-run.ts'
@@ -81,7 +82,9 @@ export async function POST(req: Request) {
 
   let body: SaveBody
   try {
-    body = (await req.json()) as SaveBody
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = (parsedBody.data) as SaveBody
   } catch {
     return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
   }

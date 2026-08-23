@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -118,7 +119,9 @@ export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
 
   const settings: Record<string, unknown> = await currentPayrollBlob(orgId)
   for (const key of ACCOUNT_KEYS) {
@@ -261,7 +264,9 @@ export async function PUT(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const body = await req.json().catch(() => ({}))
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = parsedBody2.data
   if (body.action === 'seed-components') {
     // The pack names its own component set; the registry is the only
     // validator. The old `body.country === 'US' ? 'US' : 'CA'` cast turned
