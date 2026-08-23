@@ -49,12 +49,24 @@ export const schedulerOutbox = pgTable(
     lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     error: text("error"),
+    /**
+     * Stamped exactly once, by the attempt whose failure exhausts the retry
+     * ceiling. Null on rows that are still cycling through backoff, which is
+     * what lets operators alert on poison work without also alerting on every
+     * transient failure (migration 0006_terminal_failure_surfacing).
+     */
+    terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
+    /** System identity of the worker attempt that recorded the terminal failure. */
+    terminalFailedBy: text("terminal_failed_by"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("scheduler_outbox_occurrence").on(t.kind, t.occurrenceKey),
     index("scheduler_outbox_due").on(t.status, t.nextAttemptAt),
     index("scheduler_outbox_org").on(t.orgId, t.status, t.createdAt),
+    index("scheduler_outbox_terminal_failed")
+      .on(t.terminalFailedAt)
+      .where(sql`${t.terminalFailedAt} is not null`),
     check(
       "scheduler_outbox_kind",
       sql`${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers','approval_escalation')`,

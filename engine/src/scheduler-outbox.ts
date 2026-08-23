@@ -1,10 +1,30 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "./db.ts";
+import {
+  logTerminalFailure,
+  SCHEDULER_OUTBOX_WORKER_IDENTITY,
+} from "./terminal-failure.ts";
 
 /**
  * Durable scheduler/approval-escalation outbox — same claim/run/fail/retry
  * contract as report_runs / report_delivery_outbox. Redis queues are optional
  * and rebuildable; this table is the source of truth after a crash.
+ *
+ * Terminal failures are not silent: the single attempt whose failure reaches
+ * MAX_SCHEDULER_OUTBOX_ATTEMPTS stamps terminal_failed_at / terminal_failed_by
+ * on the row (exactly once — later attempts cannot exist because claims require
+ * attempt_count < ceiling) and emits one structured
+ * "scheduler.terminal_failure" log line. Crash recovery of a stale running row
+ * that was already at the ceiling performs the same transition. Operators alert
+ * on poison scans with:
+ *
+ *   select kind, id, org_id, error, attempt_count, terminal_failed_at,
+ *          terminal_failed_by
+ *     from scheduler_outbox where terminal_failed_at is not null
+ *    order by terminal_failed_at desc;
+ *
+ * (see terminal-failure.ts for the sibling report_runs /
+ * report_delivery_outbox queries).
  */
 
 export const SCHEDULER_OUTBOX_SCAN_KINDS = [
@@ -64,19 +84,54 @@ export async function enqueueApprovalEscalation(input: {
   return inserted.rows[0]?.id ?? null;
 }
 
-/** Release crash-orphaned running rows so the next tick can retry. */
+/** Release crash-orphaned running rows so the next tick can retry. A recovered
+ * row already at the attempt ceiling is terminal: stamp + log it here, because
+ * the normal claim loop will never pick it up again to record the transition. */
 export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<number> {
-  const recovered = (await db.execute(sql`
+  const recovered = (await db.execute<{
+    id: string;
+    org_id: string | null;
+    kind: SchedulerOutboxKind;
+    subject_id: string | null;
+    occurrence_key: string;
+    attempt_count: number;
+    becameTerminal: boolean;
+  }>(sql`
     update scheduler_outbox
        set status='failed',
            error=coalesce(error, 'stale lock recovered after crash'),
            locked_at=null,
            next_attempt_at=${now},
+           terminal_failed_at = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                                     then coalesce(terminal_failed_at, ${now})
+                                     else terminal_failed_at end,
+           terminal_failed_by = case when attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                                      and terminal_failed_at is null
+                                     then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                                     else terminal_failed_by end,
            updated_at=now()
      where status='running'
        and locked_at is not null
        and locked_at < ${new Date(now.getTime() - STALE_SCHEDULER_OUTBOX_MS)}
+     returning id, org_id, kind, subject_id, occurrence_key, attempt_count,
+               (attempt_count >= ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+                and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                and terminal_failed_at = ${now}) as "becameTerminal"
   `));
+  for (const row of recovered.rows) {
+    if (!row.becameTerminal) continue;
+    logTerminalFailure({
+      surface: "scheduler_outbox",
+      kind: row.kind,
+      id: row.id,
+      orgId: row.org_id,
+      subjectId: row.subject_id,
+      attempts: row.attempt_count,
+      error: "stale lock recovered after crash at the attempt ceiling",
+      markedBy: SCHEDULER_OUTBOX_WORKER_IDENTITY,
+      at: now,
+    });
+  }
   return recovered.rowCount ?? 0;
 }
 
@@ -126,16 +181,44 @@ async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
 }
 
 async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<void> {
-  await db.execute(sql`
+  const message = errorMessage(error);
+  // attempt_count was incremented by this row's claim, so it is the ordinal of
+  // the attempt that just failed. Reaching the ceiling here is the one and
+  // only transition to terminal; stamp it in the same statement that records
+  // the final failure so a crash between them is impossible.
+  const terminal = row.attempt_count >= MAX_SCHEDULER_OUTBOX_ATTEMPTS;
+  const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
     update scheduler_outbox
        set status='failed',
-           error=${errorMessage(error)},
+           error=${message},
            locked_at=null,
            finished_at=${now},
            next_attempt_at=${new Date(now.getTime() + schedulerOutboxBackoffMs(row.attempt_count))},
+           terminal_failed_at = case when ${terminal}
+                                     then coalesce(terminal_failed_at, ${now})
+                                     else terminal_failed_at end,
+           terminal_failed_by = case when ${terminal} and terminal_failed_at is null
+                                     then ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                                     else terminal_failed_by end,
            updated_at=now()
      where id=${row.id}
-  `);
+     returning (${terminal}
+                and terminal_failed_by = ${SCHEDULER_OUTBOX_WORKER_IDENTITY}
+                and terminal_failed_at = ${now}) as "becameTerminal"
+  `));
+  if (marked.rows[0]?.becameTerminal) {
+    logTerminalFailure({
+      surface: "scheduler_outbox",
+      kind: row.kind,
+      id: row.id,
+      orgId: row.org_id,
+      subjectId: row.subject_id,
+      attempts: row.attempt_count,
+      error: message,
+      markedBy: SCHEDULER_OUTBOX_WORKER_IDENTITY,
+      at: now,
+    });
+  }
 }
 
 export type SchedulerOutboxRunner = (row: OutboxRow) => Promise<void>;
@@ -203,6 +286,8 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
   error: string | null;
   nextAttemptAt: Date | null;
   finishedAt: Date | null;
+  terminalFailedAt: Date | null;
+  terminalFailedBy: string | null;
 }>> {
   const rows = await withBypassContext(() => db.execute<{
     id: string;
@@ -214,10 +299,13 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
     error: string | null;
     nextAttemptAt: Date | null;
     finishedAt: Date | null;
+    terminalFailedAt: Date | null;
+    terminalFailedBy: string | null;
   }>(sql`
     select id, org_id as "orgId", kind, subject_id as "subjectId", status,
            attempt_count as "attemptCount", error, next_attempt_at as "nextAttemptAt",
-           finished_at as "finishedAt"
+           finished_at as "finishedAt",
+           terminal_failed_at as "terminalFailedAt", terminal_failed_by as "terminalFailedBy"
       from scheduler_outbox
      where status='failed'
      order by coalesce(finished_at, updated_at) desc

@@ -5,9 +5,36 @@ import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbook
 import { scheduledReportEmail } from "@openbooks/emails";
 import { businessToday } from "./business-date.ts";
 import { db } from "./db.ts";
+import {
+  EMAIL_DELIVERY_WORKER_IDENTITY,
+  logTerminalFailure,
+  REPORT_RUN_WORKER_IDENTITY,
+} from "./terminal-failure.ts";
 
-const MAX_RUN_ATTEMPTS = 5;
-const MAX_DELIVERY_ATTEMPTS = 10;
+/**
+ * Scheduled report runs and their per-recipient delivery outbox — same
+ * claim/run/fail/retry contract as scheduler_outbox (see that module for the
+ * tick loop). Redis/BullMQ queues are rebuilt from these tables after a crash.
+ *
+ * Terminal failures are not silent: the attempt whose failure reaches the run
+ * ceiling (MAX_RUN_ATTEMPTS) or, for deliveries, a queue-giveup at the delivery
+ * ceiling (MAX_DELIVERY_ATTEMPTS) stamps terminal_failed_at /
+ * terminal_failed_by exactly once and emits one structured
+ * "scheduler.terminal_failure" log line. Operators alert on poison rows with:
+ *
+ *   select id, org_id, definition_id, error, attempt_count,
+ *          terminal_failed_at, terminal_failed_by
+ *     from report_runs where terminal_failed_at is not null
+ *    order by terminal_failed_at desc;
+ *
+ *   select id, org_id, recipient, error, attempt_count,
+ *          terminal_failed_at, terminal_failed_by
+ *     from report_delivery_outbox where terminal_failed_at is not null
+ *    order by terminal_failed_at desc;
+ */
+
+export const MAX_RUN_ATTEMPTS = 5;
+export const MAX_DELIVERY_ATTEMPTS = 10;
 const STALE_RUN_MS = 15 * 60_000;
 
 type CadenceRow = {
@@ -162,12 +189,38 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
     return { deliveries: recipients.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // attempt_count was incremented by this run's claim, so it is the ordinal
+    // of the attempt that just failed; reaching the ceiling here is the one
+    // and only transition to terminal.
+    const terminal = row.attempt_count >= MAX_RUN_ATTEMPTS;
+    const failedAt = new Date();
     const delay = Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, row.attempt_count - 1));
-    await db.execute(sql`
-      update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=now(),
-             locked_at=null, next_attempt_at=${new Date(Date.now() + delay)}, updated_at=now()
+    const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
+      update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=${failedAt},
+             locked_at=null, next_attempt_at=${new Date(failedAt.getTime() + delay)},
+             terminal_failed_at = case when ${terminal}
+                                       then coalesce(terminal_failed_at, ${failedAt})
+                                       else terminal_failed_at end,
+             terminal_failed_by = case when ${terminal} and terminal_failed_at is null
+                                       then ${REPORT_RUN_WORKER_IDENTITY}
+                                       else terminal_failed_by end,
+             updated_at=${failedAt}
        where id=${runId} and org_id=${row.org_id}
-    `);
+       returning (${terminal}
+                  and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
+                  and terminal_failed_at = ${failedAt}) as "becameTerminal"
+    `));
+    if (marked.rows[0]?.becameTerminal) {
+      logTerminalFailure({
+        surface: "report_runs",
+        id: runId,
+        orgId: row.org_id,
+        attempts: row.attempt_count,
+        error: message.slice(0, 1000),
+        markedBy: REPORT_RUN_WORKER_IDENTITY,
+        at: failedAt,
+      });
+    }
     throw error;
   }
 }
@@ -245,9 +298,41 @@ export async function markReportDeliveryFailed(
   error: string,
   finalQueueAttempt: boolean,
 ): Promise<void> {
-  await db.execute(sql`
+  // A queue giveup only strands the row forever once attempt_count has also
+  // reached the delivery ceiling — until then the scanner re-enqueues failed
+  // rows. That conjunction is the one and only terminal transition, so stamp
+  // and log it in the same statement that records the failure.
+  const failedAt = new Date();
+  const marked = (await db.execute<{
+    becameTerminal: boolean;
+    attempts: number;
+  }>(sql`
     update report_delivery_outbox set status=${finalQueueAttempt ? "failed" : "enqueued"}, email_log_id=${emailLogId},
-           error=${error.slice(0, 1000)}, next_attempt_at=${new Date(Date.now() + 5 * 60_000)}, updated_at=now()
+           error=${error.slice(0, 1000)}, next_attempt_at=${new Date(failedAt.getTime() + 5 * 60_000)},
+           terminal_failed_at = case when ${finalQueueAttempt} and attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
+                                     then coalesce(terminal_failed_at, ${failedAt})
+                                     else terminal_failed_at end,
+           terminal_failed_by = case when ${finalQueueAttempt} and attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
+                                      and terminal_failed_at is null
+                                     then ${EMAIL_DELIVERY_WORKER_IDENTITY}
+                                     else terminal_failed_by end,
+           updated_at=${failedAt}
      where id=${deliveryId} and org_id=${orgId}
-  `);
+     returning attempt_count as "attempts",
+               (attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
+                and terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
+                and terminal_failed_at = ${failedAt}) as "becameTerminal"
+  `));
+  const row = marked.rows[0];
+  if (row?.becameTerminal) {
+    logTerminalFailure({
+      surface: "report_delivery_outbox",
+      id: deliveryId,
+      orgId,
+      attempts: row.attempts,
+      error: error.slice(0, 1000),
+      markedBy: EMAIL_DELIVERY_WORKER_IDENTITY,
+      at: failedAt,
+    });
+  }
 }
