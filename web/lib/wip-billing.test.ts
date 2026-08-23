@@ -79,18 +79,37 @@ test('WIP API permissions and feature gates separate preparation, approval, and 
 test('WIP workspace exposes aging, realization, leakage, holds, workflow, and invoices', () => {
   const page = source('app/(app)/projects/wip-billing/page.tsx')
   const workspace = source('app/(app)/projects/wip-billing/WipBillingWorkspace.tsx')
+  const messages = JSON.parse(source('messages/en/projects.json')) as {
+    wipBilling: {
+      wipHealthAria: string
+      tiles: { realization: string; leakage: string }
+      detail: { sendForReview: string; approve: string; createInvoice: string }
+      lockedAlert: string
+      line: { hold: string; releaseHold: string }
+    }
+  }
+  const { wipBilling } = messages
 
   assert.match(page, /requireWipBillingFeature/)
   assert.match(page, /wipAnalytics/)
-  assert.match(workspace, /WIP health/)
-  assert.match(workspace, /Realization/)
-  assert.match(workspace, /Leakage/)
-  assert.match(workspace, /Send for review/)
-  assert.match(workspace, /Approve/)
-  assert.match(workspace, /Create invoice/)
-  assert.match(workspace, /Hold/)
-  assert.match(workspace, /Release hold/)
-  assert.match(workspace, /approval snapshot is locked/i)
+  assert.match(workspace, /t\("wipHealthAria"\)/)
+  assert.equal(wipBilling.wipHealthAria, 'WIP health')
+  assert.match(workspace, /t\("tiles\.realization"\)/)
+  assert.equal(wipBilling.tiles.realization, 'Realization')
+  assert.match(workspace, /t\("tiles\.leakage"\)/)
+  assert.equal(wipBilling.tiles.leakage, 'Leakage')
+  assert.match(workspace, /t\("detail\.sendForReview"\)/)
+  assert.equal(wipBilling.detail.sendForReview, 'Send for review')
+  assert.match(workspace, /t\("detail\.approve"\)/)
+  assert.equal(wipBilling.detail.approve, 'Approve')
+  assert.match(workspace, /t\("detail\.createInvoice"\)/)
+  assert.equal(wipBilling.detail.createInvoice, 'Create invoice')
+  assert.match(workspace, /t\("line\.hold"\)/)
+  assert.equal(wipBilling.line.hold, 'Hold')
+  assert.match(workspace, /t\("line\.releaseHold"\)/)
+  assert.equal(wipBilling.line.releaseHold, 'Release hold')
+  assert.match(workspace, /t\("lockedAlert"\)/)
+  assert.match(wipBilling.lockedAlert, /approval snapshot is locked/i)
   assert.match(workspace, /<EmptyState/)
   assert.doesNotMatch(workspace, /window\.prompt/)
   assert.doesNotMatch(workspace, /1–30 days/)
