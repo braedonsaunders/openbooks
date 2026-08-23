@@ -615,7 +615,9 @@ export async function receiveInventory(
           currency,
           periodId: period,
           date: input.date,
-          entryNumber: `INV-RCPT-${input.date}-${input.stockLocationId.slice(0, 8)}`,
+          // A location receives many movements per day; the entry number must
+          // be unique per physical journal under journal_entries_org_number.
+          entryNumber: `INV-RCPT-${input.date}-${input.stockLocationId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
           memo: input.memo ?? "Inventory receipt",
           lines,
         })
@@ -844,7 +846,7 @@ export async function issueInventory(
       currency,
       periodId: period,
       date: input.date,
-      entryNumber: `INV-ISSUE-${input.date}-${input.stockLocationId.slice(0, 8)}`,
+      entryNumber: `INV-ISSUE-${input.date}-${input.stockLocationId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       memo: input.memo ?? "Inventory issue",
       lines,
     });
@@ -1300,7 +1302,7 @@ async function transferInventoryTx(
       currency,
       periodId: period,
       date: input.date,
-      entryNumber: `INV-XFER-${input.date}-${input.itemId.slice(0, 8)}`,
+      entryNumber: `INV-XFER-${input.date}-${input.itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       memo: input.memo ?? "Inventory transfer",
       lines: [
         {
@@ -2068,7 +2070,7 @@ export async function buildAssembly(
       currency,
       periodId: period,
       date: input.date,
-      entryNumber: `INV-BUILD-${input.date}-${input.assemblyItemId.slice(0, 8)}`,
+      entryNumber: `INV-BUILD-${input.date}-${input.assemblyItemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       memo: input.memo ?? "Assembly build",
       lines,
     });
