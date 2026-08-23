@@ -2,6 +2,13 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import {
+  PROPERTY_MANAGEMENT_PREFIX,
+  completenessReport,
+  flattenCatalog,
+  generateFallbackManifest,
+  readFallbackManifest,
+} from './i18n-catalog-completeness.ts'
 
 /**
  * Structural guards on the translation catalogs.
@@ -78,4 +85,60 @@ test('no message value is an empty string', () => {
     })
   }
   assert.deepEqual(blanks, [], `these keys resolve to nothing:\n${blanks.join('\n')}`)
+})
+
+test('the generated fallback manifest exactly identifies untranslated property-management copy', () => {
+  const source = flattenCatalog('en')
+  const manifest = readFallbackManifest()
+  const translatedLocales = locales.filter((locale) => locale !== 'en').sort()
+  const propertyKeys = [...source.keys()]
+    .filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX))
+    .sort()
+
+  assert.equal(manifest.sourceLocale, 'en')
+  assert.deepEqual(Object.keys(manifest.fallbacks).sort(), translatedLocales)
+  assert.equal(propertyKeys.length, 178, 'the property-management source inventory changed')
+  assert.deepEqual(manifest, generateFallbackManifest(), 'fallback manifest must be regenerated')
+
+  for (const locale of translatedLocales) {
+    const catalog = flattenCatalog(locale)
+    const listed = manifest.fallbacks[locale] ?? []
+    const copiedEnglish = propertyKeys.filter(
+      (key) => catalog.has(key) && catalog.get(key) === source.get(key),
+    )
+    const missing = propertyKeys.filter((key) => !catalog.has(key))
+
+    assert.deepEqual(
+      copiedEnglish,
+      [],
+      `${locale} contains source-English property copy that would be counted as translated`,
+    )
+    assert.deepEqual(listed, [...new Set(listed)].sort(), `${locale} fallback keys must be unique and sorted`)
+    assert.deepEqual(
+      listed,
+      missing,
+      `${locale} fallback manifest must exactly match untranslated property-management keys`,
+    )
+  }
+})
+
+test('catalog completeness counts missing and declared fallback keys as untranslated', (t) => {
+  const source = flattenCatalog('en')
+  const manifest = readFallbackManifest()
+
+  for (const row of completenessReport(manifest)) {
+    const declaredFallbacks = manifest.fallbacks[row.locale] ?? []
+    for (const key of declaredFallbacks) {
+      assert.ok(source.has(key), `${row.locale} fallback key is absent from English source: ${key}`)
+    }
+    assert.equal(
+      declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,
+      178,
+      `${row.locale} must report all property-management values as untranslated fallbacks`,
+    )
+    t.diagnostic(
+      `${row.locale}: translated=${row.translated}/${row.sourceKeys} untranslated=${row.untranslated} ` +
+      `declaredFallbacks=${row.declaredFallbacks} coverage=${row.coverage}%`,
+    )
+  }
 })
