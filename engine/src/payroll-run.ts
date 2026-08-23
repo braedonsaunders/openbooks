@@ -4,40 +4,30 @@ import { PayrollError } from "./payroll-error.ts";
 import {
   add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
 } from "./money.ts";
-import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
-import { calculateTp1015 } from "./payroll/canada/quebec/tp1015.ts";
-import type { Province } from "./payroll/canada/rates.ts";
-import { calculatePub15T } from "./payroll/us/pub15t.ts";
-import { computeUsWithholding, usSubRegionRateIndex } from "./payroll/us/withholding.ts";
 import {
-  certificateSubRegions,
-  packCertificates,
   payrollCertificate,
   resolveCertificate,
   type ResolvedCertificate,
   type StoredCertificate,
 } from "./payroll/certificates.ts";
 import {
-  blockingGaps,
-  resolveWithholding,
-  type WithholdingResolution,
-} from "./payroll/withholding-resolution.ts";
-import {
   assertContributoryBasesDeclared,
-  assertPayrollRegionSupported,
   jurisdictionKey,
   labourJurisdictionProblem,
   legacyStatutoryLiabilityAccount,
   packStatutoryComponents,
+  PayrollJurisdictionError,
   payrollJurisdictionDeclared,
   payrollPack,
+  assertPayrollRegionSupported,
   resolveEmployeePayrollContext,
   resolvePayrollRunContext,
-  statutoryAssessment,
   type EmployeePayrollContext,
   type PayrollAssessedOn,
   type PayrollRunContext,
 } from "./payroll/packs.ts";
+import { createPushStatutory } from "./payroll/push-statutory.ts";
+import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./payroll/statutory-context.ts";
 import {
   resolveStatutoryHolidayPay,
   undeclaredJurisdictionHolidayConflict,
@@ -46,7 +36,6 @@ import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
 // Aliased: the local closure keeps the same name, and this module is the one
 // home for "how much of this component has the employee already taken".
 import { componentYearToDate as openingComponentYtd } from "./payroll-opening-balances.ts";
-import { resolveStatutoryRates } from "./payroll/statutory-rates.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
 import { businessToday } from "./business-date.ts";
@@ -124,68 +113,6 @@ export interface PayrollSettings {
    * declaration (engine/src/payroll/packs.ts), never to the CRA vendor.
    */
   rqRemittancePartyId: string | null;
-}
-
-/**
- * US pack configuration, resolved from the pack's declared rate slots
- * (engine/src/payroll/statutory-rates.ts) rather than from an org-level blob.
- *
- * Both numbers are functions of a scope point because both genuinely vary
- * within one payroll: the effective FUTA rate by STATE (USDOL publishes the
- * credit reduction per state per year), and the SUI rate by FILING ACCOUNT (the
- * state assigns an experience rate to each registered account). A tenant that
- * has not touched the new surface resolves through the pack's read-only legacy
- * reader and gets byte-identical numbers.
- */
-export interface UsPayrollConfig {
-  futaRate(state: string): string | null;
-  sui(state: string, filingAccountId: string | null): { rate: string; wageBase: string } | undefined;
-  /**
-   * The employer-entered values for a levy BELOW the state — a Pennsylvania
-   * Act 32 PSD rate, an Ohio municipal rate, a Michigan city's rate pair and
-   * exemption value.
-   *
-   * `undefined` when nothing has been entered for that jurisdiction, and every
-   * caller refuses on it rather than substituting a plausible number: the whole
-   * reason these are tenant-scoped is that no publication a payroll release
-   * could carry has them.
-   */
-  subRegionRates(
-    rateKey: string, region: string, subRegion: string,
-  ): Record<string, string> | undefined;
-}
-
-export async function usPayrollConfig(orgId: string, taxYear: number): Promise<UsPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, "US", taxYear);
-  return {
-    futaRate: (state) => rates.values("us_futa", { region: state })?.rate ?? null,
-    sui: (state, filingAccountId) => {
-      const values = rates.values("us_sui", { region: state, filingAccountId });
-      return values ? { rate: values.rate!, wageBase: values.wageBase! } : undefined;
-    },
-    subRegionRates: (rateKey, region, subRegion) =>
-      rates.values(rateKey, { region, subRegion }) ?? undefined,
-  };
-}
-
-/**
- * CA pack configuration. EHT is levied by four provinces at four rates above
- * four exemptions, so it resolves PER PROVINCE; `null` means this province
- * levies none, or the employer has configured none, and nothing is accrued.
- */
-export interface CaPayrollConfig {
-  eht(region: string): { rate: string; annualExemption: string | null } | null;
-}
-
-export async function caPayrollConfig(orgId: string, taxYear: number): Promise<CaPayrollConfig> {
-  const rates = await resolveStatutoryRates(orgId, "CA", taxYear);
-  return {
-    eht: (region) => {
-      const values = rates.values("ca_eht", { region });
-      if (!values?.rate) return null;
-      return { rate: values.rate, annualExemption: values.annualExemption ?? null };
-    },
-  };
 }
 
 export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
@@ -920,139 +847,6 @@ interface StubComputation {
   /** Non-fatal entitlement notices (a bank at or over its scoped limit). */
   warnings: EntitlementWarning[];
 }
-type YtdRow = {
-  pensionable: string; insurable: string; cpp: string; cpp2: string; ei: string;
-  qpip: string; non_periodic: string; f5b: string; qc_csb: string;
-};
-
-/**
- * Year-to-date state the statutory annual ceilings are measured against
- * (CPP/CPP2 pensionable, EI/QPIP insurable, the bonus-method base), opening
- * balances included.
- *
- * Consumes CALCULATED-OR-COMMITTED stubs, not committed ones alone.
- *
- * A ceiling is a finite annual allowance. Counting only committed stubs meant
- * every run CALCULATED before the first of them committed saw the same empty
- * room and claimed it in full: an off-cycle bonus or termination run computed
- * while the overlapping regular run is still sitting at 'calculated' withheld
- * CPP and EI past the annual maximum, and nothing prevents that ordering —
- * non-regular run types are deliberately exempt from the overlap guard, which
- * is exactly what they are for.
- *
- * This is the identical failure mode the WCB and Ontario EHT accumulators
- * already document and defend against; the statutory ceilings were left
- * exposed to it. The two dependencies noted there hold here too: this run's own
- * stubs are visible because calculateStub inserts them in the same transaction,
- * and the roster query guarantees one stub per employee per run.
- */
-async function employeeYtd(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
-  taxYear: number, excludeDocumentId: string,
-): Promise<YtdRow> {
-  const r = (await tx.execute<YtdRow>(sql`
-    select
-      coalesce((select pensionable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.pensionable_earnings), 0) as pensionable,
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.insurable_earnings), 0) as insurable,
-      coalesce((select cpp_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'C')::numeric), 0) as cpp,
-      coalesce((select cpp2_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'C2')::numeric), 0) as cpp2,
-      coalesce((select ei_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'EI')::numeric), 0) as ei,
-      coalesce((select qpip_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'QPIP')::numeric), 0) as qpip,
-      coalesce((select non_periodic_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
-      coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
-      coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
-      and r.run_status in ('calculated', 'committed')
-      -- 'voided', not 'void' — the documents status enum. A voided run's stubs
-      -- are not year-to-date anything, and counting them would hold statutory
-      -- room hostage to a run that was undone. (The overlap guard learned this
-      -- spelling the hard way; see the note there.)
-      and d.status <> 'voided'
-  `));
-  return r.rows[0]!;
-}
-type UsYtdRow = {
-  fica: string;
-  futa: string;
-  supplemental: string;
-  /**
-   * Employee-side FICA and Medicare WITHHELD earlier this year (not wages).
-   *
-   * Massachusetts is the only state that reads it, and it reads it as a cap:
-   * Circular M's percentage method opens by subtracting the FICA, Medicare and
-   * public-retirement contributions deducted, "up to $2,000 a year". Supplying
-   * the period figure with no year-to-date would restart that allowance every
-   * pay period and UNDER-withhold every Massachusetts employee — the direction
-   * that costs the employee money at filing time.
-   */
-  fica_tax: string;
-};
-
-/**
- * US YTD state for the wage-base caps: the caps compare cumulative WAGES
- * (not contributions) against the base, so the generic pensionable/insurable
- * stub columns — FICA and FUTA/SUI wages for US employees — plus the same
- * opening-balance columns are the whole story.
- *
- * Consumes CALCULATED-OR-COMMITTED stubs, for the reason spelled out on the
- * WCB/EHT accumulators below: a finite annual allowance that is only consumed
- * on COMMIT is claimed in full by every run calculated before the first of them
- * commits. See employeeYtd.
- */
-async function usEmployeeYtd(
-  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
-  taxYear: number, excludeDocumentId: string,
-): Promise<UsYtdRow> {
-  const r = (await tx.execute<UsYtdRow>(sql`
-    select
-      coalesce((select pensionable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.pensionable_earnings), 0) as fica,
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.insurable_earnings), 0) as futa,
-      coalesce((select non_periodic_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
-      -- Withheld, not wages: the Massachusetts subtraction is capped on the
-      -- CONTRIBUTIONS. Committed stubs only, exactly like the wage bases above,
-      -- and read off the stub's own factors so it needs no join to the
-      -- component table (the pack's own keys, written by calculatePub15T).
-      coalesce(sum((s.factors->>'SS')::numeric), 0)
-      + coalesce(sum((s.factors->>'MED')::numeric), 0)
-      + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
-      and r.run_status in ('calculated', 'committed')
-      -- 'voided', not 'void' — the documents status enum. A voided run's stubs
-      -- are not year-to-date anything, and counting them would hold statutory
-      -- room hostage to a run that was undone. (The overlap guard learned this
-      -- spelling the hard way; see the note there.)
-      and d.status <> 'voided'
-  `));
-  return r.rows[0]!;
-}
 
 /**
  * Every tax certificate this employee has on file, as `resolveCertificate`
@@ -1459,9 +1253,6 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     `));
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
 
-    // The run's own tax year — the resolved context's, never `slice(0, 4)`.
-    const usConfig = await usPayrollConfig(orgId, Number(run.tax_year));
-    const caConfig = await caPayrollConfig(orgId, Number(run.tax_year));
     const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
@@ -1507,7 +1298,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         });
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
-          periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
+          periodsPerYear: P, need, components: components.rows,
           eftFallbackToCheque, statHolidayPay, simulate: input.simulate === true,
         });
         grossTotal = add(grossTotal, result.gross);
@@ -1567,8 +1358,6 @@ async function calculateStub(
     periodsPerYear: number | undefined;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
-    usConfig: UsPayrollConfig;
-    caConfig: CaPayrollConfig;
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
     eftFallbackToCheque: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
@@ -1590,6 +1379,12 @@ async function calculateStub(
   // the paying legal entity before this function was called.
   const { country, region: province } = jurisdiction;
   const taxYear = jurisdiction.taxYear;
+  const pack = payrollPack(country);
+  if (!pack.installable) {
+    throw new PayrollJurisdictionError(
+      `the ${country} payroll pack is declared but not installable — statutory compute is refused`,
+    );
+  }
 
   interface Line {
     componentId: string | null; kind: "earning" | "deduction" | "employer_contribution";
@@ -2341,50 +2136,12 @@ async function calculateStub(
   //                    pass and re-derived from the deductions that pass takes.
   //
   // See .local/payroll-pipeline-contract.md.
-  interface StatutoryAllocation {
-    amount: string;
-    projectId?: string | null;
-    departmentId?: string | null;
-  }
   /** Earnings-assessed slots already emitted on this stub, `systemKey:kind`. */
   const emittedEarningsAssessed = new Set<string>();
 
-  const pushStatutory = (
-    systemKey: string, kind: "deduction" | "employer_contribution",
-    description: string, amount: string, sequence: number,
-    options: {
-      /**
-       * Job-costed levies (WCB) emit their whole allocation in ONE call, so
-       * the idempotency guard covers the split as a unit and a re-run can
-       * never re-allocate the remainder.
-       */
-      allocations?: readonly StatutoryAllocation[];
-    } = {},
-  ) => {
-    if (cmp(amount, "0") === 0) return;
-    const assessedOn = statutoryAssessment(country, systemKey, kind);
-    const slot = `${systemKey}:${kind}`;
-    // Recomputing the value on a later pass is harmless (the statutory engines
-    // return CPP/EI/tax from one call); re-PUSHING it is not.
-    if (assessedOn === "earnings" && emittedEarningsAssessed.has(slot)) return;
-    const c = ctx.need(systemKey, kind);
-    let pushed = false;
-    for (const allocation of options.allocations ?? [{ amount }]) {
-      if (cmp(allocation.amount, "0") === 0) continue;
-      lines.push({
-        componentId: c.id as string, kind, description,
-        amount: allocation.amount, sequence,
-        projectId: allocation.projectId ?? null,
-        departmentId: allocation.departmentId ?? null,
-        assessedOn,
-      });
-      pushed = true;
-    }
-    // Only a line that actually landed marks the slot emitted: a slot that was
-    // zero on the first pass and non-zero on a later one is a violation the
-    // assertion below must SEE, not something this guard should hide.
-    if (assessedOn === "earnings" && pushed) emittedEarningsAssessed.add(slot);
-  };
+  const pushStatutory = createPushStatutory({
+    country, lines, emittedEarningsAssessed, need: ctx.need,
+  });
 
   /** Every earnings-assessed line as the invariant check compares them. */
   const earningsAssessedSnapshot = (): EarningsAssessedLine[] =>
@@ -2397,150 +2154,18 @@ async function calculateStub(
         departmentId: l.departmentId ?? null,
       }));
 
-  // ---- Employer taxes: WCB/WSIB and Ontario EHT (CA pack) ------------------
-  // Both are employer-only accruals. WCB assesses gross earnings (capped at
-  // the class's annual assessable max) at the worker-comp group's rate and is
-  // job-costed by project like the earnings it assesses. EHT is org-level:
-  // Ontario remuneration past the annual exemption at the configured rate,
-  // consuming the exemption across all employees in pay-date order.
-  //
-  // BOTH accumulators consume against CALCULATED-OR-COMMITTED stubs, not
-  // committed ones alone. A finite annual allowance — the WCB assessable
-  // ceiling, the Ontario EHT exemption — that is only consumed on commit is
-  // claimed IN FULL by every schedule calculated before the first of them
-  // commits, so two schedules calculated the same afternoon each spend the
-  // whole exemption and the employer under-remits.
-  //
-  // Two dependencies this makes explicit rather than assuming:
-  //   1. the stubs of THIS run are visible to these reads because they are
-  //      inserted by the same transaction, one employee at a time, in
-  //      calculateStub — which is why the run's own document id is still
-  //      OR-ed in (run_status is not flipped to 'calculated' until the end);
-  //   2. exactly ONE stub per employee per run exists, which the roster query
-  //      in calculateInTransaction guarantees with `distinct on (p.id)` and
-  //      the `delete from pay_stubs` that precedes the loop. A second pass
-  //      over one employee would consume the exemption twice.
-  let wcbAmount = "0";
-  let wcbAssessable = "0";
-  let ehtAmount = "0";
-  let ehtEarnings = "0";
-  if (country === "CA") {
-    const grossEarnings = () =>
-      sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
-    const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
-      select g.rate_percent, g.max_assessable
-        from employee_roles er
-        join worker_comp_groups g on g.id = er.worker_comp_group_id and g.org_id = er.org_id and g.is_active
-       where er.org_id = ${orgId} and er.party_id = ${employeePartyId} and er.is_active
-       limit 1
-    `));
-    const wcb = wcbGroup.rows[0];
-    if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
-      const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
-        select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
-          from pay_stubs s
-          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-         where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-           and s.tax_year = ${taxYear}
-           and (r.run_status in ('calculated', 'committed')
-                or s.pay_run_document_id = ${documentId})
-      `))).rows[0]!.prior;
-      const gross = grossEarnings();
-      const room = wcb.max_assessable
-        ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
-        : gross;
-      wcbAssessable = cmp(gross, room) <= 0 ? gross : room;
-      if (cmp(wcbAssessable, "0") > 0) {
-        wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2);
-        // Split by project proportional to earning amounts (WCB is a real
-        // job-cost burden, like union fringes). Exact bigint ratios; the last
-        // job absorbs the rounding remainder so the premium never leaks a
-        // penny. The whole allocation is handed to pushStatutory in one call,
-        // so a second protection pass cannot allocate that remainder again.
-        //
-        // The remainder is signed and is absorbed WHATEVER its sign. Rounding
-        // each share independently can over-allocate as easily as under: gross
-        // 1,000.00 split 333.33 / 333.33 / 333.33 with 0.01 untagged, at 5%,
-        // allocates 50.01 against a 50.00 premium. Dropping the negative
-        // remainder silently — as a `> 0` guard does — leaves the stub lines
-        // and factors.WCB permanently disagreeing, and the remittance summary
-        // (which sums pay_stub_lines) permanently at odds with the annual-cap
-        // tracker (which reads factors.WCB_EARN).
-        const splits = lines.filter((l) => l.kind === "earning" && !l.accrualOnly && l.projectId);
-        const grossUnits = toUnits(gross);
-        const allocations: StatutoryAllocation[] = [];
-        let allocated = "0";
-        const allTagged = cmp(sum(splits.map((s) => s.amount)), gross) === 0;
-        for (const [index, split] of splits.entries()) {
-          const share = index === splits.length - 1 && allTagged
-            ? add(wcbAmount, neg(allocated))
-            : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), grossUnits), 2);
-          if (cmp(share, "0") === 0) continue;
-          allocated = add(allocated, share);
-          allocations.push({
-            amount: share, projectId: split.projectId, departmentId: split.departmentId,
-          });
-        }
-        const remainder = add(wcbAmount, neg(allocated));
-        if (cmp(remainder, "0") !== 0) {
-          // A negative remainder belongs to the job that was rounded up, not
-          // to the untagged pool, so it lands on the last allocated line;
-          // a positive one is genuinely unallocated overhead.
-          const last = allocations[allocations.length - 1];
-          if (cmp(remainder, "0") < 0 && last) last.amount = add(last.amount, remainder);
-          else allocations.push({ amount: remainder });
-        }
-        const allocatedTotal = sum(allocations.map((a) => a.amount));
-        if (cmp(allocatedTotal, wcbAmount) !== 0) {
-          throw new PayrollError(
-            `WCB allocation ${allocatedTotal} does not equal the ${wcbAmount} premium `
-            + `for ${emp.display_name ?? employeePartyId}`,
-          );
-        }
-        pushStatutory("wcb", "employer_contribution", "WCB/WSIB", wcbAmount, 260, { allocations });
-      }
-    }
+  // ---- Phase 8: pack-declared earnings-assessed employer levies ----------
+  // WCB/WSIB and provincial EHT for the CA pack; other packs omit this hook.
+  // Both accumulators consume against CALCULATED-OR-COMMITTED stubs — see
+  // .local/payroll-pipeline-contract.md and the pack's employer-levies module.
+  const employerLevies = await pack.applyEmployerLevies?.({
+    tx, orgId, documentId, employeePartyId,
+    employeeName: emp.display_name ?? employeePartyId,
+    taxYear, region: province, lines, pushStatutory,
+  }) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
 
-    // Employer health tax, per PROVINCE. The old code asked `province === "ON"`
-    // and read one org-level rate, so an employer with BC and Ontario payroll
-    // accrued Ontario's levy on Ontario wages and nothing on the other
-    // province's — or the reverse, depending on which rate was stored.
-    // Already inside `country === "CA"`, and `province` is the resolved
-    // region — the old `(emp.country ?? "CA") !== "US"` re-derivation was a
-    // third opinion on a question the run context now answers once.
-    const eht = ctx.caConfig.eht(province);
-    if (eht) {
-      ehtEarnings = grossEarnings();
-      if (cmp(ehtEarnings, "0") > 0) {
-        // Scoped to the province whose exemption it is: the previous query
-        // summed Ontario stubs only, which was right when only Ontario could be
-        // levied and wrong the moment a second province can be.
-        const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
-          select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
-            from pay_stubs s
-            join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-           where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${province}
-             and (r.run_status in ('calculated', 'committed')
-                  or s.pay_run_document_id = ${documentId})
-        `))).rows[0]!.prior;
-        const exemption = eht.annualExemption ?? "0";
-        const exemptionLeft = cmp(exemption, priorInProvince) > 0
-          ? add(exemption, neg(priorInProvince))
-          : "0";
-        const taxableRemuneration = cmp(ehtEarnings, exemptionLeft) > 0
-          ? add(ehtEarnings, neg(exemptionLeft))
-          : "0";
-        if (cmp(taxableRemuneration, "0") > 0) {
-          ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2);
-          pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtAmount, 270);
-        }
-      }
-    }
-  }
-
-  // Statutory inputs from the line set. For US employees the flags
-  // generalize: taxable → FIT wages, pensionable → FICA (Social Security /
-  // Medicare) wages, insurable → FUTA and SUI wages.
+  // Statutory inputs from the line set. The pack's contributoryBases declaration
+  // documents what pensionable and insurable accumulate for each jurisdiction.
   const earning = (predicate: (l: Line) => boolean) =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly && predicate(l)).map((l) => l.amount));
   const deduction = (treatment: string) =>
@@ -2552,317 +2177,26 @@ async function calculateStub(
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
 
-  /**
-   * Drop the previous pass's INCOME-assessed withholdings so the pass can be
-   * re-derived from a changed pre-tax deduction. Earnings-assessed lines are
-   * left standing — no deduction moves them, and re-pushing one would double a
-   * levy and re-run its project split.
-   */
   const clearIncomeAssessedLines = () => dropIncomeAssessedLines(lines);
 
   const bool = (value: string | null | undefined) =>
     value === "true" || (value as unknown) === true;
-  // `province` is the resolved region. It used to default to "ON" for a
-  // Canadian employee whose profile carried no province — silently withholding
-  // Ontario provincial tax on someone whose jurisdiction nobody had recorded.
   let factors: Record<string, string> = {};
   let firstEarningsAssessed: EarningsAssessedLine[] | null = null;
 
-  /**
-   * One statutory pass over the CURRENT line set. `income`, `nonPeriodic`,
-   * `pensionable` and `insurable` are earnings-only and therefore stable
-   * across passes; what changes between passes is `deduction("pension_f")` /
-   * `deduction("alimony")` / `deduction("union_dues")`, which is exactly why a
-   * pre-tax protected order has to be settled by iteration.
-   *
-   * The pass re-COMPUTES everything each time — the CRA and IRS engines return
-   * CPP/EI/QPIP/FICA and tax from a single call, and splitting them would fork
-   * a conformance-tested engine for no gain — but `pushStatutory` re-emits only
-   * the income-assessed lines. Earnings-assessed ones stand from the first
-   * pass, and `assertEarningsAssessedStable` proves afterwards that standing
-   * still was the right answer.
-   */
-  /**
-   * The certificate keys the employee actually has ON FILE, for reciprocity.
-   *
-   * Membership only: reciprocity asks "is the authority on file?", never "what
-   * does it say". Effective-dated against the PAY DATE, so a re-run of a prior
-   * period sees the forms that were signed then.
-   */
-  const certificateKeysOnFile = (): string[] =>
-    storedCertificates
-      .filter((row) => !row.effectiveFrom || row.effectiveFrom <= run.pay_date)
-      .filter((row) => !row.supersededOn || row.supersededOn > run.pay_date)
-      .map((row) => row.certificateKey);
-
-  /**
-   * The sub-regions the employee's certificates place them in, on one side.
-   *
-   * Scoped to the REGION the side belongs to: a stale Pennsylvania CLGS-32-6 on
-   * the file of somebody who now works in New York names a PSD code that is not
-   * a New York jurisdiction, and feeding it in would refuse the run for a form
-   * that no longer applies.
-   */
-  const subRegionsOnFile = (side: "work" | "residence"): string[] => {
-    const region = side === "work"
-      ? province
-      : ((emp.residence_region as string | null) || province);
-    const codes: string[] = [];
-    for (const certificate of packCertificates(country).certificates) {
-      if (!certificate.fields.some((field) => field.subRegion?.side === side)) continue;
-      if ((certificate.scope.region ?? region) !== region) continue;
-      const resolved = certificateFor(certificate.key);
-      if (!resolved) continue;
-      for (const found of certificateSubRegions(resolved)) {
-        if (found.side === side && !codes.includes(found.code)) codes.push(found.code);
-      }
-    }
-    return codes;
-  };
-
   const runStatutoryPass = async (): Promise<void> => {
     clearIncomeAssessedLines();
-    if (country === "US") {
-    // The unsupported-region refusal is the country pack's answer now, not two
-    // inline US-only checks (engine/src/payroll/packs.ts). Same behaviour for
-    // the US; the CA arm below finally gets the same question asked of it,
-    // which is how Quebec stopped being silently half-withheld.
-    assertPayrollRegionSupported(country, province);
-    const ytd = await usEmployeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
-    const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
-    const statutory = calculatePub15T({
-      payDate: run.pay_date, periodsPerYear: P,
-      wages: income, supplemental: nonPeriodic,
-      ficaWages: pensionable, futaWages: insurable,
-      filingStatus,
-      multipleJobs: bool(emp.multiple_jobs),
-      dependentCredits: emp.dependent_credits ?? undefined,
-      otherIncomeAnnual: emp.other_income_annual ?? undefined,
-      deductionsAnnual: emp.deductions_annual ?? undefined,
-      extraPerPeriod: emp.additional_tax_per_period ?? undefined,
-      pre2020: bool(emp.w4_pre_2020)
-        ? { allowances: Number(emp.w4_allowances ?? 0), married: filingStatus === "married_joint" }
-        : undefined,
-      fitExempt: bool(emp.tax_exempt),
-      ficaExempt: bool(emp.fica_exempt),
-      futaExempt: bool(emp.futa_exempt),
-      futaEffectiveRate: ctx.usConfig.futaRate(province) ?? undefined,
-      // Per FILING ACCOUNT: the state assigns an experience rate to each
-      // registration, so a two-account employer in one state holds two. Before
-      // this, both divisions got whichever rate was entered last.
-      sui: ctx.usConfig.sui(province, jurisdiction.filingAccountId),
-      ytd: {
-        ssWages: ytd.fica, medicareWages: ytd.fica,
-        futaWages: ytd.futa, suiWages: ytd.futa,
-        supplemental: ytd.supplemental,
-      },
+    factors = await pack.computeStatutory({
+      tx, orgId, documentId, employeePartyId,
+      employeeName: emp.display_name ?? employeePartyId,
+      taxYear, country, region: province, run, emp,
+      filingAccountId: jurisdiction.filingAccountId,
+      periodsPerYear: P, income, nonPeriodic, pensionable, insurable, deduction,
+      pushStatutory, storedCertificates, certificateFor, bool,
+      assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
+      employerLevies,
     });
-    pushStatutory("fit", "deduction", "Federal income tax", statutory.fit, 110);
-    pushStatutory("ss", "deduction", "Social Security", statutory.ss, 120);
-    pushStatutory("medicare", "deduction", "Medicare", statutory.medicare, 130);
-    pushStatutory("medicare_addl", "deduction", "Additional Medicare", statutory.additionalMedicare, 135);
-    pushStatutory("ss", "employer_contribution", "Social Security (employer)", statutory.ssEmployer, 210);
-    pushStatutory("medicare", "employer_contribution", "Medicare (employer)", statutory.medicareEmployer, 220);
-    pushStatutory("futa", "employer_contribution", "Federal unemployment (FUTA)", statutory.futa, 230);
-    pushStatutory("suta", "employer_contribution", "State unemployment (SUI)", statutory.suta, 250);
-    factors = {
-      ...statutory.factors,
-      B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
-    };
-
-    // ---- State, city and local income tax ---------------------------------
-    //
-    // The RESOLUTION decides which jurisdictions withhold; the ENGINES decide
-    // how much. They are never merged: the first is generic and pure
-    // (engine/src/payroll/withholding-resolution.ts, which contains no region
-    // code at all) and the second is per jurisdiction
-    // (engine/src/payroll/us/withholding.ts). Merging them is how
-    // `if (state === "PA")` gets written into a pay run.
-    //
-    // Before this, a Californian's stub carried federal tax, FICA, FUTA and SUI
-    // and NO CALIFORNIA INCOME TAX. The ten state engines and the resolution
-    // order were both complete, both tested, and connected to nothing.
-    const workSubRegions = subRegionsOnFile("work");
-    const residenceSubRegions = subRegionsOnFile("residence");
-    const residenceRegion = (emp.residence_region as string | null) || province;
-    const resolution = resolveWithholding({
-      country,
-      workRegion: province,
-      residenceRegion: (emp.residence_region as string | null) ?? null,
-      // Sub-region membership is a fact about an ADDRESS, so it cannot be
-      // derived — it is read from the answers the packs' own certificates
-      // collect (`PayrollCertificateField.subRegion`): the PSD codes on
-      // Pennsylvania's CLGS-32-6, the school district on Ohio's IT 4, the two
-      // residency questions on New York's IT-2104.
-      workSubRegions,
-      residenceSubRegions,
-      certificatesOnFile: certificateKeysOnFile(),
-      // The rates the region's own conflict rule compares, when it declares one
-      // that needs them (Pennsylvania's Act 32 higher-of). A rate that has not
-      // been entered is absent, and the resolver reports that by name rather
-      // than picking a side.
-      subRegionRates: usSubRegionRateIndex({
-        codes: [
-          ...workSubRegions.map((code) => ({ region: province, code })),
-          ...residenceSubRegions.map((code) => ({ region: residenceRegion, code })),
-        ],
-        tenantRates: ctx.usConfig.subRegionRates,
-      }),
-    });
-
-    // Refuse BEFORE any money is computed. A blocking gap means withholding
-    // would be materially wrong — an unimplemented state, a residence region
-    // whose rule nobody has established, a locality the pack does not know —
-    // and every message already names the employee's jurisdictions and what is
-    // missing.
-    const blocking = blockingGaps(resolution);
-    if (blocking.length > 0) {
-      throw new PayrollError(
-        `${emp.display_name ?? employeePartyId}: ${blocking.map((gap) => gap.message).join(" ")}`,
-      );
-    }
-
-    // The REGION is computed first. The resolution order guarantees it comes
-    // first in `levies`, and two things need it as an input: the Yonkers
-    // resident surcharge (16.75% OF the state tax, not a rate on wages) and a
-    // residence region's `required_net_of_credit` offset.
-    let regionTax: string | undefined;
-    let sequence = 140;
-    for (const levy of resolution.levies) {
-      const withheld = computeUsWithholding({
-        levy,
-        payDate: run.pay_date,
-        // Ohio keys its tables to the payroll period END, not the pay date,
-        // and refuses without it: its 2026 rates change on 1 August, and
-        // substituting the pay date pulls August's rates onto a July period at
-        // every changeover.
-        periodEnd: run.period_end,
-        periodsPerYear: P,
-        wages: income,
-        supplemental: nonPeriodic,
-        certificateFor,
-        regionTax,
-        // Massachusetts Circular M opens by subtracting employee-side FICA and
-        // Medicare, capped at $2,000 a year. Omitting it over-withholds;
-        // supplying the period without the year-to-date under-withholds.
-        socialInsuranceDeducted: {
-          period: sum([statutory.ss, statutory.medicare, statutory.additionalMedicare]),
-          yearToDate: ytd.fica_tax,
-        },
-        tenantRates: (rateKey, subRegion) =>
-          ctx.usConfig.subRegionRates(rateKey, levy.region, subRegion),
-      });
-      // null means the jurisdiction levies no wage income tax at all — a fact,
-      // and the only silence this loop permits. Everything else either
-      // computes an amount or throws naming the jurisdiction.
-      if (!withheld) continue;
-      if (levy.level === "region") regionTax = withheld.tax;
-      pushStatutory(
-        levy.level === "region" ? "state_income_tax" : "local_income_tax",
-        "deduction", withheld.label, withheld.tax, sequence++,
-      );
-      factors = {
-        ...factors,
-        ...withheld.factors,
-        // Keyed by JURISDICTION, so a stub that carries a state tax and two
-        // local ones can be read back apart — by the acceptance tests, by the
-        // W-2 state boxes when they land, and by an operator asking which
-        // authority the money is owed to.
-        [`${levy.level === "region" ? "SIT" : "LIT"}_${withheld.code}`]: withheld.tax,
-      };
-    }
-    // The assumption, on the record. `resolveWithholding` resolves an
-    // unrecorded residence to the work region — the answer that was already
-    // being produced — and REPORTS it, so a stub can show it and readiness can
-    // ask for the real one rather than it looking like a fact.
-    factors.WITHHOLDING_RESIDENCE = resolution.residenceRegion;
-    factors.WITHHOLDING_RESIDENCE_SOURCE = resolution.residenceSource;
-  } else {
-    // The CA arm, asked the same question the US arm has always been asked.
-    // Every province is supported now that the QC engine exists: T4127
-    // computes the federal side (abatement, QPP, QPIP) for Quebec and
-    // engine/src/payroll/canada/quebec computes TP-1015 provincial income
-    // tax below. The assertion still refuses an unknown province by name.
-    assertPayrollRegionSupported(country, province);
-
-    const ytd = await employeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
-
-    const t4127Input: T4127Input = {
-      payDate: run.pay_date, province: province as Province, periodsPerYear: P,
-      income, nonPeriodic, pensionable, insurable,
-      pensionDeductions: deduction("pension_f"),
-      alimonyDeductions: deduction("alimony"),
-      unionDues: deduction("union_dues"),
-      prescribedZoneDeduction: emp.prescribed_zone_deduction ?? undefined,
-      authorizedAnnualDeductions: emp.authorized_annual_deductions ?? undefined,
-      authorizedFederalCredits: emp.authorized_federal_credits ?? undefined,
-      authorizedProvincialCredits: emp.authorized_provincial_credits ?? undefined,
-      additionalTaxPerPeriod: emp.additional_tax_per_period ?? undefined,
-      federalClaim: emp.federal_claim_amount ?? undefined,
-      federalClaimCode: emp.federal_claim_amount == null && emp.federal_claim_code != null
-        ? Number(emp.federal_claim_code) : undefined,
-      provincialClaim: emp.provincial_claim_amount ?? undefined,
-      provincialClaimCode: emp.provincial_claim_amount == null && emp.provincial_claim_code != null
-        ? Number(emp.provincial_claim_code) : undefined,
-      taxExempt: bool(emp.tax_exempt),
-      cppExempt: bool(emp.cpp_exempt),
-      eiExempt: bool(emp.ei_exempt),
-      ytd: {
-        cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
-        pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
-        nonPeriodicCppEnhancedDeductions: ytd.f5b,
-      },
-    };
-    const statutory = calculateT4127(t4127Input);
-
-    pushStatutory("income_tax", "deduction", "Income tax", statutory.totalTax, 110);
-    pushStatutory("cpp", "deduction", province === "QC" ? "QPP" : "CPP", statutory.cpp, 120);
-    pushStatutory("cpp2", "deduction", province === "QC" ? "QPP2" : "CPP2", statutory.cpp2, 130);
-    pushStatutory("ei", "deduction", "EI", statutory.ei, 140);
-    pushStatutory("qpip", "deduction", "QPIP", statutory.qpip, 150);
-    pushStatutory("cpp", "employer_contribution",
-      province === "QC" ? "QPP (employer)" : "CPP (employer)", statutory.cppEmployer, 210);
-    pushStatutory("ei", "employer_contribution", "EI (employer)", statutory.eiEmployer, 220);
-    pushStatutory("qpip", "employer_contribution", "QPIP (employer)", statutory.qpipEmployer, 230);
-
-    // Québec provincial income tax — TP-1015.F-V, computed by the QC engine
-    // from the same inputs plus the T4127 arm's own QPP outputs (C, C2, S3).
-    // Its line carries assessedOn 'taxable_income', so the protection
-    // fixpoint re-derives it exactly as it re-derives federal income_tax.
-    let qcFactors: Record<string, string> = {};
-    if (province === "QC") {
-      const qc = calculateTp1015({
-        payDate: run.pay_date, periodsPerYear: P,
-        income, nonPeriodic,
-        pensionDeductions: deduction("pension_f"),
-        qpp: statutory.cpp, qpp2: statutory.cpp2,
-        pensionable,
-        // TP-1015.3-V carries an AMOUNT (line 10), never a claim code —
-        // provincial_claim_amount is E; an unset amount uses the guide's
-        // basic-personal-amount default inside the engine.
-        personalCredits: emp.provincial_claim_amount ?? undefined,
-        // TP-1016-V authorized annual credits (variable K1) — the provincial
-        // analogue field, dead for QC under T4127 (no provincial T2 exists).
-        authorizedAnnualCredits: emp.authorized_provincial_credits ?? undefined,
-        taxExempt: bool(emp.tax_exempt),
-        ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
-      });
-      pushStatutory("qc_income_tax", "deduction", "Québec income tax", qc.totalTax, 115);
-      qcFactors = qc.factors;
-    }
-
-    factors = {
-      ...statutory.factors,
-      ...qcFactors,
-      B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
-      QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
-      ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
-      ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
-    };
-  }
-  // What the earnings-assessed lines looked like the first time the pass ran,
-  // so the loop can be held to leaving them alone.
-  firstEarningsAssessed ??= earningsAssessedSnapshot();
+    firstEarningsAssessed ??= earningsAssessedSnapshot();
   };
 
   // ---- Deduction protection (protected earnings) --------------------------

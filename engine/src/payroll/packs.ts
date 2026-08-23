@@ -22,7 +22,15 @@ import {
   registerPayrollWithholdingSource,
 } from "./withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "./statutory-rates.ts";
+import type {
+  PayrollEmployerLevyContext,
+  PayrollEmployerLevyFactors,
+  PayrollStatutoryComputeContext,
+} from "./statutory-context.ts";
 import type { PayrollTaxYearSupport } from "./tax-years.ts";
+import { applyCaEmployerLevies } from "./canada/employer-levies.ts";
+import { computeCaStatutory } from "./canada/compute-statutory.ts";
+import { computeUsStatutory } from "./us/compute-statutory.ts";
 
 /**
  * Anything the jurisdiction layer refuses. Declared FIRST because
@@ -304,6 +312,20 @@ export interface PayrollCountryPack {
    * to "no agreement", which withholds the work region. Canada declares none.
    */
   reciprocity?: () => PayrollPackReciprocity;
+  /**
+   * Phase 8 — earnings-assessed employer-only levies the pack declares in its
+   * statutory slots (WCB/EHT for CA). Absent when the pack levies none.
+   */
+  applyEmployerLevies?: (
+    ctx: PayrollEmployerLevyContext,
+  ) => Promise<PayrollEmployerLevyFactors>;
+  /**
+   * Phase 9 — one re-runnable statutory pass over the current line set
+   * (.local/payroll-pipeline-contract.md). REQUIRED on every installable pack.
+   */
+  computeStatutory: (
+    ctx: PayrollStatutoryComputeContext,
+  ) => Promise<Record<string, string>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -936,6 +958,8 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         ],
       },
     ],
+    applyEmployerLevies: applyCaEmployerLevies,
+    computeStatutory: computeCaStatutory,
   },
   US: {
     country: "US",
@@ -1029,6 +1053,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         ],
       },
     ],
+    computeStatutory: computeUsStatutory,
   },
 };
 

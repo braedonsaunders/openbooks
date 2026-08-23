@@ -131,6 +131,9 @@ const FREEDONIA: PayrollCountryPack = {
       citation: "Freedonia Revenue Bulletin 2026-1: income tax is levied federally",
     })),
   }),
+  computeStatutory: async () => {
+    throw new PayrollPackError("Freedonia statutory compute is not implemented");
+  },
   statutorySlots: [
     {
       key: "payg",
