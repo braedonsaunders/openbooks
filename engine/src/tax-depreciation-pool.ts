@@ -495,6 +495,17 @@ function persistPoolClaimCap(value: unknown): string {
   }
 }
 
+/** Persist pool enhanced first-year multiplier through exact decimal then ledger money. Fail closed. */
+function persistPoolEnhancedMultiplier(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("enhanced first-year multiplier must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("enhanced first-year multiplier must be an exact decimal");
+  }
+}
+
 export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const opening = persistPoolOpeningBalance(input.openingBalance);
   const additions = persistPoolAdditions(input.additions);
@@ -520,8 +531,8 @@ export function computePoolYear(input: PoolYearInput): PoolYearResult {
   const immediateExpense = minMoney(requestedImmediateExpense, balance);
   const afterIei = add(balance, neg(immediateExpense));
   let base: string;
-  const enhancedMultiplier = String(input.enhancedFirstYearMultiplier ?? 1);
-  if (cmp(normalizeMoney(enhancedMultiplier), "1") > 0) {
+  const enhancedMultiplier = persistPoolEnhancedMultiplier(input.enhancedFirstYearMultiplier ?? 1);
+  if (cmp(enhancedMultiplier, "1") > 0) {
     const enhancedAddition = add(mulDecimal(netAdditions, enhancedMultiplier), neg(netAdditions));
     base = add(afterIei, enhancedAddition);
   } else {
