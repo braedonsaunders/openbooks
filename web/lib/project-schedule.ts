@@ -368,7 +368,8 @@ export async function createScheduleDependency(
     values (${orgId}, ${projectId}, ${input.predecessorId}, ${input.successorId},
             ${input.type ?? 'FS'}, ${Math.trunc(Number(input.lagDays ?? 0)) || 0}, ${userId}, ${userId})
     on conflict (predecessor_id, successor_id)
-      do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}`)
+      do update set type = excluded.type, lag_days = excluded.lag_days, updated_at = now(), updated_by = ${userId}
+      where schedule_dependencies.org_id = ${orgId}`)
 }
 
 export async function deleteScheduleDependency(orgId: string, projectId: string, id: string) {
