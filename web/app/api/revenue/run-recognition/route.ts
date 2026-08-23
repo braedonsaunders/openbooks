@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { runRevenueRecognition } from '@openbooks/engine/src/revenue-recognition.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
-import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-interface Body {
-  asOfDate?: string
-  obligationId?: string
-}
+const runRecognitionBody = z.object({
+  asOfDate: isoDate().optional(),
+  obligationId: z
+    .string({ error: 'invalid obligation' })
+    .refine((v) => uuidId.safeParse(v).success, 'invalid obligation'),
+})
 
 /**
  * Run revenue recognition: post every due, unposted schedule line through the
@@ -29,11 +30,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
   }
 
-  const body = (await req.json().catch(() => ({}))) as Body
-  const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : await businessToday(user.orgId)
-  if (body.obligationId !== undefined && !isUuid(body.obligationId)) {
-    return NextResponse.json({ error: 'invalid obligation' }, { status: 422 })
-  }
+  const parsed = await parseJsonBody(req, runRecognitionBody, { status: 422 })
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
+  const asOfDate = body.asOfDate ?? (await businessToday(user.orgId))
 
   try {
     // Refresh fixed-price project contracts first (percent complete → catch-up

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   postDocument,
@@ -12,8 +13,17 @@ import {
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/control-accounts.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
+
+const journalActionBody = z.object({
+  action: z.literal('post', { error: 'unknown action' }),
+  documentId: z.string({ error: 'documentId required' }).refine(
+    (v) => uuidId.safeParse(v).success,
+    'documentId required',
+  ),
+})
 
 /**
  * Manual-journal actions. A draft is submitted through the tenant's active
@@ -21,22 +31,21 @@ export const runtime = 'nodejs'
  * single- or multi-leg gate topology leaves it pending until Flow resolves.
  */
 export async function POST(req: Request) {
-  const body = (await req.json()) as { action: string; documentId?: string }
+  const parsed = await parseJsonBody(req, journalActionBody)
+  if (!parsed.ok) return parsed.response
+  const { documentId } = parsed.data
 
   try {
-    switch (body.action) {
+    switch (parsed.data.action) {
       case 'post': {
         const gate = await guardPermission('gl.post')
         if (gate instanceof NextResponse) return gate
-        if (!body.documentId) {
-          return NextResponse.json({ error: 'documentId required' }, { status: 400 })
-        }
         const outcome = await withOrgTransaction(gate.user.orgId, async () => {
           // Serialize the lifecycle and posting decision at the aggregate root.
           // If posting fails, the draft→approved release rolls back with it.
           const owned = (await db.execute<{ id: string; status: string }>(sql`
             select id, status from documents
-             where id = ${body.documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
+             where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
              for update
           `))
           if (!owned.rows[0]) return { kind: 'not_found' as const }
@@ -44,7 +53,7 @@ export async function POST(req: Request) {
           if (previousStatus === 'draft') {
             const submission = await submitAndReleaseIfUngated(
               'journal',
-              body.documentId!,
+              documentId,
               gate.user.id,
             )
             if (submission.flowError) {
@@ -59,7 +68,7 @@ export async function POST(req: Request) {
 
           // Defer after-post scripts/flows until the database transaction has
           // durably committed. Financial writes remain inside this transaction.
-          const entryId = await postDocument(body.documentId!, {
+          const entryId = await postDocument(documentId, {
             control: await loadRequiredControlAccounts(gate.user.orgId),
           }, {
             deferEffects: true,
@@ -89,7 +98,7 @@ export async function POST(req: Request) {
             { status: 422 },
           )
         }
-        await runPostDocumentEffects(body.documentId, outcome.previousStatus)
+        await runPostDocumentEffects(documentId, outcome.previousStatus)
         return NextResponse.json({ ok: true, entryId: outcome.entryId })
       }
       default:

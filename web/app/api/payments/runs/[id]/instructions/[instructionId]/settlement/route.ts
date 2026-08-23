@@ -1,10 +1,24 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { recordPaymentSettlement } from '@openbooks/engine/src/payment-operations.ts'
+import { isoDate, parseJsonBody } from '@/lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
 
 export const runtime = 'nodejs'
+
+const settlementBody = z
+  .object({
+    status: z.enum(['settled', 'returned', 'rejected'], { error: 'A valid outcome is required' }),
+    effectiveOn: isoDate('A valid effective date is required'),
+    bankReference: z.string().nullable().optional(),
+    returnCode: z.string().nullable().optional(),
+    returnReason: z.string().nullable().optional(),
+  })
+  .refine((body) => body.status === 'settled' || !!body.returnReason?.trim(), {
+    error: 'A return reason is required',
+  })
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; instructionId: string }> }) {
   const { id, instructionId } = await params
@@ -15,29 +29,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
      where i.id = ${instructionId} and r.id = ${id} and r.org_id = ${gate.user.orgId}
   `))
   if (!owned.rows[0]) return NextResponse.json({ error: 'Payment instruction not found' }, { status: 404 })
-  const body = (await req.json()) as {
-    status?: 'settled' | 'returned' | 'rejected'
-    effectiveOn?: string
-    bankReference?: string | null
-    returnCode?: string | null
-    returnReason?: string | null
-  }
-  if (!body.status || !['settled', 'returned', 'rejected'].includes(body.status)) {
-    return NextResponse.json({ error: 'A valid outcome is required' }, { status: 400 })
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(body.effectiveOn ?? '')) {
-    return NextResponse.json({ error: 'A valid effective date is required' }, { status: 400 })
-  }
-  if (body.status !== 'settled' && !body.returnReason?.trim()) {
-    return NextResponse.json({ error: 'A return reason is required' }, { status: 400 })
-  }
+  const parsed = await parseJsonBody(req, settlementBody)
+  if (!parsed.ok) return parsed.response
+  const body = parsed.data
   try {
     await recordPaymentSettlement({
       instructionId,
       orgId: gate.user.orgId,
       userId: gate.user.id,
       status: body.status,
-      effectiveOn: body.effectiveOn!,
+      effectiveOn: body.effectiveOn,
       bankReference: body.bankReference ?? null,
       returnCode: body.returnCode ?? null,
       returnReason: body.returnReason ?? null,
