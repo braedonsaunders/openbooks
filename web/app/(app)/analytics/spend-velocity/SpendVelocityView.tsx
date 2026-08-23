@@ -548,7 +548,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
         actions={
           <button
             type="button"
-            onClick={() => exportCsv('spend-accounts', ['Account', 'Current', 'Prior', '2 Back', 'Change %', 'Projected', 'Velocity %/mo', 'Accel', 'Trend'], rows.map((a) => [a.accountName, Math.round(a.currentAmount), Math.round(a.priorAmount), Math.round(a.twoBackAmount), a.changePct.toFixed(1), Math.round(a.projectedAmount), a.velocity.toFixed(1), a.acceleration.toFixed(1), a.trend])), today)}
+            onClick={() => exportCsv('spend-accounts', ['Account', 'Current', 'Prior', '2 Back', 'Change %', 'Projected', 'Velocity %/mo', 'Accel', 'Trend'], rows.map((a) => [a.accountName, Math.round(a.currentAmount), Math.round(a.priorAmount), Math.round(a.twoBackAmount), a.changePct.toFixed(1), Math.round(a.projectedAmount), a.velocity.toFixed(1), a.acceleration.toFixed(1), a.trend]), today)}
             className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
           >
             <Download size={11} /> CSV
