@@ -257,7 +257,8 @@ async function applyTaskPatch(
                 ${Math.max(0.0001, Number(assignment.units ?? 1) || 1)}, ${assignment.role ?? ''},
                 ${userId}, ${userId})
         on conflict (task_id, resource_id)
-          do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}`)
+          do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}
+          where schedule_task_assignments.org_id = ${orgId}`)
     }
   }
 }
