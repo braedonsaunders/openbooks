@@ -159,44 +159,67 @@ export async function createDelegation(args: {
     )
     .limit(1);
 
-  const [delegation] = await db
-    .insert(t)
-    .values({
-      orgId,
-      fromUserId,
-      toUserId,
-      startsAt,
-      endsAt,
-      reason: args.reason?.trim() || null,
-      createdBy: fromUserId,
-    })
-    .returning();
+  const delegation = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(t)
+      .values({
+        orgId,
+        fromUserId,
+        toUserId,
+        startsAt,
+        endsAt,
+        reason: args.reason?.trim() || null,
+        createdBy: fromUserId,
+      })
+      .returning();
+    // Append-only audit trail for the grant of approval authority: who
+    // delegated to whom, over which window (the row carries no amount limit —
+    // delegation never raises authority, so there is none to record).
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'approval_delegations', ${row.id}, 'insert',
+              ${JSON.stringify({ after: row })}::jsonb, ${fromUserId})
+    `);
+    return row;
+  });
   return { delegation, overlapping: overlap.length > 0 };
 }
 
 /** Revoke one of MY delegations (only the principal may revoke their own). */
 export async function revokeDelegation(orgId: string, id: string, userId: string): Promise<void> {
   const t = schema.approvalDelegations;
-  const updated = await db
-    .update(t)
-    .set({ revokedAt: new Date(), updatedBy: userId, updatedAt: new Date() })
-    .where(
-      and(
-        eq(t.id, id),
-        eq(t.orgId, orgId),
-        eq(t.fromUserId, userId),
-        sql`${t.revokedAt} is null`,
-        gte(t.endsAt, new Date()),
-      ),
-    )
-    .returning({ id: t.id });
-  if (updated.length === 0) {
-    // Disambiguate for a friendlier 404 vs 409.
-    const [row] = await db
-      .select({ fromUserId: t.fromUserId, revokedAt: t.revokedAt })
+  await db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
       .from(t)
       .where(and(eq(t.id, id), eq(t.orgId, orgId)));
-    if (!row || row.fromUserId !== userId) throw new DelegationError("delegation not found");
-    throw new DelegationError("this delegation is already revoked or expired");
-  }
+    const updated = await tx
+      .update(t)
+      .set({ revokedAt: new Date(), updatedBy: userId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(t.id, id),
+          eq(t.orgId, orgId),
+          eq(t.fromUserId, userId),
+          sql`${t.revokedAt} is null`,
+          gte(t.endsAt, new Date()),
+        ),
+      )
+      .returning();
+    if (updated.length === 0) {
+      // Disambiguate for a friendlier 404 vs 409.
+      if (!before || before.fromUserId !== userId)
+        throw new DelegationError("delegation not found");
+      throw new DelegationError("this delegation is already revoked or expired");
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'approval_delegations', ${id}, 'update',
+              ${JSON.stringify({
+                field: "revokedAt",
+                before: before ?? null,
+                after: updated[0],
+              })}::jsonb, ${userId})
+    `);
+  });
 }
