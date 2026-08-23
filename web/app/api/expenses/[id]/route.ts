@@ -125,9 +125,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (subtotal === 'invalid') {
       return NextResponse.json({ error: 'Expense subtotal is not a valid amount' }, { status: 422 })
     }
+    const taxTotal = exactMoney(computed.taxTotal)
+    if (taxTotal === 'invalid') {
+      return NextResponse.json({ error: 'Expense tax total is not a valid amount' }, { status: 422 })
+    }
     totals = {
       subtotal,
-      taxTotal: normalizeMoney(computed.taxTotal),
+      taxTotal,
       total: normalizeMoney(computed.total),
     }
     preparedLines = []
