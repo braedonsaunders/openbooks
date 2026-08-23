@@ -5,7 +5,7 @@ import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-dele
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
-import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
 import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -248,13 +248,17 @@ export function makePATCH(cfg: OrderHandlerConfig) {
         if (taxInputAmount === 'invalid') {
           return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
         }
+        const taxAmount = exactOrderMoney(l.taxAmount)
+        if (taxAmount === 'invalid') {
+          return NextResponse.json({ error: 'Order totals contain an invalid amount' }, { status: 422 })
+        }
         preparedLines.push({
           ...l,
           quantity: l.quantity ?? '0',
           unitPrice: l.unitPrice ?? '0',
           amount,
           taxInputAmount,
-          taxAmount: normalizeMoney(l.taxAmount),
+          taxAmount,
           extraDims: lineDims.cleaned,
         })
       }
