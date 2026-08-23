@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import {
+  ControlAccountsIncompleteError,
+  loadRequiredControlAccounts,
+} from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -14,21 +18,6 @@ export const runtime = 'nodejs'
  * Approval decisions are owned by the Flows engine (via the /approvals worklist
  * and the record flyout → /api/flows/gates/decide), not this route.
  */
-
-async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
-  const c = r.rows[0]?.c ?? {}
-  return {
-    control: {
-      ar: c.ar,
-      ap: c.ap,
-      bank: c.bank,
-      taxCollected: c.taxCollected,
-      taxPaid: c.taxPaid,
-      employeePayable: c.employeePayable,
-    },
-  }
-}
 
 /** The document must be an expense report in the caller's org. */
 async function expenseReport(id: string, orgId: string) {
@@ -88,7 +77,7 @@ export async function POST(req: Request) {
             { status: 422 },
           )
         }
-        const deps = await controlDeps(user.orgId)
+        const deps = { control: await loadRequiredControlAccounts(user.orgId) }
         const entryId = await postDocument(body.documentId, deps, {
           audit: { actorId: user.id, source: 'ui' },
         })
@@ -98,7 +87,12 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
   } catch (e) {
-    const status = e instanceof PostingError ? 422 : 500
+    // Posting refusals (kernel rules or unconfigured org control accounts) are
+    // request-state failures, not server defects.
+    const status =
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+        ? 422
+        : 500
     return NextResponse.json({ error: (e as Error).message }, { status })
   }
 }

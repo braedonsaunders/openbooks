@@ -27,6 +27,15 @@ export async function loadControlAccounts(orgId: string): Promise<OrgControlAcco
   };
 }
 
+/** Thrown by loadRequiredControlAccounts when ar/ap/bank are not all configured.
+ * Callers map it to their own refusal surface (422-class), never a raw 500. */
+export class ControlAccountsIncompleteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ControlAccountsIncompleteError";
+  }
+}
+
 /** Control accounts shaped for PostingDeps: ar/ap/bank are mandatory before
  * any document may post. Fails closed on incomplete org configuration
  * instead of letting undefined account ids reach the posting kernel. */
@@ -36,7 +45,7 @@ export async function loadRequiredControlAccounts(orgId: string): Promise<
 > {
   const c = await loadControlAccounts(orgId);
   if (!c.ar || !c.ap || !c.bank) {
-    throw new Error(
+    throw new ControlAccountsIncompleteError(
       `org ${orgId} control accounts are incomplete: ar, ap, and bank must be configured in orgs.settings.controlAccounts before posting`,
     );
   }

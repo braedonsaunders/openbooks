@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { runTriggerScripts } from "@openbooks/engine/src/scripting.ts";
 import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/src/control-accounts.ts";
 import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { deleteDocument, DeleteError } from "@openbooks/engine/src/document-delete.ts";
 import { resolveDefaultValue, type FieldValueMap } from "@openbooks/forms-core";
@@ -473,7 +474,12 @@ async function runDocumentLifecycle(
     }
     return null;
   } catch (e) {
-    const status = e instanceof PostingError ? 422 : 500;
+    // Posting refusals (kernel rules or unconfigured org control accounts) are
+    // request-state failures, not server defects.
+    const status =
+      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+        ? 422
+        : 500;
     return { status, body: { error: (e as Error).message, document: await loadDocument(id, user.orgId) } };
   }
 }

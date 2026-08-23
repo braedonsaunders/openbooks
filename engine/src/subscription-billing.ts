@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
@@ -108,14 +109,14 @@ async function nextNumber(orgId: string, kind: string, subsidiaryId: string | nu
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
 
+/**
+ * Posting deps with ar/ap/bank fail-closed: an org missing control accounts
+ * refuses to post (ControlAccountsIncompleteError) instead of letting undefined
+ * account ids reach the kernel. Auto-post failures surface through the billing
+ * runner's existing per-subscription failure path.
+ */
 async function controlDeps(orgId: string): Promise<PostingDeps> {
-  const r = (await db.execute<{ c: Record<string, string> | null }>(
-    sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  ));
-  const c = r.rows[0]?.c ?? {};
-  return {
-    control: { ar: c.ar!, ap: c.ap!, bank: c.bank!, taxCollected: c.taxCollected, taxPaid: c.taxPaid, employeePayable: c.employeePayable },
-  };
+  return { control: await loadRequiredControlAccounts(orgId) };
 }
 type SubRow = {
   id: string;

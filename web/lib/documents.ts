@@ -13,7 +13,7 @@ import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { loadControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
+import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
 
 /**
  * Unified line-based posting-document machinery.
@@ -75,9 +75,11 @@ async function orgBaseCurrency(orgId: string): Promise<string> {
   return r.rows[0]?.base_currency ?? 'CAD'
 }
 
-/** Org-level control accounts from orgs.settings.controlAccounts. */
+/** Posting deps for the shared document machinery. Fails closed: throws
+ * ControlAccountsIncompleteError unless ar/ap/bank are configured, so a
+ * half-configured org can never hand undefined account ids to the kernel. */
 export async function controlDeps(orgId: string) {
-  return { control: await loadControlAccounts(orgId) }
+  return { control: await loadRequiredControlAccounts(orgId) }
 }
 
 /** Instant-into-draft: mint an empty draft document for a kind, return id + number. */
