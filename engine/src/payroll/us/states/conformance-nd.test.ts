@@ -11,8 +11,7 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { ND_CERTIFICATE, ND_REGION } from "./nd-declaration.ts";
-import { ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax } from "./nd.ts";
+import { ND_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax } from "./nd.ts";
 import { pctToRate } from "./transcription.ts";
 
 const money = (value: string) => {

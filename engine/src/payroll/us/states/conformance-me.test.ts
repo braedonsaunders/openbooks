@@ -12,9 +12,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { U } from "../../canada/decimal.ts";
-import { ME_CERTIFICATE, ME_REGION } from "./me-declaration.ts";
 import {
-  ME_RATES_2026, ME_WITHHOLDING, meAnnualTax, meRoundToDollar, meStandardDeduction,
+  ME_CERTIFICATE, ME_REGION, ME_RATES_2026, ME_WITHHOLDING, meAnnualTax, meRoundToDollar,
+  meStandardDeduction,
 } from "./me.ts";
 import { pctToRate } from "./transcription.ts";
 

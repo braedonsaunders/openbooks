@@ -13,9 +13,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { WI_CERTIFICATE, WI_REGION, WI_W220 } from "./wi-declaration.ts";
 import {
-  WI_RATES_2026, WI_WITHHOLDING, wiAnnualTax, wiDeduction, wiScheduleFor,
+  WI_CERTIFICATE, WI_REGION, WI_W220, WI_RATES_2026, WI_WITHHOLDING, wiAnnualTax, wiDeduction,
+  wiScheduleFor,
 } from "./wi.ts";
 import { pctToRate } from "./transcription.ts";
 

@@ -10,9 +10,8 @@ import {
   certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
-import { UT_CERTIFICATE, UT_REGION } from "./ut-declaration.ts";
 import {
-  UT_EDITION_2025, UT_EDITION_2026, UT_WITHHOLDING, utScheduleFor,
+  UT_CERTIFICATE, UT_REGION, UT_EDITION_2025, UT_EDITION_2026, UT_WITHHOLDING, utScheduleFor,
 } from "./ut.ts";
 import { pctToRate } from "./transcription.ts";
 

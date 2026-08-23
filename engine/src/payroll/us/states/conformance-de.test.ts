@@ -13,9 +13,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
-import { DE_CERTIFICATE, DE_REGION } from "./de-declaration.ts";
 import {
-  DE_RATES_2026, DE_WITHHOLDING, deAnnualPeriods, deAnnualTax, deStandardDeduction,
+  DE_CERTIFICATE, DE_REGION, DE_RATES_2026, DE_WITHHOLDING, deAnnualPeriods, deAnnualTax,
+  deStandardDeduction,
 } from "./de.ts";
 import { pctToRate } from "./transcription.ts";
 

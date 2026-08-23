@@ -22,12 +22,9 @@ import {
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION,
-} from "./md-declaration.ts";
-import {
-  MD_COUNTIES_2026, MD_RATES_2026, MD_WITHHOLDING,
-  addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax, mdCombinedRate,
-  mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
+  MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION, MD_COUNTIES_2026,
+  MD_RATES_2026, MD_WITHHOLDING, addPrintedPercents, mdAnneArundelLocal, mdAnnualCombinedTax,
+  mdCombinedRate, mdCounty, mdFrederickLocal, mdLumpSumBonus, mdScheduleFor,
 } from "./md.ts";
 
 const money = (value: string) => {

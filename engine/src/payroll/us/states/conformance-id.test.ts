@@ -11,9 +11,8 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { ID_CERTIFICATE, ID_REGION } from "./id-declaration.ts";
 import {
-  ID_RATES_2026_07_23, ID_THRESHOLDS_2026_07_23, ID_WITHHOLDING,
+  ID_CERTIFICATE, ID_REGION, ID_RATES_2026_07_23, ID_THRESHOLDS_2026_07_23, ID_WITHHOLDING,
   idPeriodTax, idRoundToDollar,
 } from "./id.ts";
 import { pctToRate } from "./transcription.ts";

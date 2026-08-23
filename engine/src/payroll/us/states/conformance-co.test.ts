@@ -9,8 +9,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveCertificate } from "../../certificates.ts";
-import { CO_CERTIFICATE } from "./co-declaration.ts";
-import { CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
+import { CO_CERTIFICATE, CO_RATES_2026, CO_WITHHOLDING } from "./co.ts";
 
 const money = (value: string) => {
   const [whole, fraction = ""] = value.split(".");

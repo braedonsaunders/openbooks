@@ -11,9 +11,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { AR_CERTIFICATE, AR_REGION } from "./ar-declaration.ts";
 import {
-  AR_RATES_2026, AR_WITHHOLDING, arAnnualGrossTax, arMidrangeLookup, arRoundToDollar,
+  AR_CERTIFICATE, AR_REGION, AR_RATES_2026, AR_WITHHOLDING, arAnnualGrossTax, arMidrangeLookup,
+  arRoundToDollar,
 } from "./ar.ts";
 import { pctToRate } from "./transcription.ts";
 

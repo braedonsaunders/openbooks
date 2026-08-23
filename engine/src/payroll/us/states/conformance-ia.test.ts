@@ -15,8 +15,9 @@ import {
   certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
-import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./ia-declaration.ts";
-import { IA_RATES_2026, IA_WITHHOLDING, iaColumn2024 } from "./ia.ts";
+import {
+  IA_44016, IA_CERTIFICATE, IA_REGION, IA_RATES_2026, IA_WITHHOLDING, iaColumn2024,
+} from "./ia.ts";
 import { pctToRate } from "./transcription.ts";
 
 const money = (value: string) => {

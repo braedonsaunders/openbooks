@@ -11,9 +11,8 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { SC_CERTIFICATE, SC_REGION } from "./sc-declaration.ts";
 import {
-  SC_RATES_2026, SC_WITHHOLDING, scAnnualTax, scStandardDeduction,
+  SC_CERTIFICATE, SC_REGION, SC_RATES_2026, SC_WITHHOLDING, scAnnualTax, scStandardDeduction,
 } from "./sc.ts";
 import { pctToRate } from "./transcription.ts";
 
