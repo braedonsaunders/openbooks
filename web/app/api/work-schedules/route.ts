@@ -92,10 +92,30 @@ export async function POST(request: Request) {
 
   if (action === 'delete') {
     if (!isUuid(String(body.id ?? ''))) return bad('a schedule id is required')
-    // work_schedule_days cascades on the FK, so the pattern never outlives the
-    // schedule it describes.
-    await db.execute(sql`
-      delete from work_schedules where org_id = ${orgId} and id = ${String(body.id)}`)
+    const id = String(body.id)
+    // Snapshot the pattern and its days first: they decide holiday pay, and a
+    // bare delete leaves no trace of what an absent employee was owed.
+    await db.transaction(async (tx) => {
+      const existing = (await tx.execute(sql`
+        select * from work_schedules where org_id = ${orgId} and id = ${id}`)
+      ).rows[0] as Record<string, unknown> | undefined
+      if (!existing) return
+      const days = (await tx.execute(sql`
+        select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${id} order by day_index`)
+      ).rows
+      // work_schedule_days cascades on the FK, so the pattern never outlives
+      // the schedule it describes.
+      await tx.execute(sql`
+        delete from work_schedules where org_id = ${orgId} and id = ${id}`)
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${orgId}, 'work_schedules', ${id}, 'delete',
+           ${JSON.stringify({ before: { ...existing, days } })}::jsonb,
+           ${actorId})
+      `)
+    })
     return NextResponse.json({ ok: true })
   }
 
@@ -163,11 +183,22 @@ export async function POST(request: Request) {
   const isActive = body.isActive !== false
 
   // Parent and days in ONE transaction: a schedule whose day rows half-applied
-  // would be a pattern nobody wrote, and it would go on paying somebody.
+  // would be a pattern nobody wrote, and it would go on paying somebody. The
+  // audit row lands in the same transaction so it never describes a state that
+  // did not commit.
   const saved = await db.transaction(async (tx) => {
     let scheduleId = id
+    let before: Record<string, unknown> | null = null
+    let afterRow: Record<string, unknown>
     if (scheduleId) {
-      const updated = (await tx.execute<{ id: string }>(sql`
+      const existing = (await tx.execute(sql`
+        select * from work_schedules where org_id = ${orgId} and id = ${scheduleId}`)
+      ).rows[0] as Record<string, unknown> | undefined
+      if (!existing) throw new Error('that work schedule no longer exists')
+      const beforeDays = (await tx.execute(sql`
+        select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId} order by day_index`)
+      ).rows
+      const updated = (await tx.execute<Record<string, unknown>>(sql`
         update work_schedules
            set name = ${name}, employee_party_id = ${scope.employeePartyId},
                job_title = ${scope.jobTitle}, trade_id = ${scope.tradeId},
@@ -177,12 +208,14 @@ export async function POST(request: Request) {
                notes = ${notes}, is_active = ${isActive},
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${scheduleId}
-         returning id`))
-      if (updated.rows.length === 0) throw new Error('that work schedule no longer exists')
+         returning *`))
+      before = { ...existing, days: beforeDays }
+      scheduleId = updated.rows[0]!.id as string
+      afterRow = updated.rows[0]!
       await tx.execute(sql`
         delete from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`)
     } else {
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = (await tx.execute<Record<string, unknown>>(sql`
         insert into work_schedules (org_id, name, employee_party_id, job_title, trade_id,
                                     department_id, subsidiary_id, pattern, cycle_days, cycle_anchor,
                                     effective_from, effective_to, notes, is_active,
@@ -191,14 +224,27 @@ export async function POST(request: Request) {
                 ${scope.departmentId}, ${scope.subsidiaryId}, ${pattern}, ${cycleDays},
                 ${cycleAnchor}, ${effectiveFrom}, ${effectiveTo}, ${notes}, ${isActive},
                 ${actorId}, ${actorId})
-        returning id`))
-      scheduleId = inserted.rows[0]!.id
+        returning *`))
+      scheduleId = inserted.rows[0]!.id as string
+      afterRow = inserted.rows[0]!
     }
+    const afterDays: Record<string, unknown>[] = []
     for (const day of days) {
-      await tx.execute(sql`
+      const dayRow = (await tx.execute<Record<string, unknown>>(sql`
         insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${day.dayIndex}, ${day.hours}, ${actorId}, ${actorId})`)
+        values (${orgId}, ${scheduleId}, ${day.dayIndex}, ${day.hours}, ${actorId}, ${actorId})
+        returning *`))
+      afterDays.push(dayRow.rows[0]!)
     }
+    const after = { ...afterRow, days: afterDays }
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${orgId}, 'work_schedules', ${scheduleId}, ${before ? 'update' : 'insert'},
+         ${JSON.stringify(before ? { before, after } : { after })}::jsonb,
+         ${actorId})
+    `)
     return scheduleId
   }).catch((error: unknown) => {
     const message = (error as Error).message
