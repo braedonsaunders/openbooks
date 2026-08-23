@@ -2068,6 +2068,9 @@ export async function publishCloseRun(
   actorId: string,
   comment?: string,
 ): Promise<void> {
+  if (!(await advancedCloseEnabled(orgId))) {
+    throw new CloseError("enable Advanced close controls to publish a close package");
+  }
   await db.transaction(async (tx) => {
     const run = (await tx.execute<{ status: string; data_fingerprint: string | null }>(sql`
       select status, data_fingerprint from close_runs where id = ${runId} and org_id = ${orgId} for update`));

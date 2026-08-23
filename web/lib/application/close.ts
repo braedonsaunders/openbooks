@@ -16,6 +16,7 @@ import {
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
+import { isFeatureEnabled } from "../features";
 import { executeIdempotent } from "./idempotency";
 type CloseRunRow = {
   id: string;
@@ -143,6 +144,9 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
     context,
     input.action === "attest" || input.action === "close" ? "close.approve" : "close.run",
   );
+  if (input.action === "publish" && !(await isFeatureEnabled(context.authz.user.orgId, "advancedClose"))) {
+    throw notFound("close package");
+  }
   await closeRun(context, input.runId);
   const outcome = await executeIdempotent({
     context,

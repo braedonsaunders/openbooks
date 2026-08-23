@@ -8,6 +8,7 @@ import {
   refreshCloseRun,
 } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -29,6 +30,9 @@ export async function POST(
       : "close.run";
   const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
+  if (body.action === "publish" && !(await isFeatureEnabled(gate.user.orgId, "advancedClose"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   try {
     if (body.action === "refresh") {
       return NextResponse.json({

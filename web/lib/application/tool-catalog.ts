@@ -253,7 +253,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     return definition({
       name: names[action][0], title: names[action][1],
       description: action === "publish"
-        ? "Freeze and publish the approved close binder; configured package delivery may be queued after commit."
+        ? "Freeze and publish the approved close binder; configured package delivery may be queued after commit. Requires Advanced close controls — omitted when that Features switch is off."
         : `${names[action][1]} through the controlled close lifecycle.`,
       inputSchema: z.object({ runId: UUID, comment: z.string().trim().max(2000).optional(), idempotencyKey: IDEMPOTENCY_KEY }),
       readOnly: false,

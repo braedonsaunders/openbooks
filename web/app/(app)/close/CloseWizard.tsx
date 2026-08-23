@@ -84,9 +84,13 @@ async function call(url: string, body: Record<string, unknown>) {
 export function CloseWizard(props: Props) {
   const t = useTranslations("close");
   const router = useRouter();
-  const selected: Stage = STAGES.includes(props.stage as Stage)
+  const visibleStages = props.advancedClose || props.run.status === "published"
+    ? STAGES
+    : STAGES.filter((stage) => stage !== "publish");
+  const requested: Stage = STAGES.includes(props.stage as Stage)
     ? (props.stage as Stage)
     : (props.run.current_stage as Stage);
+  const selected: Stage = visibleStages.includes(requested) ? requested : "lock";
   const completed = props.tasks.filter((task) =>
     ["complete", "waived"].includes(task.status),
   ).length;
@@ -186,7 +190,7 @@ export function CloseWizard(props: Props) {
         className="flex gap-1 overflow-x-auto"
         aria-label={t("stageNavigation")}
       >
-        {STAGES.map((stage, index) => (
+        {visibleStages.map((stage, index) => (
           <Link
             key={stage}
             href={`/close?run=${props.run.id}&stage=${stage}` as any}
@@ -995,7 +999,7 @@ function PublishStage(
             ))}
           </CardContent>
         </Card>
-        {props.run.status !== "published" ? (
+        {props.advancedClose && props.run.status !== "published" ? (
           <div className="space-y-2">
             <Button
               disabled={props.busy || !props.canRun || props.run.status !== "closed"}
