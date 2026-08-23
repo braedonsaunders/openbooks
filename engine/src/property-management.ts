@@ -980,7 +980,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
   `));
   let created = 0;
   for (const row of overdue.rows) {
-    const amount = row.late_fee_type === "fixed" ? normalizeMoney(row.late_fee_value) : mulPercent(row.transaction_open, row.late_fee_value);
+    const amount = row.late_fee_type === "fixed" ? exactMoney(row.late_fee_value, "Late-fee value") : mulPercent(row.transaction_open, row.late_fee_value);
     if (cmp(amount, "0") <= 0) continue;
     const result = (await db.execute(sql`
       with charge as (insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
