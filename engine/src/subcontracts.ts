@@ -152,7 +152,7 @@ export function computeVendorApplication(
   inputs: VendorApplicationLineInput[],
 ): ComputedVendorApplication {
   const lines = inputs.map((input) => {
-    const scheduled = normalizeMoney(input.scheduledValue);
+    const scheduled = persistSubcontractSovScheduledValue(input.scheduledValue);
     const previousEarned = normalizeMoney(input.previousEarned);
     const previousStored = normalizeMoney(input.previousMaterialsStored);
     const work = normalizeMoney(input.workCompletedThisPeriod);
