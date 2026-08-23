@@ -30,6 +30,7 @@ import {
 import {
   EMAIL_DELIVERY_WORKER_IDENTITY,
   logTerminalFailure,
+  POSTING_EFFECTS_WORKER_IDENTITY,
   SCHEDULER_OUTBOX_WORKER_IDENTITY,
   TERMINAL_FAILURE_LOG_EVENT,
 } from "./terminal-failure.ts";
@@ -198,10 +199,21 @@ test("every confirmed poison row bumps openbooks.terminal_failures exactly once 
       markedBy: EMAIL_DELIVERY_WORKER_IDENTITY,
       at: new Date(),
     });
+    logTerminalFailure({
+      surface: "posting_effects",
+      kind: "customer_invoice",
+      id: "row-3",
+      orgId: "org-3",
+      subjectId: "document-3",
+      attempts: 8,
+      error: "inventory effect poisoned",
+      markedBy: POSTING_EFFECTS_WORKER_IDENTITY,
+      at: new Date(),
+    });
   } finally {
     console.log = original;
   }
-  assert.equal(lines.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT)).length, 2);
+  assert.equal(lines.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT)).length, 3);
 
   const terminal = counterPoints("openbooks.terminal_failures", await collectMetrics());
   assert.equal(
@@ -222,12 +234,21 @@ test("every confirmed poison row bumps openbooks.terminal_failures exactly once 
   );
   assert.equal(delivery.length, 1);
   assert.equal(Number(delivery[0].value), 1);
+  assert.equal(
+    sumPoints(terminal, {
+      [ATTR_SURFACE]: "posting_effects",
+      [ATTR_KIND]: "customer_invoice",
+    }),
+    1,
+    "a posting-effects poison row must count exactly once",
+  );
 });
 
 test("durable-work attempts are counted by outcome and measured by duration", async () => {
   recordOutboxAttempt("scheduler_outbox", "fx_providers", "succeeded", 12);
   recordOutboxAttempt("scheduler_outbox", "fx_providers", "failed", 2_500);
   recordOutboxAttempt("report_runs", "scheduled_report", "succeeded", 40_000);
+  recordOutboxAttempt("posting_effects", "vendor_bill", "failed", 250);
   // A negative duration can only come from clock skew; clamping beats lying.
   recordOutboxAttempt("scheduler_outbox", "fx_providers", "failed", -5);
 

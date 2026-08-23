@@ -52,7 +52,7 @@ export const ATTR_ROW_ID = "openbooks.row_id";
 export const ATTR_RUN_ID = "openbooks.run_id";
 export const ATTR_DEFINITION_ID = "openbooks.definition_id";
 
-export type OutboxSurface = "scheduler_outbox" | "report_runs";
+export type OutboxSurface = "scheduler_outbox" | "report_runs" | "posting_effects";
 
 const tracer = trace.getTracer(TELEMETRY_SCOPE);
 
@@ -145,7 +145,11 @@ export function recordOutboxAttempt(
  * stamp, and this counter can never drift apart.
  */
 export function recordTerminalFailure(
-  surface: "scheduler_outbox" | "report_runs" | "report_delivery_outbox",
+  surface:
+    | "scheduler_outbox"
+    | "report_runs"
+    | "report_delivery_outbox"
+    | "posting_effects",
   kind?: string | null,
 ): void {
   metricsInstruments().terminalFailures.add(1, {
