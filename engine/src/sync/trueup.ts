@@ -215,6 +215,9 @@ export async function trueUpResidualGl(
         modules: ["gl"],
       });
 
+      // The id is client-generated randomUUID (v4) — never a DB uuidv7 whose
+      // leading bytes repeat for ~50 days — so the whole id is a collision-
+      // free per-generation salt under journal_entries_org_number.
       const entryId = randomUUID();
       await db.execute(sql`
         insert into journal_entries
@@ -222,7 +225,7 @@ export async function trueUpResidualGl(
            period_id, memo, status, origin, custom, created_by, updated_by)
         values
           (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId},
-           ${`TRUEUP-${month}-${entryId.slice(0, 8)}`}, ${endOn}, ${periodId},
+           ${`TRUEUP-${month}-${entryId}`}, ${endOn}, ${periodId},
            ${`Migration GL true-up ${source.name} ${month}`}, 'draft',
            'migration', ${JSON.stringify({
              sourceProjection: {
