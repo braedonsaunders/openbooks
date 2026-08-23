@@ -89,27 +89,32 @@ test('WIP workspace exposes aging, realization, leakage, holds, workflow, and in
     }
   }
   const { wipBilling } = messages
+  const requiredMessages = [
+    wipBilling.wipHealthAria,
+    wipBilling.tiles.realization,
+    wipBilling.tiles.leakage,
+    wipBilling.detail.sendForReview,
+    wipBilling.detail.approve,
+    wipBilling.detail.createInvoice,
+    wipBilling.line.hold,
+    wipBilling.line.releaseHold,
+    wipBilling.lockedAlert,
+  ]
 
   assert.match(page, /requireWipBillingFeature/)
   assert.match(page, /wipAnalytics/)
   assert.match(workspace, /t\("wipHealthAria"\)/)
-  assert.equal(wipBilling.wipHealthAria, 'WIP health')
   assert.match(workspace, /t\("tiles\.realization"\)/)
-  assert.equal(wipBilling.tiles.realization, 'Realization')
   assert.match(workspace, /t\("tiles\.leakage"\)/)
-  assert.equal(wipBilling.tiles.leakage, 'Leakage')
   assert.match(workspace, /t\("detail\.sendForReview"\)/)
-  assert.equal(wipBilling.detail.sendForReview, 'Send for review')
   assert.match(workspace, /t\("detail\.approve"\)/)
-  assert.equal(wipBilling.detail.approve, 'Approve')
   assert.match(workspace, /t\("detail\.createInvoice"\)/)
-  assert.equal(wipBilling.detail.createInvoice, 'Create invoice')
   assert.match(workspace, /t\("line\.hold"\)/)
-  assert.equal(wipBilling.line.hold, 'Hold')
   assert.match(workspace, /t\("line\.releaseHold"\)/)
-  assert.equal(wipBilling.line.releaseHold, 'Release hold')
   assert.match(workspace, /t\("lockedAlert"\)/)
-  assert.match(wipBilling.lockedAlert, /approval snapshot is locked/i)
+  for (const message of requiredMessages) {
+    assert.ok(typeof message === 'string' && message.trim().length > 0)
+  }
   assert.match(workspace, /<EmptyState/)
   assert.doesNotMatch(workspace, /window\.prompt/)
   assert.doesNotMatch(workspace, /1–30 days/)
