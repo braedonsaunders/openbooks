@@ -129,5 +129,13 @@
     "title": "Notifications",
     "empty": "You're all caught up",
     "markAllRead": "Mark all read"
+  },
+  "routeState": {
+    "errorTitle": "Something went wrong",
+    "errorDescription": "This page couldn't load. Try again, or return to the dashboard if the problem persists.",
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "The page you're looking for doesn't exist or you don't have access to it.",
+    "backToDashboard": "Go to dashboard",
+    "backToSignIn": "Go to sign in"
   }
 }
