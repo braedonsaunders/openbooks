@@ -339,6 +339,16 @@ test('the surfaces this test was written for are covered', () => {
     'customer home must not count quotes/sales orders when Orders is off',
   )
   assert.match(
+    read('lib/module-home/customers.ts'),
+    /isFeatureEnabled\(orgId, 'crm'\)/,
+    'customer home must not count opportunities or pipeline when CRM is off',
+  )
+  assert.match(
+    read('lib/module-home/customers.ts'),
+    /crmOn \? calculateForecast/,
+    'customer home must not load the forecast rollup when CRM is off — stored opportunities stay',
+  )
+  assert.match(
     read('lib/module-home/purchasing.ts'),
     /isFeatureEnabled\(orgId, 'orders'\)/,
     'purchasing home must not count purchase orders when Orders is off',
@@ -352,6 +362,16 @@ test('the surfaces this test was written for are covered', () => {
     read('app/(app)/customers/page.tsx'),
     /data\.ordersEnabled/,
     'customer home must hide the quotes/orders vital when Orders is off',
+  )
+  assert.match(
+    read('app/(app)/customers/page.tsx'),
+    /data\.crmEnabled/,
+    'customer home must hide pipeline vitals when CRM is off',
+  )
+  assert.match(
+    read('app/(app)/customers/RelationshipsTable.tsx'),
+    /crmEnabled \? <th/,
+    'customer home must hide the open-opps column when CRM is off — stored opportunities stay',
   )
   assert.match(
     read('app/(app)/purchasing/page.tsx'),

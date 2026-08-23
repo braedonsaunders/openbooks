@@ -127,6 +127,8 @@ export default async function CustomersHomePage({
             label={t('home.vitals.activeCustomers')}
             value={String(data.activeCustomers)}
           />
+          {data.crmEnabled ? (
+          <>
           <HomeStatTile
             icon="trending-up"
             accent="violet"
@@ -141,6 +143,8 @@ export default async function CustomersHomePage({
             value={moneyCompact(data.pipeline.closed)}
             tone="positive"
           />
+          </>
+          ) : null}
           {data.ordersEnabled ? (
           <HomeStatTile
             icon="clipboard"
@@ -175,7 +179,7 @@ export default async function CustomersHomePage({
             {data.topExposure.length === 0 ? (
               <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{t('home.hero.empty')}</p>
             ) : (
-              <RelationshipsTable rows={data.topExposure} />
+              <RelationshipsTable rows={data.topExposure} crmEnabled={data.crmEnabled} />
             )}
           </HomePanel>
 

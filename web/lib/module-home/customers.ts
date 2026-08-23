@@ -48,12 +48,17 @@ export interface CustomersHome {
   }
   /** False when Orders is off — hide quote/SO vitals rather than show zeros. */
   ordersEnabled: boolean
+  /** False when CRM is off — hide pipeline/opportunity vitals rather than show zeros. */
+  crmEnabled: boolean
 }
 
 const TREND_WEEKS = 13
 
 export async function customersHome(orgId: string, subIds?: string[]): Promise<CustomersHome> {
-  const ordersOn = await isFeatureEnabled(orgId, 'orders')
+  const [ordersOn, crmOn] = await Promise.all([
+    isFeatureEnabled(orgId, 'orders'),
+    isFeatureEnabled(orgId, 'crm'),
+  ])
   const today = await businessToday(orgId)
   const ago7 = addCalendarDays(today, -7)
   const ago365 = addCalendarDays(today, -365)
@@ -129,17 +134,17 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
              sum(oi.remaining) filter (where oi.due_date < ${today}) as overdue,
              count(*) as open_invoices,
              min(oi.due_date) as oldest_due,
-             coalesce(opp.n, 0) as open_opps
+             ${crmOn ? sql`coalesce(opp.n, 0)` : sql`0`} as open_opps
         from oi
         left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-        left join lateral (
+        ${crmOn ? sql`left join lateral (
           select count(*) as n
             from crm_opportunities o
             join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
            where o.org_id = ${orgId} and o.is_active and not s.is_closed
-             and o.party_id = oi.party_id) opp on true
+             and o.party_id = oi.party_id) opp on true` : sql``}
        where oi.remaining > 0
-       group by oi.party_id, p.display_name, opp.n
+       group by oi.party_id, p.display_name${crmOn ? sql`, opp.n` : sql``}
        order by sum(oi.remaining) desc
        limit 10
     `),
@@ -156,8 +161,8 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     // Directory badges — cheap counts for the workspace's other pages.
     db.execute<any>(sql`
       select
-        (select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-          where o.org_id = ${orgId} and o.is_active and not s.is_closed) as open_opps,
+        ${crmOn ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+          where o.org_id = ${orgId} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'quote'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_quotes,
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
@@ -172,7 +177,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
     `),
-    calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }),
+    crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }) : Promise.resolve([]),
   ]))
 
   const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.collected)]))
@@ -218,5 +223,6 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       customers: Number(badge.customers ?? 0),
     },
     ordersEnabled: ordersOn,
+    crmEnabled: crmOn,
   }
 }
