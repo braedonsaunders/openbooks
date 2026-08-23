@@ -89,6 +89,11 @@ const connectorPaths = [
   /^CHANGELOG\.md$/,
   /^scripts\/check-product-neutrality\.mjs$/,
   /^engine\/src\/(?:netsuite|qbo\.ts$|xero\.ts$|odoo\.ts$|erpnext\.ts$|dynamics\.ts$|qbd\/|sync\/)/,
+  // Feature-gate and reversal invariants assert connector-specific gates and
+  // source enums by exact file path; naming the system under test is the point
+  // of these tests, not product copy.
+  /^engine\/src\/reversal-journal-lines\.integration\.test\.ts$/,
+  /^web\/lib\/feature-gates\.test\.ts$/,
   /^engine\/src\/worker\/migration-worker\.ts$/,
   /^engine\/src\/harness\/ledger-parity\//,
   /^engine\/src\/harness\/differential\//,
