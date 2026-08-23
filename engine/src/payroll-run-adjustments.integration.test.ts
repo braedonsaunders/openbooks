@@ -12,6 +12,12 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function payrollFixture(label: string) {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  // The pay-run pipeline is feature-gated (engine/src/payroll-run.ts
+  // createPayRun); every other gated payroll fixture enables it the same way.
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({
+      features: { payroll: true },
+    })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
   const employeeId = randomUUID();
   const scheduleId = randomUUID();
