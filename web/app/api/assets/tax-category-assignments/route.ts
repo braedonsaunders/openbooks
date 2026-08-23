@@ -20,15 +20,42 @@ export async function PATCH(req: Request) {
       select 1 from tax_pool_classes where org_id=${gate.user.orgId} and regime=${body.regime} and class_code=${body.classCode} and is_active`))
     if (!classRow.rows[0]) return NextResponse.json({ error: 'invalid class' }, { status: 422 })
   }
-  const result = body.classCode
-    ? await db.execute(sql`
-        update asset_categories
-           set tax_attributes=jsonb_set(tax_attributes, array[${attribute}], to_jsonb(${body.classCode}::text), true),
-               updated_at=now(), updated_by=${gate.user.id}
-         where id=${body.categoryId} and org_id=${gate.user.orgId} returning id`)
-    : await db.execute(sql`
-        update asset_categories set tax_attributes=tax_attributes-${attribute}, updated_at=now(), updated_by=${gate.user.id}
-         where id=${body.categoryId} and org_id=${gate.user.orgId} returning id`)
-  if (!(result as unknown as { rows: unknown[] }).rows[0]) return NextResponse.json({ error: 'category not found' }, { status: 404 })
+  // Snapshot and write in ONE transaction so the audit row can never describe
+  // a state that did not commit: a category's tax attributes decide how its
+  // assets are reported on every filing.
+  let notFound = false
+  await db.transaction(async (tx) => {
+    const before = (await tx.execute(sql`
+      select * from asset_categories where id=${body.categoryId} and org_id=${gate.user.orgId}`))
+    if (!before.rows[0]) {
+      notFound = true
+      return
+    }
+    const after = body.classCode
+      ? await tx.execute(sql`
+          update asset_categories
+             set tax_attributes=jsonb_set(tax_attributes, array[${attribute}], to_jsonb(${body.classCode}::text), true),
+                 updated_at=now(), updated_by=${gate.user.id}
+           where id=${body.categoryId} and org_id=${gate.user.orgId} returning *`)
+      : await tx.execute(sql`
+          update asset_categories set tax_attributes=tax_attributes-${attribute}, updated_at=now(), updated_by=${gate.user.id}
+           where id=${body.categoryId} and org_id=${gate.user.orgId} returning *`)
+    const beforeRow = (before.rows[0] ?? null) as Record<string, unknown> | null
+    const afterRow = (after.rows[0] ?? null) as Record<string, unknown> | null
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${gate.user.orgId}, 'asset_categories', ${String(body.categoryId)}, 'update',
+         ${JSON.stringify({
+           before: beforeRow,
+           after: afterRow,
+           regime: body.regime,
+           classCode: body.classCode ?? null,
+         })}::jsonb,
+         ${gate.user.id})
+    `)
+  })
+  if (notFound) return NextResponse.json({ error: 'category not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
