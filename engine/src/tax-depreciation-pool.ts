@@ -258,6 +258,17 @@ function persistMacrsBusinessUsePercent(value: unknown): string {
   }
 }
 
+/** Persist MACRS bonus percent through exact decimal then ledger money. Fail closed. */
+function persistMacrsBonusPercent(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new Error("bonusPercent must be an exact decimal");
+  try {
+    return normalizeMoney(exact);
+  } catch {
+    throw new Error("bonusPercent must be an exact decimal");
+  }
+}
+
 /**
  * Compute one calendar tax year for an asset under MACRS without relying on a
  * hard-coded percentage table. DB methods switch to straight line when that
@@ -279,8 +290,9 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   const section179Cap = minMoney(originalBasis, nonnegative(persistMacrsSection179(input.section179 ?? "0")));
   const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
   const after179 = add(originalBasis, neg(section179Cap));
-  const bonus = placed.year === input.taxYear ? mulPercent(after179, percent(input.bonusPercent, "0")) : "0.0000";
-  const macrsBasis = add(after179, neg(mulPercent(after179, percent(input.bonusPercent, "0"))));
+  const bonusPercent = persistMacrsBonusPercent(input.bonusPercent ?? "0");
+  const bonus = placed.year === input.taxYear ? mulPercent(after179, bonusPercent) : "0.0000";
+  const macrsBasis = add(after179, neg(mulPercent(after179, bonusPercent)));
 
   const schedule = macrsSchedule({
     basis: macrsBasis,
@@ -293,7 +305,7 @@ export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
   const macrs = schedule.get(input.taxYear) ?? "0.0000";
   const priorMacrs = sum([...schedule.entries()].filter(([year]) => year <= input.taxYear).map(([, amount]) => amount));
   const used179 = input.taxYear >= placed.year ? section179Cap : "0.0000";
-  const usedBonus = input.taxYear >= placed.year ? mulPercent(after179, percent(input.bonusPercent, "0")) : "0.0000";
+  const usedBonus = input.taxYear >= placed.year ? mulPercent(after179, bonusPercent) : "0.0000";
   return {
     section179: formatMoney(elected179, 2), bonus: formatMoney(bonus, 2), macrs: formatMoney(macrs, 2),
     allowance: formatMoney(sum([elected179, bonus, macrs]), 2),
