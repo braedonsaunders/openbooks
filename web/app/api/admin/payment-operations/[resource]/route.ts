@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
@@ -66,7 +67,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
   if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const body = await req.json().catch(() => ({})) as Record<string, any>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as Record<string, any>
   try {
     if (resource === 'formats') {
       // Format currency is Multi-currency configuration. Turning that

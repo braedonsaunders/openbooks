@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { readAppFile, writeAppFile, deleteAppFile, AppError } from '@/lib/apps/store'
@@ -27,7 +28,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ key: str
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key, path } = await params
-  const body = (await req.json().catch(() => ({}))) as { content?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { content?: string }
   if (typeof body.content !== 'string') return NextResponse.json({ error: 'content required' }, { status: 400 })
   try {
     await writeAppFile(gate.user.orgId, gate.user.id, key, joined(path), body.content, false)

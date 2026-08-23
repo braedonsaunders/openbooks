@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -51,7 +52,9 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.forecasts.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = await req.json() as Record<string, any>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as Record<string, any>
   const periodStart = String(body.periodStart ?? '')
   const periodEnd = String(body.periodEnd ?? '')
   if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })

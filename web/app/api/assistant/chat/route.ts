@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { convertToModelMessages, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
@@ -51,7 +52,9 @@ export async function POST(req: Request): Promise<Response> {
 
   let body: unknown;
   try {
-    body = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return new Response("Bad request", { status: 400 });
   }

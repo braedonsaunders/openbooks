@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -11,7 +12,9 @@ export const runtime = 'nodejs'
 export async function POST(req: Request) {
   const gate = await guardPermission('documents.read')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => null)) as { fileIds?: unknown } | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { fileIds?: unknown } | null
   const fileIds = Array.isArray(body?.fileIds)
     ? body!.fileIds.filter((x): x is string => typeof x === 'string')
     : []

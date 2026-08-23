@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { runDepreciation } from '@openbooks/engine/src/depreciation.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -24,7 +25,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
   const asOfDate = body.asOfDate && DATE_RE.test(body.asOfDate) ? body.asOfDate : await businessToday(user.orgId)
   if (body.assetId !== undefined && !isUuid(body.assetId)) {
     return NextResponse.json({ error: 'invalid asset' }, { status: 422 })

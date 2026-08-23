@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { runUserSql, validateUserSql } from "@openbooks/engine/src/sqlapi.ts";
 import { guardFeaturePermission } from "../../../lib/feature-gates";
@@ -23,7 +24,9 @@ export async function POST(req: Request) {
 
   let rawBody: unknown;
   try {
-    rawBody = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    rawBody = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "request body must be valid JSON" }, { status: 400 });
   }

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -128,7 +129,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = existRes.rows[0]
   if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = (await req.json()) as PatchBody
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as PatchBody
 
   let subsidiaryId: string | undefined
   if (body.subsidiaryId !== undefined) {

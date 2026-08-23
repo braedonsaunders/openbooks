@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -22,7 +23,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ key: st
   const template = await getTemplateByKey(user.orgId, key)
   if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as { changelog?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { changelog?: string }
 
   const latest = await getLatestVersion(user.orgId, template.id)
   if (!latest) return NextResponse.json({ error: 'template has no draft' }, { status: 409 })

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import { completePasswordReset, requestPasswordReset } from "../../../lib/auth-reset";
 import { authRequestContext, hasExpectedOrigin } from "../../../lib/auth-policy";
@@ -13,7 +14,9 @@ export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   let body: { email?: unknown };
   try {
-    body = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }
@@ -37,7 +40,9 @@ export async function PUT(req: NextRequest) {
   if (!hasExpectedOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   let body: { token?: unknown; password?: unknown };
   try {
-    body = await req.json();
+    const parsedBody2 = await parseJsonBody(req, jsonObject);
+    if (!parsedBody2.ok) return parsedBody2.response;
+    body = parsedBody2.data;
   } catch {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }

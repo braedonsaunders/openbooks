@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -34,7 +35,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission('reports.create')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => null)) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     code?: string
     from?: string
     to?: string

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { getFolder, getFolderTree, createFolder } from '../../../../lib/file-cabinet'
 import { isUuid } from '../../../../lib/list-params'
@@ -18,7 +19,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
-  const body = await req.json().catch(() => null)
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   if (!body || typeof body.name !== 'string' || !body.name.trim()) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { deleteFile, getFile, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
@@ -27,7 +28,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Editing (rename/move) a file needs Editor+ on it.
   const gateAccess = await requireFileAccess(gate, id, 'editor')
   if (gateAccess) return gateAccess
-  const body = await req.json().catch(() => null)
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 
   if (typeof body.name === 'string' && body.name.trim()) {

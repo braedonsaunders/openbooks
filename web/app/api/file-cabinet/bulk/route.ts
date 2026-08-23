@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   accessAtLeast,
@@ -30,7 +31,9 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId
   const viewer = fileViewer(gate)
 
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown> | null
   const action = body?.action
   const fileIds = idList(body?.fileIds)
   const folderIds = idList(body?.folderIds)

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -60,7 +61,9 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId
   if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   if (!isUuid(body.projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 422 })
   const period = TICKET_PERIODS.includes(body.period) ? (body.period as TicketPeriod) : undefined
   const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date ?? '') ? body.date : undefined

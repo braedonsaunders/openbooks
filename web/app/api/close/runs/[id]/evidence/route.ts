@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { addCloseEvidence, CloseError } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../../../lib/authz";
@@ -21,7 +22,9 @@ export async function POST(
   const { id } = await params;
   const gate = await guardPermission("close.run");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const taskId = typeof body.taskId === "string" ? body.taskId : "";
   const evidenceType =
     typeof body.evidenceType === "string" ? body.evidenceType : "";

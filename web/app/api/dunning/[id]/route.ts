@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -51,7 +52,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await owned(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const stages = "stages" in body ? validStages(body.stages) : undefined;
   if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
   let minBalance: string | undefined;

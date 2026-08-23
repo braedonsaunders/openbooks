@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isTaxProvisionSelection, provisionTaxPacks } from '@openbooks/engine/src/tax-pack-provisioning.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -10,7 +11,9 @@ export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
 
-  const body = (await req.json().catch(() => null)) as { packs?: unknown } | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { packs?: unknown } | null
   if (!body || !Array.isArray(body.packs) || body.packs.length === 0 || body.packs.length > 60) {
     return NextResponse.json({ error: 'packs must be a non-empty array' }, { status: 400 })
   }

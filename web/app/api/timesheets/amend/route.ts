@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
@@ -14,7 +15,9 @@ export const runtime = 'nodejs'
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('time.reopen', 'timeTracking')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json()) as { entryId?: string; employee?: string; week?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { entryId?: string; employee?: string; week?: string }
   try {
     if (body.entryId) {
       if (!isUuid(body.entryId)) {

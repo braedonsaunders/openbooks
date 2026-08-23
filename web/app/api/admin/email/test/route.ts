@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { sendVia, isValidEmailAddress } from '@openbooks/emails'
@@ -16,7 +17,9 @@ export async function POST(req: Request) {
 
   let to: string
   try {
-    to = String(((await req.json()) as { to?: unknown }).to ?? '').trim()
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    to = String(((parsedBody.data) as { to?: unknown }).to ?? '').trim()
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -54,7 +55,9 @@ export async function POST(request: Request) {
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('invalid_idempotency_key', undefined, 400)
 
-  const parsed = await request.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const parsed = parsedBody.data
   const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? parsed as CreateBody
     : {}

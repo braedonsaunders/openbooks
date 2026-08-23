@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -82,7 +83,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
   }
-  const body = await req.json() as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as {
     rateBookId?: string | null; effectiveFrom?: string; baseUnit?: string;
     pricingPolicy?: string; invoicePresentation?: string; tiers?: TierInput[]
   }

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -21,7 +22,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const body = (await req.json().catch(() => ({}))) as { reason?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { reason?: string }
   const reason = (body.reason ?? '').trim()
   if (!reason) return NextResponse.json({ error: 'a revocation needs a reason' }, { status: 400 })
 

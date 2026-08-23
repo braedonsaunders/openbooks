@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -45,7 +46,9 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const b = (await req.json().catch(() => ({}))) as any
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const b = (parsedBody.data) as any
   const key = String(b.key ?? '').trim()
   const name = String(b.name ?? '').trim()
   if (!key || !name) return NextResponse.json({ error: 'Key and name are required' }, { status: 422 })
@@ -105,7 +108,9 @@ export async function PATCH(req: Request) {
   const today = await businessToday(orgId)
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const b = (await req.json().catch(() => ({}))) as any
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const b = (parsedBody2.data) as any
   if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })

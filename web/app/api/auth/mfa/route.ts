@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import {
   beginMfaSetup,
@@ -20,7 +21,9 @@ export async function POST(request: NextRequest) {
   if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { password?: unknown } | null;
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as { password?: unknown } | null;
   if (typeof body?.password !== "string") {
     return NextResponse.json({ error: "password required" }, { status: 400 });
   }
@@ -46,7 +49,9 @@ export async function PUT(request: NextRequest) {
   if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { code?: unknown } | null;
+  const parsedBody2 = await parseJsonBody(request, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = parsedBody2.data as { code?: unknown } | null;
   if (typeof body?.code !== "string" || body.code.length > 64) {
     return NextResponse.json({ error: "code required" }, { status: 400 });
   }
@@ -59,7 +64,9 @@ export async function DELETE(request: NextRequest) {
   if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { password?: unknown; code?: unknown } | null;
+  const parsedBody3 = await parseJsonBody(request, jsonObject);
+  if (!parsedBody3.ok) return parsedBody3.response;
+  const body = parsedBody3.data as { password?: unknown; code?: unknown } | null;
   if (typeof body?.password !== "string" || typeof body.code !== "string") {
     return NextResponse.json({ error: "password and code required" }, { status: 400 });
   }

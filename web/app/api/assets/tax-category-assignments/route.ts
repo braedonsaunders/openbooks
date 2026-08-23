@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -9,7 +10,9 @@ export const runtime = 'nodejs'
 export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { categoryId?: string; regime?: string; classCode?: string | null }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { categoryId?: string; regime?: string; classCode?: string | null }
   if (!body.categoryId || !isUuid(body.categoryId) || !body.regime) return NextResponse.json({ error: 'invalid assignment' }, { status: 422 })
   const regime = (await db.execute<{ class_attribute: string }>(sql`
     select class_attribute from tax_regimes where org_id=${gate.user.orgId} and code=${body.regime} and is_active limit 1`))

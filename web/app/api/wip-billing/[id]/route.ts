@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
@@ -18,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const body = (await req.json().catch(() => null)) as { action?: string; reason?: string } | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { action?: string; reason?: string } | null
   const permission = body?.action === 'approve' ? 'ar.approve' : 'projects.manage'
   const gate = await guardPermission(permission)
   if (gate instanceof NextResponse) return gate

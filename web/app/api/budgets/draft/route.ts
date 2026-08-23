@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -12,7 +13,9 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>
 
   const requestedBook = typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
   const requestedYear = Number(body.fiscalYear)

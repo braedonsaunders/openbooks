@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { remeasureAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -18,7 +19,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
 
-  const body = (await req.json().catch(() => ({}))) as { newCarryingValue?: string; date?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { newCarryingValue?: string; date?: string }
   const carryingRaw = canonicalDecimal(body.newCarryingValue, 4)
   if (carryingRaw === null || compareDecimal(carryingRaw, '0') < 0) {
     return NextResponse.json({ error: 'enter the new carrying value' }, { status: 422 })

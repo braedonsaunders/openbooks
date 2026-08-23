@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -58,7 +59,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
   }
 
-  const body = (await req.json().catch(() => ({}))) as Body
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
   if (!body.action || !['receive', 'issue', 'adjust', 'transfer', 'build', 'landed', 'reverse'].includes(body.action)) {
     return NextResponse.json({ error: 'invalid action' }, { status: 422 })
   }

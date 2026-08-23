@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -11,7 +12,9 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const body = await req.json().catch(() => ({})) as { partyId?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as { partyId?: string }
   if (body.partyId && !isUuid(body.partyId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (body.partyId) {
     const exists = (await db.execute(sql`select 1 from parties where id = ${body.partyId} and org_id = ${user.orgId}`))

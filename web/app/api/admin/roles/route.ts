@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -107,7 +108,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const body = (await req.json()) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     name?: string;
     key?: string;
     description?: string;
@@ -165,7 +168,9 @@ export async function PATCH(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const body = (await req.json()) as {
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = (parsedBody2.data) as {
     id?: string;
     name?: string;
     description?: string;
@@ -241,7 +246,9 @@ export async function DELETE(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const { id } = (await req.json()) as { id?: string };
+  const parsedBody3 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody3.ok) return parsedBody3.response;
+  const { id } = (parsedBody3.data) as { id?: string };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   const existing = (await db.execute(sql`

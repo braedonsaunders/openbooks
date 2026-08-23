@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
@@ -26,7 +27,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!(await ownedEnabled(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown>;
   const sets: SQL[] = [];
   if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
   if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);

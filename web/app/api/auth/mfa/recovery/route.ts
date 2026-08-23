@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser, rotateRecoveryCodes } from "../../../../../lib/auth";
 import { authRequestContext, hasExpectedOrigin } from "../../../../../lib/auth-policy";
@@ -8,7 +9,9 @@ export async function POST(request: NextRequest) {
   if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { password?: unknown; code?: unknown } | null;
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data as { password?: unknown; code?: unknown } | null;
   if (typeof body?.password !== "string" || typeof body.code !== "string") {
     return NextResponse.json({ error: "password and code required" }, { status: 400 });
   }

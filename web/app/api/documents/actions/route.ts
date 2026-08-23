@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
@@ -43,7 +44,9 @@ export async function POST(req: Request) {
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
 
-  const body = (await req.json()) as {
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     action: 'submit' | 'post'
     documentId?: string
   }

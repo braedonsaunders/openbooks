@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { updateAppMeta, AppError, type AppMetaUpdate } from '@/lib/apps/store'
@@ -13,7 +14,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ key: s
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
   const { key } = await params
-  const body = (await req.json().catch(() => null)) as AppMetaUpdate | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as AppMetaUpdate | null
   if (!body || typeof body !== 'object') return NextResponse.json({ error: 'invalid body' }, { status: 400 })
   try {
     await updateAppMeta(gate.user.orgId, gate.user.id, key, body)

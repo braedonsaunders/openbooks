@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
 import {
@@ -33,7 +34,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   let body: { title?: unknown };
   try {
-    body = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }

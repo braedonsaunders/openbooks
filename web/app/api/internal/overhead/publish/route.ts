@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -19,7 +20,9 @@ export async function POST(req: Request) {
   if (!expected || provided !== expected) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   const { orgId, effectiveFrom } = body
   if (!orgId || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
     return NextResponse.json({ error: 'orgId and effectiveFrom are required' }, { status: 422 })

@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -21,7 +22,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
-  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Record<string, unknown> | null
   if (!body || !isUuid(String(body.projectId ?? ''))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   }

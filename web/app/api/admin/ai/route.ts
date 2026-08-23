@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../lib/assistant/client";
@@ -24,7 +25,9 @@ export async function PUT(req: Request) {
   if (gate instanceof NextResponse) return gate;
   let body: Partial<AiSettingsInput> & { provider?: string };
   try {
-    body = await req.json();
+    const parsedBody = await parseJsonBody(req, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }

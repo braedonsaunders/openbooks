@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -150,7 +151,9 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission("admin.setup.manage", "projects");
   if (gate instanceof NextResponse) return gate;
-  const body = (await req.json().catch(() => null)) as { activeProfileId?: string; profiles?: unknown[] } | null;
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { activeProfileId?: string; profiles?: unknown[] } | null;
   if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });
   if (body.profiles.length > 20) return NextResponse.json({ error: "too many profiles (max 20)" }, { status: 400 });
 

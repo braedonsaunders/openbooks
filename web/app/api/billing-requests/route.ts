@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../lib/authz'
@@ -24,7 +25,9 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
-  const body = (await req.json()) as any
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as any
   if (!body?.projectId || !isUuid(String(body.projectId))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   }

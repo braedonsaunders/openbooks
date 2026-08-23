@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { installApp, listApps, AppError, type UploadBundle } from '@/lib/apps/store'
@@ -40,7 +41,9 @@ export async function POST(req: Request) {
     }
   } else {
     try {
-      body = (await req.json()) as UploadBundle
+      const parsedBody = await parseJsonBody(req, jsonObject);
+      if (!parsedBody.ok) return parsedBody.response;
+      body = (parsedBody.data) as UploadBundle
     } catch {
       return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
     }

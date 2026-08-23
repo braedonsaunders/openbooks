@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-depreciation-packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -13,7 +14,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
-  const body = (await req.json().catch(() => ({}))) as { code?: string }
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as { code?: string }
   if (!body.code) return NextResponse.json({ error: 'code required' }, { status: 422 })
   try {
     return NextResponse.json(await installTaxDepreciationPack(gate.user.orgId, body.code, gate.user.id))

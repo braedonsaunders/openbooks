@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close.ts'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -15,7 +16,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ agen
   }
   let body: Record<string, unknown>
   try {
-    body = await request.json()
+    const parsedBody = await parseJsonBody(request, jsonObject);
+    if (!parsedBody.ok) return parsedBody.response;
+    body = parsedBody.data
   } catch {
     return NextResponse.json({ error: 'bad_request' }, { status: 400 })
   }

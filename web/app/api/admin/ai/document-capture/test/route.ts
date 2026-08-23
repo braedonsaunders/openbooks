@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { getDocumentCaptureTestConfig } from '@openbooks/engine/src/ap-capture-config.ts'
 import { testAzureDocumentProvider } from '@openbooks/engine/src/ap-capture.ts'
@@ -8,7 +9,9 @@ export const runtime = 'nodejs'
 export async function POST(request: Request) {
   const gate = await guardPermission('admin.ai.manage')
   if (gate instanceof NextResponse) return gate
-  const body = (await request.json().catch(() => ({}))) as {
+  const parsedBody = await parseJsonBody(request, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as {
     endpoint?: string
     model?: string
     apiKey?: string

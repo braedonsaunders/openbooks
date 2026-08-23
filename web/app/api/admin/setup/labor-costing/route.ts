@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -105,7 +106,9 @@ export async function PUT(req: Request) {
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
 
   const s = body.settings ?? {}
   const hoursPerDayRaw = s.hoursPerDay == null || s.hoursPerDay === ''
@@ -177,7 +180,9 @@ export async function POST(req: Request) {
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
   const userId = gate.user.id
-  const body = await req.json().catch(() => ({}))
+  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  if (!parsedBody2.ok) return parsedBody2.response;
+  const body = parsedBody2.data
 
   if (body.action === 'save-rate') {
     const employeePartyId = body.employeePartyId ?? null

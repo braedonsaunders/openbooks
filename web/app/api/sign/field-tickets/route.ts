@@ -1,3 +1,4 @@
+import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrg, withOrgContext } from '@openbooks/engine/src/db.ts'
@@ -13,7 +14,9 @@ export const runtime = 'nodejs'
  * independently revocable and can be consumed only once.
  */
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}))
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data
   const verified = verifySigningToken(String(body.token ?? ''))
   if (!verified) return NextResponse.json({ error: 'This signing link is invalid or expired' }, { status: 401 })
 
