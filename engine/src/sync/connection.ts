@@ -245,7 +245,11 @@ export function sourceType(source: string): SourceTypeManifest | undefined {
   return SOURCE_TYPES.find((s) => s.source === source);
 }
 
-export function validateSourceConfig(manifest: SourceTypeManifest, config: Record<string, unknown>): string | null {
+export function validateSourceConfig(
+  manifest: SourceTypeManifest,
+  config: Record<string, unknown>,
+  opts?: { today?: string },
+): string | null {
   for (const field of manifest.configFields) {
     const value = String(config[field.key] ?? "").trim();
     if (field.required && !value) return `${field.label} is required`;
@@ -259,7 +263,8 @@ export function validateSourceConfig(manifest: SourceTypeManifest, config: Recor
     if (!/^\d{4}-\d{2}-\d{2}$/.test(historyStart) || Number.isNaN(parsedHistoryStart.getTime()) || parsedHistoryStart.toISOString().slice(0, 10) !== historyStart) {
       return "History start date must be a valid YYYY-MM-DD date";
     }
-    if (historyStart < "1901-01-01" || historyStart > new Date().toISOString().slice(0, 10)) {
+    const maxDay = opts?.today ?? new Date().toISOString().slice(0, 10);
+    if (historyStart < "1901-01-01" || historyStart > maxDay) {
       return "History start date must be between 1901-01-01 and today";
     }
     const companyFile = String(config.companyFile ?? "").trim();
