@@ -273,7 +273,16 @@ export async function POST(req: Request) {
           const project = (await tx.execute<{ contract_value: string | null }>(sql`
             select contract_value from projects where id = ${row.project_id} and org_id = ${orgId} for update
           `));
-          const effect = normalizeMoney(String(row.amount));
+          const effectRaw = canonicalDecimal(String(row.amount), 4);
+          if (effectRaw === null) {
+            throw new ConstructionBillingError("Change-order amount must be a number with no more than four decimal places");
+          }
+          let effect: string;
+          try {
+            effect = normalizeMoney(effectRaw);
+          } catch {
+            throw new ConstructionBillingError("Change-order amount must be a number with no more than four decimal places");
+          }
           const contractValueBefore = project.rows[0]?.contract_value ?? null;
           const contractValueAfter = add(contractValueBefore ?? "0", effect);
           if (cmp(contractValueAfter, "0") < 0) {
