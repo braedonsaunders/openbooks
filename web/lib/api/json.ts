@@ -58,26 +58,29 @@ export async function parseJsonBody<S extends z.ZodType>(
 }
 
 /**
- * Boundary atoms for financial bodies. Money crosses the wire as text and is
- * canonicalized through the exact-decimal primitives — it never crosses
- * IEEE-754 via JavaScript number before a writer binds it.
+ * Boundary atoms for financial bodies. Money crosses the wire as decimal text
+ * or as a safe integer JSON number and is canonicalized through the
+ * exact-decimal primitives. Fractional JSON numbers are refused because they
+ * have already crossed IEEE-754 before zod can inspect them.
  */
 
 /** Exact numeric(19,4)-scale money string ("1234.5", "-10", "0.0001"). */
-export function exactMoney(message = "must be an exact monetary amount") {
+export function exactMoney(message = "must be a decimal string or safe integer monetary amount") {
   return z
     .preprocess(
       // Absent/null amounts funnel through the same refusal as junk input,
       // so a required-money field always fails with the caller's message.
       (v) => (v === undefined || v === null ? "" : v),
-      z
-        .union([z.string(), z.number()])
+      z.unknown()
         .refine((v) => toExactMoney(v) !== null, message)
         .transform((v) => toExactMoney(v)!),
     );
 }
 
-function toExactMoney(v: string | number): string | null {
+function toExactMoney(v: unknown): string | null {
+  if (typeof v !== "string" && (typeof v !== "number" || !Number.isSafeInteger(v))) {
+    return null;
+  }
   const exact = canonicalDecimal(v, 4);
   if (exact === null) return null;
   try {
