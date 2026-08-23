@@ -612,7 +612,267 @@
   },
   "utilization": {
     "title": "Utilization",
-    "backToHub": "Analytics"
+    "backToHub": "Analytics",
+    "tabs": {
+      "overview": "Overview",
+      "intelligence": "Intelligence",
+      "departments": "Departments",
+      "items": "Items",
+      "titles": "Titles",
+      "employees": "Employees",
+      "config": "Configuration"
+    },
+    "subTabs": {
+      "forecasting": "Forecasting",
+      "anomalies": "Anomalies",
+      "peers": "Peer Analysis",
+      "whatif": "What-If",
+      "treemap": "Treemap"
+    },
+    "gauge": {
+      "onTarget": "ON TARGET",
+      "nearTarget": "NEAR TARGET",
+      "belowTarget": "BELOW TARGET",
+      "atRisk": "AT RISK",
+      "targetPct": "target {target}%"
+    },
+    "entries": {
+      "title": "Time entries",
+      "peers": "vs {title} peers ({count})",
+      "thisVsPeer": "This employee {emp} · peer avg {peer}",
+      "count": "{count}{suffix} entries",
+      "hrs": "{hours} hrs",
+      "billableOf": "{pct} billable",
+      "pills": {
+        "entries": "Entries",
+        "byItem": "By Service Item",
+        "byEmployee": "By Employee",
+        "byCustomer": "By Customer"
+      },
+      "serviceItem": "Service Item",
+      "employee": "Employee",
+      "item": "Item"
+    },
+    "loading": "Loading…",
+    "error": {
+      "loadFailed": "Could not load entries."
+    },
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "noTitle": "No Title",
+    "kpi": {
+      "nonBillableCost": "Non-Billable Cost",
+      "costPerDay": "Cost Per Day",
+      "totalHours": "Total Hours",
+      "billableHours": "Billable Hours",
+      "projectedBillablePct": "Projected Billable %",
+      "projectedNonBillCost": "Projected Non-Bill Cost",
+      "targetStatus": "Target Status",
+      "confidence": "Confidence",
+      "totalIssues": "Total Issues",
+      "suddenDrops": "Sudden Drops",
+      "overtimeNoValue": "Overtime No Value",
+      "titleDrift": "Title Drift",
+      "jobTitlesAnalyzed": "Job Titles Analyzed",
+      "titlesWithOutliers": "Titles with Outliers",
+      "avgSpread": "Avg Spread",
+      "target": "Target",
+      "opportunities": "Opportunities",
+      "potentialSavings": "Potential Savings",
+      "efficiencyScore": "Efficiency Score",
+      "capacityHeadroom": "Capacity Headroom",
+      "serviceItems": "Service Items",
+      "avgBillablePct": "Avg Billable %",
+      "avgHoursItem": "Avg Hours/Item",
+      "aboveTarget": "Above Target",
+      "highestCost": "Highest Cost",
+      "jobTitles": "Job Titles",
+      "avgTeamSize": "Avg Team Size",
+      "bestTitle": "Best Title",
+      "needsAttention": "Needs Attention",
+      "employees": "Employees",
+      "avgHours": "Avg Hours",
+      "topPerformer": "Top Performer",
+      "belowTarget": "Below Target"
+    },
+    "sub": {
+      "totalForRange": "total for range",
+      "daysInRange": "{days} days in range",
+      "recordedTime": "recorded time",
+      "revenueGenerating": "revenue generating",
+      "trendArrow": "{arrow} {trend}pp trend",
+      "trajectory": "{arrow} {amount} trajectory",
+      "targetPct": "target: {target}%",
+      "dataPoints": "{count} data points",
+      "detectedAnomalies": "detected anomalies",
+      "drop15pp": "employees with >15pp drop",
+      "highHoursLowBillable": "high hours, low billable",
+      "rolesTrendingDown": "roles trending down",
+      "with2Plus": "with 2+ employees",
+      "performanceVariance": "performance variance",
+      "maxMinusMin": "max − min within title",
+      "billableThreshold": "billable threshold",
+      "improvementScenarios": "improvement scenarios",
+      "ifAllImplemented": "if all implemented",
+      "outOf100": "out of 100",
+      "hiresAtEfficiency": "hires at current efficiency",
+      "withActivity": "with activity",
+      "acrossItems": "across items",
+      "perServiceItem": "per service item",
+      "belowTargetCount": "{count} below target",
+      "uniqueRoles": "unique roles (labour class)",
+      "employeesPerTitle": "employees per title",
+      "qualified": "{count} qualified (≥{minHours}h)",
+      "hoursWeighted": "hours-weighted",
+      "perEmployee": "per employee",
+      "aboveNear": "{above} above, {near} near"
+    },
+    "panels": {
+      "efficiencySummary": "Efficiency Summary",
+      "hoursDistribution": "Hours Distribution",
+      "topDepartments": "Top Departments",
+      "topDepartmentsHint": "By non-billable cost",
+      "alerts": "Utilization Alerts",
+      "costHotspots": "Cost Hotspots",
+      "noBillableExpectation": "No Billable Expectation",
+      "forecastTrend": "Billable % Trend with Forecast",
+      "suddenDrop": "Sudden Drop",
+      "suddenDropHint": "Billable % dropped >15pp vs prior",
+      "overtimeHint": "20%+ more hours than avg, billable 20pp below target",
+      "titleDriftHint": "Roles where ALL employees trend down",
+      "peerComparison": "Peer Comparison by Job Title",
+      "peerHint": "Compare employees doing similar work",
+      "improvementOpportunities": "Improvement Opportunities",
+      "improvementHint": "Estimated savings from a five-point utilization improvement",
+      "reallocationIdeas": "Reallocation Ideas",
+      "hiringIntelligence": "Hiring Intelligence",
+      "treemap": "Utilization Treemap",
+      "treemapHint": "Size = hours · colour = billable % · click to drill",
+      "modelAssumptions": "Model & Assumptions",
+      "dataSources": "Data sources & derivations"
+    },
+    "table": "Table",
+    "chart": {
+      "billable": "Billable",
+      "nonBillable": "Non-Billable",
+      "historical": "Historical",
+      "forecast": "Forecast",
+      "target": "Target"
+    },
+    "unit": {
+      "hrs": "hrs",
+      "billable": "billable"
+    },
+    "hotspot": {
+      "mostExpensiveDept": "Most Expensive Dept",
+      "highestCostItem": "Highest Cost Item",
+      "lowestBilledEmp": "Lowest Billed Emp",
+      "others": "+ {count} other{count, plural, one {} other {s}}"
+    },
+    "noBillableNote": "departments with zero billable hours are excluded from company billable % and hotspots (overhead functions carry no billable expectation).",
+    "noBillExpectation": "No billable expectation",
+    "noBillExpShort": "no billable exp.",
+    "prior": "Prior: {pct}",
+    "forecast": {
+      "current": "Current",
+      "projected": "Projected",
+      "onTrack": "On Track",
+      "atRisk": "At Risk",
+      "methodologyBold": "Methodology:",
+      "methodology": " forecasts use linear regression on historical periods. Higher billable % naturally correlates with lower non-billable costs as the same hours shift from non-billable to billable work."
+    },
+    "empty": {
+      "allWithinTarget": "All metrics within target.",
+      "noSuddenDrops": "No sudden drops detected",
+      "noIssues": "No issues detected",
+      "noDriftingTitles": "No drifting titles",
+      "noPeerTitles": "No titles with 2+ employees for comparison",
+      "noImprovements": "No improvement opportunities identified"
+    },
+    "empCount": "{count} emp",
+    "ppAvg": "{avg}pp avg",
+    "anomalyNote": "Anomaly detection excludes employees in no-billable-expectation departments.",
+    "peers": {
+      "outliersBold": "Outliers",
+      "outliersNote": " are employees whose billable % is more than 1.5 standard deviations from their title's average. High spread or outliers may indicate training gaps, workload imbalances, or role mismatches."
+    },
+    "whatif": {
+      "improve": "Improve “{title}” by 5%",
+      "improveDetail": "{count} employees currently at {pct}% avg",
+      "save": "Save {amount}",
+      "recExceptional": "New hires need exceptional billable rates to be cost-effective. Consider contractors for surge capacity.",
+      "highBillableRoles": "high-billable roles",
+      "na": "N/A",
+      "recFocus": "Focus hiring on {title}. Current top performers average {avgPct}%.",
+      "recSupports": "Current utilization supports new hires. Prioritize roles that complement existing team strengths.",
+      "breakEvenRate": "Break-Even Rate",
+      "billablePctLabel": "billable %",
+      "avgCostEmployee": "Avg Cost/Employee",
+      "nonBillableLabel": "non-billable",
+      "teamAvgBillable": "Current Team Avg Billable",
+      "avgHoursEmployee": "Avg Hours/Employee",
+      "costPerNonBillHour": "Cost per Non-Bill Hour",
+      "totalEmployees": "Total Employees",
+      "bestTitle": "Best Title",
+      "needsFocus": "Needs Focus"
+    },
+    "outlook": {
+      "favorable": "Favorable",
+      "neutral": "Neutral",
+      "challenging": "Challenging"
+    },
+    "searchItems": "Search items…",
+    "searchEmployees": "Search employees…",
+    "itemsWithActivity": "{count} items with activity · click a row for entries",
+    "allDepartments": "All Departments",
+    "heatmap": "Heatmap",
+    "hide": "Hide",
+    "show": "Show",
+    "lowHoursCount": "{count} employees with <{minHours} hours",
+    "titles": {
+      "drawerDesc": "{count} employees · {billable} billable · {cost} non-billable cost"
+    },
+    "treemap": {
+      "clickDrill": "Click to drill down",
+      "sizeHours": "Size = hours worked",
+      "colourBillable": "Colour = billable %",
+      "breadcrumb": "Breadcrumb to navigate up"
+    },
+    "config": {
+      "priorRange": "Prior range",
+      "priorRangeNote": "Same duration immediately preceding the selected period",
+      "historyPeriods": "History periods",
+      "historyNote": "Rolling {months}-month periods feeding trend & forecast",
+      "fields": {
+        "targetBillable": {
+          "label": "Target billable %",
+          "help": "Company-wide utilization benchmark"
+        },
+        "costSpike": {
+          "label": "Cost spike alert ($)",
+          "help": "Alert when non-billable cost rises more than this vs the prior range"
+        },
+        "minHours": {
+          "label": "Minimum hours",
+          "help": "Employees below this are excluded from anomaly / peer analysis"
+        }
+      }
+    },
+    "sources": {
+      "intro": "Everything is computed live from ",
+      "timeEntries": "time entries",
+      "introTail": ":",
+      "billableBold": "Billable",
+      "billableItem": " — the entry's billable flag (every billable entry carries a project → customer).",
+      "nonBillCostBold": "Non-billable cost",
+      "nonBillCostItem": " — Σ hours × the entry's own cost rate on non-billable time.",
+      "jobTitleBold": "Job title",
+      "jobTitleMid": " — employees carry no title field, so a person's title is their ",
+      "dominantClass": "dominant labour class",
+      "jobTitleItem": " (the service item they log the most hours to, e.g. “MECH:Foreman”).",
+      "noBillItem": " — departments with zero billable hours (current + prior) are auto-flagged and excluded from company %, e.g. Overhead."
+    }
   },
   "spendVelocity": {
     "title": "Spend Velocity",

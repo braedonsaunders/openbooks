@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   AlertTriangle, ArrowDown, ArrowRightLeft, BarChart3, Box, Brain, Building2, Calculator,
   ChartArea, CheckCircle2, Clock, DollarSign, Info, Lightbulb, PieChart as PieIcon,
@@ -20,10 +21,6 @@ import { useAnalyticsMoney } from '../_ui/format'
 
 const TABS = ['overview', 'intelligence', 'departments', 'items', 'titles', 'employees', 'config'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABEL: Record<Tab, string> = {
-  overview: 'Overview', intelligence: 'Intelligence', departments: 'Departments',
-  items: 'Items', titles: 'Titles', employees: 'Employees', config: 'Configuration',
-}
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
 const hrs0 = (n: number) => `${Math.round(n).toLocaleString('en-US')}`
 
@@ -52,9 +49,10 @@ function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: numbe
 
 /** the risk-meter billable gauge (semicircle arc coloured vs target). */
 function BillableGauge({ pct, target }: { pct: number; target: number }) {
+  const t = useTranslations('analytics.utilization')
   const diff = pct - target
   const color = diff >= 0 ? '#10b981' : diff >= -10 ? '#f59e0b' : diff >= -20 ? '#f97316' : '#ef4444'
-  const label = diff >= 0 ? 'ON TARGET' : diff >= -10 ? 'NEAR TARGET' : diff >= -20 ? 'BELOW TARGET' : 'AT RISK'
+  const label = diff >= 0 ? t('gauge.onTarget') : diff >= -10 ? t('gauge.nearTarget') : diff >= -20 ? t('gauge.belowTarget') : t('gauge.atRisk')
   const arcLength = 141.37
   const offset = arcLength * (1 - Math.min(pct, 100) / 100)
   return (
@@ -66,7 +64,7 @@ function BillableGauge({ pct, target }: { pct: number; target: number }) {
       <div className="min-w-0">
         <p className="text-xl font-bold tabular-nums" style={{ color }}>{pct1(pct)}</p>
         <p className="text-[10px] font-bold tracking-wider" style={{ color }}>{label}</p>
-        <p className="text-[10px] text-slate-400 dark:text-slate-500">target {target}%</p>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t('gauge.targetPct', { target })}</p>
       </div>
     </div>
   )
@@ -118,6 +116,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
 }) {
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
+  const t = useTranslations('analytics.utilization')
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
@@ -149,13 +148,13 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   const custGroups = view === 'byCustomer' ? groupBy((e) => e.customerName) : []
 
   return (
-    <Drawer open onClose={onClose} size="lg" title={name} description={sub ?? 'Time entries'} bodyClassName="overflow-hidden flex flex-col p-0">
+    <Drawer open onClose={onClose} size="lg" title={name} description={sub ?? t('entries.title')} bodyClassName="overflow-hidden flex flex-col p-0">
       {/* Peer strip (employee vs same-title average) */}
       {peer ? (
         <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-800/30">
           <div>
-            <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">vs {peer.title} peers ({peer.peerCount})</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">This employee {pct1(peer.empPct)} · peer avg {pct1(peer.peerAvg)}</p>
+            <p className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">{t('entries.peers', { title: peer.title, count: peer.peerCount })}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('entries.thisVsPeer', { emp: pct1(peer.empPct), peer: pct1(peer.peerAvg) })}</p>
           </div>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', peer.empPct >= peer.peerAvg ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300')}>
             {peer.empPct >= peer.peerAvg ? '+' : ''}{(peer.empPct - peer.peerAvg).toFixed(1)}pp
@@ -164,31 +163,31 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
       ) : null}
 
       <div className="flex items-center gap-4 border-b border-slate-100 px-4 py-2.5 text-sm dark:border-slate-800">
-        <span className="text-slate-500 dark:text-slate-400">{entries ? `${entries.length}${entries.length === 500 ? '+' : ''} entries` : '…'}</span>
-        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{hrs0(total)} hrs</span>
-        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{total > 0 ? pct1((billable / total) * 100) : '—'} billable</span>
+        <span className="text-slate-500 dark:text-slate-400">{entries ? t('entries.count', { count: entries.length, suffix: entries.length === 500 ? '+' : '' }) : '…'}</span>
+        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{t('entries.hrs', { hours: hrs0(total) })}</span>
+        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{total > 0 ? t('entries.billableOf', { pct: pct1((billable / total) * 100) }) : '—'}</span>
       </div>
 
       {/* View pills */}
       <div className="flex items-center gap-1.5 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
-        {([['entries', 'Entries'], ['byItem', kind === 'employee' ? 'By Service Item' : 'By Employee'], ['byCustomer', 'By Customer']] as const).map(([k, label]) => (
+        {([['entries', t('entries.pills.entries')], ['byItem', kind === 'employee' ? t('entries.pills.byItem') : t('entries.pills.byEmployee')], ['byCustomer', t('entries.pills.byCustomer')]] as const).map(([k, label]) => (
           <button key={k} type="button" onClick={() => setView(k)} className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', view === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400')}>{label}</button>
         ))}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {error ? (
-          <p className="p-6 text-center text-sm text-slate-400">Could not load entries.</p>
+          <p className="p-6 text-center text-sm text-slate-400">{t('error.loadFailed')}</p>
         ) : !entries ? (
-          <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
+          <p className="p-6 text-center text-sm text-slate-400">{t('loading')}</p>
         ) : view !== 'entries' ? (
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">{view === 'byItem' ? (kind === 'employee' ? 'Service Item' : 'Employee') : 'Customer'}</th>
-                <th className="px-4 py-2 text-right font-medium">Hours</th>
-                <th className="px-4 py-2 text-right font-medium">Billable %</th>
-                <th className="w-32 px-4 py-2 text-left font-medium">Share</th>
+                <th className="px-4 py-2 text-left font-medium">{view === 'byItem' ? (kind === 'employee' ? t('entries.serviceItem') : t('entries.employee')) : t('table.customer')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.hours')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.billablePct')}</th>
+                <th className="w-32 px-4 py-2 text-left font-medium">{t('table.share')}</th>
               </tr>
             </thead>
             <tbody>
@@ -206,11 +205,11 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Date</th>
-                <th className="px-4 py-2 text-left font-medium">{kind === 'employee' ? 'Item' : 'Employee'}</th>
-                <th className="px-4 py-2 text-left font-medium">Customer</th>
-                <th className="px-4 py-2 text-right font-medium">Hours</th>
-                <th className="px-4 py-2 text-center font-medium">Billable</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.date')}</th>
+                <th className="px-4 py-2 text-left font-medium">{kind === 'employee' ? t('entries.item') : t('entries.employee')}</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.hours')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.billable')}</th>
               </tr>
             </thead>
             <tbody>
@@ -222,8 +221,8 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
                   <td className="px-4 py-1.5 text-right tabular-nums text-slate-800 dark:text-slate-200">{e.hours.toFixed(1)}</td>
                   <td className="px-4 py-1.5 text-center">
                     {e.billable
-                      ? <Badge variant="success">Yes</Badge>
-                      : <span className="text-xs text-rose-500 tabular-nums">{e.cost > 0 ? money0(e.cost) : 'No'}</span>}
+                      ? <Badge variant="success">{t('yes')}</Badge>
+                      : <span className="text-xs text-rose-500 tabular-nums">{e.cost > 0 ? money0(e.cost) : t('no')}</span>}
                   </td>
                 </tr>
               ))}
@@ -240,6 +239,7 @@ type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: strin
 /* ------------------------------------------------------------------- shell */
 
 export function UtilizationView({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
@@ -252,17 +252,17 @@ export function UtilizationView({ data }: { data: UtilizationData }) {
       {/* Hero row: gauge + 4 KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <BillableGauge pct={c.percentBilled} target={target} />
-        <KpiCard icon={DollarSign} accent="red" label="Non-Billable Cost" value={money(c.nonBillableCost)} sub="total for range" tone="negative" />
-        <KpiCard icon={Clock} accent="slate" label="Cost Per Day" value={money(c.nonBillableCostPerDay)} sub={`${data.period.days} days in range`} />
-        <KpiCard icon={UserRound} accent="violet" label="Total Hours" value={hrs0(c.hours)} sub="recorded time" />
-        <KpiCard icon={CheckCircle2} accent="emerald" label="Billable Hours" value={hrs0(c.billableHours)} sub="revenue generating" tone="positive" />
+        <KpiCard icon={DollarSign} accent="red" label={t('kpi.nonBillableCost')} value={money(c.nonBillableCost)} sub={t('sub.totalForRange')} tone="negative" />
+        <KpiCard icon={Clock} accent="slate" label={t('kpi.costPerDay')} value={money(c.nonBillableCostPerDay)} sub={t('sub.daysInRange', { days: data.period.days })} />
+        <KpiCard icon={UserRound} accent="violet" label={t('kpi.totalHours')} value={hrs0(c.hours)} sub={t('sub.recordedTime')} />
+        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.billableHours')} value={hrs0(c.billableHours)} sub={t('sub.revenueGenerating')} tone="positive" />
       </div>
 
       <div className="-mx-1 overflow-x-auto">
         <div className="flex min-w-max gap-0.5 border-b border-slate-200 px-1 dark:border-slate-800">
           {TABS.map((k) => (
             <button key={k} type="button" onClick={() => setTab(k)} className={cn('-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium transition-colors', tab === k ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200')}>
-              {TAB_LABEL[k]}
+              {t(`tabs.${k}`)}
             </button>
           ))}
         </div>
@@ -297,6 +297,7 @@ function intelligenceScope(data: UtilizationData) {
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -306,12 +307,12 @@ function OverviewTab({ data }: { data: UtilizationData }) {
   const d = data.company.deltas
 
   const rows: [string, string, string, React.ReactNode][] = [
-    ['Percent Billed', pct1(c.percentBilled), pct1(p.percentBilled), <TrendDelta key="1" delta={d.pctDelta} goodIfUp />],
-    ['Non-Billable Cost', money0(c.nonBillableCost), money0(p.nonBillableCost), <TrendDelta key="2" delta={d.costDelta} goodIfUp={false} unit="money" />],
-    ['Total Hours', hrs0(c.hours), hrs0(p.hours), <TrendDelta key="3" delta={c.hours - p.hours} goodIfUp unit="hours" />],
-    ['Billable Hours', hrs0(c.billableHours), hrs0(p.billableHours), <TrendDelta key="4" delta={c.billableHours - p.billableHours} goodIfUp unit="hours" />],
-    ['Non-Billable Hours', hrs0(c.nonBillableHours), hrs0(p.nonBillableHours), <TrendDelta key="5" delta={c.nonBillableHours - p.nonBillableHours} goodIfUp={false} unit="hours" />],
-    ['Cost Per Day', money0(c.nonBillableCostPerDay), money0(p.nonBillableCostPerDay), '—'],
+    [t('metric.percentBilled'), pct1(c.percentBilled), pct1(p.percentBilled), <TrendDelta key="1" delta={d.pctDelta} goodIfUp />],
+    [t('metric.nonBillableCost'), money0(c.nonBillableCost), money0(p.nonBillableCost), <TrendDelta key="2" delta={d.costDelta} goodIfUp={false} unit="money" />],
+    [t('metric.totalHours'), hrs0(c.hours), hrs0(p.hours), <TrendDelta key="3" delta={c.hours - p.hours} goodIfUp unit="hours" />],
+    [t('metric.billableHours'), hrs0(c.billableHours), hrs0(p.billableHours), <TrendDelta key="4" delta={c.billableHours - p.billableHours} goodIfUp unit="hours" />],
+    [t('metric.nonBillableHours'), hrs0(c.nonBillableHours), hrs0(p.nonBillableHours), <TrendDelta key="5" delta={c.nonBillableHours - p.nonBillableHours} goodIfUp={false} unit="hours" />],
+    [t('metric.costPerDay'), money0(c.nonBillableCostPerDay), money0(p.nonBillableCostPerDay), '—'],
   ]
 
   // Cost hotspots (exclude no-billable departments, ).
@@ -332,14 +333,14 @@ function OverviewTab({ data }: { data: UtilizationData }) {
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <div className="space-y-5 lg:col-span-3">
-          <Panel title="Efficiency Summary" icon={Scale} bodyClassName="p-0">
+          <Panel title={t('panels.efficiencySummary')} icon={Scale} bodyClassName="p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Metric</th>
-                  <th className="px-4 py-2 text-right font-medium">Current Range</th>
-                  <th className="px-4 py-2 text-right font-medium">Prior Range</th>
-                  <th className="px-4 py-2 text-right font-medium">Change</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.metric')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.currentRange')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.priorRange')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.change')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -355,15 +356,15 @@ function OverviewTab({ data }: { data: UtilizationData }) {
             </table>
           </Panel>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Panel title="Hours Distribution" icon={PieIcon}>
+            <Panel title={t('panels.hoursDistribution')} icon={PieIcon}>
               <Donut
-                data={[{ name: 'Billable', value: c.billableHours }, { name: 'Non-Billable', value: c.nonBillableHours }]}
+                data={[{ name: t('chart.billable'), value: c.billableHours }, { name: t('chart.nonBillable'), value: c.nonBillableHours }]}
                 height={200}
-                valueFormat={(v) => `${Math.round(v).toLocaleString()} hrs`}
+                valueFormat={(v) => `${Math.round(v).toLocaleString()} ${t('unit.hrs')}`}
                 colors={['#10b981', '#ef4444']}
               />
             </Panel>
-            <Panel title="Top Departments" icon={BarChart3} hint="By non-billable cost">
+            <Panel title={t('panels.topDepartments')} hint={t('panels.topDepartmentsHint')}>
               <div className="space-y-2.5">
                 {topDepts.map((x) => {
                   const tone = statusTone(x.range.percentBilled, target)
@@ -385,7 +386,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
           </div>
         </div>
         <div className="space-y-5 lg:col-span-2">
-          <Panel title="Utilization Alerts" icon={AlertTriangle}>
+          <Panel title={t('panels.alerts')} icon={AlertTriangle}>
             {data.company.alerts.length ? (
               <ul className="space-y-2 text-sm">
                 {data.company.alerts.map((a, i) => (
@@ -396,32 +397,31 @@ function OverviewTab({ data }: { data: UtilizationData }) {
                 ))}
               </ul>
             ) : (
-              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />All metrics within target.</p>
+              <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400"><CheckCircle2 size={15} />{t('empty.allWithinTarget')}</p>
             )}
           </Panel>
-          <Panel title="Cost Hotspots" icon={Target} bodyClassName="p-0">
+          <Panel title={t('panels.costHotspots')} icon={Target} bodyClassName="p-0">
             <ul className="divide-y divide-slate-50 text-sm dark:divide-slate-800/60">
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">Most Expensive Dept</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.mostExpensiveDept')}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{topDept?.name ?? '—'}</span>
               </li>
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">Highest Cost Item</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.highestCostItem')}</span>
                 <span className="max-w-52 truncate font-semibold text-slate-800 dark:text-slate-200" title={topItem?.name}>{topItem?.name ?? '—'}</span>
               </li>
               <li className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-slate-500 dark:text-slate-400">Lowest Billed Emp</span>
+                <span className="text-slate-500 dark:text-slate-400">{t('hotspot.lowestBilledEmp')}</span>
                 <span className="text-right font-semibold text-slate-800 dark:text-slate-200">
                   {lowEmp ? `${lowEmp.name} (${Math.round(lowEmp.range.percentBilled)}%)` : '—'}
-                  {sameRate > 1 ? <span className="ml-1 font-normal text-slate-400">+ {sameRate - 1} other{sameRate > 2 ? 's' : ''}</span> : null}
+                  {sameRate > 1 ? <span className="ml-1 font-normal text-slate-400">{t('hotspot.others', { count: sameRate - 1 })}</span> : null}
                 </span>
               </li>
             </ul>
           </Panel>
-          <Panel title="No Billable Expectation" icon={Info}>
+          <Panel title={t('panels.noBillableExpectation')} icon={Info}>
             <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-              {data.departments.filter((x) => x.noBillable).map((x) => x.name).join(', ') || 'None'} — departments with zero billable
-              hours are excluded from company billable % and hotspots (overhead functions carry no billable expectation).
+              {data.departments.filter((x) => x.noBillable).map((x) => x.name).join(', ') || t('none')} — {t('noBillableNote')}
             </p>
           </Panel>
         </div>
@@ -434,14 +434,12 @@ function OverviewTab({ data }: { data: UtilizationData }) {
 
 const SUB_TABS = ['forecasting', 'anomalies', 'peers', 'whatif', 'treemap'] as const
 type SubTab = (typeof SUB_TABS)[number]
-const SUB_LABEL: Record<SubTab, string> = {
-  forecasting: 'Forecasting', anomalies: 'Anomalies', peers: 'Peer Analysis', whatif: 'What-If', treemap: 'Treemap',
-}
 const SUB_ICON: Record<SubTab, typeof ChartArea> = {
   forecasting: ChartArea, anomalies: AlertTriangle, peers: Scale, whatif: Calculator, treemap: LayoutGrid,
 }
 
 function IntelligenceTab({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const [sub, setSub] = useState<SubTab>('forecasting')
   return (
     <div className="space-y-4">
@@ -450,7 +448,7 @@ function IntelligenceTab({ data }: { data: UtilizationData }) {
           const Icon = SUB_ICON[k]
           return (
             <button key={k} type="button" onClick={() => setSub(k)} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors', sub === k ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-300' : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800')}>
-              <Icon size={13} />{SUB_LABEL[k]}
+              <Icon size={13} />{t(`subTabs.${k}`)}
             </button>
           )
         })}
@@ -511,11 +509,12 @@ function useForecasts(data: UtilizationData) {
 }
 
 function ForecastingSub({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const f = useForecasts(data)
-  const labels = [...data.history.periods.map((p) => p.label).reverse(), 'Current', 'Projected']
+  const labels = [...data.history.periods.map((p) => p.label).reverse(), t('forecast.current'), t('forecast.projected')]
   const hist = [...f.series, null]
   const proj = [...f.series.slice(0, -1).map(() => null), f.series[f.series.length - 1], f.projectedBillable]
 
@@ -523,12 +522,12 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={ChartArea} accent="sky" label="Projected Billable %" value={pct1(f.projectedBillable)} sub={`${f.billableTrend >= 0 ? '↑' : '↓'} ${Math.abs(f.billableTrend).toFixed(1)}pp trend`} tone={tone as any} />
-        <KpiCard icon={DollarSign} accent={f.costTrend <= 0 ? 'emerald' : 'red'} label="Projected Non-Bill Cost" value={money(f.projectedCost)} sub={`${f.costTrend <= 0 ? '↓' : '↑'} ${money(Math.abs(f.costTrend))} trajectory`} tone={f.costTrend <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Target} accent="violet" label="Target Status" value={f.projectedBillable >= target ? 'On Track' : 'At Risk'} sub={`target: ${target}%`} tone={tone as any} />
-        <KpiCard icon={Brain} accent="slate" label="Confidence" value={`${f.confidence}%`} sub={`${f.dataPoints} data points`} />
+        <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={tone as any} />
+        <KpiCard icon={DollarSign} accent={f.costTrend <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={money(f.projectedCost)} sub={t('sub.trajectory', { arrow: f.costTrend <= 0 ? '↓' : '↑', amount: money(Math.abs(f.costTrend)) })} tone={f.costTrend <= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={tone as any} />
+        <KpiCard icon={Brain} accent="slate" label={t('kpi.confidence')} value={`${f.confidence}%`} sub={t('sub.dataPoints', { count: f.dataPoints })} />
       </div>
-      <Panel title="Billable % Trend with Forecast" icon={ChartArea}>
+      <Panel title={t('panels.forecastTrend')} icon={ChartArea}>
         <Chart
           height={280}
           option={{
@@ -537,23 +536,23 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
             xAxis: { type: 'category', data: labels },
             yAxis: { type: 'value', max: 100, min: 0, axisLabel: { formatter: '{value}%' } },
             series: [
-              { name: 'Historical', type: 'line', data: hist, symbolSize: 7, lineStyle: { width: 2, color: '#3b82f6' }, itemStyle: { color: '#3b82f6' }, connectNulls: false },
-              { name: 'Forecast', type: 'line', data: proj, symbolSize: 7, symbol: 'diamond', lineStyle: { width: 2, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
-              { name: 'Target', type: 'line', data: labels.map(() => target), symbol: 'none', lineStyle: { width: 1, color: '#94a3b8', type: 'dotted' } },
+              { name: t('chart.historical'), type: 'line', data: hist, symbolSize: 7, lineStyle: { width: 2, color: '#3b82f6' }, itemStyle: { color: '#3b82f6' }, connectNulls: false },
+              { name: t('chart.forecast'), type: 'line', data: proj, symbolSize: 7, symbol: 'diamond', lineStyle: { width: 2, color: '#3b82f6', type: 'dashed' }, itemStyle: { color: '#3b82f6' } },
+              { name: t('chart.target'), type: 'line', data: labels.map(() => target), symbol: 'none', lineStyle: { width: 1, color: '#94a3b8', type: 'dotted' } },
             ],
           }}
         />
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">Methodology:</span> forecasts use linear regression on historical periods. Higher billable % naturally correlates with lower non-billable costs as the same hours shift from non-billable to billable work.</span>
+        <span><span className="font-semibold">{t('forecast.methodologyBold')}</span>{t('forecast.methodology')}</span>
       </p>
     </div>
   )
 }
 
 /** , verbatim thresholds. */
-function useAnomalies(data: UtilizationData) {
+function useAnomalies(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
     const target = data.config.target
@@ -575,9 +574,9 @@ function useAnomalies(data: UtilizationData) {
     const titleGroups = new Map<string, number[]>()
     for (const e of employees) {
       if (e.range.hours < minHours) continue
-      const t = e.title || 'No Title'
-      if (!titleGroups.has(t)) titleGroups.set(t, [])
-      titleGroups.get(t)!.push(e.deltas.pctDelta)
+      const title = e.title || t('noTitle')
+      if (!titleGroups.has(title)) titleGroups.set(title, [])
+      titleGroups.get(title)!.push(e.deltas.pctDelta)
     }
     const titleDrift = [...titleGroups.entries()]
       .map(([title, deltas]) => {
@@ -604,19 +603,20 @@ function AnomalyList({ items, empty }: { items: React.ReactNode[]; empty: string
 }
 
 function AnomaliesSub({ data }: { data: UtilizationData }) {
-  const a = useAnomalies(data)
+  const t = useTranslations('analytics.utilization')
+  const a = useAnomalies(data, t)
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={AlertTriangle} accent={a.total > 0 ? 'red' : 'emerald'} label="Total Issues" value={String(a.total)} sub="detected anomalies" tone={a.total > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={ArrowDown} accent="red" label="Sudden Drops" value={String(a.suddenDrops.length)} sub="employees with >15pp drop" />
-        <KpiCard icon={Clock} accent="amber" label="Overtime No Value" value={String(a.overtimeNoValue.length)} sub="high hours, low billable" />
-        <KpiCard icon={UserRound} accent="violet" label="Title Drift" value={String(a.titleDrift.length)} sub="roles trending down" />
+        <KpiCard icon={AlertTriangle} accent={a.total > 0 ? 'red' : 'emerald'} label={t('kpi.totalIssues')} value={String(a.total)} sub={t('sub.detectedAnomalies')} tone={a.total > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={ArrowDown} accent="red" label={t('kpi.suddenDrops')} value={String(a.suddenDrops.length)} sub={t('sub.drop15pp')} />
+        <KpiCard icon={Clock} accent="amber" label={t('kpi.overtimeNoValue')} value={String(a.overtimeNoValue.length)} sub={t('sub.highHoursLowBillable')} />
+        <KpiCard icon={UserRound} accent="violet" label={t('kpi.titleDrift')} value={String(a.titleDrift.length)} sub={t('sub.rolesTrendingDown')} />
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title="Sudden Drop" icon={ArrowDown} hint="Billable % dropped >15pp vs prior" bodyClassName="p-0">
+        <Panel title={t('panels.suddenDrop')} hint={t('panels.suddenDropHint')} bodyClassName="p-0">
           <AnomalyList
-            empty="No sudden drops detected"
+            empty={t('empty.noSuddenDrops')}
             items={a.suddenDrops.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                 <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>{x.name}</span>
@@ -625,9 +625,9 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
             ))}
           />
         </Panel>
-        <Panel title="Overtime No Value" icon={Clock} hint="20%+ more hours than avg, billable 20pp below target" bodyClassName="p-0">
+        <Panel title={t('kpi.overtimeNoValue')} hint={t('panels.overtimeHint')} bodyClassName="p-0">
           <AnomalyList
-            empty="No issues detected"
+            empty={t('empty.noIssues')}
             items={a.overtimeNoValue.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                 <span className="truncate text-slate-700 dark:text-slate-300" title={x.name}>{x.name}</span>
@@ -636,34 +636,34 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
             ))}
           />
         </Panel>
-        <Panel title="Title Drift" icon={UserRound} hint="Roles where ALL employees trend down" bodyClassName="p-0">
+        <Panel title={t('kpi.titleDrift')} hint={t('panels.titleDriftHint')} bodyClassName="p-0">
           <AnomalyList
-            empty="No drifting titles"
+            empty={t('empty.noDriftingTitles')}
             items={a.titleDrift.map((x, i) => (
               <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                 <span className="truncate text-slate-700 dark:text-slate-300" title={x.title}>{x.title}</span>
-                <span className="shrink-0 text-xs"><span className="text-slate-400">{x.count} emp</span> <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{x.avgDrop.toFixed(0)}pp avg</span></span>
+                <span className="shrink-0 text-xs"><span className="text-slate-400">{t('empCount', { count: x.count })}</span> <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t('ppAvg', { avg: x.avgDrop.toFixed(0) })}</span></span>
               </li>
             ))}
           />
         </Panel>
       </div>
-      <p className="text-xs text-slate-400 dark:text-slate-500">Anomaly detection excludes employees in no-billable-expectation departments.</p>
+      <p className="text-xs text-slate-400 dark:text-slate-500">{t('anomalyNote')}</p>
     </div>
   )
 }
 
 /** . */
-function usePeers(data: UtilizationData) {
+function usePeers(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
     const minHours = data.config.minHours
     const groups = new Map<string, number[]>()
     for (const e of employees) {
       if (e.range.hours < minHours) continue
-      const t = e.title || 'No Title'
-      if (!groups.has(t)) groups.set(t, [])
-      groups.get(t)!.push(e.range.percentBilled)
+      const title = e.title || t('noTitle')
+      if (!groups.has(title)) groups.set(title, [])
+      groups.get(title)!.push(e.range.percentBilled)
     }
     return [...groups.entries()]
       .filter(([, pcts]) => pcts.length >= 2)
@@ -679,30 +679,31 @@ function usePeers(data: UtilizationData) {
 }
 
 function PeersSub({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const target = data.config.target
-  const peers = usePeers(data)
+  const peers = usePeers(data, t)
   const withOutliers = peers.filter((p) => p.outliers > 0).length
   const avgSpread = peers.length ? peers.reduce((s, p) => s + p.spread, 0) / peers.length : 0
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={UserRound} accent="sky" label="Job Titles Analyzed" value={String(peers.length)} sub="with 2+ employees" />
-        <KpiCard icon={AlertTriangle} accent={withOutliers > 0 ? 'amber' : 'emerald'} label="Titles with Outliers" value={String(withOutliers)} sub="performance variance" />
-        <KpiCard icon={ArrowRightLeft} accent="violet" label="Avg Spread" value={pct1(avgSpread, 0)} sub="max − min within title" />
-        <KpiCard icon={Target} accent="emerald" label="Target" value={`${target}%`} sub="billable threshold" />
+        <KpiCard icon={UserRound} accent="sky" label={t('kpi.jobTitlesAnalyzed')} value={String(peers.length)} sub={t('sub.with2Plus')} />
+        <KpiCard icon={AlertTriangle} accent={withOutliers > 0 ? 'amber' : 'emerald'} label={t('kpi.titlesWithOutliers')} value={String(withOutliers)} sub={t('sub.performanceVariance')} />
+        <KpiCard icon={ArrowRightLeft} accent="violet" label={t('kpi.avgSpread')} value={pct1(avgSpread, 0)} sub={t('sub.maxMinusMin')} />
+        <KpiCard icon={Target} accent="emerald" label={t('kpi.target')} value={`${target}%`} sub={t('sub.billableThreshold')} />
       </div>
-      <Panel title="Peer Comparison by Job Title" icon={Scale} hint="Compare employees doing similar work" bodyClassName="p-0">
+      <Panel title={t('panels.peerComparison')} hint={t('panels.peerHint')} bodyClassName="p-0">
         <div className="max-h-104 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Job Title</th>
-                <th className="px-4 py-2 text-center font-medium">Employees</th>
-                <th className="px-4 py-2 text-right font-medium">Avg %</th>
-                <th className="px-4 py-2 text-right font-medium">Min</th>
-                <th className="px-4 py-2 text-right font-medium">Max</th>
-                <th className="px-4 py-2 text-right font-medium">Spread</th>
-                <th className="px-4 py-2 text-center font-medium">Outliers</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.jobTitle')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.employees')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.avgPct')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.min')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.max')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.spread')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.outliers')}</th>
               </tr>
             </thead>
             <tbody>
@@ -717,7 +718,7 @@ function PeersSub({ data }: { data: UtilizationData }) {
                   <td className="px-4 py-2 text-center">{p.outliers > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{p.outliers}</span> : <span className="text-emerald-500">—</span>}</td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No titles with 2+ employees for comparison</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">{t('empty.noPeerTitles')}</td></tr>
               )}
             </tbody>
           </table>
@@ -725,14 +726,14 @@ function PeersSub({ data }: { data: UtilizationData }) {
       </Panel>
       <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
         <Info size={14} className="mt-0.5 shrink-0" />
-        <span><span className="font-semibold">Outliers</span> are employees whose billable % is more than 1.5 standard deviations from their title&apos;s average. High spread or outliers may indicate training gaps, workload imbalances, or role mismatches.</span>
+        <span><span className="font-semibold">{t('peers.outliersBold')}</span>{t('peers.outliersNote')}</span>
       </p>
     </div>
   )
 }
 
 /** , verbatim formulas. */
-function useWhatIf(data: UtilizationData) {
+function useWhatIf(data: UtilizationData, t: ReturnType<typeof useTranslations>) {
   return useMemo(() => {
     const { employees, depts } = intelligenceScope(data)
     const target = data.config.target
@@ -740,9 +741,9 @@ function useWhatIf(data: UtilizationData) {
 
     const titleGroups = new Map<string, { employees: UGroupRow[]; totalCost: number; avgPct: number }>()
     for (const e of employees) {
-      const t = e.title || 'No Title'
-      let g = titleGroups.get(t)
-      if (!g) { g = { employees: [], totalCost: 0, avgPct: 0 }; titleGroups.set(t, g) }
+      const t2 = e.title || t('noTitle')
+      let g = titleGroups.get(t2)
+      if (!g) { g = { employees: [], totalCost: 0, avgPct: 0 }; titleGroups.set(t2, g) }
       g.employees.push(e)
       g.totalCost += e.range.nonBillableCost
     }
@@ -756,8 +757,8 @@ function useWhatIf(data: UtilizationData) {
     const improvements = [...titleGroups.entries()]
       .filter(([, g]) => g.avgPct < target && g.totalCost > 0)
       .map(([title, g]) => ({
-        description: `Improve “${title}” by 5%`,
-        detail: `${g.employees.length} employees currently at ${g.avgPct.toFixed(0)}% avg`,
+        description: t('whatif.improve', { title }),
+        detail: t('whatif.improveDetail', { count: g.employees.length, pct: g.avgPct.toFixed(0) }),
         savings: g.totalCost * 0.05,
       }))
       .sort((a, b) => b.savings - a.savings)
@@ -797,10 +798,10 @@ function useWhatIf(data: UtilizationData) {
       Math.min(50, costPerEmployee < 5000 ? 50 : 50 - (costPerEmployee - 5000) / 200),
     ))
     const recommendation = requiredBillable > 85
-      ? 'New hires need exceptional billable rates to be cost-effective. Consider contractors for surge capacity.'
+      ? t('whatif.recExceptional')
       : requiredBillable > target
-        ? `Focus hiring on ${bestTitle ? bestTitle.title : 'high-billable roles'}. Current top performers average ${bestTitle ? `${bestTitle.avgPct.toFixed(0)}%` : 'N/A'}.`
-        : 'Current utilization supports new hires. Prioritize roles that complement existing team strengths.'
+        ? t('whatif.recFocus', { title: bestTitle ? bestTitle.title : t('whatif.highBillableRoles'), avgPct: bestTitle ? bestTitle.avgPct.toFixed(0) : t('whatif.na') })
+        : t('whatif.recSupports')
     const hiringOutlook = avgBillable >= target + 5 ? 'favorable' : avgBillable >= target - 5 ? 'neutral' : 'challenging'
 
     return {
@@ -812,30 +813,31 @@ function useWhatIf(data: UtilizationData) {
 }
 
 function WhatIfSub({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
   const target = data.config.target
-  const w = useWhatIf(data)
+  const w = useWhatIf(data, t)
   const be = w.be
   const outlook = be.hiringOutlook === 'favorable'
-    ? <Badge variant="success">Favorable</Badge>
+    ? <Badge variant="success">{t('outlook.favorable')}</Badge>
     : be.hiringOutlook === 'neutral'
-      ? <Badge variant="warning">Neutral</Badge>
-      : <Badge variant="destructive">Challenging</Badge>
+      ? <Badge variant="warning">{t('outlook.neutral')}</Badge>
+      : <Badge variant="destructive">{t('outlook.challenging')}</Badge>
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Lightbulb} accent="emerald" label="Opportunities" value={String(w.improvements.length)} sub="improvement scenarios" />
-        <KpiCard icon={DollarSign} accent="sky" label="Potential Savings" value={money(w.improvements.reduce((s, i) => s + i.savings, 0))} sub="if all implemented" tone="positive" />
-        <KpiCard icon={Target} accent="violet" label="Efficiency Score" value={String(be.efficiencyScore)} sub="out of 100" tone={be.efficiencyScore >= 70 ? 'positive' : be.efficiencyScore >= 50 ? 'neutral' : 'negative'} />
-        <KpiCard icon={UserPlus} accent="slate" label="Capacity Headroom" value={String(be.capacityHeadroom)} sub="hires at current efficiency" />
+        <KpiCard icon={Lightbulb} accent="emerald" label={t('kpi.opportunities')} value={String(w.improvements.length)} sub={t('sub.improvementScenarios')} />
+        <KpiCard icon={DollarSign} accent="sky" label={t('kpi.potentialSavings')} value={money(w.improvements.reduce((s, i) => s + i.savings, 0))} sub={t('sub.ifAllImplemented')} tone="positive" />
+        <KpiCard icon={Target} accent="violet" label={t('kpi.efficiencyScore')} value={String(be.efficiencyScore)} sub={t('sub.outOf100')} tone={be.efficiencyScore >= 70 ? 'positive' : be.efficiencyScore >= 50 ? 'neutral' : 'negative'} />
+        <KpiCard icon={UserPlus} accent="slate" label={t('kpi.capacityHeadroom')} value={String(be.capacityHeadroom)} sub={t('sub.hiresAtEfficiency')} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-7">
-          <Panel title="Improvement Opportunities" icon={Lightbulb} hint="Estimated savings from a five-point utilization improvement" bodyClassName="p-0">
+          <Panel title={t('panels.improvementOpportunities')} hint={t('panels.improvementHint')} bodyClassName="p-0">
             {w.improvements.length ? (
               <ul className="max-h-80 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">
                 {w.improvements.slice(0, 8).map((s, i) => (
@@ -844,24 +846,24 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
                       <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{s.description}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500">{s.detail}</p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">Save {money(s.savings)}</span>
+                    <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">{t('whatif.save', { amount: money(s.savings) })}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">No improvement opportunities identified</p>
+              <p className="px-4 py-8 text-center text-sm text-slate-400">{t('empty.noImprovements')}</p>
             )}
           </Panel>
           {w.reallocations.length ? (
             <div className="mt-5">
-              <Panel title="Reallocation Ideas" icon={ArrowRightLeft} bodyClassName="p-0">
+              <Panel title={t('panels.reallocationIdeas')} bodyClassName="p-0">
                 <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
                   {w.reallocations.slice(0, 3).map((r, i) => (
                     <li key={i} className="flex items-center gap-2 px-4 py-2.5 text-sm">
                       <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">{r.from}</span>
                       <ArrowRightLeft size={13} className="shrink-0 text-slate-400" />
                       <span className="max-w-32 truncate text-slate-700 dark:text-slate-300">{r.to}</span>
-                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{r.employees} emp</span>
+                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-950/50 dark:text-sky-400">{t('empCount', { count: r.employees })}</span>
                     </li>
                   ))}
                 </ul>
@@ -871,25 +873,25 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
         </div>
 
         <div className="lg:col-span-5">
-          <Panel title="Hiring Intelligence" icon={UserPlus} actions={outlook}>
+          <Panel title={t('panels.hiringIntelligence')} actions={outlook}>
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">Break-Even Rate</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{t('whatif.breakEvenRate')}</p>
                 <p className="text-2xl font-bold text-sky-600 tabular-nums dark:text-sky-400">{pct1(be.requiredBillable, 0)}</p>
-                <p className="text-[10px] text-slate-400">billable %</p>
+                <p className="text-[10px] text-slate-400">{t('whatif.billablePctLabel')}</p>
               </div>
               <div className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-                <p className="text-xs text-slate-400 dark:text-slate-500">Avg Cost/Employee</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">{t('whatif.avgCostEmployee')}</p>
                 <p className="text-2xl font-bold text-slate-800 tabular-nums dark:text-slate-200">{money(be.costPerEmployee)}</p>
-                <p className="text-[10px] text-slate-400">non-billable</p>
+                <p className="text-[10px] text-slate-400">{t('whatif.nonBillableLabel')}</p>
               </div>
             </div>
             <ul className="mt-3 divide-y divide-slate-50 rounded-lg border border-slate-100 text-sm dark:divide-slate-800/60 dark:border-slate-800">
               {[
-                ['Current Team Avg Billable', pct1(be.avgBillable), be.avgBillable >= target ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'],
-                ['Avg Hours/Employee', hrs0(be.avgHoursPerEmployee), ''],
-                ['Cost per Non-Bill Hour', money0(be.costPerNonBillableHour), ''],
-                ['Total Employees', String(be.totalEmployees), ''],
+                [t('whatif.teamAvgBillable'), pct1(be.avgBillable), be.avgBillable >= target ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'],
+                [t('whatif.avgHoursEmployee'), hrs0(be.avgHoursPerEmployee), ''],
+                [t('whatif.costPerNonBillHour'), money0(be.costPerNonBillableHour), ''],
+                [t('whatif.totalEmployees'), String(be.totalEmployees), ''],
               ].map(([label, value, tone]) => (
                 <li key={label as string} className="flex items-center justify-between px-3 py-2">
                   <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
@@ -900,15 +902,15 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
             {be.bestTitle ? (
               <div className="mt-3 flex gap-2">
                 <div className="flex-1 rounded-lg bg-emerald-50 p-2.5 text-xs dark:bg-emerald-950/30">
-                  <p className="text-slate-500 dark:text-slate-400">Best Title</p>
+                  <p className="text-slate-500 dark:text-slate-400">{t('whatif.bestTitle')}</p>
                   <p className="truncate font-semibold text-slate-800 dark:text-slate-200" title={be.bestTitle.title}>{be.bestTitle.title}</p>
-                  <p className="text-emerald-600 dark:text-emerald-400">{pct1(be.bestTitle.avgPct, 0)} avg</p>
+                  <p className="text-emerald-600 dark:text-emerald-400">{t('ppAvg', { avg: pct1(be.bestTitle.avgPct, 0) })}</p>
                 </div>
                 {be.worstTitle && be.worstTitle.title !== be.bestTitle.title ? (
                   <div className="flex-1 rounded-lg bg-rose-50 p-2.5 text-xs dark:bg-rose-950/30">
-                    <p className="text-slate-500 dark:text-slate-400">Needs Focus</p>
+                    <p className="text-slate-500 dark:text-slate-400">{t('whatif.needsFocus')}</p>
                     <p className="truncate font-semibold text-slate-800 dark:text-slate-200" title={be.worstTitle.title}>{be.worstTitle.title}</p>
-                    <p className="text-rose-600 dark:text-rose-400">{pct1(be.worstTitle.avgPct, 0)} avg</p>
+                    <p className="text-rose-600 dark:text-rose-400">{t('ppAvg', { avg: pct1(be.worstTitle.avgPct, 0) })}</p>
                   </div>
                 ) : null}
               </div>
@@ -926,6 +928,7 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
 
 /**  → ECharts treemap (size = hours, colour = billable %). */
 function TreemapSub({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const { depts, employees } = intelligenceScope(data)
 
   const treeData = useMemo(() => {
@@ -935,9 +938,9 @@ function TreemapSub({ data }: { data: UtilizationData }) {
         const deptEmps = employees.filter((e) => e.departmentId === d.id)
         const titles = new Map<string, UGroupRow[]>()
         for (const e of deptEmps) {
-          const t = e.title || 'No Title'
-          if (!titles.has(t)) titles.set(t, [])
-          titles.get(t)!.push(e)
+          const title = e.title || t('noTitle')
+          if (!titles.has(title)) titles.set(title, [])
+          titles.get(title)!.push(e)
         }
         return {
           name: d.name,
@@ -965,16 +968,16 @@ function TreemapSub({ data }: { data: UtilizationData }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-center gap-2 text-xs text-slate-400 dark:text-slate-500">
-        <span>Non-Billable</span>
+        <span>{t('chart.nonBillable')}</span>
         <div className="h-2 w-40 rounded-full" style={{ background: 'linear-gradient(to right, #fecaca, #fed7aa, #fef08a, #bbf7d0, #86efac)' }} />
-        <span>Billable</span>
+        <span>{t('chart.billable')}</span>
       </div>
-      <Panel title="Utilization Treemap" icon={LayoutGrid} hint="Size = hours · colour = billable % · click to drill">
+      <Panel title={t('panels.treemap')} hint={t('panels.treemapHint')}>
         <Chart
           height={460}
           option={{
             tooltip: {
-              formatter: (p: any) => `<b>${p.name}</b><br/>Hours: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>Billable: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
+              formatter: (p: any) => `<b>${p.name}</b><br/>${t('table.hours')}: <b>${Math.round(p.value).toLocaleString('en-US')}</b><br/>${t('chart.billable')}: <b>${(p.data?.pct ?? 0).toFixed(1)}%</b>`,
             },
             series: [{
               type: 'treemap',
@@ -995,7 +998,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
         />
       </Panel>
       <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
-        <span>Click to drill down</span><span>Size = hours worked</span><span>Colour = billable %</span><span>Breadcrumb to navigate up</span>
+        <span>{t('treemap.clickDrill')}</span><span>{t('treemap.sizeHours')}</span><span>{t('treemap.colourBillable')}</span><span>{t('treemap.breadcrumb')}</span>
       </div>
     </div>
   )
@@ -1004,6 +1007,7 @@ function TreemapSub({ data }: { data: UtilizationData }) {
 /* ------------------------------------------------------------- Departments */
 
 function DepartmentsTab({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
@@ -1021,7 +1025,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
           <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">≥{target}%</span>
           <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">{target - 10}–{target}%</span>
           <span className="rounded-full bg-rose-100 px-2 py-0.5 font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-400">&lt;{target - 10}%</span>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">No billable expectation</span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('noBillExpectation')}</span>
         </div>
         <div className="flex gap-1">
           <button type="button" onClick={() => setView('cards')} className={cn('rounded-md border p-1.5', view === 'cards' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={15} /></button>
@@ -1039,29 +1043,29 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="truncate text-sm font-bold text-slate-800 dark:text-slate-200" title={d.name}>{d.name}</h3>
                   {d.noBillable
-                    ? <span className="shrink-0 text-[10px] font-medium text-slate-400">no billable exp.</span>
+                    ? <span className="shrink-0 text-[10px] font-medium text-slate-400">{t('noBillExpShort')}</span>
                     : pct >= target ? <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
                       : pct >= target - 10 ? <AlertTriangle size={16} className="shrink-0 text-amber-500" />
                         : <AlertTriangle size={16} className="shrink-0 text-rose-500" />}
                 </div>
                 <div className="my-3 text-center">
                   <p className={cn('text-3xl font-bold tabular-nums', tone.text)}>{pct1(pct)}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Billable</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">{t('chart.billable')}</p>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <div className={cn('h-full rounded-full', tone.bar)} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="text-slate-400 dark:text-slate-500">Prior: {pct1(d.prior.percentBilled)}</span>
+                  <span className="text-slate-400 dark:text-slate-500">{t('prior', { pct: pct1(d.prior.percentBilled) })}</span>
                   <TrendDelta delta={d.deltas.pctDelta} goodIfUp />
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3 text-xs dark:border-slate-800">
                   <div>
-                    <p className="text-slate-400 dark:text-slate-500">Hours</p>
+                    <p className="text-slate-400 dark:text-slate-500">{t('table.hours')}</p>
                     <p className="font-bold tabular-nums text-slate-800 dark:text-slate-200">{hrs0(d.range.hours)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-slate-400 dark:text-slate-500">Non-Bill Cost</p>
+                    <p className="text-slate-400 dark:text-slate-500">{t('table.nonBillCost')}</p>
                     <p className="font-bold tabular-nums text-rose-600 dark:text-rose-400">{money(d.range.nonBillableCost)}</p>
                   </div>
                 </div>
@@ -1082,6 +1086,7 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
 type SortKey = 'name' | 'percentBilled' | 'delta' | 'nonBillableCost' | 'hours'
 
 function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
   const [sortKey, setSortKey] = useState<SortKey>(kind === 'employee' ? 'percentBilled' : 'nonBillableCost')
@@ -1110,14 +1115,14 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-slate-900">
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              {header(kind === 'department' ? 'Department' : kind === 'item' ? 'Item' : 'Employee', 'name', 'text-left')}
-              {header('% Billed', 'percentBilled')}
-              <th className="px-4 py-2 text-right font-medium">% Prior</th>
-              {header('Change', 'delta')}
-              {header('Non-Bill Cost', 'nonBillableCost')}
-              {header('Total Hrs', 'hours')}
-              <th className="px-4 py-2 text-right font-medium text-emerald-600/70 dark:text-emerald-500/70">Billable</th>
-              <th className="px-4 py-2 text-right font-medium text-rose-500/70">Non-Bill</th>
+              {header(kind === 'department' ? t('table.department') : kind === 'item' ? t('entries.item') : t('entries.employee'), 'name', 'text-left')}
+              {header(t('table.pctBilled'), 'percentBilled')}
+              <th className="px-4 py-2 text-right font-medium">{t('table.pctPrior')}</th>
+              {header(t('table.change'), 'delta')}
+              {header(t('table.nonBillCost'), 'nonBillableCost')}
+              {header(t('table.totalHrs'), 'hours')}
+              <th className="px-4 py-2 text-right font-medium text-emerald-600/70 dark:text-emerald-500/70">{t('chart.billable')}</th>
+              <th className="px-4 py-2 text-right font-medium text-rose-500/70">{t('table.nonBill')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1129,7 +1134,7 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
               >
                 <td className="px-4 py-2">
                   <span className="font-medium text-slate-800 dark:text-slate-200">{r.name}</span>
-                  {r.noBillable ? <span className="ml-2 text-[10px] text-slate-400">no billable exp.</span> : null}
+                  {r.noBillable ? <span className="ml-2 text-[10px] text-slate-400">{t('noBillExpShort')}</span> : null}
                   {kind === 'employee' && r.title ? <span className="block text-xs text-slate-400 dark:text-slate-500">{r.title}</span> : null}
                 </td>
                 <td className={cn('px-4 py-2 text-right font-bold tabular-nums', r.noBillable ? 'text-slate-400' : statusTone(r.range.percentBilled, target).text)}>{pct1(r.range.percentBilled)}</td>
@@ -1151,6 +1156,7 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
 /* ------------------------------------------------------------------- Items */
 
 function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
@@ -1170,20 +1176,20 @@ function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyou
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={Box} accent="sky" label="Service Items" value={String(all.length)} sub="with activity" />
-        <KpiCard icon={PieIcon} accent="emerald" label="Avg Billable %" value={pct1(avgBillable)} sub="across items" tone={avgBillable >= target ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent="violet" label="Avg Hours/Item" value={hrs0(all.length ? totalHours / all.length : 0)} sub="per service item" />
-        <KpiCard icon={CheckCircle2} accent="emerald" label="Above Target" value={String(above)} sub={`${below} below target`} tone="positive" />
-        <KpiCard icon={AlertTriangle} accent="amber" label="Highest Cost" value={highest ? money(highest.range.nonBillableCost) : '—'} sub={highest?.name ?? '—'} tone="negative" />
+        <KpiCard icon={Box} accent="sky" label={t('kpi.serviceItems')} value={String(all.length)} sub={t('sub.withActivity')} />
+        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.avgBillablePct')} value={pct1(avgBillable)} sub={t('sub.acrossItems')} tone={avgBillable >= target ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent="violet" label={t('kpi.avgHoursItem')} value={hrs0(all.length ? totalHours / all.length : 0)} sub={t('sub.perServiceItem')} />
+        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.aboveTarget')} value={String(above)} sub={t('sub.belowTargetCount', { count: below })} tone="positive" />
+        <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.highestCost')} value={highest ? money(highest.range.nonBillableCost) : '—'} sub={highest?.name ?? '—'} tone="negative" />
       </div>
       <div className="flex items-center gap-2">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search items…" className="h-8 w-56 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchItems')} className="h-8 w-56 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
         </div>
-        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{items.length} items with activity · click a row for entries</span>
+        <span className="ml-auto text-xs text-slate-400 dark:text-slate-500">{t('itemsWithActivity', { count: items.length })}</span>
       </div>
-      <GroupTable rows={items} target={target} kind="item" onDrill={(r) => onDrill({ kind: 'item', id: r.id, name: r.name, sub: `${hrs0(r.range.hours)} hrs · ${pct1(r.range.percentBilled)} billable` })} />
+      <GroupTable rows={items} target={target} kind="item" onDrill={(r) => onDrill({ kind: 'item', id: r.id, name: r.name, sub: `${hrs0(r.range.hours)} ${t('unit.hrs')} · ${pct1(r.range.percentBilled)} ${t('unit.billable')}` })} />
     </div>
   )
 }
@@ -1200,6 +1206,7 @@ interface TitleGroup {
 }
 
 function TitlesTab({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -1209,9 +1216,9 @@ function TitlesTab({ data }: { data: UtilizationData }) {
   const titles = useMemo(() => {
     const groups = new Map<string, TitleGroup>()
     for (const e of data.employees) {
-      const t = e.title || 'No Title'
-      let g = groups.get(t)
-      if (!g) { g = { title: t, employees: [], hours: 0, billableHours: 0, nonBillableCost: 0, percentBilled: 0 }; groups.set(t, g) }
+      const title = e.title || t('noTitle')
+      let g = groups.get(title)
+      if (!g) { g = { title, employees: [], hours: 0, billableHours: 0, nonBillableCost: 0, percentBilled: 0 }; groups.set(title, g) }
       g.employees.push(e)
       g.hours += e.range.hours
       g.billableHours += e.range.billableHours
@@ -1231,22 +1238,22 @@ function TitlesTab({ data }: { data: UtilizationData }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={UserRound} accent="violet" label="Job Titles" value={String(titles.length)} sub="unique roles (labour class)" />
-        <KpiCard icon={Users} accent="sky" label="Avg Team Size" value={(titles.length ? data.employees.length / titles.length : 0).toFixed(1)} sub="employees per title" />
-        <KpiCard icon={Trophy} accent="emerald" label="Best Title" value={best ? pct1(best.percentBilled, 0) : '—'} sub={best?.title ?? '—'} tone="positive" />
-        <KpiCard icon={CheckCircle2} accent="emerald" label="Above Target" value={String(aboveT)} sub={`${belowT} below target`} />
-        <KpiCard icon={AlertTriangle} accent="amber" label="Needs Attention" value={worst ? pct1(worst.percentBilled, 0) : '—'} sub={worst?.title ?? '—'} tone="negative" />
+        <KpiCard icon={UserRound} accent="violet" label={t('kpi.jobTitles')} value={String(titles.length)} sub={t('sub.uniqueRoles')} />
+        <KpiCard icon={Users} accent="sky" label={t('kpi.avgTeamSize')} value={(titles.length ? data.employees.length / titles.length : 0).toFixed(1)} sub={t('sub.employeesPerTitle')} />
+        <KpiCard icon={Trophy} accent="emerald" label={t('kpi.bestTitle')} value={best ? pct1(best.percentBilled, 0) : '—'} sub={best?.title ?? '—'} tone="positive" />
+        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.aboveTarget')} value={String(aboveT)} sub={t('sub.belowTargetCount', { count: belowT })} />
+        <KpiCard icon={AlertTriangle} accent="amber" label={t('kpi.needsAttention')} value={worst ? pct1(worst.percentBilled, 0) : '—'} sub={worst?.title ?? '—'} tone="negative" />
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-              <SortTh label="Job Title" col="title" align="left" defaultDir="asc" />
-              <SortTh label="Employees" col="employeeCount" />
-              <SortTh label="% Billed" col="percentBilled" />
-              <SortTh label="Total Hours" col="hours" />
-              <SortTh label="Non-Bill Cost" col="nonBillableCost" />
+              <SortTh label={t('table.jobTitle')} col="title" align="left" defaultDir="asc" />
+              <SortTh label={t('table.employees')} col="employeeCount" />
+              <SortTh label={t('table.pctBilled')} col="percentBilled" />
+              <SortTh label={t('table.totalHrs')} col="hours" />
+              <SortTh label={t('table.nonBillCost')} col="nonBillableCost" />
             </tr>
           </thead>
           <tbody>
@@ -1264,15 +1271,15 @@ function TitlesTab({ data }: { data: UtilizationData }) {
       </div>
 
       {open ? (
-        <Drawer open onClose={() => setOpen(null)} size="lg" title={open.title} description={`${open.employees.length} employees · ${pct1(open.percentBilled)} billable · ${money(open.nonBillableCost)} non-billable cost`} bodyClassName="p-0 overflow-y-auto">
+        <Drawer open onClose={() => setOpen(null)} size="lg" title={open.title} description={t('titles.drawerDesc', { count: open.employees.length, billable: pct1(open.percentBilled), cost: money(open.nonBillableCost) })} bodyClassName="p-0 overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-white dark:bg-slate-900">
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Employee</th>
-                <th className="px-4 py-2 text-right font-medium">% Billed</th>
-                <th className="px-4 py-2 text-right font-medium">Hours</th>
-                <th className="px-4 py-2 text-right font-medium">Billable</th>
-                <th className="px-4 py-2 text-right font-medium">Cost</th>
+                <th className="px-4 py-2 text-left font-medium">{t('entries.employee')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.pctBilled')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.hours')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('chart.billable')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.cost')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1299,6 +1306,7 @@ function TitlesTab({ data }: { data: UtilizationData }) {
 /* --------------------------------------------------------------- Employees */
 
 function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
+  const t = useTranslations('analytics.utilization')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
@@ -1331,33 +1339,33 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
     const peer = e.title && peers.length >= 2
       ? { title: e.title, empPct: e.range.percentBilled, peerAvg: peers.reduce((a, p) => a + p.range.percentBilled, 0) / peers.length, peerCount: peers.length }
       : undefined
-    onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} billable`, peer })
+    onDrill({ kind: 'employee', id: e.id, name: e.name, sub: `${e.title ?? ''} · ${e.departmentName ?? ''} · ${pct1(e.range.percentBilled)} ${t('unit.billable')}`, peer })
   }
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <KpiCard icon={Users} accent="sky" label="Employees" value={String(filtered.length)} sub={`${qualified.length} qualified (≥${minHours}h)`} />
-        <KpiCard icon={PieIcon} accent="emerald" label="Avg Billable %" value={pct1(avgBillable)} sub="hours-weighted" tone={avgBillable >= target ? 'positive' : 'negative'} />
-        <KpiCard icon={Clock} accent="violet" label="Avg Hours" value={hrs0(avgHours)} sub="per employee" />
-        <KpiCard icon={Trophy} accent="emerald" label="Top Performer" value={top ? pct1(top.range.percentBilled, 0) : '—'} sub={top?.name ?? '—'} tone="positive" />
-        <KpiCard icon={AlertTriangle} accent={belowN > 0 ? 'red' : 'emerald'} label="Below Target" value={String(belowN)} sub={`${above} above, ${near} near`} tone={belowN > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Users} accent="sky" label={t('kpi.employees')} value={String(filtered.length)} sub={t('sub.qualified', { count: qualified.length, minHours })} />
+        <KpiCard icon={PieIcon} accent="emerald" label={t('kpi.avgBillablePct')} value={pct1(avgBillable)} sub={t('sub.hoursWeighted')} tone={avgBillable >= target ? 'positive' : 'negative'} />
+        <KpiCard icon={Clock} accent="violet" label={t('kpi.avgHours')} value={hrs0(avgHours)} sub={t('sub.perEmployee')} />
+        <KpiCard icon={Trophy} accent="emerald" label={t('kpi.topPerformer')} value={top ? pct1(top.range.percentBilled, 0) : '—'} sub={top?.name ?? '—'} tone="positive" />
+        <KpiCard icon={AlertTriangle} accent={belowN > 0 ? 'red' : 'emerald'} label={t('kpi.belowTarget')} value={String(belowN)} sub={t('sub.aboveNear', { above, near })} tone={belowN > 0 ? 'negative' : 'positive'} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Select value={dept} onChange={(e) => setDept(e.target.value)} className="w-48" triggerClassName="h-8 text-sm">
-          <option value="__ALL__">All Departments</option>
+          <option value="__ALL__">{t('allDepartments')}</option>
           {data.departments.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </Select>
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employees…" className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchEmployees')} className="h-8 w-52 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
         </div>
         <div className="ml-auto flex gap-1">
-          <button type="button" onClick={() => setView('heatmap')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'heatmap' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={13} />Heatmap</button>
-          <button type="button" onClick={() => setView('table')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={13} />Table</button>
+          <button type="button" onClick={() => setView('heatmap')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'heatmap' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={13} />{t('heatmap')}</button>
+          <button type="button" onClick={() => setView('table')} className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={13} />{t('table')}</button>
         </div>
       </div>
 
@@ -1387,7 +1395,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
           {low.length ? (
             <div>
               <button type="button" onClick={() => setShowLow(!showLow)} className="text-xs text-slate-400 underline-offset-2 hover:underline dark:text-slate-500">
-                {showLow ? 'Hide' : 'Show'} {low.length} employees with &lt;{minHours} hours
+                {showLow ? t('hide') : t('show')} {t('lowHoursCount', { count: low.length, minHours })}
               </button>
               {showLow ? (
                 <div className="mt-2 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
@@ -1415,9 +1423,10 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
 /* ------------------------------------------------------------ Configuration */
 
 function ConfigTab({ data }: { data: UtilizationData }) {
+  const t = useTranslations('analytics.utilization')
   const items = [
-    { label: 'Prior range', value: `${data.prior.from} → ${data.prior.to}`, note: 'Same duration immediately preceding the selected period' },
-    { label: 'History periods', value: String(data.history.periods.length), note: `Rolling ${data.history.periodMonths}-month periods feeding trend & forecast` },
+    { label: t('config.priorRange'), value: `${data.prior.from} → ${data.prior.to}`, note: t('config.priorRangeNote') },
+    { label: t('config.historyPeriods'), value: String(data.history.periods.length), note: t('config.historyNote', { months: data.history.periodMonths }) },
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -1425,14 +1434,14 @@ function ConfigTab({ data }: { data: UtilizationData }) {
         <ConfigEditor
           dashboard="utilization"
           fields={[
-            { key: 'targetBillablePct', label: 'Target billable %', help: 'Company-wide utilization benchmark', min: 10, max: 100, step: 1 },
-            { key: 'costSpikeThreshold', label: 'Cost spike alert ($)', help: 'Alert when non-billable cost rises more than this vs the prior range', min: 0, max: 1_000_000, step: 100 },
-            { key: 'minHours', label: 'Minimum hours', help: 'Employees below this are excluded from anomaly / peer analysis', min: 0, max: 500, step: 1 },
+            { key: 'targetBillablePct', label: t('config.fields.targetBillable.label'), help: t('config.fields.targetBillable.help'), min: 10, max: 100, step: 1 },
+            { key: 'costSpikeThreshold', label: t('config.fields.costSpike.label'), help: t('config.fields.costSpike.help'), min: 0, max: 1_000_000, step: 100 },
+            { key: 'minHours', label: t('config.fields.minHours.label'), help: t('config.fields.minHours.help'), min: 0, max: 500, step: 1 },
           ]}
           values={{ targetBillablePct: data.config.target, costSpikeThreshold: data.config.costSpike, minHours: data.config.minHours }}
           defaults={{ targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 }}
         />
-        <Panel title="Model & Assumptions" icon={SlidersHorizontal} bodyClassName="p-0">
+        <Panel title={t('panels.modelAssumptions')} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {items.map((i) => (
               <li key={i.label} className="flex items-start justify-between gap-4 px-4 py-3">
@@ -1446,14 +1455,14 @@ function ConfigTab({ data }: { data: UtilizationData }) {
           </ul>
         </Panel>
       </div>
-      <Panel title="Data sources & derivations" icon={Info}>
+      <Panel title={t('panels.dataSources')} icon={Info}>
         <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>Everything is computed live from <span className="font-semibold">time entries</span>:</p>
+          <p>{t('sources.intro')}<span className="font-semibold">{t('sources.timeEntries')}</span>{t('sources.introTail')}</p>
           <ul className="list-disc space-y-1 pl-5 text-slate-500 dark:text-slate-400">
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Billable</span> — the entry&apos;s billable flag (every billable entry carries a project → customer).</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Non-billable cost</span> — Σ hours × the entry&apos;s own cost rate on non-billable time.</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">Job title</span> — employees carry no title field, so a person&apos;s title is their <em>dominant labour class</em> (the service item they log the most hours to, e.g. “MECH:Foreman”).</li>
-            <li><span className="font-medium text-slate-700 dark:text-slate-200">No billable expectation</span> — departments with zero billable hours (current + prior) are auto-flagged and excluded from company %, e.g. Overhead.</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.billableBold')}</span>{t('sources.billableItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.nonBillCostBold')}</span>{t('sources.nonBillCostItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('sources.jobTitleBold')}</span>{t('sources.jobTitleMid')}<em>{t('sources.dominantClass')}</em>{t('sources.jobTitleItem')}</li>
+            <li><span className="font-medium text-slate-700 dark:text-slate-200">{t('noBillExpectation')}</span>{t('sources.noBillItem')}</li>
           </ul>
         </div>
       </Panel>
