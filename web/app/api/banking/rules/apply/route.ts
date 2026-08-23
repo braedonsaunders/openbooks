@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PostingError } from '@openbooks/engine/src/posting.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { applyRulesToAccount } from '../../../../../lib/banking-rules'
 import { bankingErrorResponse } from '../../util'
@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 
 /** Run active reconciliation rules against an account's unmatched bank lines. */
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json().catch(() => ({}))) as { accountId?: string }

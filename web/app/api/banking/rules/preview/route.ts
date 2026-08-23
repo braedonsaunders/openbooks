@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { previewRules } from '../../../../../lib/banking-rules'
 import { validateCriteria, validateOutcome } from '../../../../../lib/banking-rules-validate'
@@ -14,7 +14,7 @@ export const runtime = 'nodejs'
  * suggest surface). Never posts.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>

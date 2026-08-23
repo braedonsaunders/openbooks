@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { analyticsConfig } from "../../../../lib/analytics/config";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * supplies the rows behind whichever week is actually opened.
  */
 export async function GET(req: Request) {
-  const gate = await guardPermission("reports.read");
+  const gate = await guardFeaturePermission("reports.read", "banking");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;
 

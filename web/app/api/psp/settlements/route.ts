@@ -14,12 +14,12 @@ import {
   type PspProvider,
 } from "@openbooks/engine/src/psp-settlement.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const gate = await guardPermission("banking.read");
+  const gate = await guardFeaturePermission("banking.read", "banking");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const [batches, configs] = await Promise.all([
@@ -44,7 +44,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission("banking.reconcile");
+  const gate = await guardFeaturePermission("banking.reconcile", "banking");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
   const userId = gate.user.id;

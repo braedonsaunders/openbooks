@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
 
 export const runtime = 'nodejs'
@@ -15,7 +15,7 @@ function build(body: Record<string, unknown>): { error: string } | { criteria: u
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json()) as Record<string, unknown>
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json()) as Record<string, unknown>

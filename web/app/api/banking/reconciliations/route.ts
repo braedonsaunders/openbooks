@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { startReconciliation } from '@openbooks/engine/src/banking.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { bankingErrorResponse } from '../util'
@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
 
 /** List reconciliation sessions, optionally for one account. */
 export async function GET(req: Request) {
-  const gate = await guardPermission('banking.read')
+  const gate = await guardFeaturePermission('banking.read', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const accountId = new URL(req.url).searchParams.get('accountId')
@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 
 /** Start a reconciliation session (one open session per account). */
 export async function POST(req: Request) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json()) as {

@@ -6,7 +6,7 @@ import {
   discardReconciliation,
   reconciliationTotals,
 } from '@openbooks/engine/src/banking.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
@@ -17,7 +17,7 @@ export const runtime = 'nodejs'
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params }: Params) {
-  const gate = await guardPermission('banking.read')
+  const gate = await guardFeaturePermission('banking.read', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -41,7 +41,7 @@ export async function GET(_req: Request, { params }: Params) {
 
 /** Adjust an unsigned session's cutoff or statement balance. */
 export async function PATCH(req: Request, { params }: Params) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -77,7 +77,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
 /** Discard an unsigned session — releases its matched statement lines. */
 export async function DELETE(_req: Request, { params }: Params) {
-  const gate = await guardPermission('banking.reconcile')
+  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
