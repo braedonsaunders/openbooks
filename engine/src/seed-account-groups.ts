@@ -45,6 +45,7 @@ async function main() {
         on conflict (org_id, dimension, key) do update
           set name = excluded.name, color = excluded.color, sort_order = excluded.sort_order,
               match = excluded.match, is_catch_all = excluded.is_catch_all, is_active = true, updated_at = now()
+        where account_groups.org_id = ${orgId}
       `);
     }
     const c: any = await db.execute(sql`select count(*)::int n from account_groups where dimension=${dimension}`);
