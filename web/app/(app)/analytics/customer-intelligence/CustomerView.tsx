@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import {
   Users,
   Crown,
@@ -54,19 +55,8 @@ import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
 type Tab = (typeof TABS)[number]
-const TAB_LABEL: Record<Tab, string> = {
-  overview: 'Overview',
-  health: 'Health Scores',
-  segmentation: 'Segmentation',
-  lifetime: 'Lifetime Value',
-  churn: 'Churn Risk',
-  growth: 'Growth',
-  profitability: 'Profitability',
-  configuration: 'Configuration',
-}
 
 /* ------------------------------------------------------------ badge styles */
-const PROFIT_TIER_LABEL: Record<ProfitTier, string> = { high: 'High', medium: 'Medium', low: 'Low', marginal: 'Marginal', loss: 'Loss' }
 const PROFIT_TIER_STYLE: Record<ProfitTier, string> = {
   high: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   medium: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
@@ -80,13 +70,6 @@ function marginClass(m: number): string {
   if (m < 10) return 'text-amber-600 dark:text-amber-400'
   return 'text-slate-700 dark:text-slate-300'
 }
-function marginLabel(m: number): string {
-  if (m >= 40) return 'Excellent'
-  if (m >= 25) return 'Good'
-  if (m >= 10) return 'Fair'
-  if (m >= 0) return 'Low'
-  return 'Loss'
-}
 function marginAccent(m: number): 'emerald' | 'sky' | 'violet' | 'amber' | 'red' {
   if (m >= 40) return 'emerald'
   if (m >= 25) return 'sky'
@@ -95,7 +78,6 @@ function marginAccent(m: number): 'emerald' | 'sky' | 'violet' | 'amber' | 'red'
   return 'red'
 }
 
-const TIER_LABEL: Record<Tier, string> = { platinum: 'Platinum', gold: 'Gold', silver: 'Silver', bronze: 'Bronze' }
 const TIER_STYLE: Record<Tier, string> = {
   platinum: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
   gold: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
@@ -104,7 +86,6 @@ const TIER_STYLE: Record<Tier, string> = {
 }
 const TIER_COLOR: Record<Tier, string> = { platinum: '#8b5cf6', gold: '#f59e0b', silver: '#94a3b8', bronze: '#f97316' }
 
-const RISK_LABEL: Record<RiskLevel, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' }
 const RISK_STYLE: Record<RiskLevel, string> = {
   low: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   medium: 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300',
@@ -113,16 +94,6 @@ const RISK_STYLE: Record<RiskLevel, string> = {
 }
 
 const SEGMENTS: Segment[] = ['champions', 'loyal', 'potential', 'new', 'regular', 'hibernating', 'at-risk', 'lost']
-const SEGMENT_LABEL: Record<Segment, string> = {
-  champions: 'Champions',
-  loyal: 'Loyal',
-  potential: 'Potential',
-  new: 'New',
-  regular: 'Regular',
-  hibernating: 'Hibernating',
-  'at-risk': 'At Risk',
-  lost: 'Lost',
-}
 const SEGMENT_COLOR: Record<Segment, string> = {
   champions: '#8b5cf6',
   loyal: '#14b8a6',
@@ -143,16 +114,6 @@ const SEGMENT_STYLE: Record<Segment, string> = {
   'at-risk': 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300',
   lost: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
-const SEGMENT_DESC: Record<Segment, string> = {
-  champions: 'Recent, frequent, high spend (R≥4 F≥4 M≥4)',
-  loyal: 'Consistent high spenders (R≥3 F≥3 M≥4)',
-  potential: 'Recent with solid value (R≥3 M≥3)',
-  new: 'Recent first-time buyers (R≥4 F≤2)',
-  regular: 'Moderate engagement',
-  hibernating: 'Valuable but inactive (R≤2 F≥3 M≥3)',
-  'at-risk': 'Low recency and frequency (R≤2 F≤2)',
-  lost: 'Inactive, low value (R≤2 M≤2)',
-}
 
 const GRADE_STYLE: Record<CustomerRow['healthGrade'], string> = {
   'A+': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
@@ -163,16 +124,6 @@ const GRADE_STYLE: Record<CustomerRow['healthGrade'], string> = {
   F: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
 }
 
-const REC_LABEL: Record<Recommendation, string> = {
-  'resolve-issues': 'Resolve Issues',
-  reactivate: 'Reactivate',
-  'win-back': 'Win Back',
-  nurture: 'Nurture',
-  onboard: 'Onboard',
-  reprice: 'Reprice',
-  review: 'Review',
-  maintain: 'Maintain',
-}
 const REC_STYLE: Record<Recommendation, string> = {
   'resolve-issues': 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
   reactivate: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300',
@@ -205,6 +156,7 @@ export function CustomerView({
   profitability: Profitability
   projectsEnabled?: boolean
 }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const tabs = projectsEnabled ? TABS : TABS.filter((key) => key !== 'profitability')
@@ -213,7 +165,7 @@ export function CustomerView({
   const k = data.kpis
   const intel = data.intelligence
   const openCustomer = (r: Pick<CustomerRow, 'id' | 'name' | 'invoices' | 'revenue'>) =>
-    setDrill({ kind: 'party', id: r.id, name: r.name, sub: `${r.invoices} invoices · ${money(r.revenue)}` })
+    setDrill({ kind: 'party', id: r.id, name: r.name, sub: t('drill.invoicesRevenue', { invoices: r.invoices, revenue: money(r.revenue) }) })
 
   return (
     <div className="space-y-5">
@@ -222,10 +174,10 @@ export function CustomerView({
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <Gauge value={intel.score} label={intel.label} size={132} thickness={12} showTicks={false} />
         </div>
-        <KpiCard icon={Users} accent="sky" label="Total Customers" value={String(k.totalCustomers)} sub={`${k.newCustomers} new in period`} />
-        <KpiCard icon={Crown} accent="violet" label="Champions" value={String(k.champions)} sub="RFM champions segment" />
-        <KpiCard icon={Gem} accent="amber" label="Projected CLV" value={money(k.projectedClv)} sub="3-year projection" />
-        <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label="At Risk" value={String(k.atRiskCount)} sub={money(k.atRiskRevenue)} tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Users} accent="sky" label={t('kpi.totalCustomers')} value={String(k.totalCustomers)} sub={t('sub.newInPeriod', { count: k.newCustomers })} />
+        <KpiCard icon={Crown} accent="violet" label={t('kpi.champions')} value={String(k.champions)} sub={t('sub.rfmChampions')} />
+        <KpiCard icon={Gem} accent="amber" label={t('kpi.projectedClv')} value={money(k.projectedClv)} sub={t('sub.threeYearProjection')} />
+        <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label={t('kpi.atRisk')} value={String(k.atRiskCount)} sub={money(k.atRiskRevenue)} tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
       </div>
 
       {/* Tabs */}
@@ -241,7 +193,7 @@ export function CustomerView({
                 tab === key ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
               )}
             >
-              {TAB_LABEL[key]}
+              {t(`tabs.${key}`)}
             </button>
           ))}
         </div>
@@ -272,6 +224,7 @@ const INSIGHT_ICON: Record<Insight['type'], { icon: typeof Info; cls: string }> 
 }
 
 function OverviewTab({ data }: { data: CustomerData }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const k = data.kpis
@@ -289,26 +242,26 @@ function OverviewTab({ data }: { data: CustomerData }) {
   return (
     <div className="space-y-5">
       {/* Key metrics — the 6-metric grid */}
-      <Panel title="Key Metrics" icon={BarChart3}>
+      <Panel title={t('panels.keyMetrics')} icon={BarChart3}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {metric('Avg Value', money(k.avgCustomerValue), 'per customer')}
-          {metric('Retention', `${k.retentionRate}%`, 'avg retention probability')}
-          {metric('Payment Rate', `${k.paymentRate}%`, 'invoices paid in full')}
-          {metric('Avg DSO', `${k.avgDaysToPay}d`, 'days to pay')}
-          {metric('Top 10% Share', `${k.top10PctShare}%`, 'of revenue')}
-          {metric('Monthly Growth', `${k.monthlyGrowth >= 0 ? '+' : ''}${k.monthlyGrowth}%`, 'avg MoM (mature months)')}
+          {metric(t('metrics.avgValue'), money(k.avgCustomerValue), t('metricsSub.perCustomer'))}
+          {metric(t('metrics.retention'), `${k.retentionRate}%`, t('metricsSub.retentionProb'))}
+          {metric(t('metrics.paymentRate'), `${k.paymentRate}%`, t('metricsSub.paidInFull'))}
+          {metric(t('metrics.avgDso'), `${k.avgDaysToPay}d`, t('metricsSub.daysToPay'))}
+          {metric(t('metrics.top10Share'), `${k.top10PctShare}%`, t('metricsSub.ofRevenue'))}
+          {metric(t('metrics.monthlyGrowth'), `${k.monthlyGrowth >= 0 ? '+' : ''}${k.monthlyGrowth}%`, t('metricsSub.avgMoM'))}
         </div>
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title="Top Customers by Revenue" icon={BarChart3}>
+          <Panel title={t('panels.topByRevenue')} icon={BarChart3}>
             <DivergingBar labels={top.map((r) => r.name)} values={top.map((r) => r.revenue)} height={Math.max(220, top.length * 28)} />
           </Panel>
         </div>
-        <Panel title="Revenue by CLV Tier" icon={PieIcon}>
+        <Panel title={t('panels.revenueByTier')} icon={PieIcon}>
           <Donut
-            data={data.tierBreakdown.filter((x) => x.revenue > 0).map((x) => ({ name: TIER_LABEL[x.tier], value: x.revenue }))}
+            data={data.tierBreakdown.filter((x) => x.revenue > 0).map((x) => ({ name: t(`tier.${x.tier}`), value: x.revenue }))}
             colors={data.tierBreakdown.filter((x) => x.revenue > 0).map((x) => TIER_COLOR[x.tier])}
             height={220}
           />
@@ -317,11 +270,11 @@ function OverviewTab({ data }: { data: CustomerData }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* RFM Segments bars —  */}
-        <Panel title="RFM Segments" icon={Grid3x3} bodyClassName="p-0">
+        <Panel title={t('panels.rfmSegments')} icon={Grid3x3} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {data.segments.map((s) => (
               <li key={s.segment} className="flex items-center gap-3 px-4 py-2">
-                <span className={cn('w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold', SEGMENT_STYLE[s.segment])}>{SEGMENT_LABEL[s.segment]}</span>
+                <span className={cn('w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold', SEGMENT_STYLE[s.segment])}>{t(`segment.${s.segment}`)}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <div className="h-full rounded-full" style={{ width: `${(s.totalRevenue / maxSegRevenue) * 100}%`, backgroundColor: SEGMENT_COLOR[s.segment] }} />
                 </div>
@@ -333,9 +286,9 @@ function OverviewTab({ data }: { data: CustomerData }) {
         </Panel>
 
         {/* Intelligence Insights —  */}
-        <Panel title="Intelligence Insights" icon={Lightbulb} bodyClassName="p-0">
+        <Panel title={t('panels.insights')} icon={Lightbulb} bodyClassName="p-0">
           {data.insights.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">No notable signals for this period.</p>
+            <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noSignals')}</p>
           ) : (
             <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
               {data.insights.map((ins, i) => {
@@ -364,6 +317,7 @@ type GroupBy = 'none' | 'segment' | 'tier' | 'churn' | 'grade'
 const HEALTH_PAGE = 25
 
 function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: CustomerRow) => void }) {
+  const t = useTranslations('analytics.customer')
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
@@ -376,7 +330,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const groups = useMemo(() => {
     if (groupBy === 'none') return null
     const keyOf = (r: CustomerRow) =>
-      groupBy === 'segment' ? SEGMENT_LABEL[r.segment] : groupBy === 'tier' ? TIER_LABEL[r.tier] : groupBy === 'churn' ? RISK_LABEL[r.churnLevel] : r.healthGrade
+      groupBy === 'segment' ? t(`segment.${r.segment}`) : groupBy === 'tier' ? t(`tier.${r.tier}`) : groupBy === 'churn' ? t(`risk.${r.churnLevel}`) : r.healthGrade
     const map = new Map<string, CustomerRow[]>()
     for (const r of rows) {
       const key = keyOf(r)
@@ -398,8 +352,8 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
   const Row = ({ r }: { r: CustomerRow }) => (
     <tr onClick={() => onDrill(r)} className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
       <td className="px-4 py-2">
-        <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title="High revenue, low margin — review pricing"> ⚠️</span> : null}</p>
-        <p className="text-[11px] text-slate-400 dark:text-slate-500">Last: {r.recencyDays >= 9999 ? '—' : `${r.recencyDays} days ago`}</p>
+        <p className="font-medium text-slate-800 dark:text-slate-200">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('lastActive', { days: r.recencyDays >= 9999 ? '—' : t('daysAgo', { days: r.recencyDays }) })}</p>
       </td>
       <td className="px-4 py-2 text-center">
         <span className={cn('mr-1.5 rounded-full px-2 py-0.5 text-xs font-bold', GRADE_STYLE[r.healthGrade])}>{r.healthGrade}</span>
@@ -407,54 +361,54 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
       </td>
       <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
       <td className="px-4 py-2 text-right tabular-nums text-teal-600 dark:text-teal-400">{money(r.clv)}</td>
-      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{SEGMENT_LABEL[r.segment]}</span></td>
-      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{RISK_LABEL[r.churnLevel]}</span></td>
+      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></td>
+      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></td>
       <td className="px-4 py-2 text-center text-xs text-slate-500 capitalize dark:text-slate-400">{r.paymentRating}</td>
       <td className="px-4 py-2">
-        <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap', REC_STYLE[r.recommendation])} title={r.recommendationDetail}>{REC_LABEL[r.recommendation]}</span>
+        <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap', REC_STYLE[r.recommendation])} title={r.recommendationDetail}>{t(`rec.${r.recommendation}`)}</span>
       </td>
     </tr>
   )
 
   const header = (
     <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-      <th className="px-4 py-2 text-left font-medium">Customer</th>
-      <th className="px-4 py-2 text-center font-medium">Health</th>
-      <th className="px-4 py-2 text-right font-medium">Revenue</th>
-      <th className="px-4 py-2 text-right font-medium">Projected CLV</th>
-      <th className="px-4 py-2 text-center font-medium">Segment</th>
-      <th className="px-4 py-2 text-center font-medium">Churn</th>
-      <th className="px-4 py-2 text-center font-medium">Payment</th>
-      <th className="px-4 py-2 text-left font-medium">Recommendation</th>
+      <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+      <th className="px-4 py-2 text-center font-medium">{t('table.health')}</th>
+      <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+      <th className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</th>
+      <th className="px-4 py-2 text-center font-medium">{t('table.segment')}</th>
+      <th className="px-4 py-2 text-center font-medium">{t('table.churn')}</th>
+      <th className="px-4 py-2 text-center font-medium">{t('table.payment')}</th>
+      <th className="px-4 py-2 text-left font-medium">{t('table.recommendation')}</th>
     </tr>
   )
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={HeartPulse} accent="teal" label="Avg Health" value={String(avgHealth)} sub="weighted R/F/M/payment" />
-        <KpiCard icon={CheckCircle2} accent="emerald" label="Excellent" value={String(excellent)} sub="score ≥ 80" tone="positive" />
-        <KpiCard icon={AlertTriangle} accent={warning > 0 ? 'amber' : 'emerald'} label="Warning" value={String(warning)} sub="score 40–59" />
-        <KpiCard icon={AlertOctagon} accent={critical > 0 ? 'red' : 'emerald'} label="Critical" value={String(critical)} sub="score < 40" tone={critical > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={HeartPulse} accent="teal" label={t('kpi.avgHealth')} value={String(avgHealth)} sub={t('sub.weightedRfm')} />
+        <KpiCard icon={CheckCircle2} accent="emerald" label={t('kpi.excellent')} value={String(excellent)} sub={t('sub.score80Plus')} tone="positive" />
+        <KpiCard icon={AlertTriangle} accent={warning > 0 ? 'amber' : 'emerald'} label={t('kpi.warning')} value={String(warning)} sub={t('sub.score40to59')} />
+        <KpiCard icon={AlertOctagon} accent={critical > 0 ? 'red' : 'emerald'} label={t('kpi.critical')} value={String(critical)} sub={t('sub.scoreBelow40')} tone={critical > 0 ? 'negative' : 'positive'} />
       </div>
 
       <Panel
-        title={`Customer Health (${rows.length})`}
+        title={t('panels.customerHealth', { count: rows.length })}
         icon={HeartPulse}
-        hint="Weighted 25% recency · 25% frequency · 30% monetary · 20% payment, minus friction penalty"
+        hint={t('panels.customerHealthHint')}
         bodyClassName="p-0"
         actions={
           <span className="flex items-center gap-2">
             <Select value={groupBy} onChange={(e) => { setGroupBy(e.target.value as GroupBy); setPage(1) }} className="w-40" triggerClassName="h-7 text-xs">
-              <option value="none">No grouping</option>
-              <option value="segment">By Segment</option>
-              <option value="tier">By CLV Tier</option>
-              <option value="churn">By Churn Risk</option>
-              <option value="grade">By Health Grade</option>
+              <option value="none">{t('groupBy.none')}</option>
+              <option value="segment">{t('groupBy.segment')}</option>
+              <option value="tier">{t('groupBy.tier')}</option>
+              <option value="churn">{t('groupBy.churn')}</option>
+              <option value="grade">{t('groupBy.grade')}</option>
             </Select>
             <button
               type="button"
-              onClick={() => exportCsv('customer-health', ['Customer', 'Health', 'Grade', 'Revenue', 'Projected CLV', 'Segment', 'Churn', 'Payment', 'Recommendation'], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), SEGMENT_LABEL[r.segment], RISK_LABEL[r.churnLevel], r.paymentRating, REC_LABEL[r.recommendation]]), today)}
+              onClick={() => exportCsv('customer-health', [t('table.customer'), t('table.health'), t('csv.grade'), t('table.revenue'), t('csv.projectedClv'), t('csv.segment'), t('csv.churn'), t('csv.payment'), t('csv.recommendation')], rows.map((r) => [r.name, r.healthScore, r.healthGrade, Math.round(r.revenue), Math.round(r.clv), t(`segment.${r.segment}`), t(`risk.${r.churnLevel}`), r.paymentRating, t(`rec.${r.recommendation}`)]), today)}
               className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <Download size={11} /> CSV
@@ -479,7 +433,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
                           <td colSpan={8} className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
                             <span className="mr-1.5 inline-block align-middle text-slate-400">{isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
                             {label}
-                            <span className="ml-2 font-normal text-slate-400">{set.length} customers · {money(rev)}</span>
+                            <span className="ml-2 font-normal text-slate-400">{t('groupSummary', { count: set.length, revenue: money(rev) })}</span>
                           </td>
                         </tr>
                         {!isCollapsed && set.map((r) => <Row key={r.id} r={r} />)}
@@ -491,7 +445,7 @@ function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: Custome
           </table>
         </div>
         {!groups && totalPages > 1 && (
-          <Pager page={pageNo} totalPages={totalPages} total={rows.length} pageSize={HEALTH_PAGE} onPage={setPage} noun="customers" />
+          <Pager page={pageNo} totalPages={totalPages} total={rows.length} pageSize={HEALTH_PAGE} onPage={setPage} noun={t('pager.nounCustomers')} />
         )}
       </Panel>
     </div>
@@ -503,14 +457,15 @@ function GroupRows({ children }: { children: React.ReactNode }) {
 }
 
 function Pager({ page, totalPages, total, pageSize, onPage, noun }: { page: number; totalPages: number; total: number; pageSize: number; onPage: (p: number) => void; noun: string }) {
+  const t = useTranslations('analytics.customer')
   const start = (page - 1) * pageSize
   return (
     <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-      <span>Showing {start + 1}–{Math.min(start + pageSize, total)} of {total} {noun}</span>
+      <span>{t('pager.showing', { from: start + 1, to: Math.min(start + pageSize, total), total })} {noun}</span>
       <div className="flex items-center gap-1">
-        <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Prev</button>
+        <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">{t('pager.prev')}</button>
         <span className="px-2 tabular-nums">{page} / {totalPages}</span>
-        <button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Next</button>
+        <button type="button" disabled={page >= totalPages} onClick={() => onPage(page + 1)} className="rounded border border-slate-200 px-2 py-1 disabled:opacity-40 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">{t('pager.next')}</button>
       </div>
     </div>
   )
@@ -518,6 +473,7 @@ function Pager({ page, totalPages, total, pageSize, onPage, noun }: { page: numb
 
 /* ----------------------------------------------------------- Segmentation */
 function SegmentationTab({ data }: { data: CustomerData }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [segment, setSegment] = useState<Segment | 'all'>('all')
@@ -543,9 +499,9 @@ function SegmentationTab({ data }: { data: CustomerData }) {
               'rounded-xl border p-3 text-left shadow-sm transition-colors',
               segment === s.segment ? 'border-teal-400 bg-teal-50/60 dark:border-teal-600 dark:bg-teal-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700',
             )}
-            title={SEGMENT_DESC[s.segment]}
+            title={t(`segmentDesc.${s.segment}`)}
           >
-            <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', SEGMENT_STYLE[s.segment])}>{SEGMENT_LABEL[s.segment]}</span>
+            <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', SEGMENT_STYLE[s.segment])}>{t(`segment.${s.segment}`)}</span>
             <p className="mt-1.5 text-xl font-semibold text-slate-800 tabular-nums dark:text-slate-100">{s.count}</p>
             <p className="text-[11px] text-slate-400 tabular-nums dark:text-slate-500">{s.percentage}% · {money(s.totalRevenue)}</p>
           </button>
@@ -554,23 +510,23 @@ function SegmentationTab({ data }: { data: CustomerData }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <Panel title="Segment Performance" icon={Grid3x3} bodyClassName="p-0">
+          <Panel title={t('panels.segmentPerformance')} icon={Grid3x3} bodyClassName="p-0">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Segment</th>
-                  <th className="px-4 py-2 text-right font-medium">Customers</th>
-                  <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                  <th className="px-4 py-2 text-right font-medium">Avg / Customer</th>
-                  <th className="px-4 py-2 text-right font-medium">Rev Share</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.segment')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.avgPerCustomer')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.revShare')}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.segments.map((s) => (
                   <tr key={s.segment} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                     <td className="px-4 py-2.5">
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', SEGMENT_STYLE[s.segment])}>{SEGMENT_LABEL[s.segment]}</span>
-                      <span className="ml-2 hidden text-[11px] text-slate-400 lg:inline dark:text-slate-500">{SEGMENT_DESC[s.segment]}</span>
+                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', SEGMENT_STYLE[s.segment])}>{t(`segment.${s.segment}`)}</span>
+                      <span className="ml-2 hidden text-[11px] text-slate-400 lg:inline dark:text-slate-500">{t(`segmentDesc.${s.segment}`)}</span>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-700 dark:text-slate-300">{s.count}</td>
                     <td className="px-4 py-2.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(s.totalRevenue)}</td>
@@ -582,34 +538,34 @@ function SegmentationTab({ data }: { data: CustomerData }) {
             </table>
           </Panel>
         </div>
-        <Panel title="Segment Mix" icon={PieIcon}>
+        <Panel title={t('panels.segmentMix')} icon={PieIcon}>
           <Donut
-            data={data.segments.filter((s) => s.count > 0).map((s) => ({ name: SEGMENT_LABEL[s.segment], value: s.count }))}
+            data={data.segments.filter((s) => s.count > 0).map((s) => ({ name: t(`segment.${s.segment}`), value: s.count }))}
             colors={data.segments.filter((s) => s.count > 0).map((s) => SEGMENT_COLOR[s.segment])}
-            valueFormat={(v) => `${Math.round(v)} customers`}
+            valueFormat={(v) => t('customersCount', { count: Math.round(v) })}
             height={220}
           />
         </Panel>
       </div>
 
       <Panel
-        title={segment === 'all' ? `Customers by Segment (${filtered.length})` : `${SEGMENT_LABEL[segment]} (${filtered.length})`}
+        title={segment === 'all' ? t('panels.customersBySegment', { count: filtered.length }) : t('panels.segmentCustomers', { segment: t(`segment.${segment}`), count: filtered.length })}
         icon={Users}
-        hint="R/F/M scores: 5 best, 1 worst — recency from fixed day thresholds, frequency/monetary from 33rd/66th percentiles"
+        hint={t('panels.rfmHint')}
         bodyClassName="p-0"
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Customer</th>
-                <th className="px-4 py-2 text-center font-medium">R</th>
-                <th className="px-4 py-2 text-center font-medium">F</th>
-                <th className="px-4 py-2 text-center font-medium">M</th>
-                <th className="px-4 py-2 text-center font-medium">Segment</th>
-                <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                <th className="px-4 py-2 text-right font-medium">Invoices</th>
-                <th className="px-4 py-2 text-right font-medium">Recency</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.r')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.f')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.m')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.segment')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.invoices')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.recency')}</th>
               </tr>
             </thead>
             <tbody>
@@ -619,7 +575,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
                   <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.r} /></td>
                   <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.f} /></td>
                   <td className="px-4 py-2 text-center"><ScoreChip v={r.rfm.m} /></td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{SEGMENT_LABEL[r.segment]}</span></td>
+                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', SEGMENT_STYLE[r.segment])}>{t(`segment.${r.segment}`)}</span></td>
                   <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.invoices}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</td>
@@ -628,7 +584,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={filtered.length} pageSize={25} onPage={setPage} noun="customers" />}
+        {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={filtered.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
       </Panel>
     </div>
   )
@@ -644,6 +600,7 @@ function LifetimeTab({
   profitability: Profitability
   projectsEnabled: boolean
 }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
@@ -652,74 +609,74 @@ function LifetimeTab({
   const totalPages = Math.max(1, Math.ceil(byClv.length / 25))
   const pageNo = Math.min(page, totalPages)
   const pageRows = byClv.slice((pageNo - 1) * 25, pageNo * 25)
-  const maxTier = Math.max(1, ...data.tierBreakdown.map((t) => t.count))
+  const maxTier = Math.max(1, ...data.tierBreakdown.map((tb) => tb.count))
 
   return (
     <div className="space-y-5">
       <div className={projectsEnabled ? 'grid grid-cols-2 gap-3 lg:grid-cols-4' : 'grid grid-cols-2 gap-3'}>
-        <KpiCard icon={Gem} accent="violet" label="Total Projected CLV" value={money(k.projectedClv)} sub={`avg ${money(k.avgClv)} / customer`} />
-        <KpiCard icon={DollarSign} accent="emerald" label="Period Revenue" value={money(k.totalRevenue)} sub="historical CLV base" />
+        <KpiCard icon={Gem} accent="violet" label={t('kpi.totalProjectedClv')} value={money(k.projectedClv)} sub={t('sub.avgPerCustomer', { amount: money(k.avgClv) })} />
+        <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.periodRevenue')} value={money(k.totalRevenue)} sub={t('sub.clvBase')} />
         {projectsEnabled ? (
           <>
-            <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label="Gross Profit" value={money(profitability.summary.totalGrossProfit)} sub={`${profitability.summary.avgMarginPct.toFixed(1)}% margin`} />
-            <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label="Profit Leaks" value={String(k.fakeChampions)} sub="high revenue, <15% margin" tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
+            <KpiCard icon={HandCoins} accent={profitability.summary.totalGrossProfit < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(profitability.summary.totalGrossProfit)} sub={t('sub.marginPct', { pct: profitability.summary.avgMarginPct.toFixed(1) })} />
+            <KpiCard icon={AlertTriangle} accent={k.fakeChampions > 0 ? 'amber' : 'emerald'} label={t('kpi.profitLeaks')} value={String(k.fakeChampions)} sub={t('sub.highRevenueLowMargin')} tone={k.fakeChampions > 0 ? 'negative' : 'positive'} />
           </>
         ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="CLV Tier Distribution" icon={Layers} bodyClassName="p-0">
+        <Panel title={t('panels.tierDistribution')} icon={Layers} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
-            {data.tierBreakdown.map((t) => (
-              <li key={t.tier} className="flex items-center gap-3 px-4 py-2.5">
-                <span className={cn('w-20 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold', TIER_STYLE[t.tier])}>{TIER_LABEL[t.tier]}</span>
+            {data.tierBreakdown.map((tb) => (
+              <li key={tb.tier} className="flex items-center gap-3 px-4 py-2.5">
+                <span className={cn('w-20 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold', TIER_STYLE[tb.tier])}>{t(`tier.${tb.tier}`)}</span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className="h-full rounded-full" style={{ width: `${(t.count / maxTier) * 100}%`, backgroundColor: TIER_COLOR[t.tier] }} />
+                  <div className="h-full rounded-full" style={{ width: `${(tb.count / maxTier) * 100}%`, backgroundColor: TIER_COLOR[tb.tier] }} />
                 </div>
-                <span className="w-24 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{t.count} · {money(t.revenue)}</span>
-                <span className="w-20 text-right text-[11px] text-slate-400 tabular-nums dark:text-slate-500">{t.threshold > 0 ? `≥ ${money(t.threshold)}` : '—'}</span>
+                <span className="w-24 text-right text-xs text-slate-500 tabular-nums dark:text-slate-400">{tb.count} · {money(tb.revenue)}</span>
+                <span className="w-20 text-right text-[11px] text-slate-400 tabular-nums dark:text-slate-500">{tb.threshold > 0 ? `≥ ${money(tb.threshold)}` : '—'}</span>
               </li>
             ))}
           </ul>
         </Panel>
-        <Panel title="How CLV is projected" icon={Info}>
+        <Panel title={t('panels.howClvProjected')} icon={Info}>
           <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Annual value</span> = avg invoice × (invoices ÷ years active, floor 3 months).{' '}
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Retention factor</span> = 0.95·e<sup>−days since last ÷ 120</sup>, clamped 10–95%.{' '}
-            <span className="font-semibold text-slate-700 dark:text-slate-300">Projected CLV</span> = annual value × 3 years × retention.
-            Tiers rank by projected CLV: top 10% Platinum, next 20% Gold, next 30% Silver, bottom 40% Bronze.
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.annualBold')}</span>{t('clvHow.annualTail')}{' '}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.retentionBold')}</span>{t('clvHow.retentionHead')}<sup>{t('clvHow.retentionSup')}</sup>{t('clvHow.retentionTail')}{' '}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">{t('clvHow.clvBold')}</span>{t('clvHow.clvTail')}
+            {t('clvHow.tiersNote')}
           </p>
           <div className="mt-3">
             <GroupedBar
-              labels={data.tierBreakdown.map((t) => TIER_LABEL[t.tier])}
+              labels={data.tierBreakdown.map((tb) => t(`tier.${tb.tier}`))}
               height={180}
-              series={[{ name: 'Projected CLV', data: data.tierBreakdown.map((t) => data.rows.filter((r) => r.tier === t.tier).reduce((a, r) => a + r.clv, 0)), color: '#0d9488' }]}
+              series={[{ name: t('chart.projectedClv'), data: data.tierBreakdown.map((tb) => data.rows.filter((r) => r.tier === tb.tier).reduce((a, r) => a + r.clv, 0)), color: '#0d9488' }]}
             />
           </div>
         </Panel>
       </div>
 
-      <Panel title="Lifetime Value Ranking" icon={Gem} bodyClassName="p-0">
+      <Panel title={t('panels.clvRanking')} icon={Gem} bodyClassName="p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                 <th className="px-4 py-2 text-left font-medium">#</th>
-                <th className="px-4 py-2 text-left font-medium">Customer</th>
-                <th className="px-4 py-2 text-center font-medium">Tier</th>
-                <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                <th className="px-4 py-2 text-right font-medium">Margin</th>
-                <th className="px-4 py-2 text-right font-medium">Annual Value</th>
-                <th className="px-4 py-2 text-right font-medium">Projected CLV</th>
-                <th className="px-4 py-2 text-right font-medium">Retention</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                <th className="px-4 py-2 text-center font-medium">{t('table.tier')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.margin')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.annualValue')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.projectedClv')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.retention')}</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((r) => (
                 <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                   <td className="px-4 py-2 text-slate-400 tabular-nums dark:text-slate-500">{r.clvRank}</td>
-                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title="High revenue, low margin"> ⚠️</span> : null}</td>
-                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{TIER_LABEL[r.tier]}</span></td>
+                  <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}{r.isFakeChampion ? <span title={t('fakeChampionTitleShort')}> ⚠️</span> : null}</td>
+                  <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TIER_STYLE[r.tier])}>{t(`tier.${r.tier}`)}</span></td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.revenue)}</td>
                   <td className={cn('px-4 py-2 text-right tabular-nums', r.marginPct === null ? 'text-slate-400 dark:text-slate-500' : marginClass(r.marginPct))}>{r.marginPct === null ? '—' : `${r.marginPct.toFixed(1)}%`}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{money(r.annualValue)}</td>
@@ -730,7 +687,7 @@ function LifetimeTab({
             </tbody>
           </table>
         </div>
-        {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={byClv.length} pageSize={25} onPage={setPage} noun="customers" />}
+        {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={byClv.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
       </Panel>
     </div>
   )
@@ -738,6 +695,7 @@ function LifetimeTab({
 
 /* --------------------------------------------------------------- Churn */
 function ChurnTab({ data }: { data: CustomerData }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
@@ -762,25 +720,25 @@ function ChurnTab({ data }: { data: CustomerData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label="Recency Risk" value={String(k.atRiskCount)} sub="high + critical churn" tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Undo2} accent={k.criticalFriction + k.highFriction > 0 ? 'amber' : 'emerald'} label="High Friction" value={String(k.criticalFriction + k.highFriction)} sub="credit-heavy accounts" />
-        <KpiCard icon={CalendarClock} accent={k.overdueOrders > 0 ? 'amber' : 'emerald'} label="Overdue Orders" value={String(k.overdueOrders)} sub="past their usual cycle" />
-        <KpiCard icon={DollarSign} accent={k.atRiskRevenue > 0 ? 'red' : 'emerald'} label="At Risk Revenue" value={money(k.atRiskRevenue)} sub="high + critical accounts" tone={k.atRiskRevenue > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={AlertOctagon} accent={k.atRiskCount > 0 ? 'red' : 'emerald'} label={t('kpi.recencyRisk')} value={String(k.atRiskCount)} sub={t('sub.highCriticalChurn')} tone={k.atRiskCount > 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Undo2} accent={k.criticalFriction + k.highFriction > 0 ? 'amber' : 'emerald'} label={t('kpi.highFriction')} value={String(k.criticalFriction + k.highFriction)} sub={t('sub.creditHeavy')} />
+        <KpiCard icon={CalendarClock} accent={k.overdueOrders > 0 ? 'amber' : 'emerald'} label={t('kpi.overdueOrders')} value={String(k.overdueOrders)} sub={t('sub.pastUsualCycle')} />
+        <KpiCard icon={DollarSign} accent={k.atRiskRevenue > 0 ? 'red' : 'emerald'} label={t('kpi.atRiskRevenue')} value={money(k.atRiskRevenue)} sub={t('sub.highCriticalAccounts')} tone={k.atRiskRevenue > 0 ? 'negative' : 'positive'} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="Friction Signals" icon={Undo2} hint="Credits ×2 points (no return-authorization docs on this ledger, so returns are always 0)" bodyClassName="p-0">
+        <Panel title={t('panels.frictionSignals')} hint={t('panels.frictionHint')} bodyClassName="p-0">
           {friction.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">No credit-memo friction in this period.</p>
+            <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noFriction')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Customer</th>
-                  <th className="px-4 py-2 text-right font-medium">Credits</th>
-                  <th className="px-4 py-2 text-right font-medium">Credit Value</th>
-                  <th className="px-4 py-2 text-right font-medium">Issue Rate</th>
-                  <th className="px-4 py-2 text-center font-medium">Level</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.credits')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.creditValue')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.issueRate')}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t('table.level')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -790,7 +748,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                     <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{r.creditCount}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-red-600 dark:text-red-400">{money(r.creditValue)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.returnRate.toFixed(1)}%</td>
-                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.frictionLevel])}>{RISK_LABEL[r.frictionLevel]}</span></td>
+                    <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.frictionLevel])}>{t(`risk.${r.frictionLevel}`)}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -798,17 +756,17 @@ function ChurnTab({ data }: { data: CustomerData }) {
           )}
         </Panel>
 
-        <Panel title="Overdue Orders" icon={CalendarClock} hint="Days past each customer's own average order cycle" bodyClassName="p-0">
+        <Panel title={t('panels.overdueOrders')} hint={t('panels.overdueHint')} bodyClassName="p-0">
           {overdue.length === 0 ? (
-            <p className="px-4 py-6 text-center text-xs text-slate-400">Nobody is past their usual ordering cycle.</p>
+            <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noOverdue')}</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Customer</th>
-                  <th className="px-4 py-2 text-right font-medium">Avg Cycle</th>
-                  <th className="px-4 py-2 text-right font-medium">Overdue</th>
-                  <th className="px-4 py-2 text-center font-medium">Urgency</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.avgCycle')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.overdue')}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t('table.urgency')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -827,33 +785,33 @@ function ChurnTab({ data }: { data: CustomerData }) {
       </div>
 
       <Panel
-        title={`At-Risk Customers (${atRisk.length})`}
+        title={t('panels.atRiskCustomers', { count: atRisk.length })}
         icon={AlertOctagon}
-        hint="Churn score: recency 0–40 (>120d/>60d/>30d) + cadence decline 0–30 (2×/1.5× own average) + low engagement 0–30 (≤1/≤3 orders)"
+        hint={t('panels.atRiskHint')}
         bodyClassName="p-0"
       >
         {atRisk.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs text-slate-400">No at-risk customers — retention looks healthy.</p>
+          <p className="px-4 py-6 text-center text-xs text-slate-400">{t('empty.noAtRisk')}</p>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                    <th className="px-4 py-2 text-left font-medium">Customer</th>
-                    <th className="px-4 py-2 text-center font-medium">Risk</th>
-                    <th className="px-4 py-2 text-right font-medium">Score</th>
-                    <th className="px-4 py-2 text-right font-medium">Days Inactive</th>
-                    <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                    <th className="px-4 py-2 text-right font-medium">Retention Prob.</th>
-                    <th className="px-4 py-2 text-left font-medium">Risk Factors</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.customer')}</th>
+                    <th className="px-4 py-2 text-center font-medium">{t('table.risk')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.score')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.daysInactive')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+                    <th className="px-4 py-2 text-right font-medium">{t('table.retentionProb')}</th>
+                    <th className="px-4 py-2 text-left font-medium">{t('table.riskFactors')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageRows.map((r) => (
                     <tr key={r.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{r.name}</td>
-                      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{RISK_LABEL[r.churnLevel]}</span></td>
+                      <td className="px-4 py-2 text-center"><span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', RISK_STYLE[r.churnLevel])}>{t(`risk.${r.churnLevel}`)}</span></td>
                       <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{r.churnScore}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{r.recencyDays >= 9999 ? '—' : `${r.recencyDays}d`}</td>
                       <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{money(r.revenue)}</td>
@@ -864,7 +822,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
                 </tbody>
               </table>
             </div>
-            {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={atRisk.length} pageSize={25} onPage={setPage} noun="customers" />}
+            {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={atRisk.length} pageSize={25} onPage={setPage} noun={t('pager.nounCustomers')} />}
           </>
         )}
       </Panel>
@@ -874,6 +832,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
 
 /* --------------------------------------------------------------- Growth */
 function GrowthTab({ data }: { data: CustomerData }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const g = data.growth
@@ -883,38 +842,38 @@ function GrowthTab({ data }: { data: CustomerData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiCard icon={TrendingUp} accent={(g.yoyGrowth ?? 0) >= 0 ? 'emerald' : 'red'} label="YoY Growth" value={g.yoyGrowth === null ? '—' : `${g.yoyGrowth >= 0 ? '+' : ''}${g.yoyGrowth}%`} sub="last 3mo vs same period LY" tone={(g.yoyGrowth ?? 0) >= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label="Avg Monthly" value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={`trend: ${g.trend}`} />
-        <KpiCard icon={DollarSign} accent="sky" label="Median Monthly" value={money(g.medianMonthlyRevenue)} sub="revenue" />
-        <KpiCard icon={Users} accent="violet" label="New Customers" value={String(g.totalNewCustomers)} sub="first order in period" />
-        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= 50 ? 'emerald' : 'amber'} label="Retention Rate" value={`${data.cohorts.overallRetention}%`} sub="active in last 6 months" />
+        <KpiCard icon={TrendingUp} accent={(g.yoyGrowth ?? 0) >= 0 ? 'emerald' : 'red'} label={t('kpi.yoyGrowth')} value={g.yoyGrowth === null ? '—' : `${g.yoyGrowth >= 0 ? '+' : ''}${g.yoyGrowth}%`} sub={t('sub.last3moVsLy')} tone={(g.yoyGrowth ?? 0) >= 0 ? 'positive' : 'negative'} />
+        <KpiCard icon={BarChart3} accent={g.avgMonthlyGrowth >= 0 ? 'teal' : 'amber'} label={t('kpi.avgMonthly')} value={`${g.avgMonthlyGrowth >= 0 ? '+' : ''}${g.avgMonthlyGrowth}%`} sub={t('sub.trend', { trend: g.trend })} />
+        <KpiCard icon={DollarSign} accent="sky" label={t('kpi.medianMonthly')} value={money(g.medianMonthlyRevenue)} sub={t('sub.revenue')} />
+        <KpiCard icon={Users} accent="violet" label={t('kpi.newCustomers')} value={String(g.totalNewCustomers)} sub={t('sub.firstOrderInPeriod')} />
+        <KpiCard icon={HeartPulse} accent={data.cohorts.overallRetention >= 50 ? 'emerald' : 'amber'} label={t('kpi.retentionRate')} value={`${data.cohorts.overallRetention}%`} sub={t('sub.activeLast6mo')} />
       </div>
 
       {k.overdueInvoices > 5 ? (
         <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-          <span><span className="font-semibold">{k.overdueInvoices} overdue invoices</span> in this period — collections risk can mask growth. Review the Churn Risk tab.</span>
+          <span><span className="font-semibold">{t('overdueBanner.count', { count: k.overdueInvoices })}</span>{t('overdueBanner.rest')}</span>
         </p>
       ) : null}
 
-      <Panel title="Monthly Revenue Trend" icon={BarChart3}>
+      <Panel title={t('panels.monthlyRevenueTrend')} icon={BarChart3}>
         <GroupedBar
           labels={g.monthly.map((m) => m.label)}
           height={240}
-          series={[{ name: 'Revenue', data: g.monthly.map((m) => m.revenue), color: '#0d9488' }]}
+          series={[{ name: t('table.revenue'), data: g.monthly.map((m) => m.revenue), color: '#0d9488' }]}
         />
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="Cohort Retention" icon={Layers} hint="By first-order year · active = ordered in the last 6 months" bodyClassName="p-0">
+        <Panel title={t('panels.cohortRetention')} hint={t('panels.cohortHint')} bodyClassName="p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                <th className="px-4 py-2 text-left font-medium">Cohort</th>
-                <th className="px-4 py-2 text-right font-medium">Customers</th>
-                <th className="px-4 py-2 text-right font-medium">Active</th>
-                <th className="px-4 py-2 text-right font-medium">Retention</th>
-                <th className="px-4 py-2 text-right font-medium">Avg Lifetime Rev</th>
+                <th className="px-4 py-2 text-left font-medium">{t('table.cohort')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.active')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.retention')}</th>
+                <th className="px-4 py-2 text-right font-medium">{t('table.avgLifetimeRev')}</th>
               </tr>
             </thead>
             <tbody>
@@ -931,17 +890,17 @@ function GrowthTab({ data }: { data: CustomerData }) {
           </table>
         </Panel>
 
-        <Panel title="Monthly Details" icon={CalendarClock} hint="MoM growth capped +200/−80%; '—' marks ramp-up from an immature month" bodyClassName="p-0">
+        <Panel title={t('panels.monthlyDetails')} hint={t('panels.monthlyDetailsHint')} bodyClassName="p-0">
           <div className="max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-white dark:bg-slate-900">
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <th className="px-4 py-2 text-left font-medium">Month</th>
-                  <th className="px-4 py-2 text-right font-medium">Revenue</th>
-                  <th className="px-4 py-2 text-right font-medium">Customers</th>
-                  <th className="px-4 py-2 text-right font-medium">New</th>
-                  <th className="px-4 py-2 text-right font-medium">Txns</th>
-                  <th className="px-4 py-2 text-right font-medium">MoM</th>
+                  <th className="px-4 py-2 text-left font-medium">{t('table.month')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.revenue')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.customers')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.new')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.txns')}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t('table.mom')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -971,8 +930,16 @@ type ProfitSort = 'customerName' | 'totalRevenue' | 'totalCost' | 'grossProfit' 
 const PAGE_SIZE = 20
 
 function ProfitabilityTab({ p }: { p: Profitability }) {
+  const t = useTranslations('analytics.customer')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
+  const marginLabel = (m: number): string => {
+    if (m >= 40) return t('margin.excellent')
+    if (m >= 25) return t('margin.good')
+    if (m >= 10) return t('margin.fair')
+    if (m >= 0) return t('margin.low')
+    return t('margin.loss')
+  }
   const s = p.summary
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sortCol, setSortCol] = useState<ProfitSort>('totalRevenue')
@@ -1016,29 +983,29 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={DollarSign} accent="emerald" label="Total Revenue" value={money(s.totalRevenue)} sub={`${s.customerCount} customers`} />
-        <KpiCard icon={FileText} accent="red" label="Total Costs" value={money(s.totalCost)} sub={`${s.totalJobs} jobs`} />
-        <KpiCard icon={HandCoins} accent={s.totalGrossProfit < 0 ? 'red' : 'sky'} label="Gross Profit" value={money(s.totalGrossProfit)} sub={s.totalGrossProfit < 0 ? 'Loss' : 'Profit'} tone={s.totalGrossProfit < 0 ? 'negative' : 'positive'} />
-        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label="Avg Margin" value={`${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
+        <KpiCard icon={DollarSign} accent="emerald" label={t('kpi.totalRevenue')} value={money(s.totalRevenue)} sub={t('sub.customersCount', { count: s.customerCount })} />
+        <KpiCard icon={FileText} accent="red" label={t('kpi.totalCosts')} value={money(s.totalCost)} sub={t('sub.jobsCount', { count: s.totalJobs })} />
+        <KpiCard icon={HandCoins} accent={s.totalGrossProfit < 0 ? 'red' : 'sky'} label={t('kpi.grossProfit')} value={money(s.totalGrossProfit)} sub={s.totalGrossProfit < 0 ? t('margin.loss') : t('margin.profit')} tone={s.totalGrossProfit < 0 ? 'negative' : 'positive'} />
+        <KpiCard icon={Percent} accent={marginAccent(s.avgMarginPct)} label={t('kpi.avgMargin')} value={`${s.avgMarginPct.toFixed(1)}%`} sub={marginLabel(s.avgMarginPct)} />
       </div>
 
       {p.customers.length === 0 ? (
-        <Panel title="Customer Profitability" icon={Users}>
-          <p className="py-8 text-center text-sm text-slate-400">No project-tagged profitability for this period.</p>
+        <Panel title={t('panels.customerProfitability')} icon={Users}>
+          <p className="py-8 text-center text-sm text-slate-400">{t('empty.noProjectProfitability')}</p>
         </Panel>
       ) : (
-        <Panel title="Customer Profitability" icon={Users} hint={`Click a customer to expand jobs · ⚠️ marks profit leaks (>${money(100_000)} revenue, <15% margin)`} bodyClassName="p-0">
+        <Panel title={t('panels.customerProfitability')} icon={Users} hint={t('panels.profitabilityHint', { threshold: money(100_000) })} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:text-slate-500">
                   <th className="w-8 px-2 py-2" />
-                  <SortTh label="Customer / Job" col="customerName" align="left" />
-                  <SortTh label="Revenue" col="totalRevenue" />
-                  <SortTh label="Costs" col="totalCost" />
-                  <SortTh label="Profit" col="grossProfit" />
-                  <SortTh label="Margin" col="marginPct" />
-                  <th className="px-3 py-2 text-center font-medium">Tier</th>
+                  <SortTh label={t('table.customerJob')} col="customerName" align="left" />
+                  <SortTh label={t('table.revenue')} col="totalRevenue" />
+                  <SortTh label={t('table.costs')} col="totalCost" />
+                  <SortTh label={t('table.profit')} col="grossProfit" />
+                  <SortTh label={t('table.margin')} col="marginPct" />
+                  <th className="px-3 py-2 text-center font-medium">{t('table.tier')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1054,14 +1021,14 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className="font-semibold text-slate-800 dark:text-slate-100">{c.customerName}{c.isFakeChampion ? <span title="High revenue, low margin — review pricing"> ⚠️</span> : null}</span>
-                          <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{c.jobs.length} jobs</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-100">{c.customerName}{c.isFakeChampion ? <span title={t('fakeChampionTitle')}> ⚠️</span> : null}</span>
+                          <span className="ml-2 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('jobsCount', { count: c.jobs.length })}</span>
                         </td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{money(c.totalRevenue)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-red-600 dark:text-red-400">{money(c.totalCost)}</td>
                         <td className={cn('px-3 py-2.5 text-right font-medium tabular-nums', c.grossProfit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-800 dark:text-slate-200')}>{money(c.grossProfit)}</td>
                         <td className={cn('px-3 py-2.5 text-right font-bold tabular-nums', marginClass(c.marginPct))}>{c.marginPct.toFixed(1)}%</td>
-                        <td className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{PROFIT_TIER_LABEL[c.profitTier]}</span></td>
+                        <td className="px-3 py-2.5 text-center"><span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', PROFIT_TIER_STYLE[c.profitTier])}>{t(`profitTier.${c.profitTier}`)}</span></td>
                       </tr>
                       {isOpen
                         ? c.jobs.map((j) => (
@@ -1071,7 +1038,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
                                 <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                                   <FolderGit2 size={12} className="text-slate-400" />
                                   {j.jobName}
-                                  {j.transactionCount ? <span className="text-slate-400 dark:text-slate-500">({j.transactionCount} txns)</span> : null}
+                                  {j.transactionCount ? <span className="text-slate-400 dark:text-slate-500">({t('txnsCount', { count: j.transactionCount })})</span> : null}
                                 </span>
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{money(j.revenue)}</td>
@@ -1088,7 +1055,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
               </tbody>
             </table>
           </div>
-          {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={sorted.length} pageSize={PAGE_SIZE} onPage={setPage} noun="customers" />}
+          {totalPages > 1 && <Pager page={pageNo} totalPages={totalPages} total={sorted.length} pageSize={PAGE_SIZE} onPage={setPage} noun={t('pager.nounCustomers')} />}
         </Panel>
       )}
     </div>
@@ -1097,6 +1064,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
 
 /* ---------------------------------------------------------- Configuration */
 function ConfigurationTab({ data }: { data: CustomerData }) {
+  const t = useTranslations('analytics.customer')
   const item = (label: string, value: string) => (
     <div className="flex items-center justify-between border-b border-slate-50 py-2 text-sm last:border-0 dark:border-slate-800/60">
       <span className="text-slate-500 dark:text-slate-400">{label}</span>
@@ -1110,37 +1078,37 @@ function ConfigurationTab({ data }: { data: CustomerData }) {
         <ConfigEditor
           dashboard="customerIntelligence"
           fields={[
-            { key: 'churnCriticalScore', label: 'Churn — critical (score)', help: 'Composite churn score at or above this reads as critical risk', min: 1, max: 100, step: 1 },
-            { key: 'churnHighScore', label: 'Churn — high (score)', help: 'Composite churn score at or above this reads as high risk', min: 1, max: 100, step: 1 },
-            { key: 'churnMediumScore', label: 'Churn — medium (score)', help: 'Composite churn score at or above this reads as medium risk', min: 1, max: 100, step: 1 },
-            { key: 'hhiWarning', label: 'Concentration warning (HHI)', help: 'Herfindahl index at or above this flags a concentration warning', min: 0, max: 10_000, step: 100 },
-            { key: 'hhiCritical', label: 'Concentration critical (HHI)', help: 'Herfindahl index at or above this flags critical concentration', min: 0, max: 10_000, step: 100 },
-            { key: 'clvYears', label: 'CLV horizon (years)', help: 'Years of forward value in the lifetime-value projection', min: 1, max: 10, step: 1 },
+            { key: 'churnCriticalScore', label: t('config.fields.churnCritical.label'), help: t('config.fields.churnCritical.help'), min: 1, max: 100, step: 1 },
+            { key: 'churnHighScore', label: t('config.fields.churnHigh.label'), help: t('config.fields.churnHigh.help'), min: 1, max: 100, step: 1 },
+            { key: 'churnMediumScore', label: t('config.fields.churnMedium.label'), help: t('config.fields.churnMedium.help'), min: 1, max: 100, step: 1 },
+            { key: 'hhiWarning', label: t('config.fields.hhiWarning.label'), help: t('config.fields.hhiWarning.help'), min: 0, max: 10_000, step: 100 },
+            { key: 'hhiCritical', label: t('config.fields.hhiCritical.label'), help: t('config.fields.hhiCritical.help'), min: 0, max: 10_000, step: 100 },
+            { key: 'clvYears', label: t('config.fields.clvYears.label'), help: t('config.fields.clvYears.help'), min: 1, max: 10, step: 1 },
           ]}
           values={{ churnCriticalScore: c.churnCriticalScore, churnHighScore: c.churnHighScore, churnMediumScore: c.churnMediumScore, hhiWarning: c.hhiWarning, hhiCritical: c.hhiCritical, clvYears: c.clvYears }}
           defaults={{ churnCriticalScore: 70, churnHighScore: 50, churnMediumScore: 30, hhiWarning: 1500, hhiCritical: 2500, clvYears: 3 }}
         />
-        <Panel title="Scoring Model" icon={Settings2} hint="How the composite scores are built">
-          {item('Health weights', 'Recency 25% · Frequency 25% · Monetary 30% · Payment 20%')}
-          {item('Friction penalty', 'Critical −25 · High −15 · Medium −8')}
-          {item('RFM recency thresholds', '≤30d → 5 · ≤90d → 3 · ≤180d → 2 · else 1')}
-          {item('RFM frequency / monetary', '33rd & 66th percentile cuts → 1 / 3 / 5')}
-          {item('CLV retention', 'retention 0.95·e^(−days/120), clamped 10–95%')}
-          {item('CLV tiers', 'Top 10% Platinum · next 20% Gold · next 30% Silver · rest Bronze')}
-          {item('Payment score', '100 − 40/20/10 by DSO >60/>30/>15d − min(40, overdue×10)')}
-          {item('Health grades', 'A+ ≥90 · A ≥80 · B ≥70 · C ≥60 · D ≥50 · F below')}
+        <Panel title={t('panels.scoringModel')} hint={t('panels.scoringModelHint')}>
+          {item(t('scoring.healthWeights.label'), t('scoring.healthWeights.value'))}
+          {item(t('scoring.frictionPenalty.label'), t('scoring.frictionPenalty.value'))}
+          {item(t('scoring.rfmRecency.label'), t('scoring.rfmRecency.value'))}
+          {item(t('scoring.rfmFrequency.label'), t('scoring.rfmFrequency.value'))}
+          {item(t('scoring.clvRetention.label'), t('scoring.clvRetention.value'))}
+          {item(t('scoring.clvTiers.label'), t('scoring.clvTiers.value'))}
+          {item(t('scoring.paymentScore.label'), t('scoring.paymentScore.value'))}
+          {item(t('scoring.healthGrades.label'), t('scoring.healthGrades.value'))}
         </Panel>
       </div>
-      <Panel title="Data Sources & Derivations" icon={Timer}>
+      <Panel title={t('panels.dataSources')} icon={Timer}>
         <ul className="space-y-2.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Revenue basis:</span> posted customer-invoice document totals.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Recency:</span> measured to today (or the period end when historical), never a future fiscal-year end.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Friction:</span> credit memos only — this ledger has no return-authorization documents, so the returns component is always 0.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Payment behavior:</span> paid = invoice fully applied; days-to-pay = final payment application date − invoice date; overdue = past due date and not fully applied.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">New customers:</span> no earlier invoice or sales order, lifetime, before the month of first activity.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Cohorts:</span> lifetime invoice history grouped by first-order year; active = ordered within the last 6 months.</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Profitability:</span> project-tagged GL lines rolled job → customer; customers without project-tagged activity show no margin (never estimated).</li>
-          <li><span className="font-semibold text-slate-700 dark:text-slate-300">Intelligence score:</span> 30% champions share (20% of customers = max) + 30% avg retention probability + 20% concentration health + 20% payment rate — score {data.intelligence.score} ({data.intelligence.grade}).</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.revenueBold')}</span>{t('sources.revenueTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.recencyBold')}</span>{t('sources.recencyTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.frictionBold')}</span>{t('sources.frictionTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.paymentBold')}</span>{t('sources.paymentTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.newCustomersBold')}</span>{t('sources.newCustomersTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.cohortsBold')}</span>{t('sources.cohortsTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.profitabilityBold')}</span>{t('sources.profitabilityTail')}</li>
+          <li><span className="font-semibold text-slate-700 dark:text-slate-300">{t('sources.intelligenceBold')}</span> {t('sources.intelligenceTail', { score: data.intelligence.score, grade: data.intelligence.grade })}</li>
         </ul>
       </Panel>
     </div>
