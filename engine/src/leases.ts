@@ -53,6 +53,17 @@ function exactMoney(value: unknown, label: string): string {
   }
 }
 
+/** Persist-time annual discount rate: exact decimal at numeric(19,10). Fail closed. */
+function persistLeaseAnnualDiscountRate(value: unknown): string {
+  const exact = canonicalDecimal(value, 10);
+  if (exact === null) throw new LeaseError("annual discount rate must be an exact decimal");
+  try {
+    return normalizeDecimal(exact, 10);
+  } catch {
+    throw new LeaseError("annual discount rate must be an exact decimal");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Classification (pure)
 // ---------------------------------------------------------------------------
@@ -442,6 +453,7 @@ export async function createLeaseAgreement(
   assertLeaseTimingSupported(input.paymentTiming ?? "arrears");
 
   const paymentAmount = exactMoney(input.paymentAmount, "Payment amount");
+  const annualDiscountRatePercent = persistLeaseAnnualDiscountRate(input.annualDiscountRatePercent);
   const leaseId = randomUUID();
   await db.execute(sql`
     insert into lease_agreements
@@ -454,7 +466,7 @@ export async function createLeaseAgreement(
     values (${leaseId}, ${orgId}, ${input.subsidiaryId}, ${input.leaseNumber}, ${input.description ?? null},
             'draft', ${input.commencementOn}, ${input.termPeriods},
             ${input.paymentFrequency}, ${input.paymentTiming ?? "arrears"}, ${paymentAmount},
-            ${normalizeDecimal(input.annualDiscountRatePercent, 10)}, ${classification.model},
+            ${annualDiscountRatePercent}, ${classification.model},
             ${JSON.stringify({ ...classificationInputs, resolvedCriteria: classification.criteria, framework })}::jsonb,
             ${input.exemption ?? null},
             ${input.accounts.rouAsset}, ${input.accounts.leaseLiability}, ${input.accounts.interestExpense},

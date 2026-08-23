@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { toUnits } from "./money.ts";
 import {
@@ -35,6 +36,24 @@ test("advance timing discounts one fewer period", () => {
   });
   // arrears PV × 1.05 = 90,919.0101
   assert.equal(pv, "90919.0101");
+});
+
+test("createLeaseAgreement persists annualDiscountRatePercent through canonicalDecimal then normalizeDecimal at FX scale", () => {
+  const source = readFileSync(new URL("./leases.ts", import.meta.url), "utf8");
+  const helperStart = source.indexOf("function persistLeaseAnnualDiscountRate");
+  const helperEnd = source.indexOf("\n}", helperStart);
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistLeaseAnnualDiscountRate helper is defined");
+  const helper = source.slice(helperStart, helperEnd + 2);
+  assert.match(helper, /canonicalDecimal\(value, 10\)/);
+  assert.match(helper, /normalizeDecimal\(exact, 10\)/);
+  assert.match(helper, /annual discount rate must be an exact decimal/);
+  assert.doesNotMatch(helper, /return normalizeDecimal\(value, 10\)/);
+
+  const start = source.indexOf("export async function createLeaseAgreement");
+  const next = source.indexOf("type LeaseRow");
+  const body = source.slice(start, next);
+  assert.match(body, /persistLeaseAnnualDiscountRate\(input\.annualDiscountRatePercent\)/);
+  assert.doesNotMatch(body, /normalizeDecimal\(input\.annualDiscountRatePercent, 10\)/);
 });
 
 test("advance timing is refused at creation, not deferred to commencement", () => {
