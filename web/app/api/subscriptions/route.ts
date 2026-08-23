@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
   SubscriptionError,
@@ -116,15 +116,25 @@ export async function POST(req: Request) {
         if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
         const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
         if (refusedItem) return refusedItem;
-        const r = (await db.execute<{ id: string }>(sql`
-          insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
-                                          interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
-          values (${orgId}, ${body.name}, ${body.description ?? null}, ${normalizeMoney(amount)},
-                  ${body.currency ?? null}, ${body.interval}, ${Number(body.intervalCount ?? 1)},
-                  ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
-          returning id
-        `));
-        return NextResponse.json({ id: r.rows[0]!.id }, { status: 201 });
+        const created = await db.transaction(async (tx) => {
+          const row = (await tx.execute<Record<string, unknown>>(sql`
+            insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
+                                            interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
+            values (${orgId}, ${body.name}, ${body.description ?? null}, ${normalizeMoney(amount)},
+                    ${body.currency ?? null}, ${body.interval}, ${Number(body.intervalCount ?? 1)},
+                    ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
+            returning *
+          `));
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id)
+            values
+              (${orgId}, 'subscription_plans', ${(row.rows[0] as any).id as string}, 'insert',
+               ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
+          `);
+          return row.rows[0]!;
+        });
+        return NextResponse.json({ id: (created as any).id }, { status: 201 });
       }
       case "updatePlan": {
         // Plan currency is Multi-currency configuration. Turning that switch
@@ -143,23 +153,58 @@ export async function POST(req: Request) {
           const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId, storedItemId);
           if (refusedItem) return refusedItem;
         }
-        await db.execute(sql`
-          update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
-                 amount = ${normalizeMoney(amount)},
-                 currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
-                 interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
-                 income_account_id = ${body.incomeAccountId ?? null},
-                 item_id = ${body.itemId !== undefined ? body.itemId ?? null : sql`item_id`},
-                 tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
-                 updated_at = now(), updated_by = ${userId}
-           where id = ${body.id} and org_id = ${orgId}
-        `);
+        const missingPlan = await db.transaction(async (tx) => {
+          const before = (await tx.execute<Record<string, unknown>>(sql`
+            select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
+          `));
+          if (!before.rows[0]) return true;
+          const updated = (await tx.execute<Record<string, unknown>>(sql`
+            update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
+                   amount = ${normalizeMoney(amount)},
+                   currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
+                   interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
+                   income_account_id = ${body.incomeAccountId ?? null},
+                   item_id = ${body.itemId !== undefined ? body.itemId ?? null : sql`item_id`},
+                   tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
+                   updated_at = now(), updated_by = ${userId}
+             where id = ${body.id} and org_id = ${orgId}
+            returning *
+          `));
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id)
+            values
+              (${orgId}, 'subscription_plans', ${String(body.id)}, 'update',
+               ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${userId})
+          `);
+          return false;
+        });
+        if (missingPlan) return NextResponse.json({ error: "not found" }, { status: 404 });
         return NextResponse.json({ ok: true });
       }
       case "deletePlan": {
-        const inUse = (await db.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`));
-        if (inUse.rows.length) return NextResponse.json({ error: "plan has subscriptions — archive it instead" }, { status: 422 });
-        await db.execute(sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`);
+        const deleted = await db.transaction(async (tx) => {
+          // Re-check "in use" inside the transaction so a subscription created
+          // between check and delete cannot orphan onto a vanished plan.
+          const inUse = (await tx.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`));
+          if (inUse.rows.length) return { inUse: true as const };
+          const before = (await tx.execute<Record<string, unknown>>(sql`
+            select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
+          `));
+          if (!before.rows[0]) return { inUse: false as const };
+          await tx.execute(sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`);
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id)
+            values
+              (${orgId}, 'subscription_plans', ${String(body.id)}, 'delete',
+               ${JSON.stringify({ before: before.rows[0] })}::jsonb, ${userId})
+          `);
+          return { inUse: false as const };
+        });
+        if (deleted.inUse) {
+          return NextResponse.json({ error: "plan has subscriptions — archive it instead" }, { status: 422 });
+        }
         return NextResponse.json({ ok: true });
       }
       case "addSubscription": {
@@ -183,15 +228,25 @@ export async function POST(req: Request) {
         if (body.priceOverride != null && body.priceOverride !== "" && priceOverride === null) {
           return NextResponse.json({ error: "invalid price override" }, { status: 422 });
         }
-        const r = (await db.execute<{ id: string }>(sql`
-          insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
-                                     next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
-          values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
-                  ${priceOverride != null ? normalizeMoney(priceOverride) : null},
-                  ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
-          returning id
-        `));
-        const id = r.rows[0]!.id;
+        const created = await db.transaction(async (tx) => {
+          const row = (await tx.execute<Record<string, unknown>>(sql`
+            insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
+                                       next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
+            values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
+                    ${priceOverride != null ? normalizeMoney(priceOverride) : null},
+                    ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
+            returning *
+          `));
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id)
+            values
+              (${orgId}, 'subscriptions', ${(row.rows[0] as any).id as string}, 'insert',
+               ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
+          `);
+          return row.rows[0]!;
+        });
+        const id = (created as any).id as string;
         let proration: unknown = null;
         if (body.prorateFirstPeriod && firstBillOn > startOn) {
           proration = await prorateFirstInvoice(id, firstBillOn);
@@ -228,7 +283,7 @@ export async function POST(req: Request) {
         return NextResponse.json(result);
       }
       case "updateSubscription": {
-        const sets = [];
+        const sets: SQL[] = [];
         if ("status" in body) sets.push(sql`status = ${body.status}`);
         if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
         if ("quantity" in body) {
@@ -254,7 +309,26 @@ export async function POST(req: Request) {
         if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);
         if ("nextBillOn" in body) sets.push(sql`next_bill_on = ${body.nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-        await db.execute(sql`update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId} where id = ${body.id} and org_id = ${orgId}`);
+        const missing = await db.transaction(async (tx) => {
+          const before = (await tx.execute<Record<string, unknown>>(sql`
+            select * from subscriptions where id = ${body.id} and org_id = ${orgId}
+          `));
+          if (!before.rows[0]) return true;
+          const updated = (await tx.execute<Record<string, unknown>>(sql`
+            update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
+             where id = ${body.id} and org_id = ${orgId}
+            returning *
+          `));
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id)
+            values
+              (${orgId}, 'subscriptions', ${String(body.id)}, 'update',
+               ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${userId})
+          `);
+          return false;
+        });
+        if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
         return NextResponse.json({ ok: true });
       }
       case "billNow": {
