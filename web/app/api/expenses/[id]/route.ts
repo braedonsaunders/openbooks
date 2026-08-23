@@ -163,6 +163,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (taxInputAmount === 'invalid') {
         return NextResponse.json({ error: 'Expense line tax input amount is not a valid amount' }, { status: 422 })
       }
+      const taxAmount = exactMoney(l.taxAmount)
+      if (taxAmount === 'invalid') {
+        return NextResponse.json({ error: 'Expense line tax amount is not a valid amount' }, { status: 422 })
+      }
       preparedLines.push({
         accountId: l.accountId!,
         description: l.description ?? null,
@@ -170,7 +174,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
         taxInputAmount,
-        taxAmount: normalizeMoney(l.taxAmount),
+        taxAmount,
         taxOverridden: l.taxOverridden === true,
         taxComponents: l.taxComponents,
         departmentId: l.departmentId ?? null,
