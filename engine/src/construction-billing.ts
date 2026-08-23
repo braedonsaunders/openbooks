@@ -159,7 +159,7 @@ export function revisedScheduleValue(
  */
 export function computeApplication(lines: AppLineInput[]): ComputedApplication {
   const computed: ComputedAppLine[] = lines.map((l) => {
-    const scheduled = normalizeMoney(l.scheduledValue || "0");
+    const scheduled = persistRevisedScheduleValueInput(l.scheduledValue || "0");
     const previous = normalizeMoney(l.previousCompleted || "0");
     const previousStored = normalizeMoney(l.previousMaterialsStored || "0");
     const thisPeriod = persistThisPeriodCompleted(l.thisPeriodCompleted || "0");
