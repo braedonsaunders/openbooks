@@ -41,7 +41,7 @@ async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
  */
 export async function resolveTargetOrg(orgId: string, argv: string[] = process.argv): Promise<TargetOrg> {
   const row = ((await retry(() => db.execute(sql`
-    select id, name, env_kind from orgs where id = ${orgId}`))) as any).rows[0];
+    select id, name, env_kind from orgs where id = ${orgId}`)))).rows[0];
   if (!row) throw new Error(`no such org: ${orgId}`);
 
   const target: TargetOrg = {

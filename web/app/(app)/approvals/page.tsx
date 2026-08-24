@@ -259,7 +259,7 @@ export default async function Approvals({
           return (
             <Link
               key={kind}
-              href={mergeHref('/approvals', sp, { kind: active ? undefined : kind }) as any}
+              href={(mergeHref('/approvals', sp, { kind: active ? undefined : kind }))}
               className={cn(
                 'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors',
                 active
@@ -281,7 +281,7 @@ export default async function Approvals({
         })}
         {kindFilter ? (
           <Link
-            href={mergeHref('/approvals', sp, { kind: undefined }) as any}
+            href={(mergeHref('/approvals', sp, { kind: undefined }))}
             className="text-xs text-slate-500 underline-offset-2 hover:underline dark:text-slate-400"
           >
             {tc('labels.all')}
@@ -304,7 +304,7 @@ export default async function Approvals({
             {tabs.map(({ key, label, count }) => (
               <Link
                 key={key}
-                href={(key === 'mine' ? '/approvals' : `/approvals?tab=${key}`) as any}
+                href={((key === 'mine' ? '/approvals' : `/approvals?tab=${key}`))}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                   tab === key
@@ -359,7 +359,7 @@ export default async function Approvals({
                     <TableCell className="font-mono text-[13px] font-semibold">
                       {r.href ? (
                         <Link
-                          href={r.href as any}
+                          href={(r.href)}
                           className="text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {r.documentNumber}

@@ -123,7 +123,7 @@ export function RunBuilder({
     toast.success(t('toasts.created', { number: data.runNumber }))
     setSelected({})
     setBusy(false)
-    router.push(`${basePath}?view=runs&run=${data.id}` as any)
+    router.push((`${basePath}?view=runs&run=${data.id}`))
     router.refresh()
   }
 

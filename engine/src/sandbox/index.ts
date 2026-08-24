@@ -24,22 +24,22 @@ export interface SandboxSummary {
 
 /** List sandboxes owned by a production org (call from the production context). */
 export async function listSandboxes(productionOrgId: string): Promise<SandboxSummary[]> {
-  const res = (await db.execute(sql`
+  const res = await db.execute<SandboxSummary & Record<string, unknown>>(sql`
     select id, org_id as "orgId", production_org_id as "productionOrgId", name, tier, masked,
            status, last_error as "lastError", last_refresh_at as "lastRefreshAt",
            refresh_schedule as "refreshSchedule", storage_rows as "storageRows", created_at as "createdAt"
       from sandboxes
      where production_org_id = ${productionOrgId}
-     order by created_at desc`)) as any;
-  return res.rows as SandboxSummary[];
+     order by created_at desc`);
+  return res.rows;
 }
 
 /** Resolve the sandbox row for an org that IS a sandbox (used by org-switch). */
 export async function sandboxForOrg(orgId: string): Promise<SandboxSummary | null> {
-  const res = (await db.execute(sql`
+  const res = await db.execute<SandboxSummary & Record<string, unknown>>(sql`
     select id, org_id as "orgId", production_org_id as "productionOrgId", name, tier, masked,
            status, last_error as "lastError", last_refresh_at as "lastRefreshAt",
            refresh_schedule as "refreshSchedule", storage_rows as "storageRows", created_at as "createdAt"
-      from sandboxes where org_id = ${orgId}`)) as any;
-  return (res.rows[0] as SandboxSummary) ?? null;
+      from sandboxes where org_id = ${orgId}`);
+  return res.rows[0] ?? null;
 }

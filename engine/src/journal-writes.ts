@@ -162,14 +162,14 @@ export async function createScriptJournal(
   if (codes.length) {
     const r = (await db.execute(sql`
       select id, number from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`)) as any;
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`));
     for (const row of r.rows) byCode.set(String(row.number), String(row.id));
     for (const c of codes) if (!byCode.has(c)) throw new JournalWriteError(`unknown, inactive, or summary account code "${c}"`);
   }
   if (ids.length) {
     const r = (await db.execute(sql`
-      select id from accounts where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`)) as any;
-    const found = new Set(r.rows.map((x: any) => String(x.id)));
+      select id from accounts where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`));
+    const found = new Set(r.rows.map((x) => String(x.id)));
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
   }
 
@@ -182,7 +182,7 @@ export async function createScriptJournal(
          limit 1
       ) s on true
      where o.id = ${orgId}
-  `)) as any).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
+  `))).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
   if (!company) throw new JournalWriteError("organization does not exist");
   if (!company.subsidiary_id) {
     throw new JournalWriteError("organization has no active root subsidiary");

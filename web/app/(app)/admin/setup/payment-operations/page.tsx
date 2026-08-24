@@ -29,9 +29,9 @@ export default async function PaymentOperationsSetupPage({
       : sql`and x.is_active = ${state === 'active'}`
     : sql``
 
-  let rows: Record<string, any>[] = []
+  let rows: Record<string, unknown>[] = []
   let total = 0
-  let selected: Record<string, any> | null = null
+  let selected: Record<string, unknown> | null = null
   let stateCounts: Array<{ value: string; count: number }> = []
 
   if (view === 'profiles') {
@@ -56,7 +56,7 @@ export default async function PaymentOperationsSetupPage({
       db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_bank_profiles where org_id = ${orgId} group by is_active`),
       selectedId ? db.execute(sql`select * from payment_bank_profiles where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
-    rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
+    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as { value: string; count: number; }[]; selected = ((open.rows[0])) ?? null
   } else if (view === 'formats') {
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
@@ -69,7 +69,7 @@ export default async function PaymentOperationsSetupPage({
       db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_formats where org_id = ${orgId} group by is_active`),
       selectedId ? db.execute(sql`select * from payment_formats where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
-    rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
+    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as { value: string; count: number; }[]; selected = ((open.rows[0])) ?? null
   } else if (view === 'schedules') {
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
@@ -81,7 +81,7 @@ export default async function PaymentOperationsSetupPage({
       db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_schedules where org_id = ${orgId} group by is_active`),
       selectedId ? db.execute(sql`select * from payment_schedules where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
-    rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
+    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as { value: string; count: number; }[]; selected = ((open.rows[0])) ?? null
   } else {
     const mandateState = state ? sql`and m.status = ${state}` : sql``
     const [data, count, counts, open] = await Promise.all([
@@ -97,7 +97,7 @@ export default async function PaymentOperationsSetupPage({
       db.execute(sql`select status as value, count(*)::int as count from payment_mandates where org_id = ${orgId} group by status`),
       selectedId ? db.execute(sql`select * from payment_mandates where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
     ])
-    rows = data.rows as any[]; total = Number((count.rows[0] as any)?.n ?? 0); stateCounts = counts.rows as any[]; selected = (open.rows[0] as any) ?? null
+    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as { value: string; count: number; }[]; selected = ((open.rows[0])) ?? null
   }
 
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
@@ -131,8 +131,8 @@ export default async function PaymentOperationsSetupPage({
       stateCounts={stateCounts}
       multiCurrency={multiCurrency}
       options={{
-        formats: formats.rows as any[], bankAccounts: bankAccounts.rows as any[], accountingAccounts: accountingAccounts.rows as any[], subsidiaries: subsidiaryUiEnabled ? subsidiaries.rows as any[] : [],
-        sftpServers: sftpServers.rows as any[], profiles: profiles.rows as any[], parties: parties.rows as any[], currencies: currencies.rows as any[],
+        formats: formats.rows as unknown as { id: string; name: string; rail: string; currency: string | null; }[], bankAccounts: bankAccounts.rows as unknown as { id: string; number: string | null; name: string; }[], accountingAccounts: accountingAccounts.rows as unknown as { id: string; number: string | null; name: string; }[], subsidiaries: subsidiaryUiEnabled ? subsidiaries.rows as unknown as { id: string; name: string; }[] : [],
+        sftpServers: sftpServers.rows as unknown as { id: string; name: string; }[], profiles: profiles.rows as unknown as { id: string; name: string; }[], parties: parties.rows as unknown as { id: string; display_name: string; bank_accounts: Array<{ id: string; label: string; }>; }[], currencies: currencies.rows as unknown as { code: string; name: string; }[],
       }}
     />
   )

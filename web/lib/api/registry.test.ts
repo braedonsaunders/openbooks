@@ -79,30 +79,36 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   // Widgets: list+create on the collection path; get+update+delete on /{id}.
   const coll = spec.paths["/api/v1/records/widgets"];
   const item = spec.paths["/api/v1/records/widgets/{id}"];
+  assert.ok(coll && item, "widgets paths should exist");
   assert.ok(coll.get && coll.post, "widgets collection should document GET + POST");
   assert.ok(item.get && item.patch && item.delete, "widgets item should document GET + PATCH + DELETE");
   for (const operation of [coll.post, item.patch, item.delete]) {
+    assert.ok(operation?.parameters, "mutation should define parameters");
     assert.ok(
-      operation.parameters.some((parameter: { name?: string }) => parameter.name === "Idempotency-Key"),
+      operation.parameters.some((parameter) => parameter.name === "Idempotency-Key"),
       "every REST mutation must document Idempotency-Key",
     );
   }
 
   // Write bodies reference the *Write model (writable fields only).
+  assert.ok(coll.post.requestBody, "create operation should define a request body");
   const writeRef = coll.post.requestBody.content["application/json"].schema.$ref;
+  assert.ok(typeof writeRef === "string");
   assert.match(writeRef, /WidgetsWrite$/);
   const writeModel = spec.components.schemas.WidgetsWrite;
+  assert.ok(writeModel?.properties, "write model should define properties");
   assert.ok(writeModel.properties.name, "write model keeps writable fields");
   assert.ok(writeModel.properties.cf_color, "write model keeps custom fields");
   assert.ok(!writeModel.properties.id, "write model drops read-only id");
   assert.deepEqual(writeModel.required, ["name"], "write model requires the required writable field");
 
   // Read model keeps everything, including read-only id.
-  assert.ok(spec.components.schemas.Widgets.properties.id, "read model keeps id");
+  assert.ok(spec.components.schemas.Widgets?.properties?.id, "read model keeps id");
 
   // Ledger (readonly): only GET endpoints, no post/patch/delete anywhere.
   const ledgerColl = spec.paths["/api/v1/records/ledger"];
   const ledgerItem = spec.paths["/api/v1/records/ledger/{id}"];
+  assert.ok(ledgerColl && ledgerItem, "ledger paths should exist");
   assert.ok(ledgerColl.get && !ledgerColl.post, "readonly type must not document POST");
   assert.ok(ledgerItem.get && !ledgerItem.patch && !ledgerItem.delete, "readonly type must not document writes");
 });

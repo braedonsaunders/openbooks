@@ -58,7 +58,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     } finally { setBusy(false); setActionsOpen(false) }
   }
   const editable = mode === 'edit' && canManage
-  const input = (label: string, value: string, set: (v:string)=>void, props: any = {}) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <Input value={value} onChange={(ev) => set(ev.target.value)} {...props}/> : <p className="text-sm">{value || '—'}</p>}</div>
+  const input = (label: string, value: string, set: (v:string)=>void, props = {}) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <Input value={value} onChange={(ev) => set(ev.target.value)} {...props}/> : <p className="text-sm">{value || '—'}</p>}</div>
   const roi = Number(e.purchase_price) > 0
     ? ((Number(m.billed_revenue) - Number(m.recovery) - Number(m.direct_costs) - Number(m.depreciation)) / Number(e.purchase_price)) * 100
     : 0

@@ -89,7 +89,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
        order by at desc
     `),
   ])
-  return NextResponse.json({ item: result.rows[0], fields: (fields as any).rows, events: (events as any).rows })
+  return NextResponse.json({ item: result.rows[0], fields: ((fields)).rows, events: ((events)).rows })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

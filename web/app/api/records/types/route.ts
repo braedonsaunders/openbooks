@@ -9,14 +9,14 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select t.id, t.key, t.name, t.plural_name, t.icon_key, t.description, t.fields,
            t.status, t.show_in_nav, t.allowed_roles, t.sort_order, t.updated_at,
            (select count(*) from custom_records cr where cr.type_id = t.id) as record_count
       from custom_record_types t
      where t.org_id = ${gate.user.orgId}
      order by t.sort_order, t.name
-  `)) as any
+  `)))
   return NextResponse.json({ types: r.rows })
 }
 

@@ -125,9 +125,9 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
   const isDefault = bool(body, "isDefault");
   return db.transaction(async (tx) => {
     if (id) {
-      const current = (await tx.execute(sql`
+      const current = ((await tx.execute(sql`
         select c.*, exists(select 1 from accounting_periods p where p.fiscal_calendar_id = c.id and p.org_id = ${orgId}) as has_periods
-          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)) as any;
+          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)));
       const row = current.rows[0];
       if (!row) throw new CloseError("calendar not found");
       if (
@@ -246,9 +246,9 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
   return db.transaction(async (tx) => {
     let version = 1;
     if (sourceId) {
-      const source = (await tx.execute(
+      const source = ((await tx.execute(
         sql`select version from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`,
-      )) as any;
+      )));
       if (!source.rows[0]) throw new CloseError("blueprint not found");
       version = Number(source.rows[0].version) + 1;
       await tx.execute(

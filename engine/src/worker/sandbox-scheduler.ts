@@ -39,7 +39,7 @@ export async function tick(): Promise<void> {
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
-       limit 50`))) as any;
+       limit 50`)));
 
     for (const s of due.rows as any[]) {
       const window = CADENCE_MS[s.cadence];
@@ -48,7 +48,7 @@ export async function tick(): Promise<void> {
       const claimed = (await withBypassContext(() =>
         db.execute(sql`
         update sandboxes set status = 'refreshing'
-         where id = ${s.id} and org_id = ${s.orgId} and status = 'ready'`))) as any;
+         where id = ${s.id} and org_id = ${s.orgId} and status = 'ready'`)));
       if (!claimed.rowCount) continue;
       // Hand back to 'ready' is done by the refresh op; enqueue it.
       await enqueueSandboxOp(

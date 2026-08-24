@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   if (feature) return feature
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as any
+  const body = ((parsedBody.data))
   if (!body?.projectId || !isUuid(String(body.projectId))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   }

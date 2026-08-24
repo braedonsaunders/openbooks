@@ -335,15 +335,15 @@ export function ProjectTypesWorkspace({
                   ) : null}
                 </div>
               ) : null}
-              <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as any } })} />
+              <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as unknown as "contract_field" | "billable_value" | "not_to_exceed" | "cost_plus" } })} />
               {fp.totalPrice.method === 'cost_plus' ? <div className="space-y-1.5"><Label>{t('defaultMarkupPercent')}</Label><Input type="number" min="0" step="0.01" value={fp.totalPrice.defaultMarkupPercent ?? ''} onChange={(e) => setFp({ totalPrice: { ...fp.totalPrice, defaultMarkupPercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div> : null}
-              <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as any } })} />
+              <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as unknown as "price_minus_invoiced" | "unbilled_billable" } })} />
               <EnumField label={t('timeRateMethod')} value={fp.billableValue.timeRate} options={TIME_RATE_METHODS} onChange={(v) => setFp({ billableValue: { ...fp.billableValue, timeRate: v as FinancialProfile['billableValue']['timeRate'] } })} />
               <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-teal-600" checked={fp.billableValue.includeUnbilledTime} onChange={(e) => setFp({ billableValue: { ...fp.billableValue, includeUnbilledTime: e.target.checked } })} />{t('includeUnbilledTime')}</label>
               <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-teal-600" checked={fp.billableValue.includeUnbilledCostLines} onChange={(e) => setFp({ billableValue: { ...fp.billableValue, includeUnbilledCostLines: e.target.checked } })} />{t('includeUnbilledCostLines')}</label>
-              <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
+              <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as unknown as "account_types" | "account_group" | "none" } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
-              <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />
+              <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as unknown as "account_group" | "none" | "in_actual_cost" | "time_rate" | "estimated_time_rate" | "payroll_je" } })} />
               <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => {
                 const method = v as FinancialProfile['overhead']['method']
                 setFp({
@@ -365,17 +365,17 @@ export function ProjectTypesWorkspace({
               ) : <div />}
               {fp.overhead.method === 'rate_engine' ? (
                 <>
-                  <EnumField label={t('overheadHoursBasis')} value={fp.overhead.rateEngine?.hoursBasis ?? 'billed_hours'} options={['billed_hours', 'actual_hours', 'total_hours']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, hoursBasis: v as any } } })} />
-                  <EnumField label={t('overheadScope')} value={fp.overhead.rateEngine?.scope ?? 'department'} options={['flat', 'department', 'class']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, scope: v as any } } })} />
+                  <EnumField label={t('overheadHoursBasis')} value={fp.overhead.rateEngine?.hoursBasis ?? 'billed_hours'} options={['billed_hours', 'actual_hours', 'total_hours']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, hoursBasis: v as unknown as "total_hours" | "billed_hours" | "actual_hours" } } })} />
+                  <EnumField label={t('overheadScope')} value={fp.overhead.rateEngine?.scope ?? 'department'} options={['flat', 'department', 'class']} onChange={(v) => setFp({ overhead: { ...fp.overhead, rateEngine: { ...ENGINE_DEFAULT, ...fp.overhead.rateEngine, scope: v as unknown as "flat" | "department" | "class" } } })} />
                   <p className="sm:col-span-2 text-xs text-slate-500 dark:text-slate-400">{t('overheadRateEngineHint')}</p>
                 </>
               ) : null}
-              <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as any } })} />
+              <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as unknown as "none" | "wbs_estimates" } })} />
               <div className="sm:col-span-2"><Chips label={t('committedKinds')} all={COMMIT_KINDS} selected={fp.committedCost.docKinds} onToggle={(v) => setFp({ committedCost: { ...fp.committedCost, docKinds: toggle(fp.committedCost.docKinds, v) } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('committedStatuses')} all={COMMITTED_COST_STATUSES} selected={fp.committedCost.statuses ?? ['approved']} onToggle={(v) => setFp({ committedCost: { ...fp.committedCost, statuses: toggle(fp.committedCost.statuses ?? ['approved'], v) as FinancialProfile['committedCost']['statuses'] } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('costSourceKinds')} all={COST_SOURCE_KINDS} selected={fp.billableValue.costSourceKinds ?? ['vendor_bill', 'expense_report', 'card_charge', 'check']} onToggle={(v) => setFp({ billableValue: { ...fp.billableValue, costSourceKinds: toggle(fp.billableValue.costSourceKinds ?? ['vendor_bill', 'expense_report', 'card_charge', 'check'], v) } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('costSourceStatuses')} all={COST_SOURCE_STATUSES} selected={fp.billableValue.costSourceStatuses ?? ['approved', 'posted']} onToggle={(v) => setFp({ billableValue: { ...fp.billableValue, costSourceStatuses: toggle(fp.billableValue.costSourceStatuses ?? ['approved', 'posted'], v) as FinancialProfile['billableValue']['costSourceStatuses'] } })} /></div>
-              <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'overhead']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
+              <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'overhead']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as unknown as ("overhead" | "actual_cost" | "committed_cost" | "labor_cost")[] } })} /></div>
 
               {/* P&L statement layout editor */}
               <div className="sm:col-span-2 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
@@ -392,7 +392,7 @@ export function ProjectTypesWorkspace({
                         <Select value={line.measure} onChange={(e) => upd({ measure: e.target.value as any })} className="flex-1">
                           {MEASURE_KEYS.map((m) => <option key={m} value={m}>{tMeasures(m as never)}</option>)}
                         </Select>
-                        <Select value={line.variant} onChange={(e) => upd({ variant: e.target.value as any })} className="w-32">
+                        <Select value={line.variant} onChange={(e) => upd({ variant: e.target.value as unknown as "line" | "subtotal" | "total" | undefined })} className="w-32">
                           {VARIANTS.map((v) => <option key={v} value={v}>{t(`variant.${v}`)}</option>)}
                         </Select>
                         <button type="button" disabled={i === 0} onClick={() => move(-1)} className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200" aria-label={t('moveUp')}><ChevronUp size={16} /></button>
@@ -452,11 +452,11 @@ export function ProjectTypesWorkspace({
                     onChange={(v) => setIp({ defaultBasis: v })}
                     disabled={!availableBases.includes(ip.defaultBasis)}
                   />
-                  <EnumField label={t('lineBuilder')} value={ip.lineBuilder} options={LINE_BUILDERS} onChange={(v) => setIp({ lineBuilder: v as any })} />
+                  <EnumField label={t('lineBuilder')} value={ip.lineBuilder} options={LINE_BUILDERS} onChange={(v) => setIp({ lineBuilder: v as unknown as "cost_plus" | "tm_actual" | "milestone" | "draw" | undefined })} />
                 </>
               )}
-              <EnumField label={t('revenueAccount')} value={ip.revenueAccount} options={REVENUE_ACCTS} onChange={(v) => setIp({ revenueAccount: v as any })} />
-              <EnumField label={t('recognition')} value={ip.recognition} options={RECOGNITIONS} onChange={(v) => setIp({ recognition: v as any })} />
+              <EnumField label={t('revenueAccount')} value={ip.revenueAccount} options={REVENUE_ACCTS} onChange={(v) => setIp({ revenueAccount: v as unknown as "fixed" | "item_income" | "unbilled_receivable" | undefined })} />
+              <EnumField label={t('recognition')} value={ip.recognition} options={RECOGNITIONS} onChange={(v) => setIp({ recognition: v as unknown as "milestone" | "as_invoiced" | "percent_complete_cost" | undefined })} />
 
               {/* Which documents supply rebillable job cost. Businesses stage priced
                   billable items differently — purchase documents, or orders. */}
@@ -467,7 +467,7 @@ export function ProjectTypesWorkspace({
               </div>
 
               <EnumField label={t('markupPresentation')} value={ip.markupPresentation ?? 'embedded'} options={MARKUP_PRESENTATIONS}
-                onChange={(v) => setIp({ markupPresentation: v as any })} />
+                onChange={(v) => setIp({ markupPresentation: v as unknown as "embedded" | "lump_sum" | undefined })} />
               <EnumField label={t('notToExceed')} value={ip.notToExceed ? 'yes' : 'no'} options={['no', 'yes']}
                 onChange={(v) => setIp({ notToExceed: v === 'yes' })} />
               <EnumField label={t('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}

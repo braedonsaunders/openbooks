@@ -196,7 +196,7 @@ export function CloseWizard(props: Props) {
         {visibleStages.map((stage, index) => (
           <Link
             key={stage}
-            href={`/close?run=${props.run.id}&stage=${stage}` as any}
+            href={(`/close?run=${props.run.id}&stage=${stage}`)}
             className={cn(
               "flex min-w-28 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
               selected === stage
@@ -268,7 +268,7 @@ function taskText(
   value: string | null | undefined,
 ): string {
   if (!value) return "";
-  return value.startsWith("close.") ? t(value.slice(6) as any) : value;
+  return value.startsWith("close.") ? t((value.slice(6))) : value;
 }
 
 function Metric({
@@ -344,7 +344,7 @@ function ScopeStage(props: Props) {
         <CardContent>
           <Link
             href={
-              `/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}` as any
+              (`/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}`)
             }
           >
             <Button variant="outline">
@@ -437,10 +437,10 @@ function ExceptionRow({ item }: { item: Row }) {
   const actionHref = closeExceptionActionHref(item.code);
   const values = { count: Number(item.details?.count ?? 0) };
   const title = item.title?.startsWith("close.")
-    ? t(item.title.slice(6) as any, values)
+    ? t((item.title.slice(6)), values)
     : item.title;
   const message = item.message?.startsWith("close.")
-    ? t(item.message.slice(6) as any, values)
+    ? t((item.message.slice(6)), values)
     : item.message;
   return (
     <div
@@ -468,7 +468,7 @@ function ExceptionRow({ item }: { item: Row }) {
           {message}
         </p>
         {actionHref ? (
-          <Link href={actionHref as any} className="mt-3 inline-flex">
+          <Link href={(actionHref)} className="mt-3 inline-flex">
             <Button size="sm" variant="outline">
               {t("actions.resolveException")}
               <ExternalLink size={13} />
@@ -507,7 +507,7 @@ function TaskStage(props: Props & { tasks: Row[] }) {
           <div className="flex items-center gap-2">
             <GitBranch size={16} className="text-teal-600" />
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-              {t(`workstreams.${group}` as any)}
+              {t((`workstreams.${group}`))}
             </h3>
           </div>
           <div className="space-y-3">
@@ -692,7 +692,7 @@ function TaskCard(props: Props & { task: Row }) {
         !["complete", "waived"].includes(props.task.status) &&
         !["fx-revalued", "consolidation"].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
-            <Link href={actionHref as any}>
+            <Link href={(actionHref)}>
               <ExternalLink size={14} />
               {t("actions.takeAction")}
             </Link>
@@ -991,12 +991,12 @@ function PublishStage(
             {(props.run.package_reports ?? []).map((report: string) => (
               <Link
                 key={report}
-                href={(reportHref[report] ?? "/reports") as any}
+                href={((reportHref[report] ?? "/reports"))}
                 className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
               >
                 <span className="flex items-center gap-2">
                   <FileCheck2 size={15} className="text-teal-600" />
-                  {t(`reports.${report}` as any)}
+                  {t((`reports.${report}`))}
                 </span>
                 <ExternalLink size={13} />
               </Link>
@@ -1060,7 +1060,7 @@ function PublishStage(
                 <span className="absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white bg-teal-500 dark:border-slate-900" />
                 <p className="font-medium text-slate-900 dark:text-slate-100">
                   {t.has(`events.${event.event_type}`)
-                    ? t(`events.${event.event_type}` as any)
+                    ? t((`events.${event.event_type}`))
                     : event.event_type}
                 </p>
                 <p className="text-xs text-slate-500">

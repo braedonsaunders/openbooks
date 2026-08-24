@@ -62,7 +62,7 @@ export async function CloseSetupPage({
   const translatedMatch = (query: string | undefined, key: string) =>
     Boolean(
       query &&
-      closeT(key as any)
+      closeT((key))
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
     );
@@ -105,11 +105,11 @@ export async function CloseSetupPage({
   const packageDefaultMatch =
     translatedMatch(packageList.query, "defaultData.package.name") ||
     translatedMatch(packageList.query, "defaultData.package.description");
-  const books = (await db.execute(
+  const books = ((await db.execute(
     sql`select id, code, name, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`,
-  )) as any;
+  )));
   const requestedBookId = pickString(searchParams.book);
-  const selectedBookId = (books.rows as any[]).some(
+  const selectedBookId = ((books.rows)).some(
     (book) => book.id === requestedBookId,
   )
     ? requestedBookId!
@@ -134,7 +134,7 @@ export async function CloseSetupPage({
     packageCount,
     reopenRequests,
     reopenCount,
-  ] = (await Promise.all([
+  ] = ((await Promise.all([
     db.execute(sql`
       select * from fiscal_calendars
        where org_id = ${orgId}
@@ -246,12 +246,12 @@ export async function CloseSetupPage({
         join users requester on requester.id = r.requested_by
        where r.org_id = ${orgId}
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
-  ])) as any[];
+  ])));
 
   // Option sources for the structured policy/automation/package editors — so
   // notifications, assignments, and reporting packages pick from real people,
   // roles, and reports (built-in + custom) instead of hand-typed JSON.
-  const [users, roles, reportDefs, subsidiaries, dimensions, subsidiaryUiEnabled] = (await Promise.all([
+  const [users, roles, reportDefs, subsidiaries, dimensions, subsidiaryUiEnabled] = ((await Promise.all([
     db.execute(
       sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`,
     ),
@@ -266,7 +266,7 @@ export async function CloseSetupPage({
     ),
     dimensionOptions(orgId),
     subsidiaryFeatureEnabled(orgId),
-  ])) as any[];
+  ])));
 
   // The report picker must show the full catalog even when the org has never
   // run the (manual) report seed script: start from the static built-in +
@@ -276,7 +276,7 @@ export async function CloseSetupPage({
   const staticStatementParams = new Map(
     STANDARD_STATEMENT_DEFINITIONS.map((def) => [def.slug, def.params]),
   );
-  const dbRowBySlug = new Map((reportDefs.rows as any[]).map((row) => [row.slug, row]));
+  const dbRowBySlug = new Map(((reportDefs.rows)).map((row) => [row.slug, row]));
   function descriptorFor(slug: string, dbRow: any): ReportDescriptor {
     if (dbRow) {
       if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query);
@@ -306,7 +306,7 @@ export async function CloseSetupPage({
     a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "built_in" ? -1 : 1,
   );
 
-  const stepRows = steps.rows as any[];
+  const stepRows = (steps.rows);
   return (
     <CloseSetupWorkspace
       currentParams={searchParams}
@@ -343,7 +343,7 @@ export async function CloseSetupPage({
       books={books.rows}
       selectedBookId={selectedBookId}
       canReopen={canReopen}
-      blueprints={(blueprints.rows as any[]).map((blueprint) => ({
+      blueprints={((blueprints.rows)).map((blueprint) => ({
         ...blueprint,
         steps: stepRows.filter((step) => step.blueprint_id === blueprint.id),
       }))}

@@ -32,9 +32,9 @@ export default async function Receipts({
           title={t('page.title')}
           description={t('page.description')}
           actions={
-            view === 'receipts' ? <NewPaymentButton kind="customer_payment" basePath="/receipts" label={t('page.newReceipt')} /> : <Button asChild><Link href={mergeHref('/receipts', sp, { view: 'runs', newRun: '1', run: undefined }) as any}><Plus size={16} />{t('page.newCollectionRun')}</Link></Button>
+            view === 'receipts' ? <NewPaymentButton kind="customer_payment" basePath="/receipts" label={t('page.newReceipt')} /> : <Button asChild><Link href={(mergeHref('/receipts', sp, { view: 'runs', newRun: '1', run: undefined }))}><Plus size={16} />{t('page.newCollectionRun')}</Link></Button>
           }
-        /><div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800"><Link href="/receipts" className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'receipts' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.receipts')}</Link><Link href={'/receipts?view=runs' as any} className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'runs' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.collections')}</Link></div></>
+        /><div className="inline-flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800"><Link href="/receipts" className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'receipts' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.receipts')}</Link><Link href={('/receipts?view=runs')} className={cn('rounded-md px-3 py-1.5 text-sm font-medium', view === 'runs' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100' : 'text-slate-600 dark:text-slate-300')}>{t('page.tabs.collections')}</Link></div></>
       }
     >
       {view === 'receipts' ? <PaymentsSection

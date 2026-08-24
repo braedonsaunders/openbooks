@@ -43,6 +43,48 @@ const RECON_SORTS = {
   created: sql`r.created_at`,
 } as const
 
+interface AccountRow extends Record<string, unknown> {
+  id: string
+  number: string | null
+  name: string
+  type: string
+  currency_restriction: string | null
+  balance: string
+  reconciled_through: string | null
+  unmatched_lines: string | number
+  open_reconciliation_id: string | null
+}
+interface StatementRow extends Record<string, unknown> {
+  id: string
+  source: string
+  statement_date: string
+  opening_balance: string | null
+  closing_balance: string | null
+  imported_at: string
+  line_count: string | number
+  unmatched_count: string | number
+}
+interface ReconciliationRow extends Record<string, unknown> {
+  id: string
+  through_date: string
+  statement_balance: string
+  status: string
+  signed_off_at: string | null
+  created_at: string
+}
+interface CountRow extends Record<string, unknown> { n: string | number }
+interface SourceCountRow extends CountRow { source: string }
+interface StatusCountRow extends CountRow { status: string }
+type StatementDrawerProps = Parameters<typeof StatementDrawer>[0]
+type StatementDetailRow = StatementDrawerProps['statement'] & Record<string, unknown>
+type StatementLineRow = StatementDrawerProps['lines'][number] & Record<string, unknown>
+interface DrawerData {
+  statement: StatementDrawerProps['statement']
+  lines: StatementDrawerProps['lines']
+  lineTotal: number
+  lineParams: { page: number; perPage: number; sort: string; dir: 'asc' | 'desc' }
+}
+
 export default async function BankingAccount({
   params,
   searchParams,
@@ -63,7 +105,7 @@ export default async function BankingAccount({
   const sp = await searchParams
   const basePath = `/banking/${accountId}`
 
-  const accountRes = (await db.execute<any>(sql`
+  const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl
                       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
@@ -109,7 +151,7 @@ export default async function BankingAccount({
   const openStatementId = pickString(sp.statement)
 
   const [statements, stmtCount, sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
-    db.execute<any>(sql`
+    db.execute<StatementRow>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at,
              coalesce(lc.n, 0) as line_count, coalesce(lc.unmatched, 0) as unmatched_count
         from bank_statements s
@@ -120,23 +162,23 @@ export default async function BankingAccount({
        order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
     `),
-    db.execute<any>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
-    db.execute<any>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
-    db.execute<any>(sql`
+    db.execute<CountRow>(sql`select count(*) as n from bank_statements s where ${stmtWhere}`),
+    db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
+    db.execute<ReconciliationRow>(sql`
       select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at
         from reconciliations r
        where ${reconWhere}
        order by ${RECON_SORTS[reconParams.sort]} ${reconParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${reconParams.perPage} offset ${(reconParams.page - 1) * reconParams.perPage}
     `),
-    db.execute<any>(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
-    db.execute<any>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} and r.org_id = ${orgId} group by r.status`),
+    db.execute<CountRow>(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
+    db.execute<StatusCountRow>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} and r.org_id = ${orgId} group by r.status`),
   ]))
 
   // -- statement drawer (?statement=<id>) ------------------------------------
-  let drawer: { statement: any; lines: any[]; lineTotal: number; lineParams: any } | null = null
+  let drawer: DrawerData | null = null
   if (openStatementId && isUuid(openStatementId)) {
-    const s = (await db.execute<any>(sql`
+    const s = (await db.execute<StatementDetailRow>(sql`
       select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
         from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
     `))
@@ -151,26 +193,26 @@ export default async function BankingAccount({
       const lineWhere = sql`l.statement_id = ${openStatementId} and l.org_id = ${orgId}
         ${lineParams.q ? sql` and (l.description ilike ${'%' + lineParams.q + '%'} or l.counterparty_ref ilike ${'%' + lineParams.q + '%'})` : sql``}`
       const [lines, lineCount] = (await Promise.all([
-        db.execute<any>(sql`
+        db.execute<StatementLineRow>(sql`
           select l.id, l.line_number, l.posted_on, l.amount, l.description, l.counterparty_ref, l.match_status
             from bank_statement_lines l
            where ${lineWhere}
            order by ${lineSorts[lineParams.sort]} ${lineParams.dir === 'asc' ? sql`asc` : sql`desc`}
            limit ${lineParams.perPage} offset ${(lineParams.page - 1) * lineParams.perPage}
         `),
-        db.execute<any>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
+        db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
       ]))
       drawer = {
         statement: s.rows[0],
         lines: lines.rows,
-        lineTotal: Number(lineCount.rows[0].n),
+        lineTotal: Number(lineCount.rows[0]?.n ?? 0),
         lineParams,
       }
     }
   }
 
-  const sourceOptions = sourceCounts.rows.map((r: any) => ({ value: r.source, label: r.source, count: Number(r.n) }))
-  const reconStatusOptions = reconStatusCounts.rows.map((r: any) => ({
+  const sourceOptions = sourceCounts.rows.map((r) => ({ value: r.source, label: r.source, count: Number(r.n) }))
+  const reconStatusOptions = reconStatusCounts.rows.map((r) => ({
     value: r.status,
     label: reconStatusLabel(r.status),
     count: Number(r.n),
@@ -243,7 +285,7 @@ export default async function BankingAccount({
             <SearchInput placeholder={t('account.searchStatements')} paramKey="stmtQ" pageParamKey="stmtPage" />
             <FilterChips basePath={basePath} currentParams={sp} paramKey="source" label={t('labels.source')} options={sourceOptions} pageParamKey="stmtPage" />
           </div>
-          {Number(stmtCount.rows[0].n) === 0 && !stmtParams.q && !source ? (
+          {Number(stmtCount.rows[0]?.n ?? 0) === 0 && !stmtParams.q && !source ? (
             <EmptyState
               title={t('account.statementsEmptyTitle')}
               description={t('account.statementsEmptyDescription')}
@@ -264,11 +306,11 @@ export default async function BankingAccount({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {statements.rows.map((s: any) => (
+                  {statements.rows.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell className="font-medium">
                         <Link
-                          href={`${basePath}?statement=${s.id}` as any}
+                          href={(`${basePath}?statement=${s.id}`)}
                           className="text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {s.statement_date}
@@ -294,7 +336,7 @@ export default async function BankingAccount({
                   ))}
                 </TableBody>
               </Table>
-              <Pagination basePath={basePath} currentParams={sp} total={Number(stmtCount.rows[0].n)} page={stmtParams.page} perPage={stmtParams.perPage} pageParamKey="stmtPage" />
+              <Pagination basePath={basePath} currentParams={sp} total={Number(stmtCount.rows[0]?.n ?? 0)} page={stmtParams.page} perPage={stmtParams.perPage} pageParamKey="stmtPage" />
             </>
           )}
         </section>
@@ -305,7 +347,7 @@ export default async function BankingAccount({
             <SearchInput placeholder={t('account.searchReconciliations')} paramKey="reconQ" pageParamKey="reconPage" />
             <FilterChips basePath={basePath} currentParams={sp} paramKey="reconStatus" label={tCommon('labels.status')} options={reconStatusOptions} pageParamKey="reconPage" />
           </div>
-          {Number(reconCount.rows[0].n) === 0 && !reconParams.q && !reconStatus ? (
+          {Number(reconCount.rows[0]?.n ?? 0) === 0 && !reconParams.q && !reconStatus ? (
             <EmptyState
               title={t('account.reconciliationsEmptyTitle')}
               description={t('account.reconciliationsEmptyDescription')}
@@ -333,7 +375,7 @@ export default async function BankingAccount({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recons.rows.map((r: any) => (
+                  {recons.rows.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.through_date}</TableCell>
                       <TableCell className="text-right tabular-nums">{money(r.statement_balance)}</TableCell>
@@ -348,7 +390,7 @@ export default async function BankingAccount({
                       </TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" asChild>
-                          <Link href={`${basePath}/reconcile/${r.id}` as any}>
+                          <Link href={(`${basePath}/reconcile/${r.id}`)}>
                             {r.status === 'signed_off' ? tCommon('actions.view') : t('account.openWorkspace')}
                           </Link>
                         </Button>
@@ -357,7 +399,7 @@ export default async function BankingAccount({
                   ))}
                 </TableBody>
               </Table>
-              <Pagination basePath={basePath} currentParams={sp} total={Number(reconCount.rows[0].n)} page={reconParams.page} perPage={reconParams.perPage} pageParamKey="reconPage" />
+              <Pagination basePath={basePath} currentParams={sp} total={Number(reconCount.rows[0]?.n ?? 0)} page={reconParams.page} perPage={reconParams.perPage} pageParamKey="reconPage" />
             </>
           )}
         </section>

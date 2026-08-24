@@ -40,6 +40,34 @@ type Options = {
   parties: Array<{ id: string; display_name: string; bank_accounts: Array<{ id: string; label: string }> }>
   currencies: Array<{ code: string; name: string }>
 }
+type Translator = ReturnType<typeof useTranslations>
+type SetupRow = {
+  id: string; name: string; bank_number: string | null; bank_name: string | null;
+  format_name: string | null; currency: string | null; sftp_server_name: string | null;
+  require_run_approval: boolean; is_active: boolean; code: string; rail: string;
+  direction: string; profile_name: string | null; cron: string; next_run_at: string | null;
+  action: string; mandate_reference: string; party_name: string; scheme: string;
+  signed_on: string | null; expires_on: string | null; status: string;
+}
+type SetupForm = {
+  id?: string; name?: string; code?: string; rail?: string; direction?: string;
+  currency?: string; country?: string; bank_account_id?: string; bankAccountId?: string;
+  subsidiary_id?: string; subsidiaryId?: string; payment_format_id?: string; paymentFormatId?: string;
+  sftp_server_id?: string; sftpServerId?: string; sftp_folder?: string; sftpFolder?: string;
+  file_extension?: string; fileExtension?: string; content_type?: string; contentType?: string;
+  formatter_script?: string; formatterScript?: string; payment_bank_profile_id?: string;
+  paymentBankProfileId?: string; cron?: string; timezone?: string; action?: string;
+  party_id?: string; partyId?: string; party_bank_account_id?: string; partyBankAccountId?: string;
+  scheme?: string; mandate_reference?: string; mandateReference?: string; status?: string;
+  signed_on?: string; signedOn?: string; valid_from?: string; validFrom?: string;
+  expires_on?: string; expiresOn?: string; require_run_approval?: boolean;
+  requireRunApproval?: boolean; require_file_approval?: boolean; requireFileApproval?: boolean;
+  auto_remittance?: boolean; autoRemittance?: boolean; is_active?: boolean; isActive?: boolean;
+  originatorSecrets?: Record<string, string>;
+  settings?: { discountAccountId?: string | null; positivePayAccountReference?: string };
+  selection_criteria?: { dueThroughDays?: number; minimumAmount?: string; maximumRunAmount?: string; captureDiscounts?: boolean; applyCredits?: boolean };
+  selectionCriteria?: { dueThroughDays?: number; minimumAmount?: string; maximumRunAmount?: string; captureDiscounts?: boolean; applyCredits?: boolean };
+}
 
 /** Currency picker over the org's currency reference table (never free text). */
 function CurrencyField({ value, onChange, label, currencies, allowInherit }: { value: string; onChange: (v: string) => void; label: string; currencies: Array<{ code: string; name: string }>; allowInherit?: boolean }) {
@@ -109,8 +137,8 @@ export function PaymentOperationsSetup({
   multiCurrency = false,
 }: {
   view: PaymentSetupView
-  rows: Record<string, any>[]
-  selected: Record<string, any> | null
+  rows: Record<string, unknown>[]
+  selected: Record<string, unknown> | null
   creating: boolean
   total: number
   page: number
@@ -123,7 +151,7 @@ export function PaymentOperationsSetup({
   const t = useTranslations('admin.setup.paymentOperations')
   const basePath = '/admin/setup/payment-operations'
   const closeHref = `${basePath}?view=${view}`
-  const stateOptions = stateCounts.map((s) => ({ value: s.value, label: t(`states.${s.value}` as any), count: Number(s.count) }))
+  const stateOptions = stateCounts.map((s) => ({ value: s.value, label: t((`states.${s.value}`)), count: Number(s.count) }))
   return (
     <div className="space-y-4">
       <div>
@@ -164,7 +192,7 @@ export function PaymentOperationsSetup({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <SetupTable view={view} rows={rows} t={t} basePath={basePath} />
+        <SetupTable view={view} rows={rows as unknown as SetupRow[]} t={t} basePath={basePath} />
       </div>
       <Pagination basePath={basePath} currentParams={currentParams} total={total} page={page} perPage={perPage} />
 
@@ -175,7 +203,7 @@ export function PaymentOperationsSetup({
   )
 }
 
-function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows: Record<string, any>[]; t: any; basePath: string }) {
+function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows: SetupRow[]; t: Translator; basePath: string }) {
   const cols: Record<PaymentSetupView, string[]> = {
     profiles: ['name', 'bank', 'format', 'currency', 'delivery', 'approval', 'status'],
     formats: ['code', 'name', 'rail', 'direction', 'currency', 'status'],
@@ -215,16 +243,16 @@ function SetupTable({ view, rows, t, basePath }: { view: PaymentSetupView; rows:
   )
 }
 
-function Active({ active, t }: { active: boolean; t: any }) {
+function Active({ active, t }: { active: boolean; t: Translator }) {
   return <Badge variant={active ? 'success' : 'outline'}>{t(`states.${active ? 'active' : 'archived'}`)}</Badge>
 }
 
-function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, any> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
+function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = false }: { view: PaymentSetupView; row: Record<string, unknown> | null; creating: boolean; options: Options; closeHref: string; multiCurrency?: boolean }) {
   const t = useTranslations('admin.setup.paymentOperations')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const initial = useMemo(() => row ?? {}, [row])
-  const [form, setForm] = useState<Record<string, any>>(() => ({ ...initial }))
+  const [form, setForm] = useState<SetupForm>(() => ({ ...initial } as SetupForm))
   const set = (key: string, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }))
   const title = creating ? t(`drawer.new.${view}`) : t(`drawer.edit.${view}`)
 
@@ -241,14 +269,14 @@ function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = 
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { toast.error(data.error ?? t('saveFailed')); return }
       toast.success(t('saved'))
-      router.push(closeHref as any)
+      router.push((closeHref))
       router.refresh()
     } finally { setBusy(false) }
   }
 
   return (
     <UrlDrawer open closeHref={closeHref} size="lg" title={title} description={t(`drawer.description.${view}`)} footer={
-      <div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push(closeHref as any)}>{t('cancel')}</Button><Button disabled={busy} onClick={save}>{busy ? t('saving') : t('save')}</Button></div>
+      <div className="flex w-full justify-end gap-2"><Button variant="outline" onClick={() => router.push((closeHref))}>{t('cancel')}</Button><Button disabled={busy} onClick={save}>{busy ? t('saving') : t('save')}</Button></div>
     }>
       <div className="space-y-5 p-1">
         {view === 'profiles' ? <ProfileFields form={form} set={set} options={options} t={t} creating={creating} multiCurrency={multiCurrency} /> : null}
@@ -260,7 +288,7 @@ function SetupEditor({ view, row, creating, options, closeHref, multiCurrency = 
   )
 }
 
-function normalizePayload(view: PaymentSetupView, form: Record<string, any>, creating: boolean, multiCurrency = false) {
+function normalizePayload(view: PaymentSetupView, form: SetupForm, creating: boolean, multiCurrency = false) {
   if (view === 'profiles') {
     const originatorSecrets = Object.fromEntries(Object.entries(form.originatorSecrets ?? {}).filter(([, value]) => String(value ?? '').trim()))
     return {
@@ -281,7 +309,7 @@ function normalizePayload(view: PaymentSetupView, form: Record<string, any>, cre
   return { partyId: form.party_id ?? form.partyId, partyBankAccountId: form.party_bank_account_id ?? form.partyBankAccountId, scheme: form.scheme, mandateReference: form.mandate_reference ?? form.mandateReference, status: form.status, signedOn: form.signed_on ?? form.signedOn, validFrom: form.valid_from ?? form.validFrom, expiresOn: form.expires_on ?? form.expiresOn, ...(creating ? {} : { id: form.id }) }
 }
 
-function ProfileFields({ form, set, options, t, creating, multiCurrency = false }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean; multiCurrency?: boolean }) {
+function ProfileFields({ form, set, options, t, creating, multiCurrency = false }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator; creating: boolean; multiCurrency?: boolean }) {
   const formatId = form.payment_format_id ?? form.paymentFormatId ?? ''
   const format = options.formats.find((f) => f.id === formatId)
   const secretFields = SECRET_FIELDS[format?.rail ?? ''] ?? []
@@ -303,7 +331,7 @@ function ProfileFields({ form, set, options, t, creating, multiCurrency = false 
   </>
 }
 
-function FormatFields({ form, set, options, t, creating, multiCurrency = false }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean; multiCurrency?: boolean }) {
+function FormatFields({ form, set, options, t, creating, multiCurrency = false }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator; creating: boolean; multiCurrency?: boolean }) {
   const custom = creating || form.rail === 'custom'
   return <><div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.code')}><Input disabled={!creating} value={form.code ?? ''} onChange={(e) => set('code', e.target.value.toUpperCase())} /></Field><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field></div>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('fields.direction')}><Select disabled={!custom} value={form.direction ?? 'credit'} onChange={(e) => set('direction', e.target.value)}><option value="credit">{t('directions.credit')}</option><option value="debit">{t('directions.debit')}</option><option value="both">{t('directions.both')}</option></Select></Field>{multiCurrency ? <CurrencyField label={t('fields.currency')} currencies={options.currencies} value={form.currency ?? ''} onChange={(v) => set('currency', v)} allowInherit /> : null}</div>
@@ -312,7 +340,7 @@ function FormatFields({ form, set, options, t, creating, multiCurrency = false }
     <Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>
 }
 
-function ScheduleFields({ form, set, options, t }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any }) {
+function ScheduleFields({ form, set, options, t }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator }) {
   const criteria = form.selection_criteria ?? form.selectionCriteria ?? {}
   const setCriteria = (key: string, value: unknown) => set('selectionCriteria', { ...criteria, [key]: value })
   return <><Field label={t('fields.name')}><Input value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field><Field label={t('fields.profile')}><Select value={form.payment_bank_profile_id ?? form.paymentBankProfileId ?? ''} onChange={(e) => set('paymentBankProfileId', e.target.value)}><option value="">{t('select')}</option>{options.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select></Field>
@@ -334,7 +362,7 @@ function ScheduleFields({ form, set, options, t }: { form: Record<string, any>; 
     <Field label={t('fields.action')}><Select value={form.action ?? 'create_draft'} onChange={(e) => set('action', e.target.value)}><option value="create_draft">{t('actions.create_draft')}</option><option value="submit_for_approval">{t('actions.submit_for_approval')}</option></Select></Field><Toggle checked={form.is_active ?? form.isActive ?? true} onChange={(v) => set('isActive', v)} label={t('fields.active')} /></>
 }
 
-function MandateFields({ form, set, options, t, creating }: { form: Record<string, any>; set: (k: string, v: any) => void; options: Options; t: any; creating: boolean }) {
+function MandateFields({ form, set, options, t, creating }: { form: SetupForm; set: (k: string, v: unknown) => void; options: Options; t: Translator; creating: boolean }) {
   const partyId = form.party_id ?? form.partyId ?? ''
   const party = options.parties.find((p) => p.id === partyId)
   return <><Field label={t('fields.party')}><Select disabled={!creating} value={partyId} onChange={(e) => { set('partyId', e.target.value); set('partyBankAccountId', '') }}><option value="">{t('select')}</option>{options.parties.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</Select></Field><Field label={t('fields.partyBankAccount')}><Select disabled={!creating || !party} value={form.party_bank_account_id ?? form.partyBankAccountId ?? ''} onChange={(e) => set('partyBankAccountId', e.target.value)}><option value="">{t('select')}</option>{party?.bank_accounts?.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}</Select></Field>

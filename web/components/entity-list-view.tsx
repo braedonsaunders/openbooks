@@ -184,21 +184,21 @@ export async function EntityListView({
     : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
   const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select ${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${tableSql}
         ${baseJoins}
        where ${where}
        order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
+    `)),
     source.statusCounts === false
       ? Promise.resolve({ rows: [] })
-      : db.execute(sql`
+      : (db.execute(sql`
           select ${statusExpr} as status, count(*) as n from ${tableSql}
             ${countJoins}
            where ${countWhere}
-           group by ${statusExpr}`) as any,
+           group by ${statusExpr}`)),
     db.execute(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
@@ -225,7 +225,7 @@ export async function EntityListView({
     return opt ? (opt.labelKey ? label(opt.labelKey) : opt.value) : value.replace(/_/g, ' ')
   }
 
-  const statusCountByValue = new Map(statusCounts.rows.map((r: any) => [String(r.status), Number(r.n)]))
+  const statusCountByValue = new Map(statusCounts.rows.map((r) => [String(r.status), Number(r.n)]))
   const quickFilters = source.quickFilters.map((quick, index) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
     const options = loadedQuickOptions[index] ?? []
@@ -238,9 +238,10 @@ export async function EntityListView({
     }
   })
 
-  const openHref = (id: string, row?: any) => {
-    if (row && source.rowHref) return source.rowHref(row)
-    const target = row && source.drawerTarget ? source.drawerTarget(row) : { param: source.drawerParam, id }
+  const openHref = (id: string, row?: unknown) => {
+    const sourceRow = row && typeof row === 'object' ? row as Record<string, unknown> : null
+    if (sourceRow && source.rowHref) return source.rowHref(sourceRow)
+    const target = sourceRow && source.drawerTarget ? source.drawerTarget(sourceRow) : { param: source.drawerParam, id }
     return buildListDrawerHref(basePath, sp, target.param, target.id)
   }
 
@@ -252,7 +253,7 @@ export async function EntityListView({
         return (
           <TableCell key={c.key} className="font-medium">
             <Link
-              href={href as any}
+              href={(href)}
               title={String(v ?? '')}
               className="block max-w-[18rem] truncate text-teal-700 hover:underline dark:text-teal-300"
             >
@@ -291,7 +292,7 @@ export async function EntityListView({
         return (
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
             <Link
-              href={openHref(String(row.id), row) as any}
+              href={(openHref(String(row.id), row))}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
               aria-label={tCommon('actions.open')}
               title={tCommon('actions.open')}

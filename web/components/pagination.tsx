@@ -103,7 +103,7 @@ function PageButton({
   }
   return (
     <Link
-      href={href as any}
+      href={(href)}
       className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-800/60"
       {...(rest as object)}
     >

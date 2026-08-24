@@ -67,7 +67,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const existingPayload = await loadAccount(id, gate.user.orgId)
   if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const existing = existingPayload.account as Record<string, any>
+  const existing = (existingPayload.account)
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const parsed = parsedBody.data

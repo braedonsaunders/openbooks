@@ -56,14 +56,52 @@ type Opt = {
   label?: string
   type?: string
 };
+interface PartyApiRecord {
+  id: string; display_name: string; legal_name: string | null; short_code: string | null;
+  kind: string; email: string | null; phone: string | null; website: string | null;
+  subsidiary_id: string | null; is_active: boolean; updated_at: string;
+  custom: Record<string, unknown> | null; invoicing_preference: InvoicingPref | null
+}
+interface CustomerApiRecord {
+  is_active: boolean; payment_terms_id: string | null; credit_limit: string | number | null;
+  currency: string | null; ar_account_id: string | null; sales_rep_id: string | null;
+  tax_code_id: string | null; is_on_hold: boolean; hold_reason: string | null
+}
+interface VendorApiRecord {
+  is_active: boolean; payment_method: string | null; eft_notification_email: string | null;
+  payment_terms_id: string | null; currency: string | null; is_t4a: boolean;
+  ap_account_id: string | null; default_expense_account_id: string | null;
+  tax_code_id: string | null; is_on_hold: boolean; hold_reason: string | null
+}
+interface EmployeeApiRecord {
+  is_active: boolean; employee_number: string | null; job_title: string | null;
+  department_id: string | null; trade_id: string | null; worker_comp_group_id: string | null;
+  hired_on: string | null
+}
+interface AddressApiRecord extends Record<string, unknown> {
+  id: string | null; label: string | null; line1: string | null; line2: string | null;
+  city: string | null; region: string | null; postal_code: string | null; country: string | null;
+  is_default_billing: boolean; is_default_shipping: boolean
+}
+interface ContactApiRecord extends Record<string, unknown> {
+  id: string | null; first_name: string | null; last_name: string | null; name: string | null;
+  title: string | null; role: string | null; email: string | null; phone: string | null;
+  mobile_phone: string | null; is_primary: boolean; is_active: boolean
+}
+interface BankAccountClient extends Record<string, unknown> {
+  id: string; bank_name: string; country: string | null; currency: string | null;
+  routing: Record<string, string> | null; account_last_four: string; updated_at: string;
+  label?: string; name?: string; type?: string; approval_status?: string;
+  approved_at?: string | null; retired_at?: string | null
+}
 interface PartyPayload {
-  party: Record<string, any>
-  customer: Record<string, any> | null
-  vendor: Record<string, any> | null
-  employee: Record<string, any> | null
-  addresses: Record<string, any>[]
-  contacts: Record<string, any>[]
-  bankAccounts: Record<string, any>[]
+  party: PartyApiRecord
+  customer: CustomerApiRecord | null
+  vendor: VendorApiRecord | null
+  employee: EmployeeApiRecord | null
+  addresses: AddressApiRecord[]
+  contacts: ContactApiRecord[]
+  bankAccounts: BankAccountClient[]
   transactionSummary: {
     count: number
     openCount: number
@@ -131,7 +169,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-const addressFromApi = (address: Record<string, any>): AddressRow => ({
+const addressFromApi = (address: AddressApiRecord): AddressRow => ({
   id: address.id ? String(address.id) : null,
   label: address.label ?? '',
   line1: address.line1 ?? '',
@@ -144,7 +182,7 @@ const addressFromApi = (address: Record<string, any>): AddressRow => ({
   isDefaultShipping: address.is_default_shipping === true ? 'true' : 'false',
 })
 
-const contactFromApi = (contact: Record<string, any>): ContactRow => ({
+const contactFromApi = (contact: ContactApiRecord): ContactRow => ({
   id: contact.id ? String(contact.id) : null,
   firstName: contact.first_name ?? '',
   lastName: contact.last_name ?? '',
@@ -1641,7 +1679,7 @@ function BankAccountsPanel({
   multiCurrency = false,
 }: {
   partyId: string
-  initialAccounts: Record<string, any>[]
+  initialAccounts: BankAccountClient[]
   canManage: boolean
   multiCurrency?: boolean
 }) {
@@ -1651,7 +1689,7 @@ function BankAccountsPanel({
   const router = useRouter()
   const [accounts, setAccounts] = useState(initialAccounts)
   const [draft, setDraft] = useState<BankAccountDraft | null>(null)
-  const [historyAccount, setHistoryAccount] = useState<Record<string, any> | null>(null)
+  const [historyAccount, setHistoryAccount] = useState<BankAccountClient | null>(null)
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -1667,7 +1705,7 @@ function BankAccountsPanel({
   const pages = Math.max(1, Math.ceil(filtered.length / perPage))
   const shown = filtered.slice((page - 1) * perPage, page * perPage)
 
-  function edit(account: Record<string, any>) {
+  function edit(account: BankAccountClient) {
     const routing = (account.routing ?? {}) as Record<string, string>
     setDraft({
       id: String(account.id), bankName: account.bank_name ?? '', country: account.country ?? '',
@@ -1747,7 +1785,7 @@ function BankAccountsPanel({
     }
   }
 
-  async function retire(account: Record<string, any>) {
+  async function retire(account: Record<string, unknown>) {
     const reason = await promptDialog({
       title: tc('actions.retire'),
       label: tc('amendment.reason'),
@@ -1776,7 +1814,7 @@ function BankAccountsPanel({
     setBusy(false)
   }
 
-  const statusLabel = (account: Record<string, any>) => {
+  const statusLabel = (account: Record<string, unknown>) => {
     if (account.retired_at) return tc('status.retired')
     const status = String(account.approval_status ?? (account.approved_at ? 'approved' : 'pending'))
     if (status === 'approved') return tc('status.approved')

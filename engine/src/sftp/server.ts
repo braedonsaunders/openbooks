@@ -89,14 +89,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
 
           sftp.on("REALPATH", (reqid, p) => {
             const cp = cleanPath(p === "." || p === "" ? "/" : p);
-            sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) as any }]);
+            sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) }]);
           });
 
           const doStat = async (reqid: number, p: string) => {
             try {
               const st = await backend.stat(p);
               if (!st) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
-              sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs) as any);
+              sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs));
             } catch (e) { fail(reqid, e); }
           };
           sftp.on("STAT", doStat);
@@ -104,7 +104,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           sftp.on("FSTAT", (reqid, handle) => {
             const f = files.get(handle.toString());
             if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            sftp.attrs(reqid, attrsFor(false, f.write ? 0 : f.buf.length, Date.now()) as any);
+            sftp.attrs(reqid, attrsFor(false, f.write ? 0 : f.buf.length, Date.now()));
           });
 
           sftp.on("OPENDIR", async (reqid, p) => {
@@ -120,7 +120,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
             if (d.sent) return sftp.status(reqid, STATUS_CODE.EOF);
             d.sent = true;
-            sftp.name(reqid, d.entries.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) as any })));
+            sftp.name(reqid, d.entries.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) })));
           });
 
           sftp.on("OPEN", async (reqid, filename, flags) => {

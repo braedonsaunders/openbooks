@@ -78,10 +78,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ...(body.lines ?? []).flatMap((line) => line.subsidiaryId ? [line.subsidiaryId] : []),
   ])]
   if (requestedSubsidiaries.length) {
-    const subsidiaries = (await db.execute(sql`
+    const subsidiaries = ((await db.execute(sql`
       select id from subsidiaries
        where org_id = ${user.orgId} and is_active and not is_elimination
-         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)) as any
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)))
     if (subsidiaries.rows.length !== requestedSubsidiaries.length) {
       return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
     }

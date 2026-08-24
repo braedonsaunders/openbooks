@@ -699,7 +699,7 @@ export async function generateInvoiceFromBillingRequest(
               ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
               ${req.invoice_description}, '0', '0', '0', ${userId})
       returning id
-    `)).rows as any[]
+    `)).rows as unknown as [any]
     const invoiceId = created.id
 
     // An invoice is payable in the currency's minor unit, so every billed line
@@ -729,7 +729,7 @@ export async function generateInvoiceFromBillingRequest(
               ${l.timeEntryId}, ${l.timeTypeId}, true, ${l.equipmentUnitId ?? null}, ${l.rateVersionId ?? null},
               ${l.unitPrice}, ${l.amount}, ${userId})
         returning id
-      `)).rows as any[]
+      `)).rows as unknown as [any]
       presentedLineIds.push(String(line.id))
       amounts.push(l.amount)
       lineNo++

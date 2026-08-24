@@ -803,7 +803,7 @@ export async function createObligationsFromInvoice(
   const currency = doc.currency ?? "";
   const lineRes = (await db.execute<{
       line_id: string; description: string | null; amount: string; quantity: string | null; item_id: string;
-      line_custom: Record<string, any> | null; income_account_id: string | null; item_deferred: string | null;
+      line_custom: Record<string, unknown> | null; income_account_id: string | null; item_deferred: string | null;
       item_ssp: string | null; revenue_allocation: string; rule_id: string; rule_deferred: string | null;
       rule_recognized: string | null; end_date_source: string; fair_value: string | null;
       fair_value_low: string | null; fair_value_high: string | null;

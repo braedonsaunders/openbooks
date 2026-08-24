@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * matching (or Unassigned).
  */
 async function loadGroup(id: string, orgId: string) {
-  const r: any = await db.execute(sql`
+  const r = await db.execute(sql`
     select id, dimension from account_groups where id = ${id} and org_id = ${orgId}
   `);
   return r.rows[0] ?? null;
@@ -31,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const group = await loadGroup(id, gate.user.orgId);
   if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const acct: any = await db.execute(sql`
+  const acct = await db.execute(sql`
     select id from accounts where id = ${accountId} and org_id = ${gate.user.orgId}
   `);
   if (!acct.rows.length) return NextResponse.json({ error: "account not found" }, { status: 404 });

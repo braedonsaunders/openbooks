@@ -279,7 +279,7 @@ export async function runAppEndpoint(opts: {
     const platformCall = (
       name: string,
       cost: number,
-      call: (...args: any[]) => Promise<unknown>,
+      call: (...args: unknown[]) => Promise<unknown>,
     ) =>
       vm.newAsyncifiedFunction(name, async (...handles) => {
         if (!adapters.platform) {
@@ -396,7 +396,7 @@ export async function runAppEndpoint(opts: {
       result.error.dispose();
       const msg =
         typeof err === "object" && err && "message" in err
-          ? String((err as any).message)
+          ? String((err).message)
           : String(err);
       if (msg.startsWith(FORBIDDEN)) {
         return {
@@ -456,8 +456,8 @@ function normalizeResponse(out: unknown): { status: number; body: unknown } {
   if (
     out &&
     typeof out === "object" &&
-    "status" in (out as any) &&
-    typeof (out as any).status === "number"
+    "status" in (out) &&
+    typeof (out).status === "number"
   ) {
     const o = out as { status: number; body?: unknown };
     return { status: o.status, body: "body" in o ? o.body : null };

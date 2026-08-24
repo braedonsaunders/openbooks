@@ -467,7 +467,7 @@ export async function applyDocumentEdit(
     const subsidiary = (await db.execute(sql`
       select 1 from subsidiaries
        where id = ${body.subsidiaryId} and org_id = ${orgId}
-         and is_active and not is_elimination`)) as any
+         and is_active and not is_elimination`))
     if (!subsidiary.rows.length) throw new DocumentEditError(422, 'invalid subsidiary')
   }
   if (body.currency !== undefined && !(await isFeatureEnabled(orgId, 'multiCurrency'))) {
@@ -813,10 +813,10 @@ export async function taxGroupOptions(orgId?: string): Promise<Opt[]> {
 export async function dimensionOptions(orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
   const [departments, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`) as any,
-    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active order by name limit 2000`) as any,
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`) as any,
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`) as any,
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`),
+    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active order by name limit 2000`),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`),
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`),
     segmentRegistry(resolvedOrgId),
   ])
   return {

@@ -53,6 +53,20 @@ export interface ProjectCostSummary {
 const m = (v: unknown) => normalizeMoney(v == null ? '0' : String(v))
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 
+interface QueryRows<T> { rows: T[] }
+interface ProjectSummaryRow { contract_value: unknown; cost_budget: unknown }
+interface ProjectActualRow { cost: unknown; revenue: unknown }
+interface ProjectCommittedRow { committed_cost: unknown; committed_revenue: unknown }
+interface ProjectAccountRow { account_id: string; number: string | null; name: string; type: string; amount: unknown }
+interface ProjectDocumentRow {
+  id: string; kind: string; document_number: string; document_date: string;
+  status: string; party_name: string | null; amount: unknown
+}
+interface ProjectTimeSqlRow {
+  key: string | null; label: string; hours: unknown; billable_hours: unknown;
+  cost: unknown; bill: unknown
+}
+
 export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
   const [proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows] = await Promise.all([
     // project custom (contract value) + task cost budget
@@ -60,7 +74,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       select coalesce(p.contract_value, 0) as contract_value,
              coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id and t.org_id = p.org_id), 0) as cost_budget
         from projects p where p.id = ${projectId} and p.org_id = ${orgId}
-    `) as any,
+    `),
     // posted actuals split into cost vs revenue
     db.execute(sql`
       select
@@ -70,7 +84,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-    `) as any,
+    `),
     // committed: open order remainders tagged to the project
     db.execute(sql`
       select
@@ -82,7 +96,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         and coalesce(dl.project_id, d.project_id) = ${projectId}
         and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
         and dl.quantity > dl.quantity_billed
-    `) as any,
+    `),
     directSubcontractOpenCommitment(orgId, projectId),
     // actual cost broken down by account
     db.execute(sql`
@@ -95,7 +109,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       group by a.id, a.number, a.name, a.type
       having sum(l.amount) <> 0
       order by sum(l.amount) desc
-    `) as any,
+    `),
     // documents with at least one line tagged to the project (job cost detail)
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date, d.status,
@@ -111,13 +125,27 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
       order by d.document_date desc
       limit 500
-    `) as any,
+    `),
   ])
 
-  return assembleSummary(proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows)
+  return assembleSummary(
+    proj as unknown as QueryRows<ProjectSummaryRow>,
+    actualRows as unknown as QueryRows<ProjectActualRow>,
+    committedRows as unknown as QueryRows<ProjectCommittedRow>,
+    directSubcontractCommitment,
+    byAccountRows as unknown as QueryRows<ProjectAccountRow>,
+    docRows as unknown as QueryRows<ProjectDocumentRow>,
+  )
 }
 
-function assembleSummary(proj: any, actualRows: any, committedRows: any, directSubcontractCommitment: string, byAccountRows: any, docRows: any): ProjectCostSummary {
+function assembleSummary(
+  proj: QueryRows<ProjectSummaryRow>,
+  actualRows: QueryRows<ProjectActualRow>,
+  committedRows: QueryRows<ProjectCommittedRow>,
+  directSubcontractCommitment: string,
+  byAccountRows: QueryRows<ProjectAccountRow>,
+  docRows: QueryRows<ProjectDocumentRow>,
+): ProjectCostSummary {
   const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
   const contractValue = m(p.contract_value)
   const costBudget = m(p.cost_budget)
@@ -126,7 +154,7 @@ function assembleSummary(proj: any, actualRows: any, committedRows: any, directS
   const committedCost = add(m(committedRows.rows[0]?.committed_cost), directSubcontractCommitment)
   const committedRevenue = m(committedRows.rows[0]?.committed_revenue)
 
-  const costByAccount = (byAccountRows.rows as any[]).map((r) => ({
+  const costByAccount = byAccountRows.rows.map((r) => ({
     accountId: r.account_id,
     number: r.number,
     name: r.name,
@@ -155,7 +183,7 @@ function assembleSummary(proj: any, actualRows: any, committedRows: any, directS
     },
     costByAccount,
     costByCategory,
-    documents: (docRows.rows as any[]).map((r) => ({
+    documents: docRows.rows.map((r) => ({
       id: r.id,
       kind: r.kind,
       documentNumber: r.document_number,
@@ -209,7 +237,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        group by te.project_task_id, pt.name
        order by hours desc
-    `) as any,
+    `),
     db.execute(sql`
       select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
              coalesce(sum(te.hours), 0) as hours,
@@ -221,7 +249,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        group by te.employee_party_id, pty.display_name
        order by hours desc
-    `) as any,
+    `),
     db.execute(sql`
       select te.item_id as key, coalesce(i.name, '') as label,
              coalesce(sum(te.hours), 0) as hours,
@@ -233,7 +261,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        group by te.item_id, i.name
        order by hours desc
-    `) as any,
+    `),
     db.execute(sql`
       select coalesce(sum(te.hours), 0) as hours,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
@@ -241,9 +269,9 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
              coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-    `) as any,
+    `),
   ])
-  const row = (r: any): ProjectTimeRow => ({
+  const row = (r: ProjectTimeSqlRow): ProjectTimeRow => ({
     key: r.key,
     label: r.label || '',
     hours: n(r.hours),
@@ -253,9 +281,9 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
   })
   const tot = totalRow.rows[0] ?? {}
   return {
-    byTask: (byTaskRows.rows as any[]).map(row),
-    byEmployee: (byEmpRows.rows as any[]).map(row),
-    byItem: (byItemRows.rows as any[]).map(row),
+    byTask: (byTaskRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
+    byEmployee: (byEmpRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
+    byItem: (byItemRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
     totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
   }
 }
@@ -309,7 +337,7 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId}
          and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
-    `) as any,
+    `),
     db.execute(sql`
       select coalesce(sum(case when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
                                else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) end), 0) as revenue,
@@ -322,7 +350,7 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
          and dl.is_billable and dl.billed_by_line_id is null
          and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
            or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
-    `) as any,
+    `),
   ])
   const tr = timeRow.rows[0] ?? {}
   const lr = lineRow.rows[0] ?? {}

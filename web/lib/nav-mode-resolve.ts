@@ -24,7 +24,7 @@ export async function resolveNavMode(userId: string, orgId: string): Promise<Nav
       select u.nav_mode as user_mode, o.settings ->> 'defaultNavMode' as org_default
         from users u
         join orgs o on o.id = u.org_id
-       where u.id = ${userId} and u.org_id = ${orgId} and u.is_active`)) as any;
+       where u.id = ${userId} and u.org_id = ${orgId} and u.is_active`));
     const row = r.rows[0];
     return effectiveNavMode(row?.user_mode, row?.org_default);
   });
@@ -41,7 +41,7 @@ export async function userNavModePreference(userId: string, orgId: string): Prom
       select nav_mode
         from users
        where id = ${userId} and org_id = ${orgId} and is_active
-    `)) as any;
+    `));
     const value = r.rows[0]?.nav_mode;
     return isNavMode(value) ? value : null;
   });

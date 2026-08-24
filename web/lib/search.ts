@@ -130,7 +130,7 @@ async function searchContacts(orgId: string, q: string, like: string): Promise<S
        and (p.display_name % ${q} or p.display_name ilike ${like}
             or p.legal_name % ${q} or p.email ilike ${like})
      order by sim desc, p.display_name
-     limit ${PER_GROUP}`)) as any
+     limit ${PER_GROUP}`))
   return r.rows.map((row: any): SearchHit => ({
     id: row.id,
     type: 'contact',
@@ -200,7 +200,7 @@ async function searchTransactions(
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id
      where true ${hiddenKindFilter}
      order by ${numOrder}sim desc, d.created_at desc
-     limit ${PER_GROUP + 2}`)) as any
+     limit ${PER_GROUP + 2}`))
   return r.rows.map((row: any): SearchHit => {
     const meta = docMeta(row.kind)
     const href = moduleDrawerHref(row.kind, row.id)
@@ -223,7 +223,7 @@ async function searchAccounts(orgId: string, q: string, like: string): Promise<S
      where org_id = ${orgId} and not is_summary
        and (name % ${q} or name ilike ${like} or number ilike ${like})
      order by similarity(name, ${q}) desc, number nulls last
-     limit ${PER_GROUP}`)) as any
+     limit ${PER_GROUP}`))
   return r.rows.map((row: any): SearchHit => ({
     id: row.id,
     type: 'account',
@@ -239,7 +239,7 @@ async function searchItems(orgId: string, q: string, like: string): Promise<Sear
     select id, code, name from items
      where org_id = ${orgId} and (name % ${q} or name ilike ${like} or code ilike ${like})
      order by similarity(name, ${q}) desc, name
-     limit ${PER_GROUP}`)) as any
+     limit ${PER_GROUP}`))
   return r.rows.map((row: any): SearchHit => ({
     id: row.id,
     type: 'item',
@@ -255,7 +255,7 @@ async function searchProjects(orgId: string, q: string, like: string): Promise<S
     select id, code, name from projects
      where org_id = ${orgId} and (name % ${q} or name ilike ${like} or code ilike ${like})
      order by similarity(name, ${q}) desc, name
-     limit ${PER_GROUP}`)) as any
+     limit ${PER_GROUP}`))
   return r.rows.map((row: any): SearchHit => ({
     id: row.id,
     type: 'project',

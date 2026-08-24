@@ -80,7 +80,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
   const today = await businessToday(user.orgId)
   const result = await db.transaction(async (tx) => {
-    const opportunity = (await tx.execute<any>(sql`
+    const opportunity = (await tx.execute(sql`
       select * from crm_opportunities where id = ${id} and org_id = ${user.orgId} and is_active for update`))
     const op = opportunity.rows[0]
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
@@ -103,7 +103,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
               ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${projected},
               0, ${projected}, ${user.id}, ${user.id}) returning id`))
     const docId = document.rows[0]!.id
-    const lines = (await tx.execute<any>(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`))
+    const lines = (await tx.execute(sql`select * from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId} order by line_number`))
     for (const line of lines.rows) await tx.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,

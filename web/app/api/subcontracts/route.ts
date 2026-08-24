@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ subcontracts: rows.rows });
   }
 
-  const contract = (await db.execute<any>(sql`
+  const contract = (await db.execute(sql`
     select s.id, s.number, s.title, s.description, s.status, s.currency,
            s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
            s.original_commitment as "originalCommitment", s.default_retainage_percent as "defaultRetainagePercent",
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
      where s.org_id = ${orgId} and s.id = ${id}
   `));
   if (!contract.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const [sov, changes, applications, lines, controls, releases] = await Promise.all([
+  const [sov, changes, applications, lines, controls, releases] = (await Promise.all([
     db.execute(sql`
       select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
              l.retainage_percent as "retainagePercent", l.expense_account_id as "expenseAccountId",
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
         from vendor_retainage_releases r join documents d on d.id = r.vendor_bill_document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.subcontract_id = ${id} order by r.period_end desc
     `),
-  ]) as any[];
+  ]));
   return NextResponse.json({
     subcontract: contract.rows[0],
     sovLines: sov.rows,
@@ -168,7 +168,7 @@ const paymentActions = new Set(["addPaymentControl", "releasePaymentControl"]);
 export async function POST(request: Request) {
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
   const action = String(body.action ?? "");
   const permission = approvalActions.has(action) ? "ap.approve"
     : postingActions.has(action) ? "ap.post"
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
         if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
         result = await createSubcontract({
           ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
-        } as any);
+        } as unknown as { orgId: string; userId: string; projectId: string; vendorId: string; number: string; title: string; description?: string | null; currency?: string | null; originalCommitment: string; defaultRetainagePercent?: string; purchaseOrderId?: string | null; startsOn?: string | null; endsOn?: string | null; });
         break;
       }
       case "updateSubcontract": {
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
         if (defaultRetainagePercent === null) return invalidDecimal("Retainage percent");
         await updateDraftSubcontract({
           ...body, orgId, userId, originalCommitment, defaultRetainagePercent,
-        } as any);
+        } as unknown as { orgId: string; userId: string; id: string; title: string; description?: string | null; originalCommitment: string; defaultRetainagePercent: string; startsOn?: string | null; endsOn?: string | null; });
         break;
       }
       case "addSovLine": {
@@ -225,7 +225,7 @@ export async function POST(request: Request) {
         }
         result = await addSubcontractSovLine({
           ...body, orgId, userId, scheduledValue, retainagePercent,
-        } as any);
+        } as unknown as { orgId: string; userId: string; subcontractId: string; itemNo?: string | null; description: string; scheduledValue: string; retainagePercent?: string | null; expenseAccountId?: string | null; sortOrder?: number; });
         break;
       }
       case "removeSovLine":
@@ -243,7 +243,7 @@ export async function POST(request: Request) {
       case "addChangeOrder": {
         const amount = exactMoney(body.amount);
         if (amount === null) return invalidDecimal("Amount");
-        result = await createSubcontractChangeOrder({ ...body, orgId, userId, amount } as any);
+        result = await createSubcontractChangeOrder({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; number: string; description?: string | null; amount: string; targetSovLineId?: string | null; });
         break;
       }
       case "approveChangeOrder":
@@ -253,11 +253,11 @@ export async function POST(request: Request) {
         await voidSubcontractChangeOrder(orgId, userId, String(body.id));
         break;
       case "createPayApplication":
-        result = await createVendorPayApplication({ ...body, orgId, userId } as any);
+        result = await createVendorPayApplication({ ...body, orgId, userId } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; vendorInvoiceNumber?: string | null; });
         break;
       case "updatePayApplication": {
         if (!Array.isArray(body.lines)) {
-          result = await updateVendorPayApplicationLines({ ...body, orgId, userId } as any);
+          result = await updateVendorPayApplicationLines({ ...body, orgId, userId } as unknown as { orgId: string; userId: string; payApplicationId: string; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
           break;
         }
         const lines = [];
@@ -273,7 +273,7 @@ export async function POST(request: Request) {
             materialsStoredCurrent,
           });
         }
-        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as any);
+        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as unknown as { orgId: string; userId: string; payApplicationId: string; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
         break;
       }
       case "submitPayApplication":
@@ -291,7 +291,7 @@ export async function POST(request: Request) {
       case "releaseRetainage": {
         const amount = exactMoney(body.amount);
         if (amount === null) return invalidDecimal("Amount");
-        result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as any);
+        result = await releaseVendorRetainage({ ...body, orgId, userId, amount } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; amount: string; memo?: string | null; });
         break;
       }
       case "addPaymentControl": {
@@ -300,7 +300,7 @@ export async function POST(request: Request) {
           amountLimit = exactMoney(body.amountLimit);
           if (amountLimit === null) return invalidDecimal("Amount limit");
         }
-        result = await createSubcontractPaymentControl({ ...body, orgId, userId, amountLimit } as any);
+        result = await createSubcontractPaymentControl({ ...body, orgId, userId, amountLimit } as unknown as { orgId: string; userId: string; subcontractId: string; payApplicationId?: string | null; vendorBillDocumentId?: string | null; controlType: "joint_check" | "payment_hold"; jointPayeePartyId?: string | null; amountLimit?: string | null; reason: string; effectiveOn: string; expiresOn?: string | null; });
         break;
       }
       case "releasePaymentControl":

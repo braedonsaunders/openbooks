@@ -162,7 +162,7 @@ test('stripUnknownData drops unknown header keys, unknown row fields, and bad ro
       'not-an-object',
     ],
   }
-  const clean = stripUnknownData(SECTIONS, dirty as any)
+  const clean = stripUnknownData(SECTIONS, dirty)
   assert.deepEqual(clean, { name: 'ok', lines: [{ qty: 1, price: 2 }, {}] })
 })
 

@@ -62,7 +62,7 @@ export async function runOwnershipConsolidation(
   try {
     return await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
-      const context = await loadSubsidiaryContext(tx as any, orgId);
+      const context = await loadSubsidiaryContext(tx, orgId);
       const elimination = [...context.byId.values()].find((row) => row.isElimination && row.isActive);
       if (!elimination) throw new ConsolidationError("no active elimination subsidiary for ownership adjustments");
       const periodResult = (await tx.execute<{ id: string; starts_on: string; ends_on: string; name: string }>(sql`

@@ -25,15 +25,15 @@ export async function GET(request: NextRequest) {
   }
 
   const record = table === 'documents'
-    ? await db.execute(sql`
+    ? (await db.execute(sql`
         select org_id, kind, created_at, created_by, updated_at, updated_by
-          from documents where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
-    : table === 'parties' ? await db.execute(sql`
+          from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
+    : table === 'parties' ? (await db.execute(sql`
         select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by
-          from parties where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
-    : await db.execute(sql`
+          from parties where id = ${recordId} and org_id = ${authz.user.orgId}`))
+    : (await db.execute(sql`
         select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
-          from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`) as any
+          from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
   const metadata = record.rows[0]
   if (!metadata) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
@@ -66,17 +66,17 @@ export async function GET(request: NextRequest) {
   `
 
   const [rows, count] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       with events as (${events})
       select e.id, e.action, e.changes, e.at, e.request_id, u.name as actor_name
         from events e left join users u on u.id = e.actor_id
        where true ${filters}
        order by e.at desc, e.id desc
-       limit ${perPage} offset ${(page - 1) * perPage}`) as any,
-    db.execute(sql`
+       limit ${perPage} offset ${(page - 1) * perPage}`)),
+    (db.execute(sql`
       with events as (${events})
       select count(*) as n from events e left join users u on u.id = e.actor_id
-       where true ${filters}`) as any,
+       where true ${filters}`)),
   ])
 
   return NextResponse.json({

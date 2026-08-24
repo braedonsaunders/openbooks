@@ -69,11 +69,11 @@ export function CashflowView({ data }: { data: CashflowData }) {
 
       <p className="flex items-center justify-center gap-1 text-center text-xs text-slate-400 dark:text-slate-500">
         Act on these numbers in the
-        <Link href={'/banking/cash' as any} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
+        <Link href={('/banking/cash')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
           Cash cockpit <ArrowUpRight size={12} />
         </Link>
         (weekly drill + forecast config) and the
-        <Link href={'/ap' as any} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
+        <Link href={('/ap')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
           AP cockpit <ArrowUpRight size={12} />
         </Link>
         (pay-run planner + selection rule).

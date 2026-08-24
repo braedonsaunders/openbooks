@@ -207,6 +207,28 @@ function velocityAndAcceleration(amounts: number[], C: typeof CFG = CFG): { velo
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
+type SqlNumber = string | number | null;
+interface AccountSpendRow extends Record<string, unknown> {
+  account_id: string; account_name: string | null; month: string; month_num: number;
+  bill_amount: SqlNumber; expense_amount: SqlNumber; check_amount: SqlNumber; credit_amount: SqlNumber;
+  total_amount: SqlNumber; transaction_count: SqlNumber;
+}
+interface VendorSpendRow extends Record<string, unknown> {
+  vendor_id: string; vendor_name: string; month: string; total_amount: SqlNumber; transaction_count: SqlNumber;
+}
+interface PriorYearRow extends Record<string, unknown> { month_num: string; total_amount: SqlNumber; transaction_count: SqlNumber }
+interface CommitmentRow extends Record<string, unknown> { kind: string; month: string; amount: SqlNumber }
+interface RevenueRow extends Record<string, unknown> { revenue: SqlNumber }
+interface SpenderRow extends Record<string, unknown> {
+  employee_id: string; employee_name: string; current_spend: SqlNumber; prior_spend: SqlNumber; report_count: SqlNumber;
+}
+interface ExpenseCategoryRow extends Record<string, unknown> {
+  category_id: string; category_name: string | null; current_amount: SqlNumber; prior_amount: SqlNumber;
+}
+interface ComparisonRow extends Record<string, unknown> {
+  account_id: string; account_name: string | null; current_amount: SqlNumber; prior_amount: SqlNumber; two_back_amount: SqlNumber;
+}
+
 // ---- main -------------------------------------------------------------------
 
 export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }): Promise<SpendVelocityData> {
@@ -244,7 +266,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
 
   const [acctRows, vendRows, pyRows, poSoRows, revRows, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY).
-    db.execute(sql`
+    db.execute<AccountSpendRow>(sql`
       select l.account_id, a.name as account_name, a.number as account_number, a.type as account_type,
         to_char(e.posting_date, 'YYYY-MM') as month,
         extract(month from e.posting_date)::int as month_num,
@@ -257,9 +279,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       ${spendBase(from, to)}
       group by 1, 2, 3, 4, 5, 6
       having sum(l.amount) > 0
-    `) as Promise<any>,
+    `),
     // 2. Monthly vendor/party spend (drill-down).
-    db.execute(sql`
+    db.execute<VendorSpendRow>(sql`
       select d.party_id as vendor_id, coalesce(p.display_name, 'Unknown') as vendor_name,
         to_char(e.posting_date, 'YYYY-MM') as month,
         sum(l.amount) as total_amount,
@@ -276,33 +298,33 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
         and d.party_id is not null
       group by 1, 2, 3
       having sum(l.amount) > 0
-    `) as Promise<any>,
+    `),
     // 3. Prior-YEAR monthly totals for YoY.
-    db.execute(sql`
+    db.execute<PriorYearRow>(sql`
       select to_char(e.posting_date, 'MM') as month_num, sum(l.amount) as total_amount, count(distinct d.id) as transaction_count
       ${spendBase(pyFrom, pyTo)}
       group by 1
-    `) as Promise<any>,
+    `),
     // 4. PO vs SO monthly (commitment cliff).
-    db.execute(sql`
+    db.execute<CommitmentRow>(sql`
       select kind, to_char(document_date, 'YYYY-MM') as month, sum(total) as amount
       from documents
       where org_id = ${orgId} and kind in ('purchase_order', 'sales_order') and voided_at is null
         and document_date >= ${from} and document_date <= ${to}
       group by 1, 2
-    `) as Promise<any>,
+    `),
     // 5. Revenue (income lines) for OpEx normalisation.
-    db.execute(sql`
+    db.execute<RevenueRow>(sql`
       select coalesce(-sum(l.amount), 0) as revenue
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.type in ('income', 'income_other')
         and e.posting_date >= ${from} and e.posting_date <= ${to}
-    `) as Promise<any>,
+    `),
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders — expense reports by employee, current vs prior window.
-    db.execute(sql`
+    db.execute<SpenderRow>(sql`
       select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
         sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
@@ -315,9 +337,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       having sum(d.total) > 0
       order by 3 desc nulls last
       limit 50
-    `) as Promise<any>,
+    `),
     // 8. Expense categories (accounts on expense reports + bills), current vs prior.
-    db.execute(sql`
+    db.execute<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
@@ -332,9 +354,9 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       group by 1, 2
       order by 3 desc nulls last
       limit 50
-    `) as Promise<any>,
+    `),
     // 9. Period comparison: current vs prior vs two-back per account.
-    db.execute(sql`
+    db.execute<ComparisonRow>(sql`
       select l.account_id, a.name as account_name,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date >= ${priorFrom} and e.posting_date < ${from}) as prior_amount,
@@ -342,7 +364,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       ${spendBase(twoBackFrom, to)}
       group by 1, 2
       having sum(l.amount) > 0
-    `) as Promise<any>,
+    `),
   ]);
 
   // ---- account velocity (primary) -------------------------------------------
@@ -351,7 +373,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     totalSpend: number; totalBills: number; totalExpenses: number; totalOther: number; txns: number;
   }
   const acctMap = new Map<string, AcctAgg>();
-  for (const r of acctRows.rows as any[]) {
+  for (const r of acctRows.rows) {
     let a = acctMap.get(r.account_id);
     if (!a) {
       a = { id: r.account_id, name: r.account_name ?? `Account ${r.account_id}`, months: [], totalSpend: 0, totalBills: 0, totalExpenses: 0, totalOther: 0, txns: 0 };
@@ -399,7 +421,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   // ---- vendor velocity (drill-down) ------------------------------------------
   interface VendAgg { id: string; name: string; months: { month: string; amount: number; txns: number }[]; totalSpend: number; txns: number }
   const vendMap = new Map<string, VendAgg>();
-  for (const r of vendRows.rows as any[]) {
+  for (const r of vendRows.rows) {
     let v = vendMap.get(r.vendor_id);
     if (!v) { v = { id: r.vendor_id, name: r.vendor_name, months: [], totalSpend: 0, txns: 0 }; vendMap.set(r.vendor_id, v); }
     const amount = Number(r.total_amount ?? 0);
@@ -473,7 +495,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
 
   // ---- monthly trends w/ YoY ---------------------------------------------------
   const pyByMonth = new Map<string, { amount: number; txns: number }>(
-    (pyRows.rows as any[]).map((r) => [r.month_num, { amount: Number(r.total_amount ?? 0), txns: Number(r.transaction_count ?? 0) }]),
+    pyRows.rows.map((r) => [r.month_num, { amount: Number(r.total_amount ?? 0), txns: Number(r.transaction_count ?? 0) }]),
   );
   const trendMap = new Map<string, { total: number; txns: number; bill: number; expense: number; vendors: Set<string> }>();
   for (const a of acctMap.values()) {
@@ -483,7 +505,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       t.total += m.amount; t.txns += m.txns; t.bill += m.bill; t.expense += m.expense;
     }
   }
-  for (const r of vendRows.rows as any[]) trendMap.get(r.month)?.vendors.add(r.vendor_id);
+  for (const r of vendRows.rows) trendMap.get(r.month)?.vendors.add(r.vendor_id);
   const monthlyTrends = [...trendMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, t], i, arr) => {
     const py = pyByMonth.get(month.slice(5, 7));
     const prev = i > 0 ? arr[i - 1]![1].total : 0;
@@ -628,7 +650,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
 
   // ---- commitment cliff ----------------------------------------------------------------------
   const cliffMonths = new Map<string, { po: number; so: number }>();
-  for (const r of poSoRows.rows as any[]) {
+  for (const r of poSoRows.rows) {
     const m = cliffMonths.get(r.month) ?? { po: 0, so: 0 };
     if (r.kind === "purchase_order") m.po += Number(r.amount ?? 0);
     else m.so += Number(r.amount ?? 0);
@@ -663,7 +685,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const revenue = { hasData: totalRevenue > 0, totalRevenue, opexRatio: totalRevenue > 0 ? Math.round((totalSpend / totalRevenue) * 100) : 0 };
 
   // ---- period comparison ------------------------------------------------------------------------------
-  const cmpAccounts = (cmpRows.rows as any[]).map((r) => {
+  const cmpAccounts = cmpRows.rows.map((r) => {
     const current = Number(r.current_amount ?? 0);
     const prior = Number(r.prior_amount ?? 0);
     const twoBack = Number(r.two_back_amount ?? 0);
@@ -705,7 +727,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   };
 
   // ---- expense analysis ---------------------------------------------------------------------------------------
-  const topSpenders = (spenderRows.rows as any[]).map((r) => {
+  const topSpenders = spenderRows.rows.map((r) => {
     const current = Number(r.current_spend ?? 0);
     const prior = Number(r.prior_spend ?? 0);
     return {
@@ -718,7 +740,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     };
   }).filter((s) => s.totalSpend > 0 || s.priorSpend > 0);
   let categoryIncreaseTotal = 0;
-  const expCategories = (catRows.rows as any[]).map((r) => {
+  const expCategories = catRows.rows.map((r) => {
     const current = Number(r.current_amount ?? 0);
     const prior = Number(r.prior_amount ?? 0);
     const changePct = prior > 0 ? r1(((current - prior) / prior) * 100) : 0;

@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as Record<string, any>;
+  const body = ((parsedBody2.data));
   try {
     if (body.action === "manualQuote") {
       const taxableAmount = canonicalDecimal(body.taxableAmount ?? "0", 4);

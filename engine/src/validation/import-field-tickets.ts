@@ -106,15 +106,15 @@ const parseRows = (): Row[] =>
 
   const map = async (table: string) => {
     const r = (await retry(() => db.execute(sql.raw(
-      `select custom->>'nsId' k, id from "${table}" where org_id = '${ORG}' and custom->>'nsId' is not null`)))) as any;
-    return new Map<string, string>((r.rows as any[]).map((x) => [String(x.k), String(x.id)]));
+      `select custom->>'nsId' k, id from "${table}" where org_id = '${ORG}' and custom->>'nsId' is not null`))));
+    return new Map<string, string>((r.rows).map((x) => [String(x.k), String(x.id)]));
   };
   const projects = await map("projects");
   const parties = await map("parties");
-  const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
+  const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`)))).rows[0]?.id;
   const org = ((await retry(() => db.execute(sql`
     select base_currency from orgs where id = ${ORG}
-  `))) as any).rows[0] as { base_currency?: string } | undefined;
+  `)))).rows[0] as { base_currency?: string } | undefined;
   const baseCurrency = org?.base_currency?.trim();
   if (!baseCurrency) throw new Error("target organization has no base currency");
 
@@ -195,13 +195,13 @@ const parseRows = (): Row[] =>
   if (APPLY) {
     const v = (await retry(() => db.execute(sql`
       select (select count(*) from documents where org_id = ${ORG} and kind = 'field_ticket')::int tickets,
-             (select count(*) from field_tickets where org_id = ${ORG})::int native_headers`))) as any;
+             (select count(*) from field_tickets where org_id = ${ORG})::int native_headers`)));
     console.log("verify:", JSON.stringify(v.rows[0]));
   }
   process.exit(0);
 })().catch((e) => {
   const chain: string[] = [];
-  for (let c: any = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 200));
+  for (let c = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 200));
   console.error("FATAL:", chain.pop() ?? "unknown");
   process.exit(1);
 });

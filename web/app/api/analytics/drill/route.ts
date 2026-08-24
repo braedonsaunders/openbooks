@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
   if (account) {
     const [detail, monthly, byParty, agg] = await Promise.all([
-      db.execute(sql`
+      (db.execute(sql`
         select e.posting_date::text as date, e.id as entry_id, l.amount,
           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
           coalesce(p.display_name, '') as party_name,
@@ -45,16 +45,16 @@ export async function GET(req: Request) {
           and e.posting_date >= ${from} and e.posting_date <= ${to}
         order by e.posting_date desc, abs(l.amount) desc
         limit 1000
-      `) as Promise<any>,
-      db.execute(sql`
+      `)),
+      (db.execute(sql`
         select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as amount
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
         group by 1 order by 1
-      `) as Promise<any>,
-      db.execute(sql`
+      `)),
+      (db.execute(sql`
         select coalesce(p.display_name, 'No party') as name, sum(l.amount) as amount, count(*) as n
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -63,20 +63,20 @@ export async function GET(req: Request) {
           and e.posting_date >= ${from} and e.posting_date <= ${to}
         group by 1 order by abs(sum(l.amount)) desc
         limit 15
-      `) as Promise<any>,
-      db.execute(sql`
+      `)),
+      (db.execute(sql`
         select count(*) as n, coalesce(sum(l.amount), 0) as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
-      `) as Promise<any>,
+      `)),
     ]);
     return NextResponse.json({
       mode: "account",
       total: Number(agg.rows[0]?.total ?? 0),
       count: Number(agg.rows[0]?.n ?? 0),
-      entries: (detail.rows as any[]).map((r) => ({
+      entries: ((detail.rows)).map((r) => ({
         date: r.date,
         entryId: r.entry_id,
         docId: r.doc_id,
@@ -86,13 +86,13 @@ export async function GET(req: Request) {
         memo: r.memo,
         amount: Number(r.amount),
       })),
-      monthly: (monthly.rows as any[]).map((r) => ({ month: r.month, amount: Number(r.amount) })),
-      breakdown: (byParty.rows as any[]).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
+      monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: Number(r.amount) })),
+      breakdown: ((byParty.rows)).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
     });
   }
 
   const [detail, monthly, byKind, agg] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select coalesce(d.document_date, d.posting_date)::text as date,
         d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
         e.id as entry_id, abs(d.total) as amount, d.status,
@@ -104,36 +104,36 @@ export async function GET(req: Request) {
         and coalesce(d.document_date, d.posting_date) <= ${to}
       order by coalesce(d.document_date, d.posting_date) desc, abs(d.total) desc
       limit 1000
-    `) as Promise<any>,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(abs(d.total)) as amount
       from documents d
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
       group by 1 order by 1
-    `) as Promise<any>,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select d.kind as name, sum(abs(d.total)) as amount, count(*) as n
       from documents d
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
       group by 1 order by sum(abs(d.total)) desc
-    `) as Promise<any>,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select count(*) as n, coalesce(sum(abs(d.total)), 0) as total
       from documents d
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
-    `) as Promise<any>,
+    `)),
   ]);
   return NextResponse.json({
     mode: "party",
     total: Number(agg.rows[0]?.total ?? 0),
     count: Number(agg.rows[0]?.n ?? 0),
-    entries: (detail.rows as any[]).map((r) => ({
+    entries: ((detail.rows)).map((r) => ({
       date: r.date,
       entryId: r.entry_id,
       docId: r.doc_id,
@@ -143,7 +143,7 @@ export async function GET(req: Request) {
       memo: r.memo,
       amount: Number(r.amount),
     })),
-    monthly: (monthly.rows as any[]).map((r) => ({ month: r.month, amount: Number(r.amount) })),
-    breakdown: (byKind.rows as any[]).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
+    monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: Number(r.amount) })),
+    breakdown: ((byKind.rows)).map((r) => ({ name: r.name, amount: Number(r.amount), count: Number(r.n) })),
   });
 }

@@ -44,7 +44,7 @@ export interface DocListSource {
   /** Always-selected extra fields (ids for drill-through links). */
   extraSelect?: SQL
   /** Column key → row→href builder for entity drill-through. */
-  links?: Record<string, (row: any) => string | RelatedPartyTarget | null>
+  links?: Record<string, (row: Record<string, unknown>) => string | RelatedPartyTarget | null>
   /** Additional record-specific quick filters beyond kind and status. */
   quickFilters?: DocQuickFilter[]
   /** URL key for the mixed-kind picker (default `kind`). */
@@ -81,7 +81,7 @@ export interface RelatedPartyTarget {
 export const DOCUMENT_BASE_JOIN = sql`left join parties p on p.id = d.party_id and p.org_id = d.org_id`
 
 /** party_id → vendor/customer/employee drawer href. */
-const partyLink = (role: RelatedPartyTarget['role']) => (row: any): RelatedPartyTarget | null =>
+const partyLink = (role: RelatedPartyTarget['role']) => (row: Record<string, unknown>): RelatedPartyTarget | null =>
   row.party_id ? { kind: 'party', id: String(row.party_id), role } : null
 
 /** A standard documents list source (number/party/date/ref/total/status). */
@@ -94,7 +94,7 @@ function documentSource(cfg: {
   builtInExpr?: Record<string, SQL>
   joins?: SQL
   extraSelect?: SQL
-  links?: Record<string, (row: any) => string | null>
+  links?: Record<string, (row: Record<string, unknown>) => string | null>
   quickFilters?: DocQuickFilter[]
 }): DocListSource {
   return {
@@ -140,7 +140,7 @@ const SOURCES: Record<string, DocListSource> = {
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
       party_name: partyLink('vendor'),
-      bank_account: (row: any) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
+      bank_account: (row) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
     },
   },
   customer_payment: {
@@ -153,7 +153,7 @@ const SOURCES: Record<string, DocListSource> = {
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
       party_name: partyLink('customer'),
-      bank_account: (row: any) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
+      bank_account: (row) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
     },
   },
   expense_report: documentSource({
@@ -165,12 +165,12 @@ const SOURCES: Record<string, DocListSource> = {
       paramKey: 'employee',
       filterKey: 'party_id',
       loadOptions: async (orgId) => {
-        const result = await db.execute(sql`
+        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
           select p.id::text as value, p.display_name as label, count(*)::int as count
             from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'expense_report'
            group by p.id, p.display_name
-           order by p.display_name`) as any
+           order by p.display_name`)
         return result.rows
       },
     }],
@@ -226,7 +226,7 @@ const SOURCES: Record<string, DocListSource> = {
       status: sql`d.status`,
     },
     links: {
-      document_number: (row: any) => `/payroll/runs/${row.id}`,
+      document_number: (row) => `/payroll/runs/${row.id}`,
     },
     where: payRunWhere,
     // The merged-stage chips replace the raw document-status chips (draft
@@ -238,13 +238,13 @@ const SOURCES: Record<string, DocListSource> = {
         paramKey: 'schedule',
         filterKey: 'pay_schedule_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
             select s.id::text as value, s.name as label, count(pr.document_id)::int as count
               from pay_schedules s
               left join pay_runs pr on pr.pay_schedule_id = s.id and pr.org_id = s.org_id
              where s.org_id = ${orgId}
              group by s.id, s.name
-             order by s.name`) as any
+             order by s.name`)
           return result.rows
         },
       },
@@ -284,11 +284,11 @@ const SOURCES: Record<string, DocListSource> = {
       filterKey: 'bank_account_id',
       searchSelect: true,
       loadOptions: async (orgId) => {
-        const result = await db.execute(sql`
+        const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
           select id::text as value, trim(coalesce(number || ' ', '') || name) as label
             from accounts
            where org_id=${orgId} and is_active and not is_summary and reconcilable
-           order by number nulls last, name`) as any
+           order by number nulls last, name`)
         return result.rows
       },
     }],

@@ -33,7 +33,7 @@ import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 /** Render one table cell for a column, given the raw (snake-keyed) row. */
 export function renderCell(
   col: SetupColumn,
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
 ) {
@@ -130,14 +130,14 @@ export async function SetupEntitySection({
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
   const [rowsRes, countRes, refOptions] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select * from ${sql.raw(entity.table)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`) as any,
-    db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`) as any,
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
+    (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
     loadRefOptions(entity, orgId),
   ])
-  const rows = rowsRes.rows as Record<string, any>[]
+  const rows = (rowsRes.rows)
   const total = Number(countRes.rows[0]?.n ?? 0)
 
   const refLabels: Record<string, Map<string, string>> = {}
@@ -148,13 +148,13 @@ export async function SetupEntitySection({
   const idColumn = entity.idColumn ?? 'id'
   const open = rowParam
     ? rowParam === 'new'
-      ? { creating: true, row: null as Record<string, any> | null }
+      ? { creating: true, row: (null) }
       : await (async () => {
-          const selected = (await db.execute(sql`
+          const selected = ((await db.execute(sql`
             select * from ${sql.raw(entity.table)}
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-             limit 1`)) as any
+             limit 1`)))
           return { creating: false, row: selected.rows[0] ?? null }
         })()
     : null

@@ -146,7 +146,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     for (const t of selected) {
       const stmt = generateCopySql(t, opts, rebaseSet, masking);
       if (!stmt) continue;
-      const res = (await db.execute(sql.raw(stmt))) as any;
+      const res = (await db.execute(sql.raw(stmt)));
       const n = res.rowCount ?? 0;
       perTable.push({ table: t.name, rows: n });
       rowsCopied += n;

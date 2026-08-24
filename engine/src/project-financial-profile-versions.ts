@@ -33,7 +33,7 @@ function object(value: unknown, name: string): Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} must be an object`);
   }
-  return value as Record<string, any>;
+  return value;
 }
 
 function oneOf(value: unknown, allowed: readonly string[], name: string): void {

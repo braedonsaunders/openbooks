@@ -40,7 +40,7 @@ export async function GET(req: Request) {
       and ${leadExpr} = ${digit}
   `;
   const [detail, agg] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount,
         coalesce(p.display_name, '') as party_name,
@@ -48,8 +48,8 @@ export async function GET(req: Request) {
       ${base}
       order by abs(d.total) desc
       limit 500
-    `) as Promise<any>,
-    db.execute(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`) as Promise<any>,
+    `)),
+    (db.execute(sql`select count(*) as n, coalesce(sum(abs(d.total)), 0) as total ${base}`)),
   ]);
 
   return NextResponse.json({
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     dim,
     count: Number(agg.rows[0]?.n ?? 0),
     total: Number(agg.rows[0]?.total ?? 0),
-    documents: (detail.rows as any[]).map((r) => ({
+    documents: ((detail.rows)).map((r) => ({
       docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "",
       date: r.date, amount: Number(r.amount), partyName: r.party_name,
     })),

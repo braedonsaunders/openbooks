@@ -16,6 +16,26 @@ import { decimalCmp, decimalNeg, decimalSum } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
 
+interface OrderDrillSqlRow {
+  id: string; kind: string; date: string; document_number: string;
+  party: string | null; status: string; total: unknown
+}
+interface TimeDrillSqlRow {
+  id: string; date: string; employee: string; project: string | null;
+  memo: string | null; hours: unknown
+}
+interface EntryDocumentSqlRow { id: string; kind: string | null; doc_id: string | null }
+interface BudgetScenarioSqlRow { book_id: string; from_date: string; to_date: string }
+interface BudgetVarianceSqlRow {
+  source: 'actual' | 'budget'; key: string; period: string; entry_number: string | null;
+  number: string | null; account: string; detail: string | null; amount: unknown;
+  entry_id: string | null; doc_kind: string | null; doc_id: string | null
+}
+interface BudgetLineSqlRow {
+  id: string; period: string; number: string | null; account: string;
+  note: string | null; amount: unknown
+}
+
 const dimSql = (dims: StatementDimFilter | undefined, alias: 'bl' | 'l') => {
   const column = (name: string) => sql.raw(`${alias}.${name}`)
   return sql`${dims?.departmentId ? sql`and ${column('department_id')} = ${dims.departmentId}` : sql``}
@@ -134,14 +154,14 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
         : sql`d.status <> 'voided'`
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n from documents d where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} and ${predicate}`) as any,
+    db.execute(sql`select count(*)::int as n from documents d where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} and ${predicate}`),
     db.execute(sql`
       select d.id, d.kind, d.document_number, d.document_date::text as date, d.status,
              p.display_name as party, d.total
         from documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.org_id = ${authz.user.orgId} and d.kind = ${target.orderKind} and ${predicate}
        order by d.document_date desc, d.document_number desc
-       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
+       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
   const total = Number(count.rows[0]?.n ?? 0)
   return {
@@ -152,7 +172,7 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
       { label: tc('labels.date') }, { label: tc('labels.number') }, { label: tc('labels.party') },
       { label: tc('labels.status') }, { label: tc('labels.total'), align: 'right' },
     ],
-    rows: result.rows.map((row: any) => ({
+    rows: (result.rows as unknown as OrderDrillSqlRow[]).map((row) => ({
       key: row.id,
       cells: [row.date, row.document_number, row.party, row.status, money(Number(row.total))],
       transaction: { entryId: row.id, docKind: row.kind, docId: row.id },
@@ -195,7 +215,7 @@ async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, au
     : sql``
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}`) as any,
+    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}`),
     db.execute(sql`
       select te.id, te.worked_on::text as date, e.display_name as employee, p.name as project, te.memo, te.hours
         from time_entries te
@@ -204,7 +224,7 @@ async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, au
        where te.org_id = ${authz.user.orgId} and te.status = 'approved'
          and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}
        order by te.worked_on desc, e.display_name
-       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
+       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
   return {
     title: target.label,
@@ -214,7 +234,7 @@ async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, au
       { label: tc('labels.date') }, { label: tc('labels.employee') }, { label: tc('labels.project') },
       { label: tc('labels.memo') }, { label: tr('projectProfitability.columns.hours'), align: 'right' },
     ],
-    rows: result.rows.map((row: any) => ({ key: row.id, cells: [row.date, row.employee, row.project, row.memo, Number(row.hours)] })),
+    rows: (result.rows as unknown as TimeDrillSqlRow[]).map((row) => ({ key: row.id, cells: [row.date, row.employee, row.project, row.memo, Number(row.hours)] })),
     page,
     perPage: REPORT_DRILL_PAGE_SIZE,
     total: Number(count.rows[0]?.n ?? 0),
@@ -293,7 +313,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     const docs = (await db.execute(sql`
       select je.id, d.kind, d.id as doc_id
         from journal_entries je left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
-       where je.org_id = ${authz.user.orgId} and je.id in ${entryIds}`)) as any
+       where je.org_id = ${authz.user.orgId} and je.id in ${entryIds}`)) as unknown as { rows: EntryDocumentSqlRow[] }
     for (const row of docs.rows) entryDocs.set(row.id, { kind: row.kind, id: row.doc_id })
   }
   return {
@@ -345,7 +365,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
       from budget_scenarios bs
       join accounting_periods ap on ap.org_id = bs.org_id and ap.fiscal_year = bs.fiscal_year and not ap.is_adjustment
      where bs.id = ${target.scenarioId} and bs.org_id = ${authz.user.orgId}
-     group by bs.book_id`)) as any
+     group by bs.book_id`)) as unknown as { rows: BudgetScenarioSqlRow[] }
   const row = scenario.rows[0]
   if (!row) throw new Error('scenario_not_found')
   if (target.scope === 'actual') {
@@ -393,13 +413,13 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
         select count(*)::int as n,
                coalesce(sum(amount) filter (where source = 'actual'), 0) as actual,
                coalesce(sum(amount) filter (where source = 'budget'), 0) as budget
-          from support`) as any,
+          from support`),
       db.execute(sql`${support}
         select source, key, period, entry_number, number, account, detail, amount,
                entry_id, doc_kind, doc_id
           from support
          order by sort_date, source, number nulls last, key
-         limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
+         limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
     ])
     const totalRow = totals.rows[0] ?? { n: 0, actual: 0, budget: 0 }
     const actual = Number(totalRow.actual)
@@ -417,7 +437,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
         { label: tc('transactionTypes.journalEntry') }, { label: tc('labels.account') },
         { label: tc('labels.description') }, { label: tc('labels.amount'), align: 'right' },
       ],
-      rows: rows.rows.map((item: any) => ({
+      rows: (rows.rows as unknown as BudgetVarianceSqlRow[]).map((item) => ({
         key: `${item.source}:${item.key}`,
         cells: [
           item.source === 'actual' ? tr('budget.actual') : tr('budget.budget'),
@@ -438,21 +458,21 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
     }
   }
   const [count, rows] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}`) as any,
+    db.execute(sql`select count(*)::int as n, coalesce(sum(bl.amount), 0) as amount from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}`),
     db.execute(sql`
       select bl.id, ap.name as period, a.number, a.name as account, bl.note, bl.amount
         from budget_lines bl join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
         join accounting_periods ap on ap.id = bl.period_id and ap.org_id = bl.org_id
        where bl.org_id = ${authz.user.orgId} and bl.scenario_id = ${target.scenarioId} ${account} ${dims}
        order by ap.starts_on, a.number nulls last, a.name
-       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
+       limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
   ])
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
     summary: [{ label: tc('labels.total'), value: money(Number(count.rows[0]?.amount ?? 0)) }],
     columns: [{ label: tc('labels.period') }, { label: tc('labels.account') }, { label: tc('labels.memo') }, { label: tc('labels.amount'), align: 'right' }],
-    rows: rows.rows.map((item: any) => ({ key: item.id, cells: [item.period, [item.number, item.account].filter(Boolean).join(' · '), item.note, money(Number(item.amount))] })),
+    rows: (rows.rows as unknown as BudgetLineSqlRow[]).map((item) => ({ key: item.id, cells: [item.period, [item.number, item.account].filter(Boolean).join(' · '), item.note, money(Number(item.amount))] })),
     page,
     perPage: REPORT_DRILL_PAGE_SIZE,
     total: Number(count.rows[0]?.n ?? 0),

@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   }
 
   const filter = employee ? sql`t.employee_party_id = ${employee}` : sql`t.item_id = ${item}`;
-  const res: any = await db.execute(sql`
+  const res = await db.execute(sql`
     select
       t.id,
       t.worked_on::text as date,
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     limit 500
   `);
 
-  const entries = (res.rows as any[]).map((r) => ({
+  const entries = ((res.rows)).map((r) => ({
     id: r.id,
     date: r.date,
     hours: Number(r.hours ?? 0),

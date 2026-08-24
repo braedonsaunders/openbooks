@@ -43,8 +43,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
 
-  const target = (await db.execute(sql`
-    select id from users where id = ${body.userId} and org_id = ${actor.orgId}`)) as any;
+  const target = ((await db.execute(sql`
+    select id from users where id = ${body.userId} and org_id = ${actor.orgId}`)));
   if (!target.rows[0]) return NextResponse.json({ error: "user not found" }, { status: 404 });
 
   switch (body.action) {
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
       if (!body.roleId || !isUuid(body.roleId)) {
         return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      const role = (await db.execute(sql`
-        select id, key from app_roles where id = ${body.roleId} and org_id = ${actor.orgId}`)) as any;
+      const role = ((await db.execute(sql`
+        select id, key from app_roles where id = ${body.roleId} and org_id = ${actor.orgId}`)));
       if (!role.rows[0]) return NextResponse.json({ error: "role not found" }, { status: 404 });
       const inserted = (await db.execute(sql`
         insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
           );
         }
       }
-      const updated = (await db.execute(sql`
+      const updated = ((await db.execute(sql`
         with changed_identity as (
           update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}
            where id = ${body.userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
@@ -148,7 +148,7 @@ export async function POST(req: Request) {
           returning id
         )
         select id from changed_identity
-      `)) as any;
+      `)));
       if (updated.rows[0]) {
         // Session revocation is in the same SQL statement as deactivation, so
         // a later reactivation cannot revive pre-disable browser sessions.

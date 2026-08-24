@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   if (feature) return feature
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const b = (parsedBody.data) as any
+  const b = ((parsedBody.data))
   const key = String(b.key ?? '').trim()
   const name = String(b.name ?? '').trim()
   if (!key || !name) return NextResponse.json({ error: 'Key and name are required' }, { status: 422 })
@@ -110,7 +110,7 @@ export async function PATCH(req: Request) {
   if (feature) return feature
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
-  const b = (parsedBody2.data) as any
+  const b = ((parsedBody2.data))
   if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })

@@ -20,6 +20,61 @@ type Search = Record<string, string | string[] | undefined>
 type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
 interface Session { id: string; throughDate: string; statementBalance: string }
+interface ListParams {
+  q?: string
+  page: number
+  perPage: number
+}
+export interface StatementRow extends Record<string, unknown> {
+  id: string
+  posted_on: string
+  amount: string
+  description: string | null
+  counterparty_ref?: string | null
+}
+export interface GlRow extends Record<string, unknown> {
+  id: string
+  posting_date: string
+  entry_number: string
+  amount: string
+  memo: string | null
+  party: string | null
+}
+export interface ReviewRow extends Record<string, unknown> {
+  id: string
+  statement_line_id: string
+  confidence: string | number
+  stmt_date: string
+  stmt_amount: string
+  stmt_description: string | null
+  entry_number: string
+}
+interface MatchData {
+  stmtRows: StatementRow[]
+  stmtTotal: number
+  stmtParams: ListParams
+  glRows: GlRow[]
+  glTotal: number
+  glParams: ListParams
+  reviewRows: ReviewRow[]
+  excludedRows: StatementRow[]
+  excludedTotal: number
+  exParams: ListParams
+}
+interface MatchTotals {
+  statementBalance: string
+  clearedBalance: string
+  difference: string
+}
+interface MatchActionResult {
+  error?: string
+  matched?: number
+  highConfidence?: number
+  mediumConfidence?: number
+  excluded?: number
+  scanned?: number
+  journalLinesReconciled?: number
+}
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
 
@@ -30,8 +85,8 @@ export function MatchWorkspace({
   offsetAccounts: Opt[]
   account: Account | null
   session: Session | null
-  data: any
-  totals: any
+  data: MatchData | null
+  totals: MatchTotals | null
   currentParams: Search
   tab: 'match' | 'review' | 'excluded'
 }) {
@@ -63,7 +118,7 @@ export function MatchWorkspace({
       signal: controller.signal,
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: any) => {
+      .then((d) => {
         if (!d?.matches) return
         const next = new Map<string, { ruleId: string; ruleName: string }>()
         for (const m of d.matches) {
@@ -90,11 +145,11 @@ export function MatchWorkspace({
   }
 
   const glSelectionSum = useMemo(
-    () => (data?.glRows ?? []).filter((r: any) => selectedGl.has(r.id)).reduce((a: number, r: any) => a + Number(r.amount), 0),
+    () => (data?.glRows ?? []).filter((r) => selectedGl.has(r.id)).reduce((a, r) => a + Number(r.amount), 0),
     [data, selectedGl],
   )
 
-  async function call(method: string, url: string, body?: unknown): Promise<any | null> {
+  async function call(method: string, url: string, body?: unknown): Promise<MatchActionResult | null> {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -102,14 +157,14 @@ export function MatchWorkspace({
         headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
-      const d = await res.json()
+      const d = await res.json() as MatchActionResult
       if (!res.ok) { toast.error(d.error ?? tBanking('errors.requestFailed')); return null }
       return d
     } finally { setBusy(false) }
   }
 
   function pickAccount(id: string) {
-    router.push((id ? `/banking/match?account=${id}` : '/banking/match') as any)
+    router.push(((id ? `/banking/match?account=${id}` : '/banking/match')))
   }
 
   async function startMatching() {
@@ -123,7 +178,7 @@ export function MatchWorkspace({
     if (!session) return
     const d = await call('POST', `/api/banking/reconciliations/${session.id}/auto-match`)
     if (!d) return
-    d.matched === 0 ? toast.info(tW('noAutoMatches')) : toast.success(tW('autoMatchedToast', { count: d.matched, high: d.highConfidence, medium: d.mediumConfidence }))
+    d.matched === 0 ? toast.info(tW('noAutoMatches')) : toast.success(tW('autoMatchedToast', { count: d.matched ?? 0, high: d.highConfidence ?? 0, medium: d.mediumConfidence ?? 0 }))
     router.refresh()
   }
 
@@ -132,8 +187,8 @@ export function MatchWorkspace({
     const d = await call('POST', '/api/banking/rules/apply', { accountId: account.id })
     if (!d) return
     d.matched === 0 && d.excluded === 0
-      ? toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned }))
-      : toast.success(tBanking('rules.runDone', { matched: d.matched, excluded: d.excluded }))
+      ? toast.info(tBanking('rules.runNoneMatched', { scanned: d.scanned ?? 0 }))
+      : toast.success(tBanking('rules.runDone', { matched: d.matched ?? 0, excluded: d.excluded ?? 0 }))
     router.refresh()
   }
 
@@ -181,7 +236,7 @@ export function MatchWorkspace({
     if (!ok) return
     const d = await call('POST', `/api/banking/reconciliations/${session.id}/sign-off`)
     if (!d) return
-    toast.success(tW('signedOffToast', { count: d.journalLinesReconciled })); router.refresh()
+    toast.success(tW('signedOffToast', { count: d.journalLinesReconciled ?? 0 })); router.refresh()
   }
 
   const zero = totals ? compareDecimal(String(totals.difference ?? '0'), '0') === 0 : false
@@ -210,7 +265,7 @@ export function MatchWorkspace({
     )
   }
 
-  if (!session) {
+  if (!session || !data || !totals) {
     return (
       <div className="space-y-4">
         {picker}
@@ -231,7 +286,7 @@ export function MatchWorkspace({
   }
   const tabBtn = (tb: 'match' | 'review' | 'excluded', label: string, count?: number) => (
     <Link
-      href={tabHref(tb) as any}
+      href={(tabHref(tb))}
       className={cn(
         'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
         tab === tb ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -261,7 +316,7 @@ export function MatchWorkspace({
         <Button variant="outline" disabled={busy} onClick={autoMatch}><Wand2 size={15} /> {tW('autoMatch')}</Button>
         <Button variant="outline" disabled={busy} onClick={runRules}><Workflow size={15} /> {tBanking('rules.runRules')}</Button>
         <span className="flex-1" />
-        {selectedStmt ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money((data.stmtRows.find((r: any) => r.id === selectedStmt)?.amount) ?? 0), gl: money(glSelectionSum) })}</span> : null}
+        {selectedStmt ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money((data.stmtRows.find((r) => r.id === selectedStmt)?.amount) ?? 0), gl: money(glSelectionSum) })}</span> : null}
         <Button disabled={busy || !selectedStmt || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
         <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : tW('signOffDisabledTitle')}><CheckCheck size={15} /> {tW('signOff')}</Button>
       </div>
@@ -292,7 +347,7 @@ export function MatchWorkspace({
               <TableBody>
                 {data.stmtRows.length === 0 ? (
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.stmtParams.q ? tW('noBankLinesSearch') : tW('allBankLinesMatched')}</TableCell></TableRow>
-                ) : data.stmtRows.map((l: any) => {
+                ) : data.stmtRows.map((l) => {
                   const sel = selectedStmt === l.id
                   return (
                     <TableRow key={l.id} className={cn('cursor-pointer', sel && selectedRow)} onClick={() => setSelectedStmt(sel ? null : l.id)}>
@@ -318,7 +373,7 @@ export function MatchWorkspace({
                           {suggestions.has(l.id) ? (
                             <Button variant="ghost" size="sm" disabled={busy} title={t('postAndMatch')} onClick={() => confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)}><Link2 size={14} /></Button>
                           ) : null}
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push(`/banking/rules?rule=new&fromLine=${l.id}` as any)}><Workflow size={14} /></Button>
+                          <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push((`/banking/rules?rule=new&fromLine=${l.id}`))}><Workflow size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId('') }}><FilePlus2 size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
@@ -348,7 +403,7 @@ export function MatchWorkspace({
               <TableBody>
                 {data.glRows.length === 0 ? (
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.glParams.q ? tW('noGlLinesSearch') : tW('allGlLinesReconciled')}</TableCell></TableRow>
-                ) : data.glRows.map((l: any) => {
+                ) : data.glRows.map((l) => {
                   const sel = selectedGl.has(l.id)
                   const toggle = () => setSelectedGl((p) => { const n = new Set(p); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n })
                   return (
@@ -383,7 +438,7 @@ export function MatchWorkspace({
             <TableBody>
               {data.reviewRows.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center text-slate-500 dark:text-slate-400">{t('noReview')}</TableCell></TableRow>
-              ) : data.reviewRows.map((m: any) => (
+              ) : data.reviewRows.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="whitespace-nowrap">{m.stmt_date}</TableCell>
                   <TableCell className="max-w-[14rem] truncate">{m.stmt_description ?? '—'}</TableCell>
@@ -414,7 +469,7 @@ export function MatchWorkspace({
             <TableBody>
               {data.excludedRows.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="text-center text-slate-500 dark:text-slate-400">{t('noExcluded')}</TableCell></TableRow>
-              ) : data.excludedRows.map((l: any) => (
+              ) : data.excludedRows.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
                   <TableCell className="max-w-[18rem] truncate">{l.description ?? '—'}</TableCell>

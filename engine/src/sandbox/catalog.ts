@@ -125,20 +125,22 @@ export function assertUuid(v: string): string {
 
 export async function loadCatalog(): Promise<Catalog> {
   // Columns for every base table in public, flagged as uuid or not.
-  const colsRes = (await db.execute(sql`
+  const colsRes = await db.execute<{ table_name: string; column_name: string; udt_name: string }>(sql`
     select c.table_name, c.column_name, c.data_type, c.udt_name
       from information_schema.columns c
       join information_schema.tables t
         on t.table_name = c.table_name and t.table_schema = c.table_schema
      where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
-     order by c.table_name, c.ordinal_position`)) as any;
+     order by c.table_name, c.ordinal_position`);
 
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
   // Use pg_catalog OIDs, not the information_schema constraint-name joins.
   // Constraint names are only table-local; joining them by name multiplies
   // common generated names across a large ERP catalog and made sandbox
   // provisioning spend minutes in introspection.
-  const fkRes = (await db.execute(sql`
+  const fkRes = await db.execute<{
+    table_name: string; column_name: string; ref_table: string; delete_rule: string; is_deferrable: string;
+  }>(sql`
     select source.relname as table_name,
            source_column.attname as column_name,
            target.relname as ref_table,
@@ -162,10 +164,10 @@ export async function loadCatalog(): Promise<Catalog> {
        and source_column.attnum = con.conkey[position]
      where con.contype = 'f'
        and source_namespace.nspname = 'public'
-     order by source.relname, con.conname, position`)) as any;
+     order by source.relname, con.conname, position`);
 
   const byTable = new Map<string, TableInfo>();
-  for (const r of colsRes.rows as any[]) {
+  for (const r of colsRes.rows) {
     let t = byTable.get(r.table_name);
     if (!t) {
       t = {
@@ -185,7 +187,7 @@ export async function loadCatalog(): Promise<Catalog> {
     if (r.column_name === "org_id") t.hasOrgId = true;
     if (r.column_name === "id") t.hasId = true;
   }
-  for (const r of fkRes.rows as any[]) {
+  for (const r of fkRes.rows) {
     const t = byTable.get(r.table_name);
     if (t) {
       t.fks[r.column_name] = r.ref_table;
@@ -196,15 +198,15 @@ export async function loadCatalog(): Promise<Catalog> {
 
   // uuid columns inside a UNIQUE index that omits org_id — must be force-rebased or
   // the copy collides with prod's own row (the key is global, not per-tenant).
-  const uqRes = (await db.execute(sql`
+  const uqRes = await db.execute<{ table_name: string; column_name: string }>(sql`
     select ix.indrelid::regclass::text as table_name, a.attname as column_name
       from pg_index ix
       join pg_attribute a on a.attrelid = ix.indrelid and a.attnum = any(ix.indkey)
      where ix.indisunique and a.atttypid = 'uuid'::regtype
        and exists (select 1 from pg_attribute o where o.attrelid = ix.indrelid and o.attname = 'org_id' and not o.attisdropped)
        and not exists (select 1 from pg_attribute o2 join lateral unnest(ix.indkey) kk(n) on o2.attnum = kk.n
-                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`)) as any;
-  for (const r of uqRes.rows as any[]) {
+                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`);
+  for (const r of uqRes.rows) {
     const t = byTable.get(r.table_name);
     if (t && r.column_name !== "id" && r.column_name !== "org_id") t.forceRebase.add(r.column_name);
   }

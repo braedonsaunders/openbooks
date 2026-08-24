@@ -555,7 +555,7 @@ function SubgroupSection({
             {chevron}
           </button>
           <Link
-            href={href as any}
+            href={(href)}
             aria-current={selfActive ? 'page' : undefined}
             data-walkthrough={`nav:${href}`}
             onClick={() => setOpen(true)}

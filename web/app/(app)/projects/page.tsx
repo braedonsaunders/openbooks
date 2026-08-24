@@ -59,10 +59,10 @@ export default async function Projects({
         loadProjectCockpit(orgId, openProject.project.id as string, {
           includeApplicationBilling: applicationPermissions.canRead,
         }),
-        db.execute(sql`
+        (db.execute(sql`
           select id, name, billing_method as "billingMethod",
                  invoicing_profile->>'billingProcedure' as "billingProcedure"
-            from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
+            from project_types where org_id = ${orgId} and is_active order by sort_order, name`)),
       ])
     : [null, [], null, null]
   const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]

@@ -24,7 +24,7 @@ export const runtime = 'nodejs'
  */
 
 async function itemExists(id: string, orgId: string) {
-  const r = (await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)) as any
+  const r = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
   return Boolean(r.rows[0])
 }
 
@@ -46,11 +46,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id) || !(await itemExists(id, gate.user.orgId))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const rows = (await db.execute(sql`
+  const rows = ((await db.execute(sql`
     select id, currency, unit_price, low_value, high_value, effective_from, effective_to, is_active
       from fair_value_prices
      where org_id = ${gate.user.orgId} and item_id = ${id}
-     order by currency, effective_from desc nulls last`)) as any
+     order by currency, effective_from desc nulls last`)))
   return NextResponse.json({ prices: rows.rows })
 }
 
@@ -122,14 +122,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   let notFound = false
   await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
+    const before = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
-    `)) as any
+    `)))
     if (!before.rows[0]) {
       notFound = true
       return
     }
-    const updated = (await tx.execute(sql`
+    const updated = ((await tx.execute(sql`
       update fair_value_prices set
         currency = ${parsed.currency}, unit_price = ${parsed.unitPrice},
         low_value = ${parsed.lowValue}, high_value = ${parsed.highValue},
@@ -137,7 +137,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         is_active = ${parsed.isActive}, updated_at = now(), updated_by = ${actorId}
        where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       returning *
-    `)) as any
+    `)))
     await auditSetupChange({
       orgId,
       table: 'fair_value_prices',
@@ -160,9 +160,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   let notFound = false
   await db.transaction(async (tx) => {
-    const existing = (await tx.execute(sql`
+    const existing = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
-    `)) as any
+    `)))
     if (!existing.rows[0]) {
       notFound = true
       return

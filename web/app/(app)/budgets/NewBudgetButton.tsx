@@ -29,7 +29,7 @@ export function NewBudgetButton({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
-      router.push(mergeHref('/budgets', currentParams, {
+      router.push((mergeHref('/budgets', currentParams, {
         budget: data.id,
         budgetNew: '1',
         budgetQ: null,
@@ -40,7 +40,7 @@ export function NewBudgetButton({
         budgetClass: null,
         budgetImport: null,
         budgetView: null,
-      }) as any)
+      })))
       router.refresh()
       setBusy(false)
     } catch {

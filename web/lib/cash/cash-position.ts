@@ -191,7 +191,7 @@ export async function cashPosition(
       select id, number, name, type from accounts
       where org_id = ${orgId} and is_summary = false
       order by number nulls last, name
-    `) as Promise<any>,
+    `),
     // "Parties with any payable document" is a semi-join: joining every
     // payable document to its party and then DISTINCTing back down to a few
     // thousand names materialized the whole document set to answer a
@@ -206,7 +206,7 @@ export async function cashPosition(
              and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
         )
       order by 2
-    `) as Promise<any>,
+    `),
   ]);
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);

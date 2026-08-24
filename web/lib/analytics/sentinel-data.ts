@@ -94,6 +94,38 @@ export interface AuditEvent {
   id: string; tableName: string; rowId: string; action: string; actorId: string | null; at: string; summary: string;
 }
 
+interface AggregateRow extends Record<string, string | number | null> {
+  count: string | number;
+  amount: string | number;
+}
+interface FlaggedDocumentRow extends Record<string, unknown> {
+  id: string; document_number: string | null; kind: string; date: string; amount: string | number;
+  party_id: string | null; party_name: string | null; trap?: string; dow?: string | number;
+}
+interface DuplicateRow extends Record<string, unknown> {
+  id1: string; id2: string; num1: string | null; num2: string | null; kind: string;
+  date1: string; date2: string; days_between: string | number; amount: string | number;
+  party_id: string | null; party_name: string; same_memo: boolean;
+}
+interface VendorStatisticRow extends FlaggedDocumentRow {
+  rsf?: string | number; z?: string | number; second_amount: string | number;
+  baseline_count: string | number; avg_amount: string | number; std_amount: string | number;
+}
+interface SequentialRow extends Record<string, unknown> {
+  party_id: string; party_name: string; span_days: string | number; cnt: string | number;
+  total_amount: string | number; start_ref: string | number; end_ref: string | number;
+  first_date: string; last_date: string;
+  invoices: Array<{ docId: string; docNumber: string; reference: string; date: string; amount: number }>;
+}
+interface GhostRow extends Record<string, unknown> {
+  vendor_id: string; vendor_name: string; employee_id: string; employee_name: string;
+  name_match: boolean; address_match: boolean;
+}
+interface AuditRow extends Record<string, unknown> {
+  id: string; table_name: string; row_id: string; action: string; actor_id: string | null;
+  at: string; changes: string | null;
+}
+
 export interface SentinelData {
   period: { from: string; to: string; label: string };
   meta: { totalDocs: number; totalAmount: number; days: number; queryMs: number };
@@ -182,7 +214,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     // contended for the same buffers. Trap/weekend qualify a subset, so their
     // key is NULL for non-qualifying rows and that null group is dropped below
     // — which reproduces the filter exactly.
-    db.execute(sql`
+    (db.execute(sql`
       with base as (
         select abs(d.total) as amt,
                coalesce(d.document_date, d.posting_date) as ddate,
@@ -204,10 +236,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
              count(*) as count, coalesce(sum(amt), 0) as amount
         from base
        group by grouping sets ((), (digit1), (digit2), (trap), (dow), (ddate))
-    `) as Promise<any>,
+    `)),
 
     // Threshold trap rows (top by amount) — SQL modular arithmetic, full scan.
-    db.execute(sql`
+    (db.execute(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total) as amount, d.party_id, coalesce(p.display_name, '') as party_name,
         case when trunc(abs(d.total))::bigint % 10000 = 9999 then '9999'
@@ -223,7 +255,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         and round((abs(d.total) - trunc(abs(d.total))) * 100) in (0, 99)
       order by abs(d.total) desc
       limit 100
-    `) as Promise<any>,
+    `)),
 
     // Duplicates. The candidate set (payable documents above the floor)
     // materializes ONCE, then self hash-joins on the plain CTE columns
@@ -236,7 +268,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     // pair set is referenced twice, so Postgres materializes it and the
     // expensive self-join runs once instead of once per result set. The name
     // lookup hangs off the top-200 only, never the whole pair set.
-    db.execute(sql`
+    (db.execute(sql`
       with cand as materialized (
         select id, document_number, kind, party_id, memo, abs(total) as amt,
                coalesce(document_date, posting_date) as ddate
@@ -270,10 +302,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         null::text, null::text, null::int, coalesce(sum(amount), 0), null::uuid,
         null::text, null::boolean, count(*)
       from pairs
-    `) as Promise<any>,
+    `)),
 
     // Weekend-dated documents (top rows + full aggregate).
-    db.execute(sql`
+    (db.execute(sql`
       select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
         abs(d.total) as amount, d.party_id, coalesce(p.display_name, '') as party_name,
         extract(dow from coalesce(d.document_date, d.posting_date))::int as dow
@@ -286,7 +318,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
       order by abs(d.total) desc
       limit 200
-    `) as Promise<any>,
+    `)),
 
     // RSF and z-score share ONE per-vendor baseline. Both derive their vendor
     // statistics from the identical 36-month row set, so computing them
@@ -296,7 +328,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     // 2nd-largest, the count, the mean and σ together; the period documents
     // then materialize once and each detector filters them. The two result
     // sets come back unioned with a `src` discriminator and are split below.
-    db.execute(sql`
+    (db.execute(sql`
       with baseline as (
         select d.party_id, abs(d.total) as amount,
           row_number() over w as rn,
@@ -349,10 +381,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       select 'rsf' as src, * from rsf
       union all
       select 'z' as src, * from zs
-    `) as Promise<any>,
+    `)),
 
     // Sequential invoice runs — gaps-and-islands over vendor reference numbers.
-    db.execute(sql`
+    (db.execute(sql`
       with refs as (
         select d.id, d.document_number, d.reference_number, d.party_id,
           coalesce(d.document_date, d.posting_date) as doc_date, abs(d.total) as amount,
@@ -383,14 +415,14 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       where i.span_days >= ${SEQUENTIAL_MIN_DAYS_FOR_FLAG}
       order by i.span_days desc, i.total_amount desc
       limit 50
-    `) as Promise<any>,
+    `)),
 
     // Ghost vendors — the full two-phase detector, both phases in SQL.
     // Phase 1: company-vendor names vs employee names. Phase 2: shared street
     // address — line1 normalized (punctuation stripped, directional/street-type
     // words abbreviated) + postal code. Weights as designed: name 75 /
     // address 90 / name+address 95.
-    db.execute(sql`
+    (db.execute(sql`
       with norm_addr as (
         select a.party_id,
           regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
@@ -431,10 +463,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         )
         or bool_or(va.addr_key is not null and va.addr_key = ea.addr_key)
       limit 50
-    `) as Promise<any>,
+    `)),
 
     // Native audit trail — deletes + sensitive-field changes on master data.
-    db.execute(sql`
+    (db.execute(sql`
       select a.id, a.table_name, a.row_id::text as row_id, a.action, a.actor_id::text as actor_id, a.at::text as at,
         left(coalesce(a.changes::text, ''), 200) as changes
       from audit_log a
@@ -447,14 +479,14 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
         )
       order by a.at desc
       limit 100
-    `) as Promise<any>,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select count(*) as total,
         count(*) filter (where action in ('delete', 'DELETE')) as deletes,
         count(*) filter (where changes::text ~* 'bank|routing|iban|account_number|email|address') as sensitive
       from audit_log
       where org_id = ${orgId} and at >= ${from}::date and at < (${to}::date + interval '1 day')
-    `) as Promise<any>,
+    `)),
 
   ]);
 
@@ -462,15 +494,15 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   // grouping(col) is 0 exactly when that column is a real key for the row, so
   // each set is picked out by its own flag; the null key in the trap/weekend
   // sets is the non-qualifying remainder and is dropped.
-  const dupAllRows = dupAll.rows as any[];
+  const dupAllRows = (dupAll.rows);
   const dupRows = { rows: dupAllRows.filter((r) => r.src === "pair") };
   const dupAgg = { rows: dupAllRows.filter((r) => r.src === "agg").map((r) => ({ total: r.pair_count, amount: r.amount })) };
 
-  const vendorStats = vendorStatRows.rows as any[];
+  const vendorStats = (vendorStatRows.rows);
   const rsfRows = { rows: vendorStats.filter((r) => r.src === "rsf").map((r) => ({ ...r, rsf: r.metric })) };
   const zRows = { rows: vendorStats.filter((r) => r.src === "z").map((r) => ({ ...r, z: r.metric })) };
 
-  const aggAll = aggRows.rows as any[];
+  const aggAll = aggRows.rows as AggregateRow[];
   const gset = (flag: string, key: string) =>
     aggAll.filter((r) => Number(r[flag]) === 0 && r[key] !== null);
   const metaRows = {
@@ -484,12 +516,12 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const trapAgg = { rows: gset("g_trap", "trap") };
   const weekendAgg = { rows: gset("g_dow", "dow") };
   const calRows = {
-    rows: gset("g_date", "date").sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+    rows: gset("g_date", "date").sort((a, b) => String(a.date).localeCompare(String(b.date))),
   };
 
   // ---- Benford 1D --------------------------------------------------------------
   const b1Map = new Map<string, { count: number; amount: number }>(
-    (b1Rows.rows as any[]).map((r) => [r.digit, { count: Number(r.count), amount: Number(r.amount) }]),
+    ((b1Rows.rows)).map((r) => [String(r.digit), { count: Number(r.count), amount: Number(r.amount) }]),
   );
   const total1D = [...b1Map.values()].reduce((s, v) => s + v.count, 0);
   let sumAbsDev1 = 0;
@@ -520,7 +552,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
 
   // ---- Benford 2D --------------------------------------------------------------
   const b2Map = new Map<string, { count: number; amount: number }>(
-    (b2Rows.rows as any[]).map((r) => [r.digits, { count: Number(r.count), amount: Number(r.amount) }]),
+    ((b2Rows.rows)).map((r) => [String(r.digits), { count: Number(r.count), amount: Number(r.amount) }]),
   );
   const total2D = [...b2Map.values()].reduce((s, v) => s + v.count, 0);
   let sumAbsDev2 = 0;
@@ -538,18 +570,18 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const anomalies2D = digits2D.filter((x) => x.isAnomaly && x.count >= 5).sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct));
 
   // ---- Threshold trap ------------------------------------------------------------
-  const trapItems: FlaggedDoc[] = (trapRows.rows as any[]).map((r) => ({
+  const trapItems: FlaggedDoc[] = (trapRows.rows as FlaggedDocumentRow[]).map((r) => ({
     docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
     amount: Number(r.amount), partyId: r.party_id, partyName: r.party_name ?? "",
     flagType: "trap" as const,
     reason: `Amount ends in ${r.trap} (potential threshold avoidance)`,
     riskScore: r.trap === "9999" ? 65 : r.trap === "999" ? 55 : 45,
   }));
-  const trapByTrap = (trapAgg.rows as any[]).map((r) => ({ trap: r.trap as string, count: Number(r.count), amount: Number(r.amount) }));
+  const trapByTrap = ((trapAgg.rows)).map((r) => ({ trap: r.trap as string, count: Number(r.count), amount: Number(r.amount) }));
   const trapTotal = trapByTrap.reduce((s, t) => s + t.count, 0);
 
   // ---- Duplicates ------------------------------------------------------------------
-  const dupPairs: DuplicatePair[] = (dupRows.rows as any[]).map((r) => {
+  const dupPairs: DuplicatePair[] = (dupRows.rows as DuplicateRow[]).map((r) => {
     const amount = Number(r.amount);
     const days = Number(r.days_between);
     const sameMemo = Boolean(r.same_memo);
@@ -574,7 +606,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const dupAmount = Number(dupAgg.rows[0]?.amount ?? 0);
 
   // ---- Weekend ------------------------------------------------------------------------
-  const weekendItems: FlaggedDoc[] = (weekendRows.rows as any[]).map((r) => {
+  const weekendItems: FlaggedDoc[] = (weekendRows.rows as FlaggedDocumentRow[]).map((r) => {
     const amount = Number(r.amount);
     const isSunday = Number(r.dow) === 0;
     let score = 35;
@@ -590,7 +622,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     };
   });
   let satCount = 0, sunCount = 0, weekendAmount = 0;
-  for (const r of weekendAgg.rows as any[]) {
+  for (const r of (weekendAgg.rows)) {
     if (Number(r.dow) === 0) sunCount = Number(r.count);
     else satCount = Number(r.count);
     weekendAmount += Number(r.amount);
@@ -598,7 +630,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const weekendTotal = satCount + sunCount;
 
   // ---- RSF ------------------------------------------------------------------------------
-  const rsfItems = (rsfRows.rows as any[]).map((r) => {
+  const rsfItems = (rsfRows.rows as VendorStatisticRow[]).map((r) => {
     const rsf = Number(r.rsf);
     const amount = Number(r.amount);
     let score = 40;
@@ -606,7 +638,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     if (amount >= CRITICAL_RISK_AMOUNT) score += 15; else if (amount >= HIGH_RISK_AMOUNT) score += 10;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount, partyId: r.party_id, partyName: r.party_name,
+      amount, partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "rsf" as const,
       reason: `${rsf.toFixed(1)}× larger than ${r.party_name}'s historical 2nd largest`,
       riskScore: Math.min(100, score),
@@ -615,7 +647,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   });
 
   // ---- Z-score ------------------------------------------------------------------------------
-  const zItems = (zRows.rows as any[]).map((r) => {
+  const zItems = (zRows.rows as VendorStatisticRow[]).map((r) => {
     const z = Number(r.z);
     const amount = Number(r.amount);
     let score = 45;
@@ -623,7 +655,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     if (amount >= CRITICAL_RISK_AMOUNT) score += 15;
     return {
       docId: r.id, docNumber: r.document_number ?? "", kind: r.kind, date: r.date,
-      amount, partyId: r.party_id, partyName: r.party_name,
+      amount, partyId: r.party_id, partyName: r.party_name ?? "",
       flagType: "zscore" as const,
       reason: `Z-score ${Math.abs(z).toFixed(2)} vs ${r.party_name} average (${r.baseline_count} txns)`,
       riskScore: Math.min(100, score),
@@ -632,7 +664,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   });
 
   // ---- Sequential runs -----------------------------------------------------------------------
-  const sequential: SequentialGroup[] = (seqRows.rows as any[]).map((r) => {
+  const sequential: SequentialGroup[] = (seqRows.rows as SequentialRow[]).map((r) => {
     const spanDays = Number(r.span_days);
     const count = Number(r.cnt);
     const totalAmount = Number(r.total_amount);
@@ -646,12 +678,12 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       firstDate: String(r.first_date), lastDate: String(r.last_date),
       riskLevel: level, riskScore: Math.min(100, score),
       reason: `${count} gap-free sequential invoices (${r.start_ref}–${r.end_ref}) over ${spanDays} days${level === "high" ? " — possible shell company / sole customer" : ""}`,
-      invoices: (r.invoices as any[]).slice(0, 12),
+      invoices: ((r.invoices)).slice(0, 12),
     };
   });
 
   // ---- Ghost vendors (Score tiers: name 75 / address 90 / name+address 95) -----------------------
-  const ghosts: GhostVendor[] = (ghostRows.rows as any[]).map((r) => {
+  const ghosts: GhostVendor[] = (ghostRows.rows as GhostRow[]).map((r) => {
     const name = Boolean(r.name_match);
     const addr = Boolean(r.address_match);
     const matchType: GhostVendor["matchType"] = name && addr ? "name+address" : addr ? "address" : "name";
@@ -668,7 +700,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   }).sort((a, b) => b.riskScore - a.riskScore);
 
   // ---- Audit trail ---------------------------------------------------------------------------------
-  const auditEvents: AuditEvent[] = (auditRows.rows as any[]).map((r) => ({
+  const auditEvents: AuditEvent[] = (auditRows.rows as AuditRow[]).map((r) => ({
     id: r.id, tableName: r.table_name, rowId: r.row_id, action: r.action, actorId: r.actor_id, at: r.at,
     summary: r.changes || "",
   }));
@@ -763,6 +795,6 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     auditTrail: { total: auditTotal, deletes: auditDeletes, sensitiveChanges: auditSensitive, events: auditEvents },
     flagged: flagged.slice(0, 300),
     vendorRisk,
-    calendar: (calRows.rows as any[]).map((r) => ({ date: r.date, count: Number(r.count), amount: Number(r.amount) })),
+    calendar: ((calRows.rows)).map((r) => ({ date: String(r.date), count: Number(r.count), amount: Number(r.amount) })),
   };
 }

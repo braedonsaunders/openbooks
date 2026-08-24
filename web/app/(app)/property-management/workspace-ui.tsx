@@ -48,7 +48,7 @@ export function Status({ value }: { value: string }) {
     : ["notice", "open", "scheduled"].includes(value)
       ? "warning"
       : "secondary";
-  return <Badge variant={variant as any}>{value.replaceAll("_", " ")}</Badge>;
+  return <Badge variant={(variant)}>{value.replaceAll("_", " ")}</Badge>;
 }
 export function Empty({ title, detail }: { title: string; detail: string }) {
   return (

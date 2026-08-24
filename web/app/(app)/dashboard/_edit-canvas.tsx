@@ -41,12 +41,12 @@ function appWidgetNodes(apps: DashboardApp[], widgetIds?: readonly string[]): Re
 }
 
 export async function loadPublishedInsightCards(orgId: string): Promise<LibraryCard[]> {
-  const res = (await db.execute(sql`
+  const res = ((await db.execute(sql`
     select id, name, coalesce(description, '') as description
       from insight_cards
      where org_id = ${orgId} and status = 'published'
      order by name asc
-  `)) as any
+  `)))
   return res.rows as LibraryCard[]
 }
 

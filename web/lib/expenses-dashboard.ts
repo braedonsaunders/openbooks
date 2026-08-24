@@ -75,7 +75,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
 
   const [pipeRes, spenderRes, catRes, trendRes, queueRes] = (await Promise.all([
     // Approval pipeline — live counts/values by status + posted this month.
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         count(*) filter (where status = 'draft') as draft_count,
         coalesce(sum(total) filter (where status = 'draft'), 0) as draft_total,
@@ -90,7 +90,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     `),
     // Top spenders — expense reports by employee, current vs prior window
     // (verbatim Spend Velocity query 7).
-    db.execute<any>(sql`
+    db.execute(sql`
       select d.party_id as employee_id, coalesce(p.display_name, 'Unknown') as employee_name,
         sum(d.total) filter (where d.posting_date >= ${from}) as current_spend,
         sum(d.total) filter (where d.posting_date < ${from}) as prior_spend,
@@ -105,7 +105,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       limit 50
     `),
     // Expense categories (accounts on expense-report lines), current vs prior.
-    db.execute<any>(sql`
+    db.execute(sql`
       select l.account_id as category_id, a.name as category_name,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
         sum(l.amount) filter (where e.posting_date < ${from}) as prior_amount
@@ -122,7 +122,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       limit 50
     `),
     // Monthly expense-report vs vendor-bill spend (the SV comparison chart).
-    db.execute<any>(sql`
+    db.execute(sql`
       select to_char(e.posting_date, 'YYYY-MM') as month,
         coalesce(sum(l.amount) filter (where d.kind = 'expense_report'), 0) as expense_amount,
         coalesce(sum(l.amount) filter (where d.kind = 'vendor_bill'), 0) as bill_amount
@@ -138,7 +138,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
       order by 1
     `),
     // Approval queue — oldest unfinished reports first.
-    db.execute<any>(sql`
+    db.execute(sql`
       select d.id, d.document_number, d.document_date::text as date, d.total, d.status,
         p.display_name as employee
       from documents d
@@ -178,7 +178,7 @@ export async function expensesDashboard(orgId: string): Promise<ExpensesDashboar
     })
     .filter((c) => c.currentAmount > 0 || c.priorAmount > 0)
 
-  const monthlyTrends = (trendRes.rows as any[]).map((r) => ({
+  const monthlyTrends = (trendRes.rows).map((r) => ({
     month: String(r.month),
     expenseAmount: Number(r.expense_amount ?? 0),
     billAmount: Number(r.bill_amount ?? 0),

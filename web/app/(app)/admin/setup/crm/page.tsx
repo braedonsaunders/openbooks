@@ -43,8 +43,8 @@ export default async function CrmSetup({
   const offset = (list.page - 1) * list.perPage;
   const term = `%${list.q ?? ""}%`;
 
-  let rowsResult: any;
-  let countResult: any;
+  let rowsResult;
+  let countResult;
   if (tab === "accountStatuses") {
     [rowsResult, countResult] = await Promise.all([
       db.execute(sql`
@@ -132,13 +132,13 @@ export default async function CrmSetup({
       multiCurrency
         ? db.execute(sql`select code,name from currencies order by code`)
         : Promise.resolve({ rows: [] }),
-    ])) as any[];
+    ])) as unknown as [any, any, any, any];
 
   const rowParam = pickString(sp.row);
   const creating = rowParam === "new";
-  let selected: Record<string, any> | null = null;
+  let selected: Record<string, unknown> | null = null;
   if (rowParam && rowParam !== "new" && isUuid(rowParam)) {
-    let selectedResult: any;
+    let selectedResult;
     if (tab === "accountStatuses")
       selectedResult = await db.execute(
         sql`select * from crm_account_statuses where id=${rowParam} and org_id=${orgId}`,
@@ -165,10 +165,10 @@ export default async function CrmSetup({
       );
     selected = selectedResult.rows[0] ?? null;
     if (selected && tab === "teams") {
-      const members = (await db.execute(
+      const members = ((await db.execute(
         sql`select user_id,role from crm_sales_team_members where team_id=${rowParam} and org_id=${orgId} and is_active order by role,user_id`,
-      )) as any;
-      selected.members = members.rows.map((member: any) => ({
+      )));
+      selected.members = members.rows.map((member) => ({
         userId: member.user_id,
         role: member.role,
       }));

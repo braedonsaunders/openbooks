@@ -7,6 +7,28 @@ import { ZERO } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
 import { type AgingBucket, agingDetail, type AgingSide } from "./aging";
 
+interface AccountRegisterAccount extends Record<string, unknown> {
+  id: string;
+  number: string | null;
+  name: string;
+  type: string;
+  is_summary: boolean;
+}
+
+interface AccountRegisterLine extends Record<string, unknown> {
+  entry_id: string;
+  entry_number: string | null;
+  posting_date: string;
+  entry_memo: string | null;
+  line_number: number;
+  amount: string;
+  memo: string | null;
+  party: string | null;
+  doc_id: string | null;
+  doc_kind: string | null;
+  doc_number: string | null;
+}
+
 export async function accountRegister(
   orgId: string,
   accountId: string,
@@ -15,10 +37,10 @@ export async function accountRegister(
   period?: { from?: string; to?: string; search?: string },
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ) {
-  const acct = (await db.execute(sql`
+  const acct = (await db.execute<AccountRegisterAccount>(sql`
     select id, number, name, type, is_summary from accounts
      where id = ${accountId} and org_id = ${orgId}
-  `)) as any;
+  `));
   if (!acct.rows[0]) return { account: undefined, lines: [], total: 0, balance: '0' };
   const dateFilter =
     period?.from || period?.to
@@ -41,7 +63,7 @@ export async function accountRegister(
       ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]}`
       : sql` and false`
     : sql``;
-  const r = (await db.execute(sql`
+  const r = (await db.execute<AccountRegisterLine>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -61,8 +83,8 @@ export async function accountRegister(
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
-  `)) as any;
-  const c = (await db.execute(sql`
+  `));
+  const c = (await db.execute<{ n: string; bal: string }>(sql`
     with recursive account_scope as (
       select id from accounts where id = ${accountId} and org_id = ${orgId}
       union
@@ -78,8 +100,9 @@ export async function accountRegister(
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
        and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
-  `)) as any;
-  return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
+  `));
+  const totals = c.rows[0] ?? { n: "0", bal: "0" };
+  return { account: acct.rows[0], lines: r.rows, total: Number(totals.n), balance: totals.bal };
 }
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,7 @@ export async function GET() {
     `),
   ])
   return NextResponse.json({
-    users: (users as any).rows as { id: string; name: string }[],
-    roles: (roles as any).rows as { id: string; name: string }[],
+    users: ((users)).rows as { id: string; name: string }[],
+    roles: ((roles)).rows as { id: string; name: string }[],
   })
 }

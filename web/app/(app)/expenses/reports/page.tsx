@@ -60,23 +60,23 @@ export default async function Expenses({
         userId: authz.user.id,
         recordType: 'expense_report',
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[6] as any,
-        lineDefs: pickers[7] as any,
+        headerDefs: (pickers[6]),
+        lineDefs: (pickers[7]),
         explicitLayoutId: pickString(sp.form),
       })
       drawer = (
         <ExpenseDrawer
-          report={openReport as any}
+          report={(openReport)}
           initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           employees={pickers[0].rows}
           accounts={pickers[1].rows}
-          taxCodes={pickers[2] as any}
-          taxGroups={pickers[3] as any}
+          taxCodes={(pickers[2])}
+          taxGroups={(pickers[3])}
           departments={pickers[4].rows}
           projects={pickers[5].rows}
           headerDefs={pickers[6] as any}
           lineDefs={pickers[7] as any}
-          segments={pickers[8] as any}
+          segments={(pickers[8])}
           canSubmit={canSubmit}
           canPost={canPost}
           layout={resolvedForm.layout}

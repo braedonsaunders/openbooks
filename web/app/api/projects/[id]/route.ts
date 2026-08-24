@@ -155,9 +155,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const value = uuidOrNull(body.subsidiaryId)
     if (value === 'invalid') return bad('Invalid subsidiary')
     if (value) {
-      const subsidiary = (await db.execute(sql`
+      const subsidiary = ((await db.execute(sql`
         select 1 from subsidiaries
-         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)) as any
+         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)))
       if (!subsidiary.rows.length) return bad('Subsidiary not found')
     }
     subsidiaryId = value

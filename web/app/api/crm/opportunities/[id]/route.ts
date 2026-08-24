@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, any>
+  const body = (parsedBody.data)
   const partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
   const contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
   const ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
@@ -66,14 +66,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
   if (!await orgUuidExists('parties', partyId, user.orgId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
   if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
-  if (contactId && !(await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`) as any).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
+  if (contactId && !((await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
   if (!await orgUuidExists('users', ownerUserId, user.orgId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (!await orgUuidExists('crm_sales_teams', salesTeamId, user.orgId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
   if (!await orgUuidExists('crm_lead_sources', leadSourceId, user.orgId)) return NextResponse.json({ error: 'invalid lead source' }, { status: 422 })
 
   const statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
   if (!statusId || !isUuid(statusId)) return NextResponse.json({ error: 'status is required' }, { status: 422 })
-  const status = (await db.execute<any>(sql`
+  const status = (await db.execute(sql`
     select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
   const nextStatus = status.rows[0]
   if (!nextStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
@@ -93,10 +93,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
-  if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`) as any).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
+  if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
   const winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
   if (nextStatus.is_closed && !nextStatus.is_won && !winLossReason) return NextResponse.json({ error: 'a loss reason is required' }, { status: 422 })
-  const lines = body.lines as Array<any> | undefined
+  const lines = (body.lines)
   let calculated: ReturnType<typeof computeOpportunityTotals> | null = null
   if (lines) {
     if (!Array.isArray(lines)) return NextResponse.json({ error: 'lines must be an array' }, { status: 422 })
@@ -115,7 +115,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: error instanceof Error ? error.message : 'invalid lines' }, { status: 422 })
     }
     for (const line of lines) {
-      if (!line.itemId || !isUuid(line.itemId) || !(await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`) as any).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
+      if (!line.itemId || !isUuid(line.itemId) || !((await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`))).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
     }
     // Stored inventory / assembly / kit lines stay. Turning Inventory off must
     // 404 a write that would persist a new one of those kinds.

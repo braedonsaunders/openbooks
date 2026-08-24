@@ -56,7 +56,7 @@ export async function POST(req: Request) {
   if (authz instanceof NextResponse) return authz;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
   try {
     switch (body.action) {
       case "createVersion": {

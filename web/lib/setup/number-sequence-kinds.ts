@@ -60,10 +60,10 @@ export async function loadNumberSequenceKindOptions(orgId: string): Promise<Numb
   const [customTypes, configured, features] = await Promise.all([
     db.execute(sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} order by name`) as any,
+       where org_id = ${orgId} order by name`),
     db.execute(sql`
       select distinct document_kind from number_sequences
-       where org_id = ${orgId} order by document_kind`) as any,
+       where org_id = ${orgId} order by document_kind`),
     orgFeatureState(orgId),
   ])
 

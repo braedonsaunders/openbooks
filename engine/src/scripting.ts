@@ -234,7 +234,7 @@ export async function runScript(
       result.error.dispose();
       const msg =
         typeof err === "object" && err && "message" in err
-          ? String((err as any).message)
+          ? String((err).message)
           : String(err);
       if (msg.startsWith("__OB_ABORT__")) {
         return {
@@ -539,7 +539,7 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
     );
 
   for (const s of scripts) {
-    const cron = (s as any).cron as string | null;
+    const cron = (s).cron as string | null;
     if (!cron) {
       await db.execute(
         sql`update user_scripts set next_run_at = null where id = ${s.id} and org_id = ${orgId}`,

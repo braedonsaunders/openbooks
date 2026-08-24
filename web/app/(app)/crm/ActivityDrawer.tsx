@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 
-export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: any; owners: any[]; accounts: any[]; opportunities: any[]; closeHref: string; canManage: boolean }) {
+export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: any; owners: any[]; accounts: unknown[]; opportunities: any[]; closeHref: string; canManage: boolean }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()

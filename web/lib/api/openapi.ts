@@ -1,5 +1,23 @@
 import type { ApiRecordTypeSchema } from "./registry-data";
 
+interface OpenApiSchema {
+  properties?: Record<string, OpenApiSchema>;
+  required?: string[];
+  [key: string]: unknown;
+}
+interface OpenApiOperation {
+  parameters?: Array<Record<string, unknown>>;
+  requestBody?: { content: { "application/json": { schema: OpenApiSchema } }; required?: boolean };
+  [key: string]: unknown;
+}
+interface OpenApiPathItem {
+  get?: OpenApiOperation;
+  post?: OpenApiOperation;
+  patch?: OpenApiOperation;
+  delete?: OpenApiOperation;
+  [key: string]: unknown;
+}
+
 /**
  * Build a tenant-specific OpenAPI 3.0 spec from an already-loaded schema.
  * Pure (no db/server-only) so it is unit-testable; `generateOpenApiSpec`
@@ -17,21 +35,21 @@ export interface OpenApiSpec {
     version: string;
   };
   servers: { url: string; description: string }[];
-  paths: Record<string, any>;
+  paths: Record<string, OpenApiPathItem>;
   components: {
-    securitySchemes: Record<string, any>;
-    schemas: Record<string, any>;
-    responses: Record<string, any>;
+    securitySchemes: Record<string, Record<string, unknown>>;
+    schemas: Record<string, OpenApiSchema>;
+    responses: Record<string, Record<string, unknown>>;
   };
-  security: Record<string, any>[];
+  security: Record<string, string[]>[];
 }
 
 export function buildOpenApiSpec(
   schema: ApiRecordTypeSchema[],
   baseUrl: string,
 ): OpenApiSpec {
-  const paths: Record<string, any> = {};
-  const schemas: Record<string, any> = {};
+  const paths: Record<string, OpenApiPathItem> = {};
+  const schemas: Record<string, OpenApiSchema> = {};
   const idempotencyParameter = {
     name: "Idempotency-Key",
     in: "header",
@@ -67,14 +85,14 @@ export function buildOpenApiSpec(
     // Build the JSON schema for this record type's fields. The READ model
     // (`modelKey`) exposes every field; the WRITE model (`modelKey`Write) is
     // the request body — only writable fields (identity/audit/computed excluded).
-    const properties: Record<string, any> = {};
-    const writeProps: Record<string, any> = {};
+    const properties: Record<string, OpenApiSchema> = {};
+    const writeProps: Record<string, OpenApiSchema> = {};
     const required: string[] = [];
     const writeRequired: string[] = [];
     for (const f of rt.fields) {
-      const [type, format] = f.type.split(" (");
+      const [rawType, format] = f.type.split(" (");
       const prop = {
-        type,
+        type: rawType ?? "string",
         ...(format ? { format: format.replace(")", "") } : {}),
         ...(f.description ? { description: f.description } : {}),
         ...(f.enum ? { enum: f.enum } : {}),

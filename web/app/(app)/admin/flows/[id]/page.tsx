@@ -23,21 +23,21 @@ export default async function FlowBuilderPage({ params }: { params: Promise<{ id
   if (!isUuid(id)) notFound()
 
   const [flowRes, runsRes, usersRes, rolesRes] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select id, name, enabled, subject_kind, graph
-        from flows where id = ${id} and org_id = ${authz.user.orgId}`) as any,
-    db.execute(sql`
+        from flows where id = ${id} and org_id = ${authz.user.orgId}`)),
+    (db.execute(sql`
       select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
         from flow_runs where flow_id = ${id} and org_id = ${authz.user.orgId}
-       order by started_at desc limit 30`) as any,
-    db.execute(sql`
+       order by started_at desc limit 30`)),
+    (db.execute(sql`
       select id, name, email from users
        where org_id = ${authz.user.orgId} and is_active
-       order by name`) as any,
-    db.execute(sql`
+       order by name`)),
+    (db.execute(sql`
       select key, name from app_roles
        where org_id = ${authz.user.orgId}
-       order by name`) as any,
+       order by name`)),
   ])
   const flow = flowRes.rows[0]
   if (!flow) notFound()
@@ -56,12 +56,12 @@ export default async function FlowBuilderPage({ params }: { params: Promise<{ id
         }}
         runs={runsRes.rows as FlowRunRow[]}
         profile={profile}
-        users={usersRes.rows.map((user: any) => ({
+        users={usersRes.rows.map((user) => ({
           id: String(user.id),
           name: String(user.name),
           email: String(user.email),
         }))}
-        roles={rolesRes.rows.map((role: any) => ({
+        roles={rolesRes.rows.map((role) => ({
           key: String(role.key),
           name: String(role.name),
         }))}

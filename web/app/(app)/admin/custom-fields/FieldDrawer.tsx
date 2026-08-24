@@ -112,7 +112,7 @@ export function FieldDrawer({
   const tCommon = useTranslations('common')
   const creating = !def
   const router = useRouter()
-  const config = (def?.config ?? {}) as Record<string, any>
+  const config = ((def?.config ?? {}))
 
   const [targetTable, setTargetTable] = useState<string>(def?.target_table ?? 'documents')
   const [targetKind, setTargetKind] = useState<string>(def?.target_kind ?? '')

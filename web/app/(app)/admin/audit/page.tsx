@@ -62,7 +62,7 @@ export default async function Audit({
     ${params.q ? sql` and ((${rtypeExpr}) ilike ${'%' + params.q + '%'} or u.name ilike ${'%' + params.q + '%'} or a.row_id::text = ${params.q})` : sql``}`
 
   const [rows, totalRow, actions, rtypes, users, selectedResult] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${rtypeExpr}) as rtype,
              case
                when a.changes ? 'before' or a.changes ? 'after' then 'snapshot'
@@ -78,34 +78,34 @@ export default async function Audit({
        where ${where}
        order by a.at desc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
+    `)),
     db.execute(sql`select count(*) as n ${auditFrom} where ${where}`) as any,
-    db.execute(sql`
+    (db.execute(sql`
       select action, count(*) as n
         from audit_log
        where org_id = ${authz.user.orgId}
        group by 1 order by 2 desc
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select (${rtypeExpr}) as rtype, count(*) as n
         ${auditFrom}
        where a.org_id = ${authz.user.orgId}
        group by 1 order by 2 desc limit 60
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select a.actor_id, u.name, count(*) as n
         from audit_log a left join users u on u.id = a.actor_id and u.org_id = a.org_id
        where a.org_id = ${authz.user.orgId}
        group by 1, 2 order by 3 desc limit 50
-    `) as any,
+    `)),
     eventId && isUuid(eventId)
-      ? db.execute(sql`
+      ? (db.execute(sql`
           select a.id, a.row_id, a.action, a.at, a.request_id, a.changes,
                  u.name as actor_name, (${rtypeExpr}) as rtype
             ${auditFrom}
            where a.id = ${eventId} and a.org_id = ${authz.user.orgId}
            limit 1
-        `) as any
+        `))
       : Promise.resolve({ rows: [] }),
   ])
   const total = Number(totalRow.rows[0].n)

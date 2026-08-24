@@ -19,6 +19,24 @@ interface AccountOpt {
   id: string
   label: string
 }
+type StoredRuleOutcome =
+  | { action: 'exclude' }
+  | {
+      action: 'categorize'
+      mode: 'auto' | 'suggest'
+      lines: AllocationLine[]
+      partyId?: string | null
+      memo?: string | null
+    }
+
+export interface BankRuleView {
+  id: string
+  name: string
+  criteria: { accountScope?: string[]; match: ConditionGroup }
+  outcome: StoredRuleOutcome
+  priority: number
+  is_active: boolean
+}
 
 export function NewRuleButton() {
   const t = useTranslations('banking.rules')
@@ -125,7 +143,7 @@ export function RuleDrawer({
   parties,
   seedFromLine,
 }: {
-  rule: Record<string, any> | null
+  rule: BankRuleView | null
   accounts: Opt[]
   reconAccounts: AccountOpt[]
   departments: Opt[]
@@ -549,7 +567,7 @@ function serializeLines(lines: AllocationLine[]) {
 }
 
 /** Read the canonical stored model, or create a blank unsaved rule. */
-function initialRuleState(rule: Record<string, any> | null, seed?: { description?: string | null; amount?: string | null } | null) {
+function initialRuleState(rule: BankRuleView | null, seed?: { description?: string | null; amount?: string | null } | null) {
   if (!rule) {
     const match: ConditionGroup = seed?.description
       ? { combinator: 'and', rules: [{ field: 'anyText', op: 'contains', value: seed.description.slice(0, 60) }] }
@@ -572,7 +590,7 @@ function initialRuleState(rule: Record<string, any> | null, seed?: { description
   const o = rule.outcome
   const action: 'categorize' | 'exclude' = o.action
   const lines: AllocationLine[] = o.action === 'categorize'
-    ? o.lines.map((l: any) => ({
+    ? o.lines.map((l) => ({
         accountId: l.accountId ?? '',
         portion: l.portion,
         departmentId: l.departmentId ?? null,

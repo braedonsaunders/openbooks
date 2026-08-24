@@ -110,19 +110,19 @@ export default async function Accounts({
   ])
   const drawerOptions = accountId || creating
     ? await Promise.all([
-        db.execute(sql`
+        (db.execute(sql`
           select id, number, name, type from accounts
            where org_id = ${authz.user.orgId} and is_summary
            order by number nulls last, name
-        `) as any,
+        `)),
         multiCurrencyEnabled
-          ? db.execute(sql`select code, name from currencies order by code`) as any
+          ? (db.execute(sql`select code, name from currencies order by code`))
           : Promise.resolve({ rows: [] }),
-        db.execute(sql`
+        (db.execute(sql`
           select id, name from subsidiaries
            where org_id = ${authz.user.orgId}
            order by name
-        `) as any,
+        `)),
         loadFieldDefs('accounts'),
         segmentRegistry(authz.user.orgId),
       ])
@@ -160,7 +160,7 @@ export default async function Accounts({
       key={creating ? 'new-account' : String(drawerPayload.account.id)}
       payload={drawerPayload}
       parents={drawerOptions[0].rows
-        .filter((option: any) => option.id !== drawerPayload.account.id)
+        .filter((option) => option.id !== drawerPayload.account.id)
         .map((option: any) => ({ value: option.id, label: `${option.number ?? ''} ${option.name}`.trim(), type: option.type }))}
       currencies={drawerOptions[1].rows.map((option: any) => ({ value: option.code, label: `${option.code} · ${option.name}` }))}
       subsidiaries={(subsidiaryUiEnabled ? drawerOptions[2].rows : []).map((option: any) => ({ value: option.id, label: option.name }))}
@@ -252,7 +252,7 @@ export default async function Accounts({
                         {a.number ?? tc('labels.notSet')}
                       </span>
                       <div className="min-w-0">
-                        <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 hover:underline dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
+                        <Link href={(mergeHref('/accounts', sp, { account: a.id }))} className={cn('hover:text-teal-700 hover:underline dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
                           {a.name}
                         </Link>
                         {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}

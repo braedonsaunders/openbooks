@@ -37,9 +37,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ dashboa
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select settings -> 'analytics' -> ${dashboard} as cfg from orgs where id = ${gate.user.orgId}
-  `)) as any;
+  `)));
   return NextResponse.json({
     values: mergeConfig(dashboard as AnalyticsDashboard, r.rows[0]?.cfg ?? null),
     defaults: spec.defaults,

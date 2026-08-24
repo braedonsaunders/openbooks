@@ -184,7 +184,7 @@ function verifyStripeWebhookDelivery(
   // (below) makes processing idempotent.
   const skew = Date.now() / 1000 - Number(parts.t);
   if (skew < -300 || skew > 86_400) return invalidWebhook();
-  let event: any;
+  let event;
   try {
     event = JSON.parse(rawBody);
   } catch {
@@ -280,7 +280,7 @@ function verifyAdyenWebhookDelivery(
   secrets: ProviderSecrets,
 ): WebhookVerification {
   if (!secrets.webhookSecret) return invalidWebhook(); // webhookSecret = base64 HMAC key
-  let payload: any;
+  let payload;
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -378,7 +378,7 @@ function verifyGoCardlessWebhookDelivery(
   if (!sig) return invalidWebhook();
   const expected = hmacSha256Hex(secrets.webhookSecret, rawBody);
   if (!safeEqual(expected, sig)) return invalidWebhook();
-  let payload: any;
+  let payload;
   try {
     payload = JSON.parse(rawBody);
   } catch {

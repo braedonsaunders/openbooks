@@ -91,7 +91,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
 
   const [schedulesRes, prevRes, statsRes, ytdRes, noProfileRes, noWageRes, settings] = (await Promise.all([
     // Active schedules + the latest run (any state) + active-profile counts.
-    db.execute<any>(sql`
+    db.execute(sql`
       select s.id, s.name, s.frequency, s.periods_per_year,
              s.anchor_period_end::text as anchor_period_end, s.pay_date_offset_days, s.is_default,
              coalesce(pc.n, 0) as active_employees,
@@ -113,7 +113,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
        order by s.is_default desc, s.name
     `),
     // Previous completed period — the latest committed (or posted) run.
-    db.execute<any>(sql`
+    db.execute(sql`
       select r.document_id, d.document_number, d.status as document_status, sc.name as schedule_name,
              r.period_start::text as period_start, r.period_end::text as period_end,
              r.pay_date::text as pay_date, r.net_total, r.employee_count
@@ -123,7 +123,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
        where r.org_id = ${orgId} and r.run_status = 'committed'
        order by r.pay_date desc, r.period_end desc limit 1
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         (select count(*) from employee_payroll_profiles where org_id = ${orgId} and is_active) as active_employees,
         (select count(*) from pay_runs where org_id = ${orgId} and tax_year = ${taxYear} and run_status = 'committed') as runs_this_year,
@@ -132,7 +132,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
         (select count(*) from pay_runs where org_id = ${orgId}) as total_runs
     `),
     // YTD = committed stubs for the current tax year (matches the engine's YTD basis).
-    db.execute<any>(sql`
+    db.execute(sql`
       select coalesce(sum(st.gross), 0) as gross,
              coalesce(sum(st.net_pay), 0) as net,
              coalesce(sum(st.employer_cost), 0) as employer_cost
@@ -141,7 +141,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
        where st.org_id = ${orgId} and st.tax_year = ${taxYear}
     `),
     // Active employees with no active payroll profile.
-    db.execute<any>(sql`
+    db.execute(sql`
       select p.id, p.display_name as name, count(*) over () as total
         from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
@@ -154,7 +154,7 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
     `),
     // Profiled employees with no wage effective today (one-table doctrine:
     // wages live in labor_cost_rates, employee scope).
-    db.execute<any>(sql`
+    db.execute(sql`
       select p.id, p.display_name as name, count(*) over () as total
         from employee_payroll_profiles pr
         join parties p on p.id = pr.employee_party_id and p.org_id = pr.org_id
@@ -250,9 +250,9 @@ export async function payrollHome(orgId: string): Promise<PayrollHome> {
     inProgressRuns: Number(stats.in_progress ?? 0),
     totalRuns: Number(stats.total_runs ?? 0),
     exceptions: {
-      missingProfiles: noProfileRes.rows.map((r: any) => ({ id: String(r.id), name: String(r.name) })),
+      missingProfiles: noProfileRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
       missingProfilesTotal: Number(noProfileRes.rows[0]?.total ?? 0),
-      missingWages: noWageRes.rows.map((r: any) => ({ id: String(r.id), name: String(r.name) })),
+      missingWages: noWageRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
       missingWagesTotal: Number(noWageRes.rows[0]?.total ?? 0),
     },
     missingSettings: REQUIRED_PAYROLL_SETTING_KEYS.filter((key) => !settings[key]),

@@ -2,6 +2,7 @@
 
 import { Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { Empty, Small, Status } from "./workspace-ui";
+import type { CamPool, Money, PropertyAction, PropertyWorkspace } from "./types";
 
 export function CamTable({
   data,
@@ -12,9 +13,18 @@ export function CamTable({
   act,
   onEdit,
   onReopen,
-}: any) {
+}: {
+  data: PropertyWorkspace;
+  propertyId?: string;
+  money: Money;
+  busy: boolean;
+  permissions: { manage: boolean; account: boolean; bill: boolean };
+  act: PropertyAction;
+  onEdit?: (pool: CamPool) => void;
+  onReopen?: (pool: CamPool) => void;
+}) {
   const pools = propertyId
-    ? data.camPools.filter((pool: any) => pool.propertyId === propertyId)
+    ? data.camPools.filter((pool) => pool.propertyId === propertyId)
     : data.camPools;
   if (!pools.length)
     return (
@@ -27,12 +37,12 @@ export function CamTable({
     );
   return (
     <div className="divide-y divide-slate-200 dark:divide-slate-800">
-      {pools.map((pool: any) => {
+      {pools.map((pool) => {
         const property = data.properties.find(
-          (item: any) => item.id === pool.propertyId,
+          (item) => item.id === pool.propertyId,
         );
         const allocations = data.camAllocations.filter(
-          (item: any) => item.poolId === pool.id,
+          (item) => item.poolId === pool.id,
         );
         return (
           <div key={pool.id} className="space-y-3 p-4">
@@ -164,12 +174,12 @@ export function CamTable({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {allocations.map((allocation: any) => (
+                    {allocations.map((allocation) => (
                       <TableRow key={allocation.id}>
                         <TableCell>
                           {
                             data.leases.find(
-                              (lease: any) => lease.id === allocation.leaseId,
+                              (lease) => lease.id === allocation.leaseId,
                             )?.leaseNumber
                           }
                         </TableCell>

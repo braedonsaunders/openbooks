@@ -33,7 +33,7 @@ export default async function SetupReadinessPage() {
     from orgs o where o.id=${user.orgId}
   `))
   const org = result.rows[0]
-  const settings = (org?.settings ?? {}) as Record<string, any>
+  const settings = ((org?.settings ?? {}))
   const workspaceProfile = (settings.workspaceProfile ?? {}) as Record<string, unknown>
   const bookStart = workspaceProfile.bookStart === 'migrate' ? 'migrate' : 'fresh'
   const taxPosition = ['registered', 'not_registered', 'unsure'].includes(String(workspaceProfile.taxPosition))
@@ -169,7 +169,7 @@ export default async function SetupReadinessPage() {
                     <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-slate-400">{index + 1}</span><CardTitle className="text-base">{item.title}</CardTitle></div>
                     <CardDescription className="mt-1">{item.description}</CardDescription>
                   </div>
-                  <Button variant="outline" size="sm" asChild><Link href={item.href as any}>{item.action}</Link></Button>
+                  <Button variant="outline" size="sm" asChild><Link href={(item.href)}>{item.action}</Link></Button>
                 </div>
               </CardHeader>
               <CardContent className="sr-only">{item.state}</CardContent>

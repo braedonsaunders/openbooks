@@ -1,6 +1,7 @@
 "use client";
 
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
+import type { ListViewConfig } from "@openbooks/customization";
 import {
   Table,
   TableBody,
@@ -10,8 +11,11 @@ import {
   TableRow,
 } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
+import type { PropertyRow, PropertyWorkspace } from "./types";
 
-export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
+type ListColumn = ListViewConfig["columns"][number];
+
+export function PropertiesTable({ data, view, fieldDefs, onOpen }: { data: PropertyWorkspace; view: ListViewConfig; fieldDefs: CustomFieldDefClient[]; onOpen: (id: string) => void }) {
   if (!data.properties.length)
     return (
       <Empty
@@ -22,8 +26,8 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
   const defs = new Map<string, CustomFieldDefClient>(
     fieldDefs.map((def: CustomFieldDefClient) => [def.key, def]),
   );
-  const columns = view.columns.filter((column: any) => column.visible);
-  const showsCodeColumn = columns.some((column: any) => column.key === "code");
+  const columns = view.columns.filter((column) => column.visible);
+  const showsCodeColumn = columns.some((column) => column.key === "code");
   const labels: Record<string, string> = {
     name: "Property",
     code: "Code",
@@ -34,13 +38,13 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
     currency: "Currency",
     status: "Status",
   };
-  const label = (column: any) =>
+  const label = (column: ListColumn) =>
     column.labelOverride?.trim() ||
     (column.key.startsWith("cf_")
       ? defs.get(column.key.slice(3))?.label
       : labels[column.key]) ||
     column.key;
-  const cell = (property: any, key: string) => {
+  const cell = (property: PropertyRow, key: string) => {
     if (key.startsWith("cf_")) {
       const value = property.custom?.[key.slice(3)];
       return Array.isArray(value)
@@ -85,7 +89,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
     <Table>
       <TableHeader>
         <TableRow>
-          {columns.map((column: any) => (
+          {columns.map((column) => (
             <TableHead
               key={column.key}
               className={column.key === "occupancy" ? "text-right" : undefined}
@@ -96,7 +100,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.properties.map((property: any) => (
+        {data.properties.map((property) => (
           <TableRow
             key={property.id}
             tabIndex={0}
@@ -110,7 +114,7 @@ export function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
               }
             }}
           >
-            {columns.map((column: any) => (
+            {columns.map((column) => (
               <TableCell
                 key={column.key}
                 className={

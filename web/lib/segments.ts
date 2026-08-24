@@ -53,7 +53,7 @@ export async function segmentRegistry(orgId?: string): Promise<SegmentDefinition
      where sd.is_active ${orgFilter}
      group by sd.id
      order by sd.sort_order, sd.name
-  `)) as any
+  `))
   return result.rows.map((row: any) => ({
     id: row.id,
     key: row.key,

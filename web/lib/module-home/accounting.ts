@@ -50,7 +50,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
        order by r.created_at desc
        limit 1
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft') as draft_journals,
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
@@ -60,7 +60,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
         (select count(*) from fixed_assets f where f.org_id = ${orgId}) as assets
     `),
     // Continuous-close open findings by severity.
-    db.execute<any>(sql`
+    db.execute(sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
        group by severity
@@ -69,7 +69,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
 
   const close = closeRes.rows[0]
   const counts = countsRes.rows[0] ?? {}
-  const sev = new Map(workRes.rows.map((r: any) => [String(r.severity), Number(r.n)]))
+  const sev = new Map(workRes.rows.map((r) => [String(r.severity), Number(r.n)]))
   const workItems = {
     critical: sev.get('critical') ?? 0,
     warning: sev.get('warning') ?? 0,

@@ -73,7 +73,7 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate;
   const { orgId } = gate.user;
 
-  const [org, currencies, sequences] = (await Promise.all([
+  const [org, currencies, sequences] = ((await Promise.all([
     db.execute(sql`
       select id, name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -81,7 +81,7 @@ export async function GET() {
     db.execute(sql`
       select document_kind, prefix, next_number, padding, gapless
         from number_sequences where org_id = ${orgId} order by document_kind`),
-  ])) as any[];
+  ])));
 
   const row = org.rows[0];
   if (!row) return NextResponse.json({ error: "org not found" }, { status: 404 });
@@ -139,9 +139,9 @@ export async function PUT(req: Request) {
     fairValueRangePolicy?: unknown;
   };
 
-  const existing = (await db.execute(sql`
+  const existing = ((await db.execute(sql`
     select name, legal_name, base_currency, country, settings
-      from orgs where id = ${orgId}`)) as any;
+      from orgs where id = ${orgId}`)));
   const cur = existing.rows[0];
   if (!cur) return NextResponse.json({ error: "org not found" }, { status: 404 });
   const settings = (cur.settings ?? {}) as Record<string, unknown>;
@@ -193,9 +193,9 @@ export async function PUT(req: Request) {
     if (typeof body.baseCurrency !== "string" || !/^[A-Z]{3}$/.test(body.baseCurrency)) {
       return NextResponse.json({ error: "base currency must be a 3-letter code" }, { status: 400 });
     }
-    const known = (await db.execute(
+    const known = ((await db.execute(
       sql`select 1 from currencies where code = ${body.baseCurrency} limit 1`,
-    )) as any;
+    )));
     if (!known.rows[0]) {
       return NextResponse.json(
         { error: `unknown currency "${body.baseCurrency}" — add it to the currency table first` },
@@ -227,13 +227,13 @@ export async function PUT(req: Request) {
       ids.add(v);
     }
     if (ids.size > 0) {
-      const found = (await db.execute(sql`
+      const found = ((await db.execute(sql`
         select id from accounts
          where org_id = ${orgId} and not is_summary and id in ${sql.join(
            [...ids].map((i) => sql`${i}`),
            sql`, `,
-         )}`)) as any;
-      const valid = new Set(found.rows.map((r: any) => r.id as string));
+         )}`)));
+      const valid = new Set(found.rows.map((r) => r.id as string));
       for (const [key, id] of Object.entries(collected)) {
         if (!valid.has(id)) {
           return NextResponse.json(

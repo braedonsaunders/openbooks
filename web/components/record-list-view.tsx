@@ -166,7 +166,7 @@ export async function RecordListView({
   const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select d.id, d.kind, d.currency${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -174,11 +174,11 @@ export async function RecordListView({
        where ${where}
        order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select d.status, count(*) as n from documents d
        where ${statusCountWhere}
-       group by d.status`) as any,
+       group by d.status`)),
     db.execute(sql`
       select count(*) as n from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -186,10 +186,10 @@ export async function RecordListView({
        where ${where}`) as any,
   ])
   const rows = rowsRes.rows as any[]
-  const total = statusCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
+  const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const filteredTotal = Number(totalRow.rows[0].n)
 
-  const statusOptions = statusCounts.rows.map((r: any) => ({
+  const statusOptions = statusCounts.rows.map((r) => ({
     value: String(r.status),
     label: statusLabel(String(r.status)),
     count: Number(r.n),
@@ -211,11 +211,11 @@ export async function RecordListView({
   // Optional kind chips for mixed-kind lists (e.g. bills + credits).
   let kindOptions: { value: string; label: string; count: number }[] = []
   if (source.multiKind) {
-    const kindCounts = (await db.execute(sql`
+    const kindCounts = ((await db.execute(sql`
       select d.kind, count(*) as n from documents d
        where ${kindCountWhere}
-       group by d.kind`)) as any
-    const countByKind = new Map(kindCounts.rows.map((r: any) => [r.kind, Number(r.n)]))
+       group by d.kind`)))
+    const countByKind = new Map(kindCounts.rows.map((r) => [r.kind, Number(r.n)]))
     kindOptions = source.kinds.map((k) => ({
       value: k,
       label: tCommon(`transactionTypes.${docTypeMeta(k).labelKey}` as never),
@@ -249,7 +249,7 @@ export async function RecordListView({
               {String(v)}
             </RelatedPartyLink>
           ) : href && v && typeof href === 'string' ? (
-            <Link href={href as any} className="text-teal-700 hover:underline dark:text-teal-300">
+            <Link href={(href)} className="text-teal-700 hover:underline dark:text-teal-300">
               {String(v)}
             </Link>
           ) : (
@@ -265,7 +265,7 @@ export async function RecordListView({
             <div className="flex items-center gap-2">
               {source.multiKind ? <DocTypeBadge kind={row.kind} /> : null}
               <Link
-                href={openHref(String(row.id)) as any}
+                href={(openHref(String(row.id)))}
                 className="text-teal-700 hover:underline dark:text-teal-300"
               >
                 {String(v ?? '')}
@@ -298,7 +298,7 @@ export async function RecordListView({
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
             {renderRowActions ? renderRowActions(row) : (
               <Link
-                href={openHref(String(row.id)) as any}
+                href={(openHref(String(row.id)))}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
                 aria-label={tCommon('actions.open')}
                 title={tCommon('actions.open')}

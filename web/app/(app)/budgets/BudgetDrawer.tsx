@@ -312,7 +312,7 @@ export function BudgetDrawer({
   const importHref = mergeHref('/budgets', currentParams, { budgetImport: '1' })
   const importCloseHref = mergeHref('/budgets', currentParams, { budgetImport: null })
   const headerActions = <>
-    {editable ? <Button variant="outline" size="sm" asChild><Link href={importHref as any}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
+    {editable ? <Button variant="outline" size="sm" asChild><Link href={(importHref)}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
     <FlowManualButtons subjectKind="budget_scenario" subjectId={scenario.id} />
     <ApprovalActions subjectKind="budget_scenario" subjectId={scenario.id} />
@@ -401,7 +401,7 @@ export function BudgetDrawer({
     </div>
   </UrlDrawer>
   <ContextMenu open={cellMenu.open} position={cellMenu.position} items={menuItems} onClose={cellMenu.close} />
-  {editable && currentParams.budgetImport === '1' ? <BudgetImport scenarioId={scenario.id} closeHref={importCloseHref} revisionRef={revisionRef} execute={execute} onCommitted={() => { router.push(importCloseHref as any); router.refresh() }} /> : null}
+  {editable && currentParams.budgetImport === '1' ? <BudgetImport scenarioId={scenario.id} closeHref={importCloseHref} revisionRef={revisionRef} execute={execute} onCommitted={() => { router.push((importCloseHref)); router.refresh() }} /> : null}
   </>
 }
 

@@ -130,7 +130,7 @@ function ActionTile({ action, index }: { action: QuickAction; index: number }) {
           {inner}
         </a>
       ) : (
-        <Link href={action.href as any} className={className}>
+        <Link href={(action.href)} className={className}>
           {inner}
         </Link>
       )}

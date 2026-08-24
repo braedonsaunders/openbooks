@@ -151,7 +151,7 @@ export async function createProjectCharge(
       values (${orgId}, 'project_charge', ${documentNumber}, ${docDate}, ${currency}, 'draft', ${input.projectId},
               ${subsidiaryId}, ${input.referenceNumber ?? null}, '0', '0', '0', ${userId})
       returning id
-    `)).rows as any[]
+    `)).rows as unknown as [any]
     const docId = doc.id
 
     const amounts: string[] = []
@@ -169,7 +169,7 @@ export async function createProjectCharge(
         cost: exactPrice(line.rateSnapshot.cost, 'Cost'),
         bill: exactPrice(line.rateSnapshot.bill, 'Bill'),
       }
-      const item = (await tx.execute<any>(sql`
+      const item = (await tx.execute(sql`
         select kind, default_cost, default_rate, expense_account_id, cost_recovery_account_id, tax_code_id, name, unit
           from items where id = ${line.itemId} and org_id = ${orgId}
       `))

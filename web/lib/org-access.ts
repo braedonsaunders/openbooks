@@ -42,6 +42,18 @@ export interface AccessibleOrg {
   envKind: "production" | "preview";
 }
 
+interface ActingUserSqlRow { acting_user_id: string }
+interface OrgNameSqlRow { name: string }
+interface AccessibleOrgSqlRow { orgId: string; actingUserId: string; name: string; envKind: "production" | "preview" }
+interface OrgEnvironmentSqlRow {
+  id: string;
+  name: string;
+  envKind: "production" | "sandbox" | "preview";
+  sandboxOf: string | null;
+  sandboxSeed: string;
+}
+interface SandboxSqlRow { name: string; status: string }
+
 /** Mirrors the SQL ob_rebase(old, seed) = md5(seed || ':' || old)::uuid so we
  * can derive a member's cloned users row id inside a sandbox without a query. */
 export function rebaseUuid(oldId: string, seed: string): string {
@@ -58,7 +70,7 @@ async function actingUserIn(
   if (targetOrgId === home.orgId) return home.id;
   const r = (await db.execute(sql`
     select acting_user_id from user_org_access
-     where member_user_id = ${home.id} and org_id = ${targetOrgId} and is_active`)) as any;
+     where member_user_id = ${home.id} and org_id = ${targetOrgId} and is_active`)) as unknown as { rows: ActingUserSqlRow[] };
   if (r.rows[0]?.acting_user_id) return r.rows[0].acting_user_id;
   // A super administrator may inspect any production tenant using the platform
   // identity. Preview/sample companies still require an explicit mapped user:
@@ -74,8 +86,8 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
         select id, name from orgs
          where env_kind = 'production'
            and not coalesce((settings->'sampleTemplate'->>'enabled')::boolean, false)
-         order by name`)) as any;
-      const out: AccessibleOrg[] = rows.rows.map((o: any) => ({
+         order by name`));
+      const out: AccessibleOrg[] = (rows.rows as unknown as Array<{ id: string; name: string }>).map((o) => ({
         orgId: o.id,
         name: o.name,
         actingUserId: home.id,
@@ -85,13 +97,13 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
         select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
           from user_org_access a join orgs o on o.id = a.org_id
          where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'preview'
-         order by o.name`)) as any;
+         order by o.name`)) as unknown as { rows: AccessibleOrgSqlRow[] };
       for (const preview of previews.rows) {
         out.push({ ...preview, envKind: "preview" });
       }
       return out;
     }
-    const homeRow = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as any;
+    const homeRow = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as unknown as { rows: OrgNameSqlRow[] };
     const out: AccessibleOrg[] = [
       {
         orgId: home.orgId,
@@ -106,7 +118,7 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
         from user_org_access a join orgs o on o.id = a.org_id
        where a.member_user_id = ${home.id} and a.is_active
          and o.env_kind in ('production', 'preview')
-       order by o.name`)) as any;
+       order by o.name`)) as unknown as { rows: AccessibleOrgSqlRow[] };
     for (const g of grants.rows) {
       if (g.orgId === home.orgId) continue;
       out.push({
@@ -127,7 +139,7 @@ export async function resolveActiveEnv(
 ): Promise<ResolvedEnv | null> {
   return withBypassContext(async () => {
     if (!activeOrgId || activeOrgId === home.orgId) {
-      const o = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as any;
+      const o = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as unknown as { rows: OrgNameSqlRow[] };
       return {
         orgId: home.orgId,
         actingUserId: home.id,
@@ -138,7 +150,7 @@ export async function resolveActiveEnv(
     }
     const orgRes = (await db.execute(sql`
       select id, name, env_kind as "envKind", sandbox_of as "sandboxOf", sandbox_seed as "sandboxSeed"
-        from orgs where id = ${activeOrgId}`)) as any;
+        from orgs where id = ${activeOrgId}`)) as unknown as { rows: OrgEnvironmentSqlRow[] };
     const org = orgRes.rows[0];
     if (!org) return null;
 
@@ -147,7 +159,7 @@ export async function resolveActiveEnv(
       const acting = await actingUserIn(home, prodId, "production");
       if (!acting) return null;
       const sb = (await db.execute(sql`
-        select name, status from sandboxes where org_id = ${activeOrgId}`)) as any;
+        select name, status from sandboxes where org_id = ${activeOrgId}`)) as unknown as { rows: SandboxSqlRow[] };
       if (!sb.rows[0] || sb.rows[0].status !== "ready") return null;
       return {
         orgId: activeOrgId,

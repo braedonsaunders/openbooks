@@ -19,6 +19,19 @@ import { customSegmentOptions } from '../../../lib/segments'
 
 export const dynamic = 'force-dynamic'
 
+interface DraftJournalRow {
+  id: string
+  document_number: string
+  document_date: string
+  memo: string | null
+  total: string | number
+}
+
+interface PickerResult<T> { rows: T[] }
+interface PartyPickerRow { id: string; display_name: string }
+interface AccountPickerRow { id: string; number: string | null; name: string }
+interface NamePickerRow { id: string; name: string }
+
 export default async function Journal({
   searchParams,
 }: {
@@ -66,7 +79,7 @@ export default async function Journal({
   )`
   // draft manual journals are documents (not entries yet) — surfaced separately
   const [draftDocs, openJournal, pickers, postedCount] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select id, document_number, document_date, memo, total
         from documents
        where org_id = ${authz.user.orgId} and kind = 'journal' and status = 'draft'
@@ -77,17 +90,17 @@ export default async function Journal({
            : sql``}
        order by created_at desc
        limit 20
-    `) as any,
+    `)),
     entryParam ? loadJournalDoc(entryParam, authz.user.orgId).then((journal) => {
       if (!journal || !allowedSubsidiaries) return journal
       return allowedSubsidiaries.has(String(journal.doc.subsidiary_id)) ? journal : null
     }) : null,
     entryParam
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as any,
-          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
-          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
-          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as unknown as PickerResult<PartyPickerRow>,
+          db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as unknown as PickerResult<AccountPickerRow>,
+          db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as unknown as PickerResult<NamePickerRow>,
+          db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as unknown as PickerResult<NamePickerRow>,
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
@@ -99,7 +112,7 @@ export default async function Journal({
           customSegmentOptions(authz.user.orgId),
         ])
       : null,
-    db.execute(sql`select count(*) as n from journal_entries e where e.org_id = ${authz.user.orgId} and ${journalsOnly} ${entryVisibility}`) as any,
+    (db.execute(sql`select count(*) as n from journal_entries e where e.org_id = ${authz.user.orgId} and ${journalsOnly} ${entryVisibility}`)),
   ])
   const total = Number(postedCount.rows[0]?.n ?? 0)
   const resolvedForm = openJournal && pickers
@@ -108,8 +121,8 @@ export default async function Journal({
         userId: authz.user.id,
         recordType: 'journal',
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[4] as any,
-        lineDefs: pickers[5] as any,
+        headerDefs: (pickers[4]),
+        lineDefs: (pickers[5]),
         explicitLayoutId: pickString(sp.form),
       })
     : null
@@ -124,10 +137,10 @@ export default async function Journal({
             {t('list.draftsHeading')}
           </p>
           <div className="flex flex-col gap-0.5">
-            {draftDocs.rows.map((d: any) => (
+            {(draftDocs.rows as unknown as DraftJournalRow[]).map((d) => (
               <Link
                 key={d.id}
-                href={buildListDrawerHref('/journal', sp, 'entry', String(d.id)) as any}
+                href={(buildListDrawerHref('/journal', sp, 'entry', String(d.id)))}
                 className="flex items-center gap-3 rounded px-1.5 py-1 text-sm hover:bg-white dark:hover:bg-slate-800/60"
               >
                 <span className="font-mono text-[13px] font-semibold text-teal-700 dark:text-teal-300">
@@ -149,17 +162,17 @@ export default async function Journal({
         sp={sp}
         drawer={openJournal && pickers ? (
           <JournalDrawer
-            journal={openJournal as any}
+            journal={(openJournal)}
             initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
             parties={pickers[0].rows}
-            accounts={pickers[1].rows}
+            accounts={pickers[1].rows.map((account) => ({ ...account, number: account.number ?? undefined }))}
             departments={pickers[2].rows}
             projects={pickers[3].rows}
             subsidiaries={pickers[6] ?? undefined}
-            headerDefs={pickers[4] as any}
-            lineDefs={pickers[5] as any}
+            headerDefs={pickers[4] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[]}
+            lineDefs={pickers[5] as unknown as import('../../../components/custom-field-inputs').CustomFieldDefClient[]}
             layout={resolvedForm?.layout}
-            segments={pickers[7] as any}
+            segments={(pickers[7])}
           />
         ) : null}
         emptyAction={<NewJournalButton />}

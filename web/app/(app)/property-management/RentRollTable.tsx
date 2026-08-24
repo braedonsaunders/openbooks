@@ -5,47 +5,60 @@ import { Search } from "lucide-react";
 import { Badge, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { Empty, Field, Status } from "./workspace-ui";
+import type { LeaseRow, Money, PropertyRow, PropertyWorkspace, UnitRow } from "./types";
 
-export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
+type RentRollRow = {
+  key: string;
+  property: PropertyRow | undefined;
+  unit: UnitRow | null;
+  lease: LeaseRow | null;
+};
+
+export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: {
+  data: PropertyWorkspace;
+  money: Money;
+  onOpenUnit: (id: string) => void;
+  onOpenLease: (id: string) => void;
+}) {
   const [query, setQuery] = useState("");
   const [propertyId, setPropertyId] = useState("all");
   const [status, setStatus] = useState("all");
   const today = useBusinessToday();
-  const operatingLeases = data.leases.filter((lease: any) =>
+  const operatingLeases = data.leases.filter((lease) =>
     ["active", "notice"].includes(lease.status),
   );
   const occupiedUnitIds = new Set(
     operatingLeases
-      .map((lease: any) => lease.unitId)
+      .map((lease) => lease.unitId)
       .filter((id: unknown): id is string => typeof id === "string"),
   );
-  const draftByUnit = new Map<string, any>();
+  const draftByUnit = new Map<string, LeaseRow>();
   for (const lease of data.leases) {
     if (lease.status === "draft" && lease.unitId && !draftByUnit.has(lease.unitId))
       draftByUnit.set(lease.unitId, lease);
   }
-  const rows = [
-    ...operatingLeases.filter((lease: any) => lease.unitId).map((lease: any) => ({
+  const rows: RentRollRow[] = [
+    ...operatingLeases.filter((lease) => lease.unitId).map((lease) => ({
       key: `lease:${lease.id}`,
-      property: data.properties.find((item: any) => item.id === lease.propertyId),
-      unit: data.units.find((item: any) => item.id === lease.unitId) ?? null,
+      property: data.properties.find((item) => item.id === lease.propertyId),
+      unit: data.units.find((item) => item.id === lease.unitId) ?? null,
       lease,
     })),
     ...data.units
-      .filter((unit: any) => !occupiedUnitIds.has(unit.id))
-      .map((unit: any) => ({
+      .filter((unit) => !occupiedUnitIds.has(unit.id))
+      .map((unit) => ({
         key: `unit:${unit.id}`,
-        property: data.properties.find((item: any) => item.id === unit.propertyId),
+        property: data.properties.find((item) => item.id === unit.propertyId),
         unit,
         lease: draftByUnit.get(unit.id) ?? null,
       })),
     ...data.leases
-      .filter((lease: any) =>
+      .filter((lease) =>
         !lease.unitId && ["active", "notice", "draft"].includes(lease.status),
       )
-      .map((lease: any) => ({
+      .map((lease) => ({
         key: `lease:${lease.id}`,
-        property: data.properties.find((item: any) => item.id === lease.propertyId),
+        property: data.properties.find((item) => item.id === lease.propertyId),
         unit: null,
         lease,
       })),
@@ -54,17 +67,17 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
       `${b.property?.name ?? ""}:${b.unit?.code ?? ""}:${b.lease?.leaseNumber ?? ""}`,
     ),
   );
-  const monthlyCharges = (lease: any) => {
+  const monthlyCharges = (lease: LeaseRow | null) => {
     if (!lease) return 0;
-    const current = data.charges.filter((charge: any) =>
+    const current = data.charges.filter((charge) =>
       charge.leaseId === lease.id && charge.frequency === "monthly" &&
       charge.effectiveFrom <= today && (!charge.effectiveTo || charge.effectiveTo >= today),
     );
     if (current.length)
-      return current.reduce((total: number, charge: any) => total + Number(charge.amount), 0);
+      return current.reduce((total, charge) => total + Number(charge.amount), 0);
     return lease.status === "draft" ? Number(lease.baseRent ?? 0) : 0;
   };
-  const pastDue = (lease: any) => {
+  const pastDue = (lease: LeaseRow | null) => {
     if (!lease) return 0;
     const invoices = new Map<string, number>();
     for (const line of data.schedules) {
@@ -75,7 +88,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
     }
     return [...invoices.values()].reduce((total, amount) => total + amount, 0);
   };
-  const rowStatus = (row: any) => row.lease?.status ?? row.unit?.status ?? "vacant";
+  const rowStatus = (row: RentRollRow) => row.lease?.status ?? row.unit?.status ?? "vacant";
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = rows.filter((row) => {
     if (propertyId !== "all" && row.property?.id !== propertyId) return false;
@@ -98,7 +111,7 @@ export function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
         <Field label="Property">
           <Select className="sm:w-56" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
             <option value="all">All properties</option>
-            {data.properties.map((property: any) => (
+            {data.properties.map((property) => (
               <option key={property.id} value={property.id}>{property.name}</option>
             ))}
           </Select>

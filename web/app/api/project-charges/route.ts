@@ -40,11 +40,11 @@ export async function GET(req: Request) {
   if (feature) return feature
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
-  const project = (await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)) as any
+  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)))
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const r = (await db.execute<any>(sql`
+  const r = (await db.execute(sql`
     select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
            d.total::numeric(19,4) as cost,
            coalesce(sum(coalesce(dl.bill_amount, dl.amount * coalesce(nullif(dl.cost_multiplier,0),1))) filter (where dl.is_billable), 0)::numeric(19,4) as "billValue",
@@ -74,7 +74,7 @@ export async function POST(req: Request) {
   if (!Array.isArray(body.lines) || body.lines.length === 0) {
     return NextResponse.json({ error: 'At least one charge line is required' }, { status: 400 })
   }
-  const project = (await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`)) as any
+  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`)))
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }

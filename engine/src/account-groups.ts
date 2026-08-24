@@ -54,7 +54,7 @@ export async function listAccountGroups(dimension: string, orgId?: string): Prom
     from account_groups
     where dimension = ${dimension} and is_active = true${orgFilter}
     order by sort_order, name
-  `)) as any;
+  `));
   return (r.rows as any[]).map((x) => ({
     id: x.id,
     dimension: x.dimension,
@@ -84,8 +84,8 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
       from account_group_members m
       join account_groups g on g.id = m.group_id
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
-    `) as Promise<any>,
-    db.execute(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`) as Promise<any>,
+    `),
+    db.execute(sql`select id, number, name, type from accounts where is_summary = false${acctOrgFilter}`),
   ]);
 
   const pins = new Map<string, GroupRef>();

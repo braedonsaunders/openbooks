@@ -122,7 +122,7 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
 }
 
 /** Audit-safe projection: sealed originator credentials never enter the trail. */
-function profileAuditView(row: Record<string, any>): Record<string, unknown> {
+function profileAuditView(row: Record<string, unknown>): Record<string, unknown> {
   const { originator_secrets_encrypted, originatorSecretsEncrypted, ...rest } = row;
   return {
     ...rest,
@@ -173,7 +173,7 @@ export async function createPaymentBankProfile(
       createdBy: userId,
       updatedBy: userId,
     }).returning({ id: schema.paymentBankProfiles.id }))[0]!;
-    const stored = (await tx.execute<Record<string, any>>(sql`
+    const stored = (await tx.execute<Record<string, unknown>>(sql`
       select * from payment_bank_profiles where id = ${profile.id} and org_id = ${orgId}
     `));
     await auditProfileChange(tx, orgId, profile.id, "insert",
@@ -230,7 +230,7 @@ export async function updatePaymentBankProfile(
         updated_at = now(), updated_by = ${userId}
       where id = ${id} and org_id = ${orgId}
     `);
-    const updated = (await tx.execute<Record<string, any>>(sql`
+    const updated = (await tx.execute<Record<string, unknown>>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
     `));
     await auditProfileChange(tx, orgId, id, "update", {

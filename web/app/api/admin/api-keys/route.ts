@@ -61,14 +61,14 @@ export async function GET() {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
 
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
            k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
            u.name as owner_name, u.email as owner_email
       from api_keys k
       join users u on u.id = k.user_id
      where k.org_id = ${gate.user.orgId}
-     order by k.created_at desc`)) as any;
+     order by k.created_at desc`)));
 
   return NextResponse.json({ keys: r.rows });
 }
@@ -150,9 +150,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
-  const existing = (await db.execute(sql`
+  const existing = ((await db.execute(sql`
     select id, name, description, scopes, rate_limit_per_min, is_active
-      from api_keys where id = ${body.id} and org_id = ${actor.orgId}`)) as any;
+      from api_keys where id = ${body.id} and org_id = ${actor.orgId}`)));
   const key = existing.rows[0];
   if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
@@ -214,9 +214,9 @@ export async function DELETE(req: Request) {
   const { id } = (parsedBody3.data) as { id?: string };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const existing = (await db.execute(sql`
+  const existing = ((await db.execute(sql`
     select id, name, key_prefix, is_active from api_keys
-     where id = ${id} and org_id = ${actor.orgId}`)) as any;
+     where id = ${id} and org_id = ${actor.orgId}`)));
   const key = existing.rows[0];
   if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 

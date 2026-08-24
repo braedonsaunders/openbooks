@@ -1196,7 +1196,7 @@ async function readinessChecks(
       select coalesce(rules->>'amount', '10000.0000') as amount,
              coalesce((rules->>'percent')::numeric, 20) as percent
         from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`),
-    ])) as any[];
+    ]));
 
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
@@ -1519,7 +1519,7 @@ export async function updateCloseTask(args: {
     throw new CloseError("validate the close run before updating tasks");
 
   await db.transaction(async (tx) => {
-    const taskRes = (await tx.execute<any>(sql`
+    const taskRes = (await tx.execute(sql`
       select t.*, (select count(*) from close_task_evidence e where e.task_id = t.id) as evidence_count
         from close_run_tasks t where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
         for update`));
@@ -2180,7 +2180,7 @@ export async function publishCloseRun(
         ),
         tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId})
         and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`),
-      ])) as any[];
+      ]));
     const snapshot = {
       format: "openbooks.close-binder.v1",
       frozenAt: new Date().toISOString(),
@@ -2502,7 +2502,7 @@ export async function recloseApprovedReopen(args: {
     throw new CloseError("a 10-500 character re-close reason is required");
   }
   await db.transaction(async (tx) => {
-    const request = (await tx.execute<any>(sql`
+    const request = (await tx.execute(sql`
       select *
         from close_reopen_requests
        where id = ${args.requestId}
@@ -2622,7 +2622,7 @@ export async function runCloseAutomations(
   `));
   const run = runResult.rows[0];
   if (!run) throw new CloseError("close run not found");
-  const rules = (await db.execute<any>(sql`
+  const rules = (await db.execute(sql`
     select * from close_automation_rules
      where org_id = ${context.orgId} and trigger = ${context.trigger} and is_active
      order by created_at, id

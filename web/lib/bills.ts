@@ -20,7 +20,7 @@ export interface TaxProfiles {
 export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<TaxProfiles> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const date = asOfDate ?? await businessToday(resolvedOrgId)
-  const codeRows = (await db.execute<Record<string, any>>(sql`
+  const codeRows = (await db.execute<Record<string, unknown>>(sql`
     select tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
            tc.calculation_type, tc.price_includes_tax, tc.compound_on_previous,
@@ -53,7 +53,7 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
   })
   const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows.map((row) => [String(row.id), [config(row, 1)]]))
 
-  const groupRows = (await db.execute<Record<string, any>>(sql`
+  const groupRows = (await db.execute<Record<string, unknown>>(sql`
     select tg.id as group_id, tg.price_includes_tax as group_inclusive,
            tgm.sequence, tc.id, tc.code, tr.rate_percent::text as effective_rate,
            tc.recoverable_percent::text as recoverable_percent,
@@ -152,12 +152,12 @@ export async function persistLineTaxComponents(
 
 export async function nextDocumentNumber(orgId: string, kind: string, prefix: string, subsidiaryId?: string | null) {
   const requested = subsidiaryId ?? ((await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)) as any).rows[0]?.id ?? null
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`))).rows[0]?.id ?? null
   const configured = requested
     ? ((await db.execute(sql`
         select 1 from number_sequences
          where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${requested}
-         limit 1`)) as any).rows.length > 0
+         limit 1`))).rows.length > 0
     : false
   const sequenceSubsidiaryId = configured ? requested : null
   const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`

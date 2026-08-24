@@ -84,7 +84,7 @@ export async function nextNumber(orgId: string, kind: string, prefix: string, su
     ? ((await db.execute(sql`
         select 1 from number_sequences
          where org_id = ${orgId} and document_kind = ${kind} and subsidiary_id = ${subsidiaryId}
-         limit 1`)) as any).rows.length > 0
+         limit 1`))).rows.length > 0
     : false;
   const sequenceSubsidiaryId = configured ? subsidiaryId : null;
   const seq = (await db.execute<{ prefix: string; next_number: number; padding: number }>(sql`

@@ -35,7 +35,7 @@ export function StartReconciliationButton({
   if (openReconciliationId) {
     return (
       <Button asChild>
-        <Link href={`/banking/${accountId}/reconcile/${openReconciliationId}` as any}>
+        <Link href={(`/banking/${accountId}/reconcile/${openReconciliationId}`)}>
           <Play size={15} /> {t('resume')}
         </Link>
       </Button>
@@ -55,7 +55,7 @@ export function StartReconciliationButton({
       setBusy(false)
       return
     }
-    router.push(`/banking/${accountId}/reconcile/${data.id}` as any)
+    router.push((`/banking/${accountId}/reconcile/${data.id}`))
     router.refresh()
   }
 

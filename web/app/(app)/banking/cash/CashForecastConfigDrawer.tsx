@@ -94,7 +94,7 @@ export function CashForecastConfigDrawer({
                 <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">{restrictToSafe ? 'On' : 'Off'}</span>
               </li>
               <li className="px-4 py-3">
-                <Link href={'/ap' as any} className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">
+                <Link href={('/ap')} className="inline-flex items-center gap-1 text-xs font-medium text-teal-600 hover:underline dark:text-teal-400">
                   Configure on the AP cockpit <ArrowUpRight size={12} />
                 </Link>
               </li>

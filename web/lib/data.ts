@@ -16,7 +16,7 @@ export async function orgInfo(orgId?: string) {
              where b.org_id = o.id and b.is_primary limit 1) as book
       from orgs o
      where o.id = ${activeOrgId}
-  `)) as any;
+  `));
   return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
 }
 
@@ -29,11 +29,11 @@ export async function dashboardData(orgId?: string) {
       (select count(*) from accounts where org_id = ${activeOrgId} and is_active) as accounts,
       (select count(*) from parties where org_id = ${activeOrgId}) as parties,
       (select coalesce(sum(amount), 0) from journal_lines where org_id = ${activeOrgId}) as ledger_sum
-  `)) as any;
+  `));
   const runs = (await db.execute(sql`
     select id, source, status, started_at, finished_at, stats, error_message, triggered_by
       from sync_runs where org_id = ${activeOrgId} order by started_at desc limit 8
-  `)) as any;
+  `));
   return { totals: r.rows[0], runs: runs.rows };
 }
 
@@ -86,7 +86,7 @@ export async function accountsWithBalances(orgId: string, asOf?: string) {
       ) s on s.account_id = a.id
      where a.org_id = ${orgId}
      order by a.number nulls last, a.name
-  `)) as any;
+  `));
   return r.rows as {
     id: string; parent_id: string | null; number: string | null; name: string;
     type: string; is_summary: boolean; is_active: boolean; balance: string;
@@ -104,7 +104,7 @@ export async function journalPage(orgId: string, offset: number, limit = 50) {
      group by e.id
      order by e.posting_date desc, e.entry_number desc
      limit ${limit} offset ${offset}
-  `)) as any;
+  `));
   const c = (await db.execute(sql`select count(*) as n from journal_entries where org_id = ${orgId}`)) as any;
   return { entries: r.rows, total: Number(c.rows[0].n) };
 }
@@ -115,7 +115,7 @@ export async function entryDetail(orgId: string, id: string) {
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}
-  `)) as any;
+  `));
   const lines = (await db.execute(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
            a.number as account_number, a.name as account_name,
@@ -126,6 +126,6 @@ export async function entryDetail(orgId: string, id: string) {
       left join departments d on d.id = l.department_id and d.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `)) as any;
+  `));
   return { entry: e.rows[0] ?? null, lines: lines.rows };
 }

@@ -46,7 +46,7 @@ export default async function AppsAdminPage({
     ${params.q ? sql` and (a.name ilike ${'%' + params.q + '%'} or a.key ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [apps, statuses, totalRow] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select a.key, a.name, a.description, a.status,
              a.granted_permissions as "grantedPermissions", a.updated_at as "updatedAt",
              v.version, v.manifest,
@@ -55,9 +55,9 @@ export default async function AppsAdminPage({
        where ${where}
        order by a.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`select status, count(*) as n from apps where org_id = ${orgId} group by 1`) as any,
-    db.execute(sql`select count(*) as n from apps a where ${where}`) as any,
+    `)),
+    (db.execute(sql`select status, count(*) as n from apps where org_id = ${orgId} group by 1`)),
+    (db.execute(sql`select count(*) as n from apps a where ${where}`)),
   ])
 
   // Drawer payload for the selected app.
@@ -68,20 +68,20 @@ export default async function AppsAdminPage({
     isPublished: boolean
   } | null = null
   if (appKey) {
-    const detail = (await db.execute(sql`
+    const detail = ((await db.execute(sql`
       select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
              a.granted_permissions as "grantedPermissions",
              v.version, v.manifest
         from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.key = ${appKey} limit 1
-    `)) as any
+    `)))
     const app = detail.rows[0]
     if (app) {
       const [files, runs, published] = await Promise.all([
         listAppFiles(orgId, appKey).catch(() => []),
-        db.execute(sql`
+        (db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
-            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`) as any,
+            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`)),
         isAppPublished(appKey),
       ])
       drawer = {
@@ -156,7 +156,7 @@ export default async function AppsAdminPage({
               <TableRow key={a.key}>
                 <TableCell>
                   <Link
-                    href={buildListDrawerHref('/admin/apps', sp, 'app', String(a.key)) as any}
+                    href={(buildListDrawerHref('/admin/apps', sp, 'app', String(a.key)))}
                     className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                   >
                     {a.name}

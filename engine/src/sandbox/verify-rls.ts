@@ -11,14 +11,14 @@ import { db, pool, withBypass, withOrg } from "../db.ts";
 const BOGUS = "00000000-0000-0000-0000-000000000000";
 
 async function count(table: string): Promise<number> {
-  const r = (await db.execute(sql.raw(`select count(*)::int as n from "${table}"`))) as any;
-  return r.rows[0].n as number;
+  const r = await db.execute<{ n: number }>(sql.raw(`select count(*)::int as n from "${table}"`));
+  return r.rows[0]?.n ?? 0;
 }
 
 async function main() {
   const table = "journal_lines"; // a core tenant-scoped table
   const realOrg = await withBypass(async () => {
-    const r = (await db.execute(sql`select id from orgs where env_kind = 'production' order by created_at limit 1`)) as any;
+    const r = (await db.execute(sql`select id from orgs where env_kind = 'production' order by created_at limit 1`));
     return r.rows[0]?.id as string;
   });
 

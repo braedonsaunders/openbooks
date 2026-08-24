@@ -57,7 +57,7 @@ export default async function Flows({
     ${params.q ? sql` and f.name ilike ${'%' + params.q + '%'}` : sql``}`
 
   const [flows, subjects, totalRow] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select f.id, f.name, f.subject_kind, f.enabled, f.updated_at,
              jsonb_array_length(f.graph->'nodes') as node_count,
              lr.status as last_run_status, lr.started_at as last_run_at
@@ -69,10 +69,10 @@ export default async function Flows({
        where ${where}
        order by f.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select subject_kind, count(*) as n from flows f
-       where f.org_id = ${orgId} group by 1 order by 1`) as any,
+       where f.org_id = ${orgId} group by 1 order by 1`)),
     db.execute(sql`select count(*) as n from flows f where ${where}`) as any,
   ])
 

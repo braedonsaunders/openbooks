@@ -94,7 +94,7 @@ async function loadDocumentValues(
   // base-currency carrying amount. The old subtraction printed a balance in
   // neither currency on every FX invoice/credit — on paper and in emailed
   // records (same fix as engine/src/dunning.ts).
-  const r = (await db.execute<Record<string, any>>(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
            case when d.status = 'posted' then d.total - ap.applied end as balance_due
@@ -119,7 +119,7 @@ async function loadDocumentValues(
   const format = createMoneyFormatter(locale, String(doc.currency ?? 'USD'))
   const { money } = format
 
-  const lines = (await db.execute<Record<string, any>>(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
            i.name as item_name
@@ -179,7 +179,7 @@ async function loadDocumentValues(
 }
 
 async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
-  const r = (await db.execute<Record<string, any>>(sql`
+  const r = (await db.execute<Record<string, unknown>>(sql`
     select e.* from journal_entries e where e.id = ${id} and e.org_id = ${orgId}
   `))
   const entry = r.rows[0]
@@ -188,7 +188,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, org.base_currency)
 
-  const lines = (await db.execute<Record<string, any>>(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.amount, l.memo,
            acc.number as account_number, acc.name as account_name
       from journal_lines l
@@ -246,7 +246,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
 
-  const lines = (await db.execute<Record<string, any>>(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}
@@ -332,7 +332,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
   const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
 
-  const lines = (await db.execute<Record<string, any>>(sql`
+  const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.kind, l.description, l.hours, l.rate, l.amount
       from pay_stub_lines l
      where l.stub_id = ${id} and l.org_id = ${orgId}

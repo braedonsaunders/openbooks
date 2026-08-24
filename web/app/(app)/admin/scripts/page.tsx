@@ -47,30 +47,30 @@ export default async function Scripts({
     ${params.q ? sql` and name ilike ${'%' + params.q + '%'}` : sql``}`
 
   const [scripts, triggers, totalRow, open, runs, customTypes] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select s.*, (select count(*) from script_runs r where r.script_id = s.id) as run_count,
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
         from user_scripts s where ${where}
        order by s.trigger_point, s.sort_order, s.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`) as any,
+    `)),
+    (db.execute(sql`select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`)),
     db.execute(sql`select count(*) as n from user_scripts where ${where}`) as any,
     scriptId && scriptId !== 'new'
-      ? (db.execute(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`) as any)
+      ? ((db.execute(sql`select * from user_scripts where id = ${scriptId} and org_id = ${orgId}`)))
       : null,
     scriptId && scriptId !== 'new'
-      ? (db.execute(sql`
+      ? ((db.execute(sql`
           select status, error_message, logs, duration_ms, at, target_kind
-            from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`) as any)
+            from script_runs where script_id = ${scriptId} and org_id = ${orgId} order by at desc limit 20`)))
       : null,
-    db.execute(sql`
+    (db.execute(sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} and status = 'published' order by name`) as any,
+       where org_id = ${orgId} and status = 'published' order by name`)),
   ])
 
   const customTypeName = new Map<string, string>(
-    customTypes.rows.map((r: any) => [String(r.key), String(r.name)]),
+    customTypes.rows.map((r) => [String(r.key), String(r.name)]),
   )
   const builtInKindKey = new Map(BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]))
 
@@ -127,7 +127,7 @@ export default async function Scripts({
           {scripts.rows.map((s: any) => (
             <TableRow key={s.id}>
               <TableCell>
-                <Link href={buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={(buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)))} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {s.name}
                 </Link>
               </TableCell>
@@ -156,7 +156,7 @@ export default async function Scripts({
         <ScriptDrawer
           script={open?.rows[0] ?? null}
           runs={runs?.rows ?? []}
-          customTypes={customTypes.rows.map((r: any) => ({ key: String(r.key), name: String(r.name) }))}
+          customTypes={customTypes.rows.map((r) => ({ key: String(r.key), name: String(r.name) }))}
         />
       ) : null}
     </ListPageLayout>

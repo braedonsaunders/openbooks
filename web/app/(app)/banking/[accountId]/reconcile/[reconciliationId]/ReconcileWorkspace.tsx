@@ -64,6 +64,13 @@ interface MatchedRow {
   gl_amount: string
   gl_memo: string | null
 }
+interface ReconciliationActionResult {
+  error?: string
+  matched?: number
+  highConfidence?: number
+  mediumConfidence?: number
+  journalLinesReconciled?: number
+}
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
 
@@ -132,7 +139,7 @@ export function ReconcileWorkspace({
     [glRows, selectedGl],
   )
 
-  async function call(method: string, url: string, body?: unknown): Promise<any | null> {
+  async function call(method: string, url: string, body?: unknown): Promise<ReconciliationActionResult | null> {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -140,7 +147,7 @@ export function ReconcileWorkspace({
         headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       })
-      const data = await res.json()
+      const data = await res.json() as ReconciliationActionResult
       if (!res.ok) {
         toast.error(data.error ?? tBanking('errors.requestFailed'))
         return null
@@ -158,9 +165,9 @@ export function ReconcileWorkspace({
     else
       toast.success(
         t('autoMatchedToast', {
-          count: data.matched,
-          high: data.highConfidence,
-          medium: data.mediumConfidence,
+          count: data.matched ?? 0,
+          high: data.highConfidence ?? 0,
+          medium: data.mediumConfidence ?? 0,
         }),
       )
     router.refresh()
@@ -196,7 +203,7 @@ export function ReconcileWorkspace({
     if (!ok) return
     const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/sign-off`)
     if (!data) return
-    toast.success(t('signedOffToast', { count: data.journalLinesReconciled }))
+    toast.success(t('signedOffToast', { count: data.journalLinesReconciled ?? 0 }))
     router.refresh()
   }
 
@@ -209,7 +216,7 @@ export function ReconcileWorkspace({
     const data = await call('DELETE', `/api/banking/reconciliations/${reconciliation.id}`)
     if (!data) return
     toast.success(t('discardedToast'))
-    router.push(accountPath as any)
+    router.push((accountPath))
     router.refresh()
   }
 

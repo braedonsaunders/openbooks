@@ -1,15 +1,22 @@
 "use client";
 
+import type { Dispatch, SetStateAction } from "react";
 import { Button, Card, CardContent, Input, Select } from "@openbooks/ui";
 import { Read, Small } from "./workspace-ui";
-import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import { ChargesSection, DepositSection, EscalationsSection } from "./LeaseSections";
+import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, WorkspaceOptions } from "./types";
 
-function LeaseEditFields({ lease, data, options, form, setForm }: any) {
+function LeaseEditFields({ lease, data, options, form, setForm }: {
+  lease: LeaseRow;
+  data: PropertyWorkspace;
+  options: WorkspaceOptions;
+  form: LeaseForm;
+  setForm: Dispatch<SetStateAction<LeaseForm>>;
+}) {
   const draft = lease.status === "draft";
   const units = data.units.filter(
-    (unit: any) =>
+    (unit) =>
       unit.propertyId === form.propertyId &&
       (unit.status === "vacant" || unit.id === form.unitId),
   );
@@ -27,18 +34,18 @@ function LeaseEditFields({ lease, data, options, form, setForm }: any) {
         <Field label="Tenant">
           <Select disabled={!draft} value={form.tenantId} onChange={(e) => setForm({ ...form, tenantId: e.target.value })}>
             <option value="">Select tenant</option>
-            {options.tenants.map((option: Option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+            {options.tenants.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
           </Select>
         </Field>
         <Field label="Property">
           <Select disabled={!draft} value={form.propertyId} onChange={(e) => setForm({ ...form, propertyId: e.target.value, unitId: "" })}>
-            {data.properties.map((property: any) => <option key={property.id} value={property.id}>{property.name}</option>)}
+            {data.properties.map((property) => <option key={property.id} value={property.id}>{property.name}</option>)}
           </Select>
         </Field>
         <Field label="Unit">
           <Select disabled={!draft} value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })}>
             <option value="">Whole property / no unit</option>
-            {units.map((unit: any) => <option key={unit.id} value={unit.id}>{unit.code}{unit.name ? ` · ${unit.name}` : ""}</option>)}
+            {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.code}{unit.name ? ` · ${unit.name}` : ""}</option>)}
           </Select>
         </Field>
         <Field label="Starts">
@@ -103,14 +110,26 @@ export function LeaseDetail({
   editing,
   form,
   setForm,
-}: any) {
-  const charges = data.charges.filter((row: any) => row.leaseId === lease.id);
+}: {
+  lease: LeaseRow;
+  data: PropertyWorkspace;
+  options: WorkspaceOptions;
+  permissions: PropertyPermissions;
+  busy: boolean;
+  tab: string;
+  act: PropertyAction;
+  money: Money;
+  editing: boolean;
+  form: LeaseForm;
+  setForm: Dispatch<SetStateAction<LeaseForm>>;
+}) {
+  const charges = data.charges.filter((row) => row.leaseId === lease.id);
   const escalations = data.escalations.filter(
-    (row: any) => row.leaseId === lease.id,
+    (row) => row.leaseId === lease.id,
   );
-  const deposits = data.deposits.filter((row: any) => row.leaseId === lease.id);
+  const deposits = data.deposits.filter((row) => row.leaseId === lease.id);
   const schedules = data.schedules.filter(
-    (row: any) => row.leaseId === lease.id,
+    (row) => row.leaseId === lease.id,
   );
   return (
     <div className="space-y-5 p-1">

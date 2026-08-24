@@ -43,7 +43,18 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
 const PAYMENT_KINDS = new Set(['vendor_payment', 'customer_payment'])
 const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
 
-function canSeeDocument(doc: Record<string, any>, partyId: string | undefined, authz: Authz): boolean {
+type DrawerProps<T extends RelatedTransactionDrawerData['type']> = Extract<
+  RelatedTransactionDrawerData,
+  { type: T }
+>['props']
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+type PaymentProps = DrawerProps<'payment'>
+type OrderProps = DrawerProps<'order'>
+type ExpenseProps = DrawerProps<'expense'>
+type JournalProps = DrawerProps<'journal'>
+type DocumentProps = DrawerProps<'document'>
+
+function canSeeDocument(doc: Record<string, unknown>, partyId: string | undefined, authz: Authz): boolean {
   return String(doc.org_id) === authz.user.orgId
     && (!partyId || String(doc.party_id) === partyId)
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id)))
@@ -114,21 +125,21 @@ export async function loadRelatedTransactionDrawerData({
     if (!can(authz, permission)) return null
     const paymentKind = kind as PaymentKind
     const payment = await loadPaymentDocument(id, paymentKind, authz.user.orgId)
-    if (!payment || !canSeeDocument(payment.doc as Record<string, any>, partyId, authz)) return null
+    if (!payment || !canSeeDocument((payment.doc), partyId, authz)) return null
 
     const side = PAYMENT_KIND_SIDE[paymentKind]
     const partyFilter = side === 'ap'
       ? sql`exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)`
       : sql`exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`
     const [parties, banks, resolvedForm] = await Promise.all([
-      db.execute(sql`
+      db.execute<ElementOf<PaymentProps['parties']>>(sql`
         select id, display_name from parties p
          where p.org_id = ${authz.user.orgId} and ${partyFilter} and p.is_active
-         order by display_name limit 2000`) as any,
-      db.execute(sql`
+         order by display_name limit 2000`),
+      db.execute<ElementOf<PaymentProps['bankAccounts']>>(sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and type = 'asset_bank' and is_active and not is_summary
-         order by number nulls last, name`) as any,
+         order by number nulls last, name`),
       resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -145,7 +156,7 @@ export async function loadRelatedTransactionDrawerData({
     return {
       type: 'payment',
       props: {
-        payment: payment as any,
+        payment: (payment),
         initialOpenItems: openItems,
         parties: parties.rows,
         bankAccounts: banks.rows,
@@ -161,14 +172,14 @@ export async function loadRelatedTransactionDrawerData({
     const permission = orderKind === 'purchase_order' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
     const order = await loadOrder(id, authz.user.orgId, orderKind)
-    if (!order || !canSeeDocument(order.doc as Record<string, any>, partyId, authz)) return null
+    if (!order || !canSeeDocument((order.doc), partyId, authz)) return null
     const roleCondition = orderKind === 'purchase_order'
       ? sql`exists (select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
       : sql`exists (select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)`
     const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, subsidiaries, resolvedForm] = await Promise.all([
-      db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
-      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
-      db.execute(sql`
+      db.execute<ElementOf<OrderProps['parties']>>(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`),
+      db.execute<ElementOf<OrderProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
+      db.execute<ElementOf<OrderProps['items']>>(sql`
         select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items
          where org_id = ${authz.user.orgId} and is_active
            and (
@@ -179,11 +190,11 @@ export async function loadRelatedTransactionDrawerData({
                 where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
              )
            )
-         order by name limit 2000`) as any,
+         order by name limit 2000`),
       taxCodeOptions(),
       taxGroupOptions(),
-      db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
+      db.execute<ElementOf<OrderProps['departments']>>(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`),
+      db.execute<ElementOf<OrderProps['projects']>>(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`),
       customSegmentOptions(authz.user.orgId),
       visibleSubsidiaries(authz),
       resolveFormLayout({
@@ -199,13 +210,13 @@ export async function loadRelatedTransactionDrawerData({
     return {
       type: 'order',
       props: {
-        order: order as any,
+        order: order as unknown as OrderProps['order'],
         kind: orderKind,
         parties: parties.rows,
         accounts: accounts.rows,
         items: items.rows,
-        taxCodes: taxCodes as any,
-        taxGroups: taxGroups as any,
+        taxCodes: (taxCodes),
+        taxGroups: (taxGroups),
         departments: departments.rows,
         projects: projects.rows,
         segments,
@@ -222,14 +233,14 @@ export async function loadRelatedTransactionDrawerData({
   if (kind === 'expense_report') {
     if (!can(authz, 'expenses.read')) return null
     const report = await loadExpenseReport(id, authz.user.orgId)
-    if (!report || !canSeeDocument(report.doc as Record<string, any>, partyId, authz)) return null
+    if (!report || !canSeeDocument((report.doc), partyId, authz)) return null
     const [employees, accounts, taxCodes, taxGroups, dimensions, headerDefs, lineDefs, segments] = await Promise.all([
-      db.execute(sql`
+      db.execute<ElementOf<ExpenseProps['employees']>>(sql`
         select p.id, p.display_name from parties p
          where p.org_id = ${authz.user.orgId} and p.is_active
            and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
-         order by p.display_name limit 2000`) as any,
-      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`) as any,
+         order by p.display_name limit 2000`),
+      db.execute<ElementOf<ExpenseProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('expense','expense_other','cogs') and is_active and not is_summary order by number nulls last`),
       taxCodeOptions(),
       taxGroupOptions(),
       dimensionOptions(),
@@ -242,23 +253,23 @@ export async function loadRelatedTransactionDrawerData({
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: headerDefs as any,
-      lineDefs: lineDefs as any,
+      headerDefs: (headerDefs),
+      lineDefs: (lineDefs),
       explicitLayoutId: formLayoutId,
     })
     return {
       type: 'expense',
       props: {
-        report: report as any,
+        report: (report),
         employees: employees.rows,
         accounts: accounts.rows,
-        taxCodes: taxCodes as any,
-        taxGroups: taxGroups as any,
-        departments: dimensions.departments as any,
-        projects: dimensions.projects as any,
-        segments: segments as any,
-        headerDefs: headerDefs as any,
-        lineDefs: lineDefs as any,
+        taxCodes: (taxCodes),
+        taxGroups: (taxGroups),
+        departments: (dimensions.departments),
+        projects: (dimensions.projects),
+        segments: (segments),
+        headerDefs: headerDefs as ExpenseProps['headerDefs'],
+        lineDefs: lineDefs as ExpenseProps['lineDefs'],
         canSubmit: can(authz, 'expenses.create'),
         canPost: can(authz, 'ap.post'),
         layout: resolvedForm.layout,
@@ -269,10 +280,10 @@ export async function loadRelatedTransactionDrawerData({
   if (kind === 'journal') {
     if (!can(authz, 'gl.read')) return null
     const journal = await loadJournalDoc(id)
-    if (!journal || !canSeeDocument(journal.doc as Record<string, any>, partyId, authz)) return null
+    if (!journal || !canSeeDocument((journal.doc), partyId, authz)) return null
     const [parties, accounts, dimensions, headerDefs, lineDefs, subsidiaries, segments] = await Promise.all([
-      db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`) as any,
-      db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
+      db.execute<ElementOf<JournalProps['parties']>>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
+      db.execute<ElementOf<JournalProps['accounts']>>(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`),
       dimensionOptions(),
       loadFieldDefs('documents', 'journal'),
       loadFieldDefs('document_lines', 'journal'),
@@ -284,22 +295,22 @@ export async function loadRelatedTransactionDrawerData({
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: headerDefs as any,
-      lineDefs: lineDefs as any,
+      headerDefs: (headerDefs),
+      lineDefs: (lineDefs),
       explicitLayoutId: formLayoutId,
     })
     return {
       type: 'journal',
       props: {
-        journal: journal as any,
+        journal: (journal),
         parties: parties.rows,
         accounts: accounts.rows,
-        departments: dimensions.departments as any,
-        projects: dimensions.projects as any,
+        departments: (dimensions.departments),
+        projects: (dimensions.projects),
         subsidiaries,
-        segments: segments as any,
-        headerDefs: headerDefs as any,
-        lineDefs: lineDefs as any,
+        segments: (segments),
+        headerDefs: headerDefs as JournalProps['headerDefs'],
+        lineDefs: lineDefs as JournalProps['lineDefs'],
         layout: resolvedForm.layout,
       },
     }
@@ -309,7 +320,7 @@ export async function loadRelatedTransactionDrawerData({
   const readPerm = kind === 'project_charge' ? 'projects.read' : readPermission(kind)
   if (!config || !can(authz, readPerm)) return null
   const payload = await loadDocument(id)
-  if (!payload || !canSeeDocument(payload.doc as Record<string, any>, partyId, authz)) return null
+  if (!payload || !canSeeDocument((payload.doc), partyId, authz)) return null
   const [headerDefs, lineDefs] = await Promise.all([
     loadFieldDefs('documents', kind),
     loadFieldDefs('document_lines', kind),
@@ -339,32 +350,32 @@ export async function loadRelatedTransactionDrawerData({
       userId: authz.user.id,
       recordType: kind,
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: headerDefs as any,
-      lineDefs: lineDefs as any,
+      headerDefs: (headerDefs),
+      lineDefs: (lineDefs),
       explicitLayoutId: formLayoutId,
     }),
   ])
   return {
     type: 'document',
     props: {
-      payload: payload as any,
+      payload: (payload),
       config,
       basePath: config.family === 'ap' ? '/ap' : config.family === 'ar' ? '/ar' : '/banking/transactions',
-      parties: parties as any,
-      accounts: accounts as any,
-      taxCodes: taxCodes as any,
-      cards: cards as any,
-      bankAccounts: banks as any,
-      departments: dimensions.departments as any,
-      projects: dimensions.projects as any,
-      locations: dimensions.locations as any,
-      classes: dimensions.classes as any,
-      segments: dimensions.segments as any,
-      builtinSegments: dimensions.builtinSegments as any,
-      items: items as any,
+      parties: (parties),
+      accounts: (accounts),
+      taxCodes: (taxCodes),
+      cards: (cards),
+      bankAccounts: (banks),
+      departments: (dimensions.departments),
+      projects: (dimensions.projects),
+      locations: (dimensions.locations),
+      classes: (dimensions.classes),
+      segments: (dimensions.segments),
+      builtinSegments: (dimensions.builtinSegments),
+      items: items as DocumentProps['items'],
       subsidiaries,
-      headerDefs: headerDefs as any,
-      lineDefs: lineDefs as any,
+      headerDefs: headerDefs as DocumentProps['headerDefs'],
+      lineDefs: lineDefs as DocumentProps['lineDefs'],
       // A project charge uses the same explicit Edit cycle as every native
       // transaction. Its rate-aware line snapshot remains read-only in the
       // universal drawer; governed header amendments preserve that evidence.

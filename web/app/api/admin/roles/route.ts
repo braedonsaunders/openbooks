@@ -56,10 +56,10 @@ async function normalizeSubsidiaryRestriction(
   if (mode === "all") return { value: { mode: "all" } };
 
   const checkExist = async (ids: string[]): Promise<string | null> => {
-    const found = (await db.execute(sql`
+    const found = ((await db.execute(sql`
       select id from subsidiaries
-       where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)) as any;
-    const known = new Set(found.rows.map((r: any) => r.id as string));
+       where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)));
+    const known = new Set(found.rows.map((r) => r.id as string));
     const missing = ids.find((id) => !known.has(id));
     return missing ? `unknown subsidiary: ${missing}` : null;
   };
@@ -180,9 +180,9 @@ export async function PATCH(req: Request) {
   if (!body.id || !isUuid(body.id)) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
-  const existing = (await db.execute(sql`
+  const existing = ((await db.execute(sql`
     select id, key, name, description, is_built_in, permissions, subsidiary_restriction
-      from app_roles where id = ${body.id} and org_id = ${actor.orgId}`)) as any;
+      from app_roles where id = ${body.id} and org_id = ${actor.orgId}`)));
   const role = existing.rows[0];
   if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
   if (role.is_built_in && role.key === "admin") {
@@ -251,9 +251,9 @@ export async function DELETE(req: Request) {
   const { id } = (parsedBody3.data) as { id?: string };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const existing = (await db.execute(sql`
+  const existing = ((await db.execute(sql`
     select id, key, name, is_built_in from app_roles
-     where id = ${id} and org_id = ${actor.orgId}`)) as any;
+     where id = ${id} and org_id = ${actor.orgId}`)));
   const role = existing.rows[0];
   if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
   if (role.is_built_in) {

@@ -55,14 +55,14 @@ export default async function InsightsDashboards({
     ${status ? sql` and status = ${status}` : sql``}`
 
   const [dashboards, counts] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select id, name, description, status, updated_at,
              jsonb_array_length(layout) as card_count
         from insight_dashboards
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
+    `)),
     db.execute(sql`
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,

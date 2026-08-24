@@ -51,18 +51,22 @@ export interface MaskingPolicy {
   transform: MaskTransform;
 }
 
+interface MaskingPolicyRow extends Record<string, unknown> {
+  table_name: string; column_name: string; transform: MaskTransform;
+}
+
 /** Load active masking policies for a production org as table → column → transform. */
 export async function loadMaskingPolicies(
   prodOrgId: string,
 ): Promise<Map<string, Map<string, MaskTransform>>> {
-  const res = (await db.execute(sql`
+  const res = await db.execute<MaskingPolicyRow>(sql`
     select table_name, column_name, transform
       from masking_policies
-     where org_id = ${prodOrgId} and is_active = true`)) as any;
+     where org_id = ${prodOrgId} and is_active = true`);
   const map = new Map<string, Map<string, MaskTransform>>();
-  for (const r of res.rows as any[]) {
+  for (const r of res.rows) {
     if (!map.has(r.table_name)) map.set(r.table_name, new Map());
-    map.get(r.table_name)!.set(r.column_name, r.transform as MaskTransform);
+    map.get(r.table_name)!.set(r.column_name, r.transform);
   }
   return map;
 }
@@ -82,7 +86,7 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
 
 export async function seedDefaultMaskingPolicies(prodOrgId: string): Promise<void> {
   const existing = (await db.execute(sql`
-    select 1 from masking_policies where org_id = ${prodOrgId} limit 1`)) as any;
+    select 1 from masking_policies where org_id = ${prodOrgId} limit 1`));
   if (existing.rows.length) return;
   for (const p of DEFAULT_POLICIES) {
     await db

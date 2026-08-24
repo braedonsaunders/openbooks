@@ -67,6 +67,35 @@ const COLUMNS: Record<CrmSetupTab, string[]> = {
 
 type Option = { id: string; name: string };
 type CurrencyOption = { code: string; name: string };
+type CrmTranslator = ReturnType<typeof useTranslations>;
+interface CrmTeamMember { userId: string }
+interface CrmSetupRecord extends Record<string, unknown> {
+  id?: string; name?: string; target_name?: string; description?: string;
+  lifecycle_stage?: string; sequence?: number; is_qualified?: boolean; is_closed?: boolean;
+  is_default?: boolean; is_active?: boolean; probability?: number;
+  default_forecast_category?: string; is_won?: boolean; priority?: number;
+  manager_user_id?: string; default_owner_user_id?: string; match_mode?: string;
+  rules?: unknown[]; members?: CrmTeamMember[]; sales_team_id?: string;
+  owner_user_id?: string; period_start?: string; period_end?: string;
+  currency?: string; amount?: string | number
+}
+interface CrmForm extends Record<string, unknown> {
+  name: string; description: string; lifecycleStage: string; sequence: string | number;
+  isQualified: boolean; isClosed: boolean; isDefault: boolean; isActive: boolean;
+  probability: string | number; defaultForecastCategory: string; isWon: boolean;
+  priority: string | number; managerUserId: string; defaultOwnerUserId: string;
+  matchMode: string; rulesText: string; memberIds: string[]; targetType: string;
+  targetId: string; periodStart: string; periodEnd: string; currency: string;
+  amount: string | number
+}
+const EMPTY_CRM_FORM: CrmForm = {
+  name: "", description: "", lifecycleStage: "lead", sequence: 10,
+  isQualified: false, isClosed: false, isDefault: false, isActive: true,
+  probability: 0, defaultForecastCategory: "upside", isWon: false,
+  priority: 100, managerUserId: "", defaultOwnerUserId: "", matchMode: "all",
+  rulesText: "[]", memberIds: [], targetType: "user", targetId: "",
+  periodStart: "", periodEnd: "", currency: "", amount: "",
+}
 
 export function CrmSetupWorkspace({
   tab,
@@ -84,8 +113,8 @@ export function CrmSetupWorkspace({
   multiCurrency = false,
 }: {
   tab: CrmSetupTab;
-  rows: Record<string, any>[];
-  selected: Record<string, any> | null;
+  rows: CrmSetupRecord[];
+  selected: CrmSetupRecord | null;
   creating: boolean;
   total: number;
   page: number;
@@ -179,7 +208,7 @@ function SetupRows({
   closeHref,
 }: {
   tab: CrmSetupTab;
-  rows: Record<string, any>[];
+  rows: CrmSetupRecord[];
   closeHref: string;
 }) {
   const { money } = useMoney()
@@ -245,7 +274,7 @@ function SetupRows({
   );
 }
 
-function renderCell(column: string, row: Record<string, any>, t: any, money: ReturnType<typeof useMoney>['money']) {
+function renderCell(column: string, row: CrmSetupRecord, t: CrmTranslator, money: ReturnType<typeof useMoney>['money']) {
   const value = row[column];
   if (column === "is_active")
     return (
@@ -262,7 +291,7 @@ function renderCell(column: string, row: Record<string, any>, t: any, money: Ret
     return t("setup.percent", { value: Number(value) });
   if (column === "member_count")
     return t("setup.memberCount", { count: Number(value) });
-  if (column === "amount") return money(value, { currency: row.currency });
+  if (column === "amount") return money(typeof value === "string" || typeof value === "number" ? value : 0, { currency: row.currency });
   return value == null || value === "" ? "—" : String(value);
 }
 
@@ -277,7 +306,7 @@ function CrmSetupDrawer({
   closeHref,
 }: {
   tab: CrmSetupTab;
-  row: Record<string, any> | null;
+  row: CrmSetupRecord | null;
   users: Option[];
   teams: Option[];
   baseCurrency: string;
@@ -290,7 +319,7 @@ function CrmSetupDrawer({
   const router = useRouter();
   const creating = !row;
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<Record<string, any>>(() =>
+  const [form, setForm] = useState<CrmForm>(() =>
     initialForm(tab, row, baseCurrency),
   );
   const set = (key: string, value: unknown) =>
@@ -301,7 +330,7 @@ function CrmSetupDrawer({
       toast.error(t("setup.validation.nameRequired"));
       return;
     }
-    let payload: Record<string, any>;
+    let payload: Record<string, unknown>;
     try {
       payload = normalizePayload(tab, form);
     } catch {
@@ -384,11 +413,12 @@ function CrmSetupDrawer({
 
 function initialForm(
   tab: CrmSetupTab,
-  row: Record<string, any> | null,
+  row: CrmSetupRecord | null,
   baseCurrency: string,
-) {
+): CrmForm {
   if (tab === "accountStatuses")
     return {
+      ...EMPTY_CRM_FORM,
       name: row?.name ?? "",
       description: row?.description ?? "",
       lifecycleStage: row?.lifecycle_stage ?? "lead",
@@ -400,6 +430,7 @@ function initialForm(
     };
   if (tab === "opportunityStatuses")
     return {
+      ...EMPTY_CRM_FORM,
       name: row?.name ?? "",
       description: row?.description ?? "",
       sequence: row?.sequence ?? 10,
@@ -412,12 +443,14 @@ function initialForm(
     };
   if (tab === "sources")
     return {
+      ...EMPTY_CRM_FORM,
       name: row?.name ?? "",
       description: row?.description ?? "",
       isActive: row?.is_active ?? true,
     };
   if (tab === "territories")
     return {
+      ...EMPTY_CRM_FORM,
       name: row?.name ?? "",
       description: row?.description ?? "",
       priority: row?.priority ?? 100,
@@ -429,12 +462,14 @@ function initialForm(
     };
   if (tab === "teams")
     return {
+      ...EMPTY_CRM_FORM,
       name: row?.name ?? "",
       managerUserId: row?.manager_user_id ?? "",
-      memberIds: (row?.members ?? []).map((member: any) => member.userId),
+      memberIds: (row?.members ?? []).map((member) => member.userId),
       isActive: row?.is_active ?? true,
     };
   return {
+    ...EMPTY_CRM_FORM,
     targetType: row?.sales_team_id ? "team" : "user",
     targetId: row?.sales_team_id ?? row?.owner_user_id ?? "",
     periodStart: row?.period_start ?? "",
@@ -457,9 +492,9 @@ function actionFor(tab: CrmSetupTab) {
   )[tab];
 }
 
-function normalizePayload(tab: CrmSetupTab, form: Record<string, any>) {
+function normalizePayload(tab: CrmSetupTab, form: CrmForm) {
   if (tab === "territories") {
-    const rules = JSON.parse(form.rulesText || "[]");
+    const rules = JSON.parse(String(form.rulesText || "[]"));
     if (!Array.isArray(rules)) throw new Error("rules must be an array");
     return {
       ...form,
@@ -784,9 +819,9 @@ function QuotaFields({
 }
 
 type FieldProps = {
-  form: Record<string, any>;
+  form: CrmForm;
   set: (key: string, value: unknown) => void;
-  t: any;
+  t: CrmTranslator;
 };
 
 function TextField({

@@ -26,6 +26,14 @@ const ROLES = {
   vendors: { role: 'vendor', badge: 'secondary' as const },
   employees: { role: 'employee', badge: 'outline' as const },
 } as const
+type PartyDrawerProps = Parameters<typeof PartyDrawer>[0]
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+
+async function loadWorkerCompGroups(orgId: string, enabled: boolean): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
+  if (!enabled) return { rows: [] }
+  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`)
+  return { rows: result.rows }
+}
 
 export default async function EntityRole({
   params,
@@ -63,17 +71,15 @@ export default async function EntityRole({
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
     partyId
       ? Promise.all([
-          db.execute(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`) as any,
-          db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`) as any,
-          db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`) as any,
+          db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
+          db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
+          db.execute<ElementOf<PartyDrawerProps['trades']>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
           loadFieldDefs('parties'),
           subsidiaryUiOptions(orgId),
-          db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`) as any,
-          db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`) as any,
-          db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`) as any,
-          payrollEnabled
-            ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`) as any
-            : Promise.resolve({ rows: [] }),
+          db.execute<ElementOf<PartyDrawerProps['accounts']>>(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
+          db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`),
+          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+          loadWorkerCompGroups(orgId, payrollEnabled),
         ])
       : null,
   ])
@@ -83,7 +89,7 @@ export default async function EntityRole({
         userId: authz.user.id,
         recordType: role,
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[3] as any,
+        headerDefs: (pickers[3]),
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),
       })
@@ -95,7 +101,7 @@ export default async function EntityRole({
       {openParty && pickers ? (
         <PartyDrawer
           key={String(openParty.party.id)}
-          payload={openParty as any}
+          payload={openParty as unknown as Parameters<typeof PartyDrawer>[0]['payload']}
           canManage={canManage}
           canReadActivities={crmEnabled && can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
@@ -110,7 +116,7 @@ export default async function EntityRole({
           departments={pickers[1].rows}
           trades={pickers[2].rows}
           workerCompGroups={pickers[8].rows}
-          fieldDefs={pickers[3] as any}
+          fieldDefs={pickers[3] as unknown as PartyDrawerProps['fieldDefs']}
           subsidiaries={pickers[4]}
           accounts={pickers[5].rows}
           taxCodes={pickers[6].rows}

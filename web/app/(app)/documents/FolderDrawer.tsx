@@ -137,7 +137,7 @@ export function FolderDrawer({
           toast.error(tt('folderCreateFailed'))
         }
       } else if (folder) {
-        const body: Record<string, any> = {
+        const body: Record<string, unknown> = {
           name: name.trim(),
           parentId: parent || null,
           isPrivate,

@@ -53,7 +53,7 @@ export async function openItems(
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
      where oi.remaining > 0
-  `)) as any
+  `))
   return (result.rows as any[]).map((row) => ({
     id: row.id,
     entryId: row.entry_id,

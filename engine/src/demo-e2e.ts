@@ -20,7 +20,7 @@ async function main() {
   const acct = async (like: string) => {
     const r = await db.execute(sql`select id, number, name from accounts
       where org_id=${orgId} and (name ilike ${"%" + like + "%"}) and is_summary=false and is_active order by number limit 1`);
-    const row = (r as any).rows[0];
+    const row = (r).rows[0];
     if (!row) throw new Error(`no account like "${like}"`);
     return row as { id: string; number: string; name: string };
   };
@@ -147,7 +147,7 @@ async function main() {
 
   const runs = await db.execute(sql`select status, error_message, logs from script_runs order by at desc limit 3`);
   console.log("== script_runs audit:");
-  for (const r of (runs as any).rows) console.log(` ${r.status} ${r.error_message ?? ""} logs=${JSON.stringify(r.logs)}`);
+  for (const r of (runs).rows) console.log(` ${r.status} ${r.error_message ?? ""} logs=${JSON.stringify(r.logs)}`);
 
   await pool.end();
 }

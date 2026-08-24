@@ -180,7 +180,7 @@ async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise
 // carry the RLS GUCs. Each pooled query brackets applyGuc + the query on one
 // dedicated client; each pooled connect (used by drizzle transactions) applies
 // the GUCs up front.
-(basePool as any).query = async (text: any, params?: any): Promise<any> => {
+(basePool).query = async (text: any, params?: any): Promise<any> => {
   const ctx = activeOrgCtx();
   const client = await rawConnect();
   try {
@@ -191,7 +191,7 @@ async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise
   }
 };
 const origConnectDescriptor = pg.Pool.prototype.connect;
-(basePool as any).connect = async (cb?: any): Promise<any> => {
+(basePool).connect = async (cb?: unknown): Promise<any> => {
   const client = await rawConnect();
   await applyGuc(client, activeOrgCtx());
   if (typeof cb === "function") {

@@ -55,11 +55,11 @@ function refSources(entity: SetupEntity): SetupRefSource[] {
 
 /** Postable accounts for the org, matching the company-settings pickers. */
 async function loadAccounts(orgId: string): Promise<RefOption[]> {
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select id, number, name from accounts
      where org_id = ${orgId} and not is_summary and is_active
-     order by number nulls last, name`)) as any
-  return r.rows.map((a: any) => ({
+     order by number nulls last, name`)))
+  return r.rows.map((a) => ({
     value: a.id as string,
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
   }))
@@ -69,36 +69,36 @@ async function loadAccounts(orgId: string): Promise<RefOption[]> {
 async function loadEntityOptions(source: string, orgId: string): Promise<RefOption[]> {
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   if (source === 'accounting-periods') {
-    const periods = (await db.execute(sql`
+    const periods = ((await db.execute(sql`
       select id as value, name as label from accounting_periods
-       where org_id = ${orgId} order by starts_on desc, period_number desc`)) as any
+       where org_id = ${orgId} order by starts_on desc, period_number desc`)))
     return periods.rows as RefOption[]
   }
   if (source === 'items') {
-    const items = (await db.execute(sql`
+    const items = ((await db.execute(sql`
       select id as value,
              case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
-        from items where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+        from items where org_id = ${orgId} and is_active order by code nulls last, name`)))
     return items.rows as RefOption[]
   }
   if (source === 'customers') {
-    const customers = (await db.execute(sql`
+    const customers = ((await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)))
     return customers.rows as RefOption[]
   }
   if (source === 'vendors') {
-    const vendors = (await db.execute(sql`
+    const vendors = ((await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)))
     return vendors.rows as RefOption[]
   }
   if (source === 'projects') {
-    const projects = (await db.execute(sql`
+    const projects = ((await db.execute(sql`
       select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label
-        from projects where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+        from projects where org_id = ${orgId} and is_active order by code nulls last, name`)))
     return projects.rows as RefOption[]
   }
   const target = SETUP_ENTITY_BY_KEY.get(source)
@@ -118,10 +118,10 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
         ? sql.raw('code')
         : sql.raw('name')
   const orderCol = hasName ? 'name' : 'code'
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select ${sql.raw(target.idColumn ?? 'id')} as value, ${labelExpr} as label
       from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
-     order by ${sql.raw(orderCol)}`)) as any
+     order by ${sql.raw(orderCol)}`)))
   return r.rows as RefOption[]
 }
 
@@ -145,7 +145,7 @@ function orderExpr(entity: SetupEntity): string {
 /** Render one table cell for a column, given the raw (snake-keyed) row. */
 function renderCell(
   col: SetupColumn,
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
 ) {
@@ -267,17 +267,17 @@ export default async function SetupEntityPage({
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
   const [rowsRes, countRes, refOptions, installedPackRows] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select * from ${sql.raw(entity.table)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`) as any,
-    db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`) as any,
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
+    (db.execute(sql`select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`)),
     loadRefOptions(entity, orgId),
     entity.key === 'tax-return-forms'
       ? db.execute(sql`select code from tax_return_forms where org_id = ${orgId}`) as any
       : Promise.resolve({ rows: [] as { code: string }[] }),
   ])
-  const rows = rowsRes.rows as Record<string, any>[]
+  const rows = (rowsRes.rows)
   const total = Number(countRes.rows[0]?.n ?? 0)
 
   // Lookup maps for rendering ref columns.
@@ -289,24 +289,24 @@ export default async function SetupEntityPage({
   const idColumn = entity.idColumn ?? 'id'
   const open = rowParam
     ? rowParam === 'new'
-      ? { creating: true, row: null as Record<string, any> | null, members: [] as string[] }
+      ? { creating: true, row: (null), members: [] as string[] }
       : await (async () => {
-          const selected = (await db.execute(sql`
+          const selected = ((await db.execute(sql`
             select * from ${sql.raw(entity.table)}
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-             limit 1`)) as any
+             limit 1`)))
           const found = selected.rows[0] ?? null
           let members: string[] = []
           const multi = entity.fields.find((f) => f.kind === 'multiref')
           if (found && multi) {
-            const m = (await db.execute(sql`
+            const m = ((await db.execute(sql`
               select tgm.tax_code_id
                 from tax_group_members tgm
                 join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
                where tgm.tax_group_id = ${found.id}
-               order by tgm.sequence`)) as any
-            members = m.rows.map((x: any) => x.tax_code_id as string)
+               order by tgm.sequence`)))
+            members = m.rows.map((x) => x.tax_code_id as string)
           }
           return { creating: false, row: found, members }
         })()
@@ -325,7 +325,7 @@ export default async function SetupEntityPage({
   let taxRateRows: TaxRateRow[] = []
   let taxRateTotal = 0
   let taxRateRefOptions: Record<string, RefOption[]> = {}
-  let taxRateOpen: { creating: boolean; row: Record<string, any> | null } | null = null
+  let taxRateOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
 
   if (taxRateTabActive) {
     const taxCodeId = String(taxCodeRow![idColumn])
@@ -342,7 +342,7 @@ export default async function SetupEntityPage({
           from tax_rates ${taxRateFilter}
          order by effective_from desc
          limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`) as any,
-      db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`) as any,
+      (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`)),
       loadRefOptions(taxRateEntity, orgId),
     ])
     taxRateRows = rateRowsRes.rows as TaxRateRow[]
@@ -354,10 +354,10 @@ export default async function SetupEntityPage({
       if (rateRowParam === 'new') {
         taxRateOpen = { creating: true, row: null }
       } else if (isUuid(rateRowParam)) {
-        const selected = (await db.execute(sql`
+        const selected = ((await db.execute(sql`
           select * from tax_rates
            where id = ${rateRowParam} and org_id = ${orgId} and tax_code_id = ${taxCodeId}
-           limit 1`)) as any
+           limit 1`)))
         taxRateOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
       }
     }
@@ -386,7 +386,7 @@ export default async function SetupEntityPage({
   let taxBoxRows: TaxReturnBoxRow[] = []
   let taxBoxTotal = 0
   let taxBoxRefOptions: Record<string, RefOption[]> = {}
-  let taxBoxOpen: { creating: boolean; row: Record<string, any> | null } | null = null
+  let taxBoxOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
 
   if (taxBoxTabActive) {
     const returnCode = String(taxReturnRow!.code)
@@ -404,7 +404,7 @@ export default async function SetupEntityPage({
           from tax_report_lines ${taxBoxFilter}
          order by report_code, sequence, line_code
          limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`) as any,
-      db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`) as any,
+      (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`)),
       loadRefOptions(taxBoxEntity, orgId),
     ])
     taxBoxRows = boxRowsRes.rows as TaxReturnBoxRow[]
@@ -416,11 +416,11 @@ export default async function SetupEntityPage({
       if (boxRowParam === 'new') {
         taxBoxOpen = { creating: true, row: null }
       } else if (isUuid(boxRowParam)) {
-        const selected = (await db.execute(sql`
+        const selected = ((await db.execute(sql`
           select * from tax_report_lines
            where id = ${boxRowParam} and org_id = ${orgId}
              and report_code = ${returnCode}
-           limit 1`)) as any
+           limit 1`)))
         taxBoxOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
       }
     }
@@ -456,7 +456,7 @@ export default async function SetupEntityPage({
   let segValRows: SegmentValueRow[] = []
   let segValTotal = 0
   let segValRefOptions: Record<string, RefOption[]> = {}
-  let segValOpen: { creating: boolean; row: Record<string, any> | null } | null = null
+  let segValOpen: { creating: boolean; row: Record<string, unknown> | null } | null = null
 
   if (segValTabActive) {
     const segmentId = String(segmentDefRow![idColumn])
@@ -472,7 +472,7 @@ export default async function SetupEntityPage({
           from segment_values ${segValFilter}
          order by name
          limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`) as any,
-      db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`) as any,
+      (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`)),
       loadRefOptions(segValEntity, orgId),
     ])
     segValRows = valRowsRes.rows as SegmentValueRow[]
@@ -484,10 +484,10 @@ export default async function SetupEntityPage({
       if (valueRowParam === 'new') {
         segValOpen = { creating: true, row: null }
       } else if (isUuid(valueRowParam)) {
-        const selected = (await db.execute(sql`
+        const selected = ((await db.execute(sql`
           select * from segment_values
            where id = ${valueRowParam} and org_id = ${orgId} and segment_id = ${segmentId}
-           limit 1`)) as any
+           limit 1`)))
         segValOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
       }
     }
@@ -607,7 +607,7 @@ export default async function SetupEntityPage({
                   <TableCell key={c.key}>
                     {i === 0 ? (
                       <Link
-                        href={mergeHref(`/admin/setup/${entity.key}`, sp, { row: String(row[idColumn]) }) as any}
+                        href={(mergeHref(`/admin/setup/${entity.key}`, sp, { row: String(row[idColumn]) }))}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {renderCell(c, row, refLabels, t)}

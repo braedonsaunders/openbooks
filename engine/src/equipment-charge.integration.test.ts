@@ -45,8 +45,8 @@ test("equipment charge posts balanced job cost and recovery with unit attributio
     const result = (await db.execute(sql`
       select account_id, amount, project_id, equipment_unit_id
         from journal_lines where entry_id = ${entryId} order by line_number
-    `)) as any;
-    assert.deepEqual(result.rows.map((row: any) => ({
+    `));
+    assert.deepEqual(result.rows.map((row) => ({
       account: row.account_id,
       amount: String(row.amount),
       project: row.project_id,

@@ -17,7 +17,7 @@ export async function getEnvKind(
 ): Promise<"production" | "sandbox" | "preview"> {
   const hit = envCache.get(orgId);
   if (hit) return hit;
-  const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`)) as any;
+  const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`));
   const kind = (res.rows[0]?.env_kind ?? "production") as "production" | "sandbox" | "preview";
   envCache.set(orgId, kind);
   return kind;

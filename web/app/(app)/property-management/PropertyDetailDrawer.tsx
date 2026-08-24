@@ -34,6 +34,14 @@ import type { Option } from "./workspace-ui";
 import { Empty, RecordTabs, Status } from "./workspace-ui";
 import { CamTable } from "./CamTable";
 import { DepositTable, RentTable } from "./LeaseTables";
+import type { CamPool, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyRow, PropertyWorkspace, SaveAction, UnitRow, WorkspaceOptions } from "./types";
+
+type PropertyCustomization = {
+  layout: FormLayoutConfig;
+  forms: Array<{ id: string; name: string }>;
+  currentFormId: string | null;
+  fieldDefs: CustomFieldDefClient[];
+};
 
 export function PropertyDetailDrawer({
   property,
@@ -59,7 +67,31 @@ export function PropertyDetailDrawer({
   onSave,
   onDelete,
   initialTab,
-}: any) {
+}: {
+  property: PropertyRow | null;
+  units: UnitRow[];
+  leases: LeaseRow[];
+  options: WorkspaceOptions;
+  permissions: PropertyPermissions;
+  customization: PropertyCustomization;
+  fixedAssetsEnabled?: boolean;
+  multiCurrency?: boolean;
+  data: PropertyWorkspace;
+  money: Money;
+  act: PropertyAction;
+  busy: boolean;
+  onClose: () => void;
+  onAddUnit: () => void;
+  onOpenUnit: (id: string) => void;
+  onAddLease: (unitId?: string | null) => void;
+  onAddCam: () => void;
+  onEditCam: (pool: CamPool) => void;
+  onReopenCam: (pool: CamPool) => void;
+  onOpenLease: (id: string) => void;
+  onSave: SaveAction;
+  onDelete: () => void | Promise<void | Record<string, unknown> | null>;
+  initialTab?: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -524,7 +556,7 @@ export function PropertyDetailDrawer({
                     value={customization.currentFormId ?? ""}
                     onChange={(e) => selectForm(e.target.value)}
                   >
-                    {customization.forms.map((item: any) => (
+                    {customization.forms.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name}
                       </option>
@@ -622,7 +654,7 @@ export function PropertyDetailDrawer({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {units.map((unit: any) => (
+                {units.map((unit) => (
                   <TableRow
                     key={unit.id}
                     tabIndex={0}
@@ -691,7 +723,7 @@ export function PropertyDetailDrawer({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leases.map((lease: any) => (
+                {leases.map((lease) => (
                   <TableRow
                     key={lease.id}
                     tabIndex={0}
@@ -768,8 +800,8 @@ export function PropertyDetailDrawer({
             ) : null}
           </div>
           <RentTable
-            schedules={data.schedules.filter((row: any) =>
-              leases.some((lease: any) => lease.id === row.leaseId),
+            schedules={data.schedules.filter((row) =>
+              leases.some((lease) => lease.id === row.leaseId),
             )}
             leases={leases}
             money={money}
@@ -785,8 +817,8 @@ export function PropertyDetailDrawer({
             </p>
           </div>
           <DepositTable
-            deposits={data.deposits.filter((row: any) =>
-              leases.some((lease: any) => lease.id === row.leaseId),
+            deposits={data.deposits.filter((row) =>
+              leases.some((lease) => lease.id === row.leaseId),
             )}
             leases={leases}
             money={money}
@@ -845,7 +877,7 @@ export function PropertyDetailDrawer({
   );
 }
 
-function propertyForm(property: any, defs: CustomFieldDefClient[]) {
+function propertyForm(property: Partial<PropertyRow>, defs: CustomFieldDefClient[]) {
   return {
     name: property.name ?? "",
     code: property.code ?? "",

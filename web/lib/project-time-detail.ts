@@ -60,7 +60,7 @@ export async function loadProjectTimeEntryPage(args: {
   const offset = (page - 1) * pageSize
   const project = await db.execute(sql`
     select 1 from projects where id = ${args.projectId} and org_id = ${args.orgId}
-  `) as any
+  `)
   if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
 
   const dimensionFilter = args.dimension === 'employee'
@@ -80,7 +80,7 @@ export async function loadProjectTimeEntryPage(args: {
          and te.project_id = ${args.projectId}
          and te.status = 'approved'
          and ${dimensionFilter}
-    `) as any,
+    `),
     db.execute(sql`
       select te.id,
              te.worked_on::text as worked_on,
@@ -113,13 +113,13 @@ export async function loadProjectTimeEntryPage(args: {
          and ${dimensionFilter}
        order by te.worked_on desc, te.id
        limit ${pageSize} offset ${offset}
-    `) as any,
+    `),
   ])
 
   const totals = summaryResult.rows[0] ?? {}
   const totalEntries = Number(totals.entries ?? 0)
   return {
-    entries: (entryResult.rows as any[]).map((row) => ({
+    entries: (entryResult.rows).map((row) => ({
       id: String(row.id),
       workedOn: String(row.worked_on),
       employeeName: String(row.employee_name ?? ''),

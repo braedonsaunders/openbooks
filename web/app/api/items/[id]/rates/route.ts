@@ -19,12 +19,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const item = (await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)) as any
+  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
   if (!item.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const [books, profile, versions, timeTypes] = await Promise.all([
-    db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`) as any,
-    db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`) as any,
-    db.execute(sql`
+    (db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`)),
+    (db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`)),
+    (db.execute(sql`
       select v.id, v.rate_book_id, b.name as rate_book_name, v.effective_from, v.effective_to, v.status,
              coalesce(jsonb_agg(jsonb_build_object(
                'id', l.id, 'unitCode', l.unit_code, 'unitName', l.unit_name, 'baseQuantity', l.base_quantity,
@@ -37,8 +37,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
        where v.org_id = ${gate.user.orgId}
        group by v.id, b.name
        order by v.effective_from desc
-    `) as any,
-    db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`) as any,
+    `)),
+    (db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`)),
   ])
   return NextResponse.json({ books: books.rows, profile: profile.rows[0] ?? null, versions: versions.rows, timeTypes: timeTypes.rows })
 }
@@ -91,8 +91,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(body.effectiveFrom ?? '')) return NextResponse.json({ error: 'Effective date is required' }, { status: 422 })
   if (!body.baseUnit?.trim()) return NextResponse.json({ error: 'Base unit is required' }, { status: 422 })
-  if (!POLICIES.includes(body.pricingPolicy as any)) return NextResponse.json({ error: 'Invalid pricing policy' }, { status: 422 })
-  if (!PRESENTATIONS.includes((body.invoicePresentation ?? 'rate_components') as any)) return NextResponse.json({ error: 'Invalid invoice presentation' }, { status: 422 })
+  if (!POLICIES.includes(body.pricingPolicy as unknown as "capped_ladder" | "lowest_cost")) return NextResponse.json({ error: 'Invalid pricing policy' }, { status: 422 })
+  if (!PRESENTATIONS.includes((body.invoicePresentation ?? 'rate_components') as unknown as "summary" | "rate_components")) return NextResponse.json({ error: 'Invalid invoice presentation' }, { status: 422 })
   if (!Array.isArray(body.tiers) || body.tiers.length === 0) return NextResponse.json({ error: 'Add at least one rate unit' }, { status: 422 })
   const baseUnit = body.baseUnit.trim()
   const tiers: Array<TierInput & { baseQuantity: string; costRate: string; billRate: string }> = []
@@ -126,17 +126,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const result = await db.transaction(async (tx) => {
-      const item = (await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)) as any
+      const item = ((await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
       if (!item.rows[0]) throw new Error('Item not found')
       let rateBookId = body.rateBookId
       if (rateBookId) {
-        const book = (await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)) as any
+        const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)))
         if (!book.rows[0]) throw new Error('Rate book not found')
       } else {
         const existing = (await tx.execute(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1`)) as any
         rateBookId = existing.rows[0]?.id
         if (!rateBookId) {
-          const org = (await tx.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`)) as any
+          const org = ((await tx.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`)))
           const created = (await tx.execute(sql`
             insert into item_rate_books (org_id, code, name, currency, is_default, created_by, updated_by)
             values (${gate.user.orgId}, 'STANDARD', 'Standard', ${org.rows[0]?.base_currency ?? 'CAD'}, true, ${gate.user.id}, ${gate.user.id}) returning id
@@ -144,13 +144,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           rateBookId = created.rows[0].id
         }
       }
-      const duplicate = (await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)) as any
+      const duplicate = ((await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)))
       if (duplicate.rows[0]) throw new Error('A rate version already starts on that date')
-      const nextVersion = (await tx.execute(sql`
+      const nextVersion = ((await tx.execute(sql`
         select effective_from from item_rate_versions
          where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
          order by effective_from limit 1
-      `)) as any
+      `)))
       await tx.execute(sql`
         insert into item_rate_profiles (org_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
         values (${gate.user.orgId}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})

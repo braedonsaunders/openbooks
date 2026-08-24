@@ -5,8 +5,19 @@ import { Drawer, Button, Input, Select } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
+import type { PropertyWorkspace, SaveAction } from "./types";
 
-export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: any) {
+export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: {
+  open: boolean;
+  stacked?: boolean;
+  initialPropertyId?: string;
+  initialUnitId?: string | null;
+  onClose: () => void;
+  data: PropertyWorkspace;
+  tenants: Option[];
+  busy: boolean;
+  onSave: SaveAction;
+}) {
   const today = useBusinessToday();
   const initial = {
     propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
@@ -37,7 +48,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
       });
   }, [open, initialPropertyId, initialUnitId, data.properties.length]);
   const units = data.units.filter(
-    (u: any) => u.propertyId === form.propertyId && u.status === "vacant",
+    (unit) => unit.propertyId === form.propertyId && unit.status === "vacant",
   );
   const submit = () =>
     onSave({
@@ -108,7 +119,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
               }
             >
               <option value="">Select property</option>
-              {data.properties.map((o: any) => (
+              {data.properties.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>
@@ -121,7 +132,7 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
               onChange={(e) => setForm({ ...form, unitId: e.target.value })}
             >
               <option value="">Whole property / no unit</option>
-              {units.map((o: any) => (
+              {units.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.code}
                   {o.name ? ` · ${o.name}` : ""}

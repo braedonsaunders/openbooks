@@ -35,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     : typeof body.description === 'string'
       ? body.description.trim().slice(0, 4_000) || null
       : undefined
-  const kind = body.kind === undefined ? undefined : BUDGET_KINDS.includes(body.kind as any) ? body.kind as string : null
+  const kind = body.kind === undefined ? undefined : BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? body.kind as string : null
   const bookId = body.bookId === undefined ? undefined : typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
   const fiscalYearValue = Number(body.fiscalYear)
   const fiscalYear = body.fiscalYear === undefined
@@ -51,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<Record<string, any>>(sql`
+      const locked = (await tx.execute<Record<string, unknown>>(sql`
         select name, description, kind, book_id, fiscal_year, status, revision,
                exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
           from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
@@ -103,7 +103,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
-    const message = error instanceof Error ? `${error.message} ${String((error as any).cause ?? '')}` : String(error)
+    const message = error instanceof Error ? `${error.message} ${String(((error)).cause ?? '')}` : String(error)
     if (message.includes('budget_scenarios_identity')) {
       return NextResponse.json({ error: 'scenario_name_already_exists' }, { status: 409 })
     }
@@ -119,7 +119,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   try {
     await db.transaction(async (tx) => {
-      const locked = (await tx.execute<Record<string, any>>(sql`
+      const locked = (await tx.execute<Record<string, unknown>>(sql`
         select name, status, revision from budget_scenarios
          where id = ${id} and org_id = ${user.orgId} for update
       `))

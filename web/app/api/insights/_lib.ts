@@ -181,7 +181,7 @@ export function normalizeLayout(v: unknown): { cardId: string; x: number; y: num
   const out: { cardId: string; x: number; y: number; w: number; h: number }[] = []
   for (const item of v) {
     if (!item || typeof item !== 'object') continue
-    const cardId = (item as any).cardId
+    const cardId = ((item)).cardId
     if (typeof cardId !== 'string' || cardId === '') continue
     const clamp = (n: unknown, min: number, max: number, dflt: number) => {
       const num = Number(n)
@@ -190,10 +190,10 @@ export function normalizeLayout(v: unknown): { cardId: string; x: number; y: num
     }
     out.push({
       cardId,
-      x: clamp((item as any).x, 0, 11, 0),
-      y: clamp((item as any).y, 0, 999, 0),
-      w: clamp((item as any).w, 1, 12, 6),
-      h: clamp((item as any).h, 1, 24, 4),
+      x: clamp(((item)).x, 0, 11, 0),
+      y: clamp(((item)).y, 0, 999, 0),
+      w: clamp(((item)).w, 1, 12, 6),
+      h: clamp(((item)).h, 1, 24, 4),
     })
   }
   return out

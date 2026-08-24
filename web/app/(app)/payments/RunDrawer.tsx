@@ -57,6 +57,25 @@ export interface RunBlockerClient {
   reason: string
 }
 
+export interface PaymentRunClient {
+  id: string; run_number: string; status: string; scheduled_for: string | null;
+  bank_number: string | null; bank_name: string | null
+}
+export interface PaymentInstructionClient {
+  id: string; status: string; payee: string; document_number: string | null;
+  amount: string | number; payment_document_id: string | null; settlement_effective_on: string | null;
+  bank_reference: string | null; return_code: string | null; return_reason: string | null
+}
+export interface PaymentFileClient {
+  id: string; status: string; filename: string; content_hash: string; sequence_number: number;
+  payment_count: number; total_amount: string | number; currency: string
+}
+export interface PaymentEventClient { id: string; event_type: string; actor_name: string | null; created_at: string }
+export interface PaymentRunItemClient {
+  id: string; document_number: string; party_name: string; payment_amount: string | number;
+  discount_amount: string | number; credit_amount: string | number; currency: string
+}
+
 export function RunDrawer({
   run,
   instructions,
@@ -70,14 +89,14 @@ export function RunDrawer({
   closeHref = '/payments?view=runs',
   paymentBasePath = '/payments',
 }: {
-  run: Record<string, any>
-  instructions: Record<string, any>[]
+  run: PaymentRunClient
+  instructions: PaymentInstructionClient[]
   eftConfigured: boolean
   eftMissing: string[]
   blockers: RunBlockerClient[]
-  files: Record<string, any>[]
-  events: Record<string, any>[]
-  items: Record<string, any>[]
+  files: PaymentFileClient[]
+  events: PaymentEventClient[]
+  items: PaymentRunItemClient[]
   canApprove: boolean
   closeHref?: string
   paymentBasePath?: '/payments' | '/receipts'
@@ -95,7 +114,7 @@ export function RunDrawer({
   const [instructionPage, setInstructionPage] = useState(1)
   const [decision, setDecision] = useState<{ kind: 'rejectRun' | 'rejectFile' | 'rollback'; fileId?: string } | null>(null)
   const [reason, setReason] = useState('')
-  const [outcomeInstruction, setOutcomeInstruction] = useState<Record<string, any> | null>(null)
+  const [outcomeInstruction, setOutcomeInstruction] = useState<PaymentInstructionClient | null>(null)
   const [outcomeStatus, setOutcomeStatus] = useState<'settled' | 'returned' | 'rejected'>('settled')
   const [effectiveOn, setEffectiveOn] = useState(today)
   const [bankReference, setBankReference] = useState('')
@@ -189,7 +208,7 @@ export function RunDrawer({
       toast.error(
         t('runDrawer.toasts.postedWithFailures', {
           count: data.posted,
-          failures: data.failures.map((f: any) => `${f.payee} (${f.error})`).join('; '),
+          failures: data.failures.map((f: { payee: string; error: string }) => `${f.payee} (${f.error})`).join('; '),
         }),
       )
     } else {
@@ -335,7 +354,7 @@ export function RunDrawer({
                   <td className="px-3 py-2 font-mono text-[13px] font-semibold">
                     {i.payment_document_id ? (
                       <Link
-                        href={`${paymentBasePath}?payment=${i.payment_document_id}` as any}
+                        href={(`${paymentBasePath}?payment=${i.payment_document_id}`)}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {i.document_number}
@@ -369,7 +388,7 @@ export function RunDrawer({
         </div>
         {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
 
-        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t(`runDrawer.events.${event.event_type}` as any)}</p><p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
+        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p><p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
       </div>
 
       <Drawer

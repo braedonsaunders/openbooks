@@ -10,6 +10,8 @@ import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadOpportunity } from '../../../../lib/crm'
 import { CrmNewButton } from '../CrmNewButton'
 import { OpportunityDrawer } from '../OpportunityDrawer'
+type OpportunityDrawerProps = Parameters<typeof OpportunityDrawer>[0]
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
 
 export const dynamic = 'force-dynamic'
 
@@ -48,13 +50,13 @@ export default async function Opportunities({
     ])
     const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId),
-      db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`) as any,
-      db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active order by p.display_name limit 2000`) as any,
-      db.execute(sql`select id,party_id,name from contacts where org_id=${authz.user.orgId} and is_active order by name limit 4000`) as any,
-      db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`) as any,
-      db.execute(sql`
+      (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`)),
+      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
+      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active order by p.display_name limit 2000`)),
+      (db.execute(sql`select id,party_id,name from contacts where org_id=${authz.user.orgId} and is_active order by name limit 4000`)),
+      (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`)),
+      (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`)),
+      (db.execute(sql`
         select id, concat_ws(' · ', code, name) name from items
          where org_id = ${authz.user.orgId} and is_active
            and (
@@ -65,9 +67,9 @@ export default async function Opportunities({
                 where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
              )
            )
-         order by name limit 2000`) as any,
+         order by name limit 2000`)),
       multiCurrency
-        ? db.execute(sql`select code,name from currencies order by code`) as any
+        ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`)
         : Promise.resolve({ rows: [] }),
     ])
     const requestedReturn = pickString(sp.drawerReturn)
@@ -77,15 +79,15 @@ export default async function Opportunities({
     if (open) {
       drawer = (
         <OpportunityDrawer
-          data={open}
-          statuses={statuses.rows}
-          owners={owners.rows}
-          accounts={accounts.rows}
-          contacts={contacts.rows}
-          teams={teams.rows}
-          sources={sources.rows}
-          items={items.rows}
-          currencies={currencies.rows}
+          data={open as unknown as OpportunityDrawerProps['data']}
+          statuses={statuses.rows as unknown as OpportunityDrawerProps['statuses']}
+          owners={owners.rows as unknown as OpportunityDrawerProps['owners']}
+          accounts={accounts.rows as unknown as OpportunityDrawerProps['accounts']}
+          contacts={contacts.rows as unknown as OpportunityDrawerProps['contacts']}
+          teams={teams.rows as unknown as OpportunityDrawerProps['teams']}
+          sources={sources.rows as unknown as OpportunityDrawerProps['sources']}
+          items={items.rows as unknown as OpportunityDrawerProps['items']}
+          currencies={currencies.rows as unknown as OpportunityDrawerProps['currencies']}
           closeHref={closeHref}
           canManage={manage}
           multiCurrency={multiCurrency}
