@@ -83,6 +83,11 @@ export interface WebhookEvent {
   raw: Record<string, unknown>;
 }
 
+export type WebhookVerification =
+  | { signatureValid: false; events: [] }
+  /** Every actionable event in the authenticated delivery, in provider order. */
+  | { signatureValid: true; events: WebhookEvent[] };
+
 type FetchFn = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<any> }>;
 
 const defaultFetch: FetchFn = (url, init) => fetch(url, init);
@@ -140,11 +145,97 @@ function safeEqual(a: string, b: string): boolean {
 export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
   createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
-  /** Verify the provider signature and normalize the event; null = invalid signature. */
+  /** Verify and normalize a complete delivery without conflating authentication
+   *  with whether this service handles any of its event types. */
+  verifyWebhookDelivery(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookVerification;
+  /** Normalize the first actionable event in a delivery, if one exists. */
   verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookEvent | null;
 }
 
+function invalidWebhook(): WebhookVerification {
+  return { signatureValid: false, events: [] };
+}
+
+function verifiedWebhook(events: WebhookEvent[]): WebhookVerification {
+  return { signatureValid: true, events };
+}
+
 // --- Stripe ---------------------------------------------------------------
+
+function verifyStripeWebhookDelivery(
+  headers: Record<string, string | string[] | undefined>,
+  rawBody: string,
+  secrets: ProviderSecrets,
+): WebhookVerification {
+  if (!secrets.webhookSecret) return invalidWebhook();
+  const sigHeader = headers["stripe-signature"];
+  const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+  if (!sig) return invalidWebhook();
+  const parts = Object.fromEntries(sig.split(",").map((kv) => kv.split("=", 2) as [string, string]));
+  if (!parts.t || !parts.v1) return invalidWebhook();
+  const expected = hmacSha256Hex(secrets.webhookSecret, `${parts.t}.${rawBody}`);
+  if (!safeEqual(expected, parts.v1)) return invalidWebhook();
+  // Replay window: far-future timestamps are rejected outright, but retries
+  // up to 24h old are accepted — during a provider outage every older
+  // delivery would otherwise 401 forever and the settlement would be
+  // silently lost. Old-event acceptance is safe because the attempt claim
+  // (below) makes processing idempotent.
+  const skew = Date.now() / 1000 - Number(parts.t);
+  if (skew < -300 || skew > 86_400) return invalidWebhook();
+  let event: any;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return verifiedWebhook([]);
+  }
+  const obj = event?.data?.object ?? {};
+  if (
+    event?.type === "checkout.session.completed" ||
+    event?.type === "checkout.session.async_payment_succeeded"
+  ) {
+    // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
+    // settling on that would post a receipt for money not yet collected.
+    const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
+    const settled =
+      event.type === "checkout.session.async_payment_succeeded" ||
+      paymentStatus === "paid" ||
+      paymentStatus === "no_payment_required";
+    return verifiedWebhook([{
+      externalRef: String(obj.id ?? ""),
+      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
+      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      status: settled ? "succeeded" : "processing",
+      paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
+      raw: event,
+    }]);
+  }
+  if (event?.type === "checkout.session.async_payment_failed") {
+    return verifiedWebhook([{
+      externalRef: String(obj.id ?? ""),
+      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
+      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      status: "failed",
+      raw: event,
+    }]);
+  }
+  if (event?.type === "checkout.session.expired") {
+    return verifiedWebhook([{ externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event }]);
+  }
+  if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
+    // Checkout stores the session id as external_ref and persists
+    // payment_intent onto event_payload. Refund/dispute objects are keyed
+    // by the intent, so both refs must be set: externalRef for a later
+    // re-key, intentRef so resolution matches event_payload.paymentIntent.
+    const intent = obj.payment_intent ? String(obj.payment_intent) : null;
+    return verifiedWebhook([{
+      externalRef: String(obj.payment_intent ?? obj.id ?? ""),
+      intentRef: intent,
+      status: "refunded",
+      raw: event,
+    }]);
+  }
+  return verifiedWebhook([]);
+}
 
 const stripeAdapter: PaymentProviderAdapter = {
   key: "stripe",
@@ -172,79 +263,68 @@ const stripeAdapter: PaymentProviderAdapter = {
     if (!json?.id || !json?.url) throw new PaymentAcceptanceError("stripe checkout returned no session url");
     return { redirectUrl: json.url, externalRef: json.id };
   },
+  verifyWebhookDelivery: verifyStripeWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
-    if (!secrets.webhookSecret) return null;
-    const sigHeader = headers["stripe-signature"];
-    const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
-    if (!sig) return null;
-    const parts = Object.fromEntries(sig.split(",").map((kv) => kv.split("=", 2) as [string, string]));
-    if (!parts.t || !parts.v1) return null;
-    const expected = hmacSha256Hex(secrets.webhookSecret, `${parts.t}.${rawBody}`);
-    if (!safeEqual(expected, parts.v1)) return null;
-    // Replay window: far-future timestamps are rejected outright, but retries
-    // up to 24h old are accepted — during a provider outage every older
-    // delivery would otherwise 401 forever and the settlement would be
-    // silently lost. Old-event acceptance is safe because the attempt claim
-    // (below) makes processing idempotent.
-    const skew = Date.now() / 1000 - Number(parts.t);
-    if (skew < -300 || skew > 86_400) return null;
-    let event: any;
-    try {
-      event = JSON.parse(rawBody);
-    } catch {
-      return null;
-    }
-    const obj = event?.data?.object ?? {};
-    if (
-      event?.type === "checkout.session.completed" ||
-      event?.type === "checkout.session.async_payment_succeeded"
-    ) {
-      // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
-      // settling on that would post a receipt for money not yet collected.
-      const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
-      const settled =
-        event.type === "checkout.session.async_payment_succeeded" ||
-        paymentStatus === "paid" ||
-        paymentStatus === "no_payment_required";
-      return {
-        externalRef: String(obj.id ?? ""),
-        intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-        linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
-        status: settled ? "succeeded" : "processing",
-        paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
-        raw: event,
-      };
-    }
-    if (event?.type === "checkout.session.async_payment_failed") {
-      return {
-        externalRef: String(obj.id ?? ""),
-        intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-        linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
-        status: "failed",
-        raw: event,
-      };
-    }
-    if (event?.type === "checkout.session.expired") {
-      return { externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event };
-    }
-    if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
-      // Checkout stores the session id as external_ref and persists
-      // payment_intent onto event_payload. Refund/dispute objects are keyed
-      // by the intent, so both refs must be set: externalRef for a later
-      // re-key, intentRef so resolution matches event_payload.paymentIntent.
-      const intent = obj.payment_intent ? String(obj.payment_intent) : null;
-      return {
-        externalRef: String(obj.payment_intent ?? obj.id ?? ""),
-        intentRef: intent,
-        status: "refunded",
-        raw: event,
-      };
-    }
-    return null;
+    return verifyStripeWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
   },
 };
 
 // --- Adyen ----------------------------------------------------------------
+
+function verifyAdyenWebhookDelivery(
+  _headers: Record<string, string | string[] | undefined>,
+  rawBody: string,
+  secrets: ProviderSecrets,
+): WebhookVerification {
+  if (!secrets.webhookSecret) return invalidWebhook(); // webhookSecret = base64 HMAC key
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return invalidWebhook();
+  }
+  const items = Array.isArray(payload?.notificationItems)
+    ? payload.notificationItems.map((entry: any) => entry?.NotificationRequestItem).filter(Boolean)
+    : [];
+  if (items.length === 0) return invalidWebhook();
+  const keyBytes = Buffer.from(secrets.webhookSecret, "base64");
+  const events: WebhookEvent[] = [];
+  for (const item of items) {
+    // Adyen signs the concatenation of these fields with HMAC-SHA256 → base64.
+    const message = [
+      item.pspReference ?? "",
+      item.originalReference ?? "",
+      item.merchantAccountCode ?? "",
+      item.merchantReference ?? "",
+      item.amount?.value ?? "",
+      item.amount?.currency ?? "",
+      item.eventCode ?? "",
+      item.success ?? "",
+    ].join(":");
+    const expected = createHmac("sha256", keyBytes).update(message, "utf8").digest("base64");
+    const provided = item.additionalData?.["metadata.hmacSignature"] ?? item.additionalData?.hmacSignature;
+    // Authentication is delivery-wide: never process a valid item from a
+    // payload that also contains an item whose signature cannot be verified.
+    if (!provided || !safeEqual(expected, String(provided))) return invalidWebhook();
+    if (item.eventCode === "AUTHORISATION" && item.success === "true") {
+      events.push({
+        externalRef: String(item.pspReference ?? ""),
+        linkToken: item.merchantReference ?? null,
+        status: "succeeded",
+        paidAmount:
+          item.amount?.value != null && item.amount?.currency
+            ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
+            : null,
+        raw: payload,
+      });
+    } else if (item.eventCode === "AUTHORISATION" && item.success !== "true") {
+      events.push({ externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload });
+    } else if (item.eventCode === "CANCELLATION" || item.eventCode === "CANCEL_OR_REFUND") {
+      events.push({ externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload });
+    }
+  }
+  return verifiedWebhook(events);
+}
 
 const adyenAdapter: PaymentProviderAdapter = {
   key: "adyen",
@@ -272,54 +352,56 @@ const adyenAdapter: PaymentProviderAdapter = {
     if (!json?.id || !json?.url) throw new PaymentAcceptanceError("adyen returned no session url");
     return { redirectUrl: json.url, externalRef: json.id };
   },
+  verifyWebhookDelivery: verifyAdyenWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
-    if (!secrets.webhookSecret) return null; // webhookSecret = base64 HMAC key
-    let payload: any;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return null;
-    }
-    const item = payload?.notificationItems?.[0]?.NotificationRequestItem;
-    if (!item) return null;
-    // Adyen signs the concatenation of these fields with HMAC-SHA256 → base64.
-    const message = [
-      item.pspReference ?? "",
-      item.originalReference ?? "",
-      item.merchantAccountCode ?? "",
-      item.merchantReference ?? "",
-      item.amount?.value ?? "",
-      item.amount?.currency ?? "",
-      item.eventCode ?? "",
-      item.success ?? "",
-    ].join(":");
-    const keyBytes = Buffer.from(secrets.webhookSecret, "base64");
-    const expected = createHmac("sha256", keyBytes).update(message, "utf8").digest("base64");
-    const provided = item.additionalData?.["metadata.hmacSignature"] ?? item.additionalData?.hmacSignature;
-    if (!provided || !safeEqual(expected, String(provided))) return null;
-    if (item.eventCode === "AUTHORISATION" && item.success === "true") {
-      return {
-        externalRef: String(item.pspReference ?? ""),
-        linkToken: item.merchantReference ?? null,
-        status: "succeeded",
-        paidAmount:
-          item.amount?.value != null && item.amount?.currency
-            ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
-            : null,
-        raw: payload,
-      };
-    }
-    if (item.eventCode === "AUTHORISATION" && item.success !== "true") {
-      return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload };
-    }
-    if (item.eventCode === "CANCELLATION" || item.eventCode === "CANCEL_OR_REFUND") {
-      return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload };
-    }
-    return null;
+    return verifyAdyenWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
   },
 };
 
 // --- GoCardless (bank debit / ACH) -----------------------------------------
+
+function verifyGoCardlessWebhookDelivery(
+  headers: Record<string, string | string[] | undefined>,
+  rawBody: string,
+  secrets: ProviderSecrets,
+): WebhookVerification {
+  if (!secrets.webhookSecret) return invalidWebhook();
+  const sigHeader = headers["webhook-signature"];
+  const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
+  if (!sig) return invalidWebhook();
+  const expected = hmacSha256Hex(secrets.webhookSecret, rawBody);
+  if (!safeEqual(expected, sig)) return invalidWebhook();
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return verifiedWebhook([]);
+  }
+  const providerEvents = Array.isArray(payload?.events) ? payload.events : [];
+  const events: WebhookEvent[] = [];
+  for (const event of providerEvents) {
+    const brId = event?.links?.billing_request ?? null;
+    const paymentId = event?.links?.payment ?? event?.links?.billing_request ?? "";
+    // Checkout stores the billing request id as the attempt's external_ref,
+    // while payment events reference the payment id — every payment event
+    // carries the billing request so resolution can match either side.
+    const alternateRef = brId && brId !== paymentId ? brId : null;
+    if (event?.resource_type === "payments" && (event.action === "confirmed" || event.action === "paid_out")) {
+      events.push({ externalRef: String(paymentId), alternateExternalRef: alternateRef, linkToken: null, status: "succeeded", raw: payload });
+    } else if (event?.resource_type === "payments" && (event.action === "failed" || event.action === "charged_back")) {
+      events.push({
+        externalRef: String(paymentId),
+        alternateExternalRef: alternateRef,
+        linkToken: null,
+        status: event.action === "failed" ? "failed" : "refunded",
+        raw: payload,
+      });
+    } else if (event?.resource_type === "billing_requests" && event.action === "cancelled") {
+      events.push({ externalRef: String(brId ?? paymentId), linkToken: null, status: "cancelled", raw: payload });
+    }
+  }
+  return verifiedWebhook(events);
+}
 
 const gocardlessAdapter: PaymentProviderAdapter = {
   key: "gocardless",
@@ -361,43 +443,9 @@ const gocardlessAdapter: PaymentProviderAdapter = {
     if (flowRes.status >= 400 || !url) throw new PaymentAcceptanceError(`gocardless flow failed: ${flow?.error?.message ?? flowRes.status}`);
     return { redirectUrl: url, externalRef: brId };
   },
+  verifyWebhookDelivery: verifyGoCardlessWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {
-    if (!secrets.webhookSecret) return null;
-    const sigHeader = headers["webhook-signature"];
-    const sig = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
-    if (!sig) return null;
-    const expected = hmacSha256Hex(secrets.webhookSecret, rawBody);
-    if (!safeEqual(expected, sig)) return null;
-    let payload: any;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return null;
-    }
-    const event = payload?.events?.[0];
-    if (!event) return null;
-    const brId = event.links?.billing_request ?? null;
-    const paymentId = event.links?.payment ?? event.links?.billing_request ?? "";
-    // Checkout stores the billing request id as the attempt's external_ref,
-    // while payment events reference the payment id — every payment event
-    // carries the billing request so resolution can match either side.
-    const alternateRef = brId && brId !== paymentId ? brId : null;
-    if (event.resource_type === "payments" && (event.action === "confirmed" || event.action === "paid_out")) {
-      return { externalRef: String(paymentId), alternateExternalRef: alternateRef, linkToken: null, status: "succeeded", raw: payload };
-    }
-    if (event.resource_type === "payments" && (event.action === "failed" || event.action === "charged_back")) {
-      return {
-        externalRef: String(paymentId),
-        alternateExternalRef: alternateRef,
-        linkToken: null,
-        status: event.action === "failed" ? "failed" : "refunded",
-        raw: payload,
-      };
-    }
-    if (event.resource_type === "billing_requests" && event.action === "cancelled") {
-      return { externalRef: String(brId ?? paymentId), linkToken: null, status: "cancelled", raw: payload };
-    }
-    return null;
+    return verifyGoCardlessWebhookDelivery(headers, rawBody, secrets).events[0] ?? null;
   },
 };
 
@@ -775,16 +823,27 @@ export async function createCheckoutSession(
  * Verify and route a provider webhook. The provider signature is checked
  * against EVERY org configured for acceptance with this provider — per-org
  * webhook secrets share one provider endpoint, so sibling orgs can verify the
- * same delivery and each verifying org must get a chance to claim its attempt.
- * Returns null when no signature verifies anywhere; otherwise the org that
- * resolved the event, or the first verifying org with "unknown_attempt" when
- * none of them owned it.
+ * same delivery and each verifying org must get a chance to claim each event.
+ * Returns null only when no signature verifies anywhere. Authenticated
+ * deliveries containing no actionable events return "unhandled" so the HTTP
+ * boundary acknowledges them instead of misreporting a signature failure.
  */
+export interface ProviderWebhookResult {
+  signatureValid: true;
+  orgId: string;
+  status: string;
+  eventResults: {
+    externalRef: string;
+    orgId: string;
+    status: string;
+  }[];
+}
+
 export async function handleProviderWebhook(
   provider: AcceptanceProvider,
   headers: Record<string, string | string[] | undefined>,
   rawBody: string,
-): Promise<{ orgId: string; status: string } | null> {
+): Promise<ProviderWebhookResult | null> {
   const configs = await withBypassContext(async () =>
     db.execute(sql`
       select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
@@ -793,19 +852,35 @@ export async function handleProviderWebhook(
        where provider = ${provider} and is_enabled and acceptance_enabled
     `)) as unknown as { rows: (ProviderConfigRow & { org_id: string })[] };
   const adapter = ACCEPTANCE_ADAPTERS[provider];
-  const verified: { orgId: string; event: WebhookEvent }[] = [];
+  const verified: { orgId: string; events: WebhookEvent[] }[] = [];
   for (const config of configs.rows) {
-    const event = adapter.verifyWebhook(headers, rawBody, configSecrets(config));
-    if (event) verified.push({ orgId: config.org_id, event });
+    const delivery = adapter.verifyWebhookDelivery(headers, rawBody, configSecrets(config));
+    if (delivery.signatureValid) verified.push({ orgId: config.org_id, events: delivery.events });
   }
   if (verified.length === 0) return null;
-  let unresolved: { orgId: string; status: string } | null = null;
-  for (const v of verified) {
-    const status = await withOrg(v.orgId, () => processWebhookEvent(v.orgId, provider, v.event));
-    if (status !== "unknown_attempt") return { orgId: v.orgId, status };
-    unresolved ??= { orgId: v.orgId, status };
+  const events = verified[0]?.events ?? [];
+  const eventResults: ProviderWebhookResult["eventResults"] = [];
+  for (const event of events) {
+    let unresolved: ProviderWebhookResult["eventResults"][number] | null = null;
+    for (const candidate of verified) {
+      const status = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+      const result = { externalRef: event.externalRef, orgId: candidate.orgId, status };
+      if (status !== "unknown_attempt") {
+        eventResults.push(result);
+        unresolved = null;
+        break;
+      }
+      unresolved ??= result;
+    }
+    if (unresolved) eventResults.push(unresolved);
   }
-  return unresolved;
+  const primary = eventResults.find((result) => result.status !== "unknown_attempt") ?? eventResults[0];
+  return {
+    signatureValid: true,
+    orgId: primary?.orgId ?? verified[0]!.orgId,
+    status: eventResults.length === 0 ? "unhandled" : eventResults.length === 1 ? primary!.status : "processed",
+    eventResults,
+  };
 }
 
 /**
