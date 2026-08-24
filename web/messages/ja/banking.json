@@ -520,6 +520,42 @@
   },
   "pspSettlements": {
     "acceptanceNote": "決済は入金後の照合です。請求書のホスト型決済リンクは別途こちらで設定します：",
-    "acceptanceLink": "会社設定 → 決済プロバイダー"
+    "acceptanceLink": "会社設定 → 決済プロバイダー",
+    "title": "PSP 決済照合",
+    "description": "決済プロバイダーからの入金明細をインポートします。手数料、異議申立て、為替調整は総勘定元帳に転記されます。",
+    "invalidJson": "有効な JSON 形式のペイロードを入力してください。",
+    "importFailed": "決済明細をインポートできませんでした。",
+    "postFailed": "決済明細を転記できませんでした。",
+    "reversalFailed": "決済明細を取消転記できませんでした。",
+    "reasonTooShort": "5文字以上の取消理由を入力してください。",
+    "importedToast": "バッチ {id} をインポートしました。",
+    "postedToast": "仕訳 {id} を転記しました。",
+    "reversedToast": "統制された取消仕訳 {id} を転記しました。",
+    "importTitle": "決済明細をインポート",
+    "providerLabel": "プロバイダー",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "外部参照番号 / 入金 ID",
+    "settlementDate": "決済日",
+    "bankAccountId": "銀行勘定 ID",
+    "feeAccountId": "手数料勘定 ID",
+    "clearingAccountId": "決済仮勘定 ID",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "残高取引の JSON 配列",
+    "genericPayloadLabel": "決済明細の JSON オブジェクト",
+    "importDraft": "下書きとしてインポート",
+    "recentBatches": "最近のバッチ",
+    "reversalDate": "取消日",
+    "reversalReason": "取消理由",
+    "reversalPlaceholder": "統制された訂正に必要な根拠",
+    "colProvider": "プロバイダー",
+    "colNet": "純額",
+    "reverse": "取消",
+    "empty": "インポートされた決済明細はまだありません。"
   }
 }

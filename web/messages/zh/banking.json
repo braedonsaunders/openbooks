@@ -520,6 +520,42 @@
   },
   "pspSettlements": {
     "acceptanceNote": "结算用于事后核对平台打款。发票托管支付链接在以下位置单独配置：",
-    "acceptanceLink": "公司设置 → 支付服务商"
+    "acceptanceLink": "公司设置 → 支付服务商",
+    "title": "PSP 结算",
+    "description": "导入支付服务商的打款结算。手续费、争议款项和外汇调整将过账至总账。",
+    "invalidJson": "有效负载必须是有效的 JSON。",
+    "importFailed": "无法导入结算。",
+    "postFailed": "无法过账结算。",
+    "reversalFailed": "无法冲销结算。",
+    "reasonTooShort": "请输入至少 5 个字符的冲销原因。",
+    "importedToast": "已导入批次 {id}。",
+    "postedToast": "已过账日记账 {id}。",
+    "reversedToast": "已过账受控冲销日记账 {id}。",
+    "importTitle": "导入结算",
+    "providerLabel": "服务商",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "外部参考号 / 打款 ID",
+    "settlementDate": "结算日期",
+    "bankAccountId": "银行科目 ID",
+    "feeAccountId": "手续费科目 ID",
+    "clearingAccountId": "清算科目 ID",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "余额交易 JSON 数组",
+    "genericPayloadLabel": "结算 JSON 对象",
+    "importDraft": "导入草稿",
+    "recentBatches": "最近批次",
+    "reversalDate": "冲销日期",
+    "reversalReason": "冲销原因",
+    "reversalPlaceholder": "受控更正所需的依据",
+    "colProvider": "服务商",
+    "colNet": "净额",
+    "reverse": "冲销",
+    "empty": "尚未导入任何结算。"
   }
 }

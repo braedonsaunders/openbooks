@@ -516,7 +516,43 @@
     }
   },
   "pspSettlements": {
-    "acceptanceNote": "Les règlements rapprochent les versements après coup. Les liens de paiement hébergés se configurent sous",
-    "acceptanceLink": "Paramètres → Fournisseurs de paiement"
+    "acceptanceNote": "Les règlements rapprochent les versements après leur traitement. Les liens de paiement hébergés pour le règlement des factures se configurent séparément sous",
+    "acceptanceLink": "Paramètres de l’entreprise → Fournisseurs de paiement",
+    "title": "Règlements des prestataires de paiement",
+    "description": "Importez les règlements de versement des prestataires de paiement. Les frais, les litiges et les ajustements de change sont comptabilisés dans le grand livre.",
+    "invalidJson": "Les données doivent être au format JSON valide.",
+    "importFailed": "Impossible d’importer le règlement.",
+    "postFailed": "Impossible de comptabiliser le règlement.",
+    "reversalFailed": "Impossible de contrepasser le règlement.",
+    "reasonTooShort": "Saisissez un motif de contrepassation d’au moins 5 caractères.",
+    "importedToast": "Lot {id} importé.",
+    "postedToast": "Journal {id} comptabilisé.",
+    "reversedToast": "Journal de contrepassation contrôlée {id} comptabilisé.",
+    "importTitle": "Importer un règlement",
+    "providerLabel": "Prestataire",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "Référence externe / identifiant du versement",
+    "settlementDate": "Date de règlement",
+    "bankAccountId": "Identifiant du compte bancaire",
+    "feeAccountId": "Identifiant du compte de frais",
+    "clearingAccountId": "Identifiant du compte de compensation",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "Tableau JSON des opérations de solde",
+    "genericPayloadLabel": "Objet JSON du règlement",
+    "importDraft": "Importer le brouillon",
+    "recentBatches": "Lots récents",
+    "reversalDate": "Date de contrepassation",
+    "reversalReason": "Motif de contrepassation",
+    "reversalPlaceholder": "Justificatif requis pour une correction contrôlée",
+    "colProvider": "Prestataire",
+    "colNet": "Net",
+    "reverse": "Contrepasser",
+    "empty": "Aucun règlement importé."
   }
 }

@@ -519,7 +519,43 @@
     }
   },
   "pspSettlements": {
-    "acceptanceNote": "As liquidações reconciliam repasses posteriormente. Os links de pagamento hospedados são configurados em",
-    "acceptanceLink": "Configurações → Provedores de pagamento"
+    "acceptanceNote": "As liquidações conciliam os repasses após sua realização. Os links de pagamento hospedados (checkout do cliente nas faturas) são configurados separadamente em",
+    "acceptanceLink": "Configurações da empresa → Provedores de pagamento",
+    "title": "Liquidações de PSP",
+    "description": "Importe liquidações de repasses de provedores de pagamento. Tarifas, contestações e ajustes cambiais são contabilizados no razão geral.",
+    "invalidJson": "A carga útil deve conter JSON válido.",
+    "importFailed": "Não foi possível importar a liquidação.",
+    "postFailed": "Não foi possível contabilizar a liquidação.",
+    "reversalFailed": "Não foi possível estornar a liquidação.",
+    "reasonTooShort": "Informe um motivo de estorno com pelo menos 5 caracteres.",
+    "importedToast": "O lote {id} foi importado.",
+    "postedToast": "O lançamento {id} foi contabilizado.",
+    "reversedToast": "O lançamento de estorno controlado {id} foi contabilizado.",
+    "importTitle": "Importar liquidação",
+    "providerLabel": "Provedor",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "Referência externa / ID do repasse",
+    "settlementDate": "Data da liquidação",
+    "bankAccountId": "ID da conta bancária",
+    "feeAccountId": "ID da conta de tarifas",
+    "clearingAccountId": "ID da conta de compensação",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "Array JSON de transações de saldo",
+    "genericPayloadLabel": "Objeto JSON da liquidação",
+    "importDraft": "Importar rascunho",
+    "recentBatches": "Lotes recentes",
+    "reversalDate": "Data do estorno",
+    "reversalReason": "Motivo do estorno",
+    "reversalPlaceholder": "Evidência obrigatória para uma correção controlada",
+    "colProvider": "Provedor",
+    "colNet": "Líquido",
+    "reverse": "Estornar",
+    "empty": "Nenhuma liquidação importada ainda."
   }
 }

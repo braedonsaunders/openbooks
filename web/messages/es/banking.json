@@ -516,7 +516,43 @@
     }
   },
   "pspSettlements": {
-    "acceptanceNote": "Las liquidaciones concilian los pagos a posteriori. Los enlaces de pago alojados se configuran en",
-    "acceptanceLink": "Configuración → Proveedores de pago"
+    "acceptanceNote": "Las liquidaciones concilian los desembolsos después de efectuados. Los enlaces de pago alojados (pago del cliente en las facturas) se configuran por separado en",
+    "acceptanceLink": "Configuración de la empresa → Proveedores de pago",
+    "title": "Liquidaciones de PSP",
+    "description": "Importe liquidaciones de desembolsos de proveedores de pago. Las comisiones, disputas y diferencias de cambio se contabilizan en el libro mayor.",
+    "invalidJson": "La carga útil debe contener JSON válido.",
+    "importFailed": "No se pudo importar la liquidación.",
+    "postFailed": "No se pudo contabilizar la liquidación.",
+    "reversalFailed": "No se pudo revertir la liquidación.",
+    "reasonTooShort": "Introduzca un motivo de reversión de al menos 5 caracteres.",
+    "importedToast": "Se importó el lote {id}.",
+    "postedToast": "Se contabilizó el asiento {id}.",
+    "reversedToast": "Se contabilizó el asiento de reversión controlada {id}.",
+    "importTitle": "Importar liquidación",
+    "providerLabel": "Proveedor",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "Referencia externa / ID de desembolso",
+    "settlementDate": "Fecha de liquidación",
+    "bankAccountId": "ID de la cuenta bancaria",
+    "feeAccountId": "ID de la cuenta de comisiones",
+    "clearingAccountId": "ID de la cuenta de compensación",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "Array JSON de transacciones de saldo",
+    "genericPayloadLabel": "Objeto JSON de la liquidación",
+    "importDraft": "Importar borrador",
+    "recentBatches": "Lotes recientes",
+    "reversalDate": "Fecha de reversión",
+    "reversalReason": "Motivo de reversión",
+    "reversalPlaceholder": "Evidencia obligatoria para una corrección controlada",
+    "colProvider": "Proveedor",
+    "colNet": "Neto",
+    "reverse": "Revertir",
+    "empty": "Aún no se han importado liquidaciones."
   }
 }
