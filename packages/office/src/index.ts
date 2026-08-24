@@ -149,32 +149,116 @@ export async function reportResultToXlsx(
 // --- reading (bulk import) ---------------------------------------------------
 
 /**
- * Read the first worksheet of an .xlsx workbook into a header row + string
- * cells. Row 1 is treated as the header. Used by the generic bulk importer;
- * ExcelJS stays isolated in this package (never reaches the client bundle).
+ * Read the first worksheet of an .xlsx workbook into a header row + typed
+ * cells. Row 1 is treated as the header. Literal numbers remain numbers, while
+ * formulas carry their cached scalar plus an explicit tag. Flattening either
+ * kind to an unmarked string would let downstream exact-decimal validators
+ * mistake rounded or formula-derived values for user-supplied text. ExcelJS
+ * stays isolated in this package (never reaches the client bundle).
  */
-export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: string[][] }> {
+export interface SheetFormulaCellValue {
+  kind: 'formula'
+  value: string | number
+}
+
+export type SheetCellValue = string | number | SheetFormulaCellValue
+
+export function isSheetFormulaCellValue(value: SheetCellValue): value is SheetFormulaCellValue {
+  return typeof value === 'object' && value.kind === 'formula'
+}
+
+interface SheetCellRange {
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
+function columnNumber(label: string): number {
+  let number = 0
+  for (const char of label.toUpperCase()) number = number * 26 + char.charCodeAt(0) - 64
+  return number
+}
+
+function sheetCellRange(ref: string): SheetCellRange | null {
+  const match = ref.match(/^\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/i)
+  if (!match) return null
+  const firstColumn = columnNumber(match[1]!)
+  const firstRow = Number(match[2])
+  const lastColumn = columnNumber(match[3] ?? match[1]!)
+  const lastRow = Number(match[4] ?? match[2])
+  return {
+    top: Math.min(firstRow, lastRow),
+    bottom: Math.max(firstRow, lastRow),
+    left: Math.min(firstColumn, lastColumn),
+    right: Math.max(firstColumn, lastColumn),
+  }
+}
+
+export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: SheetCellValue[][] }> {
   const wb = new ExcelJS.Workbook()
-  await wb.xlsx.load(buffer as unknown as ArrayBuffer)
+  // ExcelJS otherwise decorates hyperlinked formula cells as hyperlink values
+  // and drops their formula/result shape. Imports do not expose link targets,
+  // so ignore that decoration and retain the underlying formula provenance.
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer, { ignoreNodes: ['hyperlinks'] })
   const ws = wb.worksheets[0]
   if (!ws) return { headers: [], rows: [] }
-  const cell = (v: ExcelJS.CellValue): string => {
+  const arrayFormulaRanges: SheetCellRange[] = []
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    row.eachCell({ includeEmpty: false }, (worksheetCell) => {
+      const value = worksheetCell.value
+      if (value === null || typeof value !== 'object' || value instanceof Date) return
+      const formula = value as { shareType?: string; ref?: string }
+      if (formula.shareType !== 'array' || typeof formula.ref !== 'string') return
+      const range = sheetCellRange(formula.ref)
+      if (range) arrayFormulaRanges.push(range)
+    })
+  })
+  const scalar = (v: unknown): string | number => {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'number') return v
+    if (v instanceof Date) return v.toISOString().slice(0, 10)
+    return typeof v === 'string' ? v : String(v)
+  }
+  const cell = (v: ExcelJS.CellValue, inArrayFormula: boolean): SheetCellValue => {
     if (v === null || v === undefined) return ''
     if (typeof v === 'object') {
-      const o = v as { text?: string; result?: unknown; hyperlink?: string }
+      const o = v as {
+        text?: string
+        result?: unknown
+        hyperlink?: string
+        formula?: string
+        sharedFormula?: string
+      }
+      if (typeof o.formula === 'string' || typeof o.sharedFormula === 'string') {
+        return { kind: 'formula', value: scalar(o.result) }
+      }
+      if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
       if (typeof o.text === 'string') return o.text
-      if (o.result !== undefined) return String(o.result)
       if (v instanceof Date) return v.toISOString().slice(0, 10)
       return ''
     }
-    return String(v)
+    if (inArrayFormula) return { kind: 'formula', value: scalar(v) }
+    return scalar(v)
   }
-  const matrix: string[][] = []
+  const matrix: SheetCellValue[][] = []
   ws.eachRow({ includeEmpty: false }, (row) => {
     const values = row.values as ExcelJS.CellValue[] // 1-based; index 0 is null
-    matrix.push(values.slice(1).map(cell))
+    matrix.push(values.slice(1).map((value, index) => {
+      const column = index + 1
+      const inArrayFormula = arrayFormulaRanges.some(
+        (range) =>
+          row.number >= range.top &&
+          row.number <= range.bottom &&
+          column >= range.left &&
+          column <= range.right,
+      )
+      return cell(value, inArrayFormula)
+    }))
   })
-  const headers = (matrix.shift() ?? []).map((h) => h.trim())
+  const headers = (matrix.shift() ?? []).map((h) =>
+    String(isSheetFormulaCellValue(h) ? h.value : h).trim(),
+  )
   return { headers, rows: matrix }
 }
 

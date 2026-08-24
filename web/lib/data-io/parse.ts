@@ -1,12 +1,16 @@
 import 'server-only'
 import { parseCsvRows } from '@openbooks/engine/src/banking.ts'
-import { readSheet } from '@openbooks/office'
-import type { ImportFormat } from './types'
+import { isSheetFormulaCellValue, readSheet, type SheetCellValue } from '@openbooks/office'
+import { CELL_PROVENANCE_KEY, type CellProvenance, type ImportFormat } from './types'
 
 export interface ParsedFile {
   /** Column headers found in the file (in order). */
   headers: string[]
-  /** Every data row, keyed by header. */
+  /**
+   * Every data row, keyed by header. XLSX numbers remain numbers, text remains
+   * text, and formula provenance is carried under `CELL_PROVENANCE_KEY` so a
+   * formula's cached string cannot masquerade as literal input.
+   */
   rows: Record<string, unknown>[]
 }
 
@@ -34,14 +38,30 @@ export async function parseImportFile(
   return matrixToObjects(headers, matrix)
 }
 
-function matrixToObjects(headers: string[], rows: (string | number | null)[][]): ParsedFile {
+function matrixToObjects(headers: string[], rows: (SheetCellValue | null)[][]): ParsedFile {
   const out: Record<string, unknown>[] = []
   for (const row of rows.slice(0, MAX_IMPORT_ROWS)) {
-    if (row.every((c) => c === null || c === undefined || String(c).trim() === '')) continue
+    if (
+      row.every((c) => {
+        const value = c !== null && c !== undefined && isSheetFormulaCellValue(c) ? c.value : c
+        return value === null || value === undefined || String(value).trim() === ''
+      })
+    ) {
+      continue
+    }
     const obj: Record<string, unknown> = {}
+    const provenance: Record<string, CellProvenance> = {}
     headers.forEach((h, i) => {
-      if (h) obj[h] = row[i] ?? ''
+      if (!h) return
+      const cell = row[i]
+      if (cell !== null && cell !== undefined && isSheetFormulaCellValue(cell)) {
+        obj[h] = cell.value
+        provenance[h] = 'formula'
+      } else {
+        obj[h] = cell ?? ''
+      }
     })
+    if (Object.keys(provenance).length > 0) obj[CELL_PROVENANCE_KEY] = provenance
     out.push(obj)
   }
   return { headers, rows: out }

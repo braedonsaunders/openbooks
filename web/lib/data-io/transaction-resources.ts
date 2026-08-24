@@ -16,6 +16,9 @@ import {
   type WriteCtx,
 } from './resource-core'
 import {
+  CELL_PROVENANCE_KEY,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
   type CellValue,
   type ResourceDescriptor,
   type ResourceField,
@@ -83,6 +86,26 @@ interface TxnLineInput {
   taxCode?: unknown
   quantity?: unknown
   unitPrice?: unknown
+}
+
+// Kept in lockstep with parse.ts and the import route's reserved mapping keys.
+// Formula provenance starts under CELL_PROVENANCE_KEY on a parsed row; the
+// route retains the selected source entries under that key and records each
+// mapped source header under SOURCE_COLUMNS_KEY. The nested lookup accepts rows
+// produced by the earlier metadata handoff as well.
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function formulaDerivedField(src: Record<string, unknown>, field: string): boolean {
+  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY])
+  const source = typeof sourceColumns?.[field] === 'string' ? sourceColumns[field] : field
+  const direct = objectRecord(src[CELL_PROVENANCE_KEY])
+  const unmapped = objectRecord(src[UNMAPPED_COLUMNS_KEY])
+  const mapped = objectRecord(unmapped?.[CELL_PROVENANCE_KEY])
+  return direct?.[source] === 'formula' || mapped?.[source] === 'formula'
 }
 
 export function transactionResource(cfg: DocKindConfig, orgId: string): DataResource {
@@ -217,7 +240,13 @@ async function writeTransactions(
       }
 
       // Assemble lines (JSON `lines` wins; else the flat single-line columns).
-      const rawLines: TxnLineInput[] = parseLines(src)
+      const parsedLines = parseLines(src)
+      if (parsedLines.error) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: parsedLines.error })
+        continue
+      }
+      const rawLines = parsedLines.lines
       if (rawLines.length === 0) {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: 'at least one line (account + amount) is required' })
@@ -234,7 +263,7 @@ async function writeTransactions(
         const amount = exactLineAmount(l.amount)
         if (amount === null) {
           lineErr =
-            `line amount "${String(l.amount ?? '')}" must be an exact decimal with at most 4 decimal places`
+            `line amount "${String(l.amount ?? '')}" must be an exact decimal string with at most 4 decimal places`
           break
         }
         let taxCodeId: string | null = null
@@ -329,12 +358,11 @@ async function writeTransactions(
 }
 
 function exactLineAmount(value: unknown): string | null {
-  if (
-    typeof value !== 'string' &&
-    (typeof value !== 'number' || !Number.isSafeInteger(value))
-  ) {
-    return null
-  }
+  // A JSON number has already crossed IEEE-754 before it reaches this
+  // boundary. Even `Number.isSafeInteger` cannot recover the source token:
+  // 999999999999998.99 arrives here as the safe integer 999999999999999.
+  // Require the import representation to retain the original decimal text.
+  if (typeof value !== 'string') return null
   const exact = canonicalDecimal(value, 4)
   if (exact === null) return null
   try {
@@ -344,18 +372,33 @@ function exactLineAmount(value: unknown): string | null {
   }
 }
 
-function parseLines(src: Record<string, unknown>): TxnLineInput[] {
+function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; error: string | null } {
   const raw = src.lines
   if (raw !== undefined && raw !== null && raw !== '') {
+    if (formulaDerivedField(src, 'lines')) {
+      return {
+        lines: [],
+        error: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+      }
+    }
     try {
       const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
-      if (Array.isArray(arr)) return arr as TxnLineInput[]
+      if (Array.isArray(arr)) return { lines: arr as TxnLineInput[], error: null }
     } catch {
       /* fall through to single-line */
     }
   }
   if (src.account && src.amount !== undefined && src.amount !== '') {
-    return [{ account: src.account, amount: src.amount, description: src.description, taxCode: src.taxCode }]
+    if (formulaDerivedField(src, 'amount')) {
+      return {
+        lines: [],
+        error: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      }
+    }
+    return {
+      lines: [{ account: src.account, amount: src.amount, description: src.description, taxCode: src.taxCode }],
+      error: null,
+    }
   }
-  return []
+  return { lines: [], error: null }
 }
