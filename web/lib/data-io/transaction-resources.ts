@@ -234,7 +234,7 @@ async function writeTransactions(
         const amount = exactLineAmount(l.amount)
         if (amount === null) {
           lineErr =
-            `line amount "${String(l.amount ?? '')}" must be an exact decimal with at most 4 decimal places`
+            `line amount "${String(l.amount ?? '')}" must be an exact decimal string with at most 4 decimal places`
           break
         }
         let taxCodeId: string | null = null
@@ -329,12 +329,11 @@ async function writeTransactions(
 }
 
 function exactLineAmount(value: unknown): string | null {
-  if (
-    typeof value !== 'string' &&
-    (typeof value !== 'number' || !Number.isSafeInteger(value))
-  ) {
-    return null
-  }
+  // A JSON number has already crossed IEEE-754 before it reaches this
+  // boundary. Even `Number.isSafeInteger` cannot recover the source token:
+  // 999999999999998.99 arrives here as the safe integer 999999999999999.
+  // Require the import representation to retain the original decimal text.
+  if (typeof value !== 'string') return null
   const exact = canonicalDecimal(value, 4)
   if (exact === null) return null
   try {
