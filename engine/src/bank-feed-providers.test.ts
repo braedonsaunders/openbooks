@@ -62,6 +62,49 @@ test("Plaid endpoint allowlist rejects SSRF payloads and inherited keys", () => 
   }
 });
 
+test("Plaid environment resolution requires a string name hitting an own allowlist key", () => {
+  // Absent environment keeps its documented production default.
+  assert.equal(plaidApiBase(), "https://production.plaid.com");
+  // A crafted object whose toString() spoofs an allowed environment must not
+  // reach String coercion, and inherited/polluted names never resolve.
+  const spoofingEnvironment = { toString: () => "sandbox" };
+  for (const environment of [null, 5, true, {}, ["sandbox"], spoofingEnvironment]) {
+    assert.throws(() => plaidApiBase(environment), /production or sandbox/);
+  }
+});
+
+test("Plaid credentials with non-string environments fail closed before network I/O", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async () => {
+    requests += 1;
+    throw new Error("non-string Plaid environments must not be contacted");
+  };
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  for (const env of [5, null, true, {}, ["sandbox"], { toString: () => "sandbox" }]) {
+    const credentials = {
+      clientId: "client-id",
+      secret: "provider-secret",
+      accessToken: "access-token",
+      env,
+    } as unknown as Record<string, string>;
+    assert.deepEqual(await plaid.test(credentials), {
+      ok: false,
+      detail: "Plaid environment must be production or sandbox",
+    });
+    await assert.rejects(
+      plaid.fetch(credentials, "account-id", "2026-01-01", "2026-01-31"),
+      /Plaid environment must be production or sandbox/,
+    );
+  }
+  assert.equal(requests, 0);
+});
+
 test("Plaid rejects non-allowlisted endpoints before network I/O", async (t) => {
   const originalFetch = globalThis.fetch;
   let requests = 0;
