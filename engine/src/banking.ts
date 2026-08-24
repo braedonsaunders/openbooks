@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db, schema, type SqlExecutor } from "./db.ts";
 import { fromUnits, isZero, sum, toUnits } from "./money.ts";
@@ -47,6 +48,13 @@ export interface ParsedStatement {
 }
 
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
+
+/** Exact source bytes retained with an imported statement for later audit. */
+export interface StatementSourceEvidence {
+  content: string | Uint8Array;
+  filename?: string | null;
+  contentType?: string | null;
+}
 
 const CTX = Symbol();
 export interface BankingContext {
@@ -587,10 +595,97 @@ export function filterDuplicateStatementLines(
 export interface ImportResult {
   /** Null when every line was a duplicate (nothing was written). */
   statementId: string | null;
+  /** Pointer to the append-only audit row containing the exact source bytes. */
+  sourceEvidenceRef: string | null;
   imported: number;
   duplicates: number;
   /** The deduped lines (dry-run preview shows exactly what import would write). */
   lines: ParsedStatementLine[];
+}
+
+const MAX_STATEMENT_EVIDENCE_BYTES = 25 * 1024 * 1024;
+
+function defaultStatementContentType(source: StatementSource): string {
+  if (source === "ofx") return "application/x-ofx";
+  if (source === "csv") return "text/csv";
+  if (source === "camt053") return "application/xml";
+  if (source === "feed_api") return "application/json";
+  return "text/plain";
+}
+
+function defaultStatementFilename(source: StatementSource, hash: string): string {
+  const extension = source === "camt053" ? "xml" : source === "feed_api" ? "json" : source;
+  return `bank-statement-${hash.slice(0, 16)}.${extension}`;
+}
+
+function sourceEvidence(
+  opts: {
+    source: StatementSource;
+    sourceEvidence?: StatementSourceEvidence | null;
+    statementDate?: string | null;
+    openingBalance?: string | null;
+    closingBalance?: string | null;
+    currency?: string | null;
+  },
+  lines: ParsedStatementLine[],
+): {
+  auditId: string;
+  ref: string;
+  changes: Record<string, unknown>;
+} {
+  const supplied = opts.sourceEvidence;
+  const bytes = supplied
+    ? typeof supplied.content === "string"
+      ? Buffer.from(supplied.content, "utf8")
+      : Buffer.from(supplied.content)
+    : Buffer.from(
+        JSON.stringify({
+          source: opts.source,
+          statementDate: opts.statementDate ?? null,
+          openingBalance: opts.openingBalance ?? null,
+          closingBalance: opts.closingBalance ?? null,
+          currency: opts.currency ?? null,
+          lines,
+        }),
+        "utf8",
+      );
+  if (bytes.length === 0) {
+    throw new BankingError("Statement source evidence is empty");
+  }
+  if (bytes.length > MAX_STATEMENT_EVIDENCE_BYTES) {
+    throw new BankingError("Statement source evidence exceeds the 25 MB limit");
+  }
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const requestedContentType = supplied?.contentType?.trim().toLowerCase();
+  const contentType =
+    requestedContentType &&
+    /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/.test(requestedContentType)
+      ? requestedContentType
+      : defaultStatementContentType(opts.source);
+  const requestedFilename = supplied?.filename
+    ?.replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/^.*[\\/]/, "")
+    .trim()
+    .slice(0, 240);
+  const filename = requestedFilename || defaultStatementFilename(opts.source, sha256);
+  const auditId = randomUUID();
+  return {
+    auditId,
+    ref: `audit-log:${auditId}#sha256=${sha256}`,
+    changes: {
+      operation: "statement_import",
+      source: opts.source,
+      sourceEvidence: {
+        encoding: "base64",
+        content: bytes.toString("base64"),
+        filename,
+        contentType,
+        byteLength: bytes.length,
+        sha256,
+        provenance: supplied ? "original_source" : "normalized_import_request",
+      },
+    },
+  };
 }
 
 /**
@@ -599,8 +694,9 @@ export interface ImportResult {
  * skipped. Sources without transaction IDs cannot be safely content-deduped,
  * so their lines are retained on every import. With `dryRun` nothing is
  * written — used for preview.
- * `rawFileRef` stays null in v1 (no object storage yet); the schema column is
- * reserved for the original file's store key.
+ * Committed imports retain their exact source bytes in the append-only audit
+ * log and point `rawFileRef` to that evidence. Engine callers without an
+ * external file/feed payload retain a canonical copy of the import request.
  */
 export async function importStatement(
   opts: {
@@ -611,6 +707,7 @@ export async function importStatement(
     openingBalance?: string | null;
     closingBalance?: string | null;
     currency?: string | null;
+    sourceEvidence?: StatementSourceEvidence | null;
     dryRun?: boolean;
   },
   ctx: BankingContext,
@@ -649,6 +746,10 @@ export async function importStatement(
   const closingBalance = opts.closingBalance
     ? normalizeAmount(opts.closingBalance, "Closing balance")
     : null;
+  // Prepare before opening the transaction so preview exercises the same
+  // evidence limits as import and hashing/base64 work never holds the account
+  // dedupe lock.
+  const evidence = sourceEvidence(opts, opts.lines);
 
   return db.transaction(async (tx) => {
     // Serialize dedupe decisions for this tenant/account. The unique index is
@@ -684,6 +785,7 @@ export async function importStatement(
     if (opts.dryRun || fresh.length === 0) {
       return {
         statementId: null,
+        sourceEvidenceRef: null,
         imported: opts.dryRun ? fresh.length : 0,
         duplicates,
         lines: fresh,
@@ -718,7 +820,7 @@ export async function importStatement(
         statementDate,
         openingBalance,
         closingBalance,
-        rawFileRef: null, // v1: no object storage; text is parsed, not retained
+        rawFileRef: evidence.ref,
         createdBy: ctx.userId,
       })
       .returning({ id: schema.bankStatements.id });
@@ -738,8 +840,16 @@ export async function importStatement(
         createdBy: ctx.userId,
       })),
     );
+    await tx.execute(sql`
+      insert into audit_log
+        (id, org_id, table_name, row_id, action, changes, actor_id)
+      values
+        (${evidence.auditId}, ${ctx.orgId}, 'bank_statements', ${stmt.id}, 'insert',
+         ${JSON.stringify(evidence.changes)}::jsonb, ${ctx.userId})
+    `);
     return {
       statementId: stmt.id,
+      sourceEvidenceRef: evidence.ref,
       imported: fresh.length,
       duplicates,
       lines: fresh,

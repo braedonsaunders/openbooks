@@ -31,7 +31,11 @@ export const bankStatements = pgTable(
     openingBalance: money("opening_balance"),
     closingBalance: money("closing_balance"),
     importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
-    rawFileRef: text("raw_file_ref"), // file-store key of the original
+    /**
+     * Stable pointer to the exact source bytes. Current imports use an
+     * `audit-log:<id>#sha256=<hash>` reference whose target is append-only.
+     */
+    rawFileRef: text("raw_file_ref").notNull(),
     ...auditColumns,
   },
   (t) => [index("statements_account_date").on(t.accountId, t.statementDate)],
