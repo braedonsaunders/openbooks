@@ -1,22 +1,75 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Button, Card, Input, Label, PageHeader, Select } from "@openbooks/ui";
+import { useMoney } from "../../../../components/money-provider";
 import { useBusinessToday } from "../../../../components/business-date-provider";
 import {
   ListPageLayout,
   PageContainer,
 } from "../../../../components/page-layout";
 
+const SETTLEMENT_PROVIDERS = ["stripe", "adyen", "gocardless", "recurly", "chargebee"] as const;
+const SETTLEMENT_STATUSES = ["draft", "posted", "void"] as const;
+
+type SettlementProvider = (typeof SETTLEMENT_PROVIDERS)[number];
+type ImportProvider = Extract<SettlementProvider, "stripe" | "recurly" | "chargebee">;
+type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
 interface SettlementBatch {
   id: string;
-  provider: string;
+  provider: SettlementProvider;
   externalRef: string;
   settlementDate: string;
+  currency: string;
   netAmount: string;
-  status: string;
+  status: SettlementStatus;
+}
+
+const STATUS_MESSAGE: Record<SettlementStatus, "draft" | "posted" | "voided"> = {
+  draft: "draft",
+  posted: "posted",
+  void: "voided",
+};
+
+function isSettlementBatch(value: unknown): value is SettlementBatch {
+  if (!value || typeof value !== "object") return false;
+  const batch = value as Record<string, unknown>;
+  return typeof batch.id === "string"
+    && SETTLEMENT_PROVIDERS.includes(batch.provider as SettlementProvider)
+    && typeof batch.externalRef === "string"
+    && typeof batch.settlementDate === "string"
+    && typeof batch.currency === "string"
+    && typeof batch.netAmount === "string"
+    && SETTLEMENT_STATUSES.includes(batch.status as SettlementStatus);
+}
+
+async function fetchSettlements(signal?: AbortSignal): Promise<SettlementBatch[] | null> {
+  try {
+    const response = await fetch("/api/psp/settlements", { signal });
+    if (!response.ok) return null;
+    const data = await response.json() as { batches?: unknown };
+    if (!Array.isArray(data.batches) || !data.batches.every(isSettlementBatch)) return null;
+    return data.batches;
+  } catch {
+    return null;
+  }
+}
+
+async function requestSettlement<T>(body: Record<string, unknown>): Promise<T | null> {
+  try {
+    const response = await fetch("/api/psp/settlements", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) return null;
+    return await response.json() as T;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -25,9 +78,12 @@ interface SettlementBatch {
  */
 export default function PspSettlementsPage() {
   const t = useTranslations("banking.pspSettlements");
+  const common = useTranslations("common");
+  const format = useFormatter();
+  const { money } = useMoney();
   const today = useBusinessToday();
   const [batches, setBatches] = useState<SettlementBatch[]>([]);
-  const [provider, setProvider] = useState("stripe");
+  const [provider, setProvider] = useState<ImportProvider>("stripe");
   const [externalRef, setExternalRef] = useState("");
   const [settlementDate, setSettlementDate] = useState(today);
   const [payload, setPayload] = useState("[]");
@@ -38,16 +94,32 @@ export default function PspSettlementsPage() {
   const [reversalReason, setReversalReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
 
-  const load = async () => {
-    const r = await fetch("/api/psp/settlements");
-    if (r.ok) {
-      const d = await r.json();
-      setBatches(d.batches ?? []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadFailed(false);
+    const loadedBatches = await fetchSettlements();
+    if (loadedBatches === null) {
+      setLoadFailed(true);
+    } else {
+      setBatches(loadedBatches);
     }
-  };
+    setLoading(false);
+  }, []);
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void fetchSettlements(controller.signal).then((loadedBatches) => {
+      if (controller.signal.aborted) return;
+      if (loadedBatches === null) {
+        setLoadFailed(true);
+      } else {
+        setBatches(loadedBatches);
+      }
+      setLoading(false);
+    });
+    return () => controller.abort();
   }, []);
 
   const importBatch = async () => {
@@ -57,7 +129,7 @@ export default function PspSettlementsPage() {
     try {
       parsed = JSON.parse(payload);
     } catch {
-      setErr("Payload must be valid JSON");
+      setErr(t("invalidJson"));
       return;
     }
     const body: Record<string, unknown> = {
@@ -75,68 +147,60 @@ export default function PspSettlementsPage() {
     } else {
       body.payload = parsed;
     }
-    const r = await fetch("/api/psp/settlements", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      setErr(d.error ?? "Import failed");
+    const d = await requestSettlement<{ batchId?: string }>(body);
+    if (!d || typeof d.batchId !== "string") {
+      setErr(t("importFailed"));
       return;
     }
-    setMsg(`Imported batch ${d.batchId} (net ${d.totals?.netAmount ?? "—"})`);
+    setMsg(t("importedToast", { id: d.batchId }));
     void load();
   };
 
   const post = async (batchId: string) => {
     setErr(null);
-    const r = await fetch("/api/psp/settlements", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "post", batchId }),
-    });
-    const d = await r.json();
-    if (!r.ok) {
-      setErr(d.error ?? "Post failed");
+    const d = await requestSettlement<{ entryId?: string }>({ action: "post", batchId });
+    if (!d || typeof d.entryId !== "string") {
+      setErr(t("postFailed"));
       return;
     }
-    setMsg(`Posted journal ${d.entryId}`);
+    setMsg(t("postedToast", { id: d.entryId }));
     void load();
   };
 
   const reverse = async (batchId: string) => {
     setErr(null);
     if (reversalReason.trim().length < 5) {
-      setErr("Enter a reversal reason of at least 5 characters");
+      setErr(t("reasonTooShort"));
       return;
     }
-    const r = await fetch("/api/psp/settlements", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        action: "reverse",
-        batchId,
-        reversalDate,
-        reason: reversalReason,
-      }),
+    const d = await requestSettlement<{ entryId?: string }>({
+      action: "reverse",
+      batchId,
+      reversalDate,
+      reason: reversalReason,
     });
-    const d = await r.json();
-    if (!r.ok) {
-      setErr(d.error ?? "Reversal failed");
+    if (!d || typeof d.entryId !== "string") {
+      setErr(t("reversalFailed"));
       return;
     }
-    setMsg(`Posted controlled reversal journal ${d.entryId}`);
+    setMsg(t("reversedToast", { id: d.entryId }));
     setReversalReason("");
     void load();
   };
+
+  const settlementDateLabel = (value: string) => format.dateTime(
+    new Date(`${value}T12:00:00Z`),
+    { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" },
+  );
+  const providerLabel = (value: SettlementProvider) => t(`providers.${value}`);
+  const statusLabel = (value: SettlementStatus) => common(`status.${STATUS_MESSAGE[value]}`);
 
   return (
     <ListPageLayout
       header={
         <PageHeader
-          title="PSP settlements"
-          description="Import Stripe, Recurly, or Chargebee payouts. Fees, disputes, and FX post through the GL kernel."
+          title={t("title")}
+          description={t("description")}
         />
       }
     >
@@ -150,34 +214,34 @@ export default function PspSettlementsPage() {
             {t("acceptanceLink")}
           </Link>
         </p>
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {err && <p role="alert" className="text-sm text-red-600">{err}</p>}
         {msg && (
-          <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>
+          <p aria-live="polite" className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>
         )}
 
         <Card className="space-y-3 p-4">
-          <h3 className="text-sm font-semibold">Import settlement</h3>
+          <h3 className="text-sm font-semibold">{t("importTitle")}</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <Label>Provider</Label>
+              <Label>{t('providerLabel')}</Label>
               <Select
                 value={provider}
-                onChange={(e) => setProvider(e.target.value)}
+                onChange={(e) => setProvider(e.target.value as ImportProvider)}
               >
-                <option value="stripe">Stripe</option>
-                <option value="recurly">Recurly</option>
-                <option value="chargebee">Chargebee</option>
+                <option value="stripe">{t("providers.stripe")}</option>
+                <option value="recurly">{t("providers.recurly")}</option>
+                <option value="chargebee">{t("providers.chargebee")}</option>
               </Select>
             </div>
             <div>
-              <Label>External ref / payout id</Label>
+              <Label>{t('externalRef')}</Label>
               <Input
                 value={externalRef}
                 onChange={(e) => setExternalRef(e.target.value)}
               />
             </div>
             <div>
-              <Label>Settlement date</Label>
+              <Label>{t('settlementDate')}</Label>
               <Input
                 type="date"
                 value={settlementDate}
@@ -185,35 +249,35 @@ export default function PspSettlementsPage() {
               />
             </div>
             <div>
-              <Label>Bank account id</Label>
+              <Label>{t('bankAccountId')}</Label>
               <Input
                 value={bankAccountId}
                 onChange={(e) => setBankAccountId(e.target.value)}
-                placeholder="uuid"
+                placeholder={t("uuidPlaceholder")}
               />
             </div>
             <div>
-              <Label>Fee account id</Label>
+              <Label>{t('feeAccountId')}</Label>
               <Input
                 value={feeAccountId}
                 onChange={(e) => setFeeAccountId(e.target.value)}
-                placeholder="uuid"
+                placeholder={t("uuidPlaceholder")}
               />
             </div>
             <div>
-              <Label>Clearing account id</Label>
+              <Label>{t('clearingAccountId')}</Label>
               <Input
                 value={clearingAccountId}
                 onChange={(e) => setClearingAccountId(e.target.value)}
-                placeholder="uuid"
+                placeholder={t("uuidPlaceholder")}
               />
             </div>
           </div>
           <div>
             <Label>
               {provider === "stripe"
-                ? "Balance transactions JSON array"
-                : "Settlement JSON object"}
+                ? t("stripePayloadLabel")
+                : t("genericPayloadLabel")}
             </Label>
             <textarea
               className="mt-1 min-h-32 w-full rounded border p-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
@@ -226,15 +290,15 @@ export default function PspSettlementsPage() {
             disabled={!externalRef}
             onClick={() => void importBatch()}
           >
-            Import draft
+            {t("importDraft")}
           </Button>
         </Card>
 
         <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold">Recent batches</h3>
+          <h3 className="mb-3 text-sm font-semibold">{t("recentBatches")}</h3>
           <div className="mb-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
             <div>
-              <Label>Reversal date</Label>
+              <Label>{t('reversalDate')}</Label>
               <Input
                 type="date"
                 value={reversalDate}
@@ -242,11 +306,11 @@ export default function PspSettlementsPage() {
               />
             </div>
             <div>
-              <Label>Reversal reason</Label>
+              <Label>{t('reversalReason')}</Label>
               <Input
                 value={reversalReason}
                 onChange={(e) => setReversalReason(e.target.value)}
-                placeholder="Required evidence for a controlled correction"
+                placeholder={t("reversalPlaceholder")}
                 maxLength={500}
               />
             </div>
@@ -254,22 +318,22 @@ export default function PspSettlementsPage() {
           <table className="w-full text-sm">
             <thead className="text-left text-muted-foreground">
               <tr>
-                <th className="py-1">Provider</th>
-                <th>Ref</th>
-                <th>Date</th>
-                <th className="text-right">Net</th>
-                <th>Status</th>
+                <th className="py-1">{t("colProvider")}</th>
+                <th>{common("labels.reference")}</th>
+                <th>{common("labels.date")}</th>
+                <th className="text-right">{t("colNet")}</th>
+                <th>{common("labels.status")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {batches.map((b) => (
+              {!loading && !loadFailed && batches.map((b) => (
                 <tr key={b.id} className="border-t">
-                  <td className="py-1">{b.provider}</td>
+                  <td className="py-1">{providerLabel(b.provider)}</td>
                   <td className="font-mono text-xs">{b.externalRef}</td>
-                  <td>{b.settlementDate}</td>
-                  <td className="text-right tabular-nums">{b.netAmount}</td>
-                  <td>{b.status}</td>
+                  <td>{settlementDateLabel(b.settlementDate)}</td>
+                  <td className="text-right tabular-nums">{money(b.netAmount, { currency: b.currency })}</td>
+                  <td>{statusLabel(b.status)}</td>
                   <td className="text-right">
                     {b.status === "draft" && (
                       <Button
@@ -277,7 +341,7 @@ export default function PspSettlementsPage() {
                         variant="ghost"
                         onClick={() => void post(b.id)}
                       >
-                        Post
+                        {common("actions.post")}
                       </Button>
                     )}
                     {b.status === "posted" && (
@@ -287,19 +351,36 @@ export default function PspSettlementsPage() {
                         disabled={reversalReason.trim().length < 5}
                         onClick={() => void reverse(b.id)}
                       >
-                        Reverse
+                        {t("reverse")}
                       </Button>
                     )}
                   </td>
                 </tr>
               ))}
-              {batches.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                    {common("feedback.loading")}
+                  </td>
+                </tr>
+              )}
+              {!loading && loadFailed && (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                    <p>{common("feedback.loadFailed")}</p>
+                    <Button size="sm" variant="outline" className="mt-2" onClick={() => void load()}>
+                      {common("actions.retry")}
+                    </Button>
+                  </td>
+                </tr>
+              )}
+              {!loading && !loadFailed && batches.length === 0 && (
                 <tr>
                   <td
                     colSpan={6}
                     className="py-4 text-center text-muted-foreground"
                   >
-                    No settlements imported yet.
+                    {t('empty')}
                   </td>
                 </tr>
               )}

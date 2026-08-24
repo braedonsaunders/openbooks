@@ -824,6 +824,42 @@
   },
   "pspSettlements": {
     "acceptanceNote": "Settlements reconcile payouts after the fact. Hosted payment links (customer checkout on invoices) are configured separately under",
-    "acceptanceLink": "Company Settings → Payment Providers"
+    "acceptanceLink": "Company Settings → Payment Providers",
+    "title": "PSP settlements",
+    "description": "Import payment-provider payout settlements. Fees, disputes, and foreign exchange adjustments post through the general ledger.",
+    "invalidJson": "Payload must be valid JSON.",
+    "importFailed": "Could not import the settlement.",
+    "postFailed": "Could not post the settlement.",
+    "reversalFailed": "Could not reverse the settlement.",
+    "reasonTooShort": "Enter a reversal reason of at least 5 characters.",
+    "importedToast": "Imported batch {id}.",
+    "postedToast": "Posted journal {id}.",
+    "reversedToast": "Posted controlled reversal journal {id}.",
+    "importTitle": "Import settlement",
+    "providerLabel": "Provider",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "External ref / payout id",
+    "settlementDate": "Settlement date",
+    "bankAccountId": "Bank account id",
+    "feeAccountId": "Fee account id",
+    "clearingAccountId": "Clearing account id",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "Balance transactions JSON array",
+    "genericPayloadLabel": "Settlement JSON object",
+    "importDraft": "Import draft",
+    "recentBatches": "Recent batches",
+    "reversalDate": "Reversal date",
+    "reversalReason": "Reversal reason",
+    "reversalPlaceholder": "Required evidence for a controlled correction",
+    "colProvider": "Provider",
+    "colNet": "Net",
+    "reverse": "Reverse",
+    "empty": "No settlements imported yet."
   }
 }
