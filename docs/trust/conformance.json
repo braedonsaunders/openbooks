@@ -1,6 +1,6 @@
 {
-  "at": "2026-08-24T17:19:36.901Z",
-  "gitSha": "0b99d7974eaed638faf20348cef9b98bb7c942c1",
+  "at": "2026-08-24T17:30:24.935Z",
+  "gitSha": "e4ed339d4bedb6b74030ecf42c9707d47d5b3bdc",
   "totals": {
     "pass": 40,
     "fail": 0,
@@ -40,7 +40,7 @@
         "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
         "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
       ],
-      "ms": 37
+      "ms": 32
     },
     {
       "id": "rev-allocate-no-lost-cent",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 177
+      "ms": 385
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 124
+      "ms": 119
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 59
+      "ms": 57
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -266,7 +266,7 @@
         "Management concludes only 12,000.00 of the bonus meets the constraint.",
         "The transaction price is therefore 112,000.00, with 8,000.00 constrained out until the uncertainty resolves."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "rev-significant-financing-component",
@@ -338,7 +338,7 @@
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "ms": 20
+      "ms": 37
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -372,7 +372,7 @@
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "lease-operating-single-cost",
@@ -469,7 +469,7 @@
         "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
         "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "ms": 20
+      "ms": 18
     },
     {
       "id": "lease-lessor-classification",
@@ -574,7 +574,7 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "ms": 58
+      "ms": 53
     },
     {
       "id": "fx-long-term-debt-retranslated",
@@ -607,7 +607,7 @@
         "The closing rate on 2026-07-31 is 1.4000.",
         "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
       ],
-      "ms": 50
+      "ms": 45
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -702,7 +702,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 154
+      "ms": 126
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -735,7 +735,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 154
+      "ms": 147
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -766,7 +766,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 98
+      "ms": 85
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -789,7 +789,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 48
+      "ms": 47
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -827,7 +827,7 @@
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
         "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "ms": 63
+      "ms": 56
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
