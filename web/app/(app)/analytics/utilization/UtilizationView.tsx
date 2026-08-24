@@ -1028,8 +1028,8 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
           <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{t('noBillExpectation')}</span>
         </div>
         <div className="flex gap-1">
-          <button type="button" onClick={() => setView('cards')} className={cn('rounded-md border p-1.5', view === 'cards' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={15} /></button>
-          <button type="button" onClick={() => setView('table')} className={cn('rounded-md border p-1.5', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={15} /></button>
+          <button type="button" aria-label={`${t('show')} ${t('tabs.departments')}`} aria-pressed={view === 'cards'} onClick={() => setView('cards')} className={cn('rounded-md border p-1.5', view === 'cards' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Grid3X3 size={15} /></button>
+          <button type="button" aria-label={`${t('show')} ${t('table')}`} aria-pressed={view === 'table'} onClick={() => setView('table')} className={cn('rounded-md border p-1.5', view === 'table' ? 'border-teal-500 text-teal-600 dark:text-teal-400' : 'border-slate-200 text-slate-400 dark:border-slate-700')}><Table2 size={15} /></button>
         </div>
       </div>
 
