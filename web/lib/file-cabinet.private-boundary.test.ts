@@ -1,0 +1,231 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
+import { env } from "@openbooks/engine/src/db.ts";
+
+/**
+ * Regression coverage for the nested private-folder boundary defect in
+ * web/lib/file-cabinet.ts: owning a private folder anywhere on the ancestor
+ * chain used to waive a FOREIGN private folder elsewhere on the same chain —
+ * folderAccessLevel returned Manager (and unsuppressed baseline) for subtrees
+ * that resolveReadScope hides from the very same viewers, opening every
+ * mutation gate (rename/move/delete/purge, bulk ops) on read-invisible rows.
+ *
+ * The scenario runs against the real exported functions on a real database,
+ * asserting exact access levels plus a mechanical read/write parity invariant
+ * (folderAccessLevel ≠ 'none' ⇔ the folder is visible via the read paths),
+ * and that explicit resource_grants are the only way past the boundary.
+ */
+test(
+  "nested private-folder ownership cannot bypass a foreign private boundary",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    // A bare OPENBOOKS_DB_URL (throwaway container) gets the published schema
+    // through the canonical idempotent bootstrap; an already-migrated host is
+    // left untouched apart from a catalog existence probe.
+    const probe = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `
+        import pg from "pg";
+        const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+        await client.connect();
+        const r = await client.query("select to_regclass('public.folders') is not null as ok");
+        console.log("BOOTSTRAP_NEEDED=" + (!r.rows[0].ok));
+        await client.end();
+        `,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(probe.status, 0, probe.stderr || probe.stdout);
+    if (/BOOTSTRAP_NEEDED=true/.test(probe.stdout)) {
+      const bootstrapped = spawnSync(
+        process.execPath,
+        ["--import", "tsx", "scripts/bootstrap.ts"],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            NODE_ENV: "test",
+            ORG_NAME: "OpenBooks Test",
+            ORG_CURRENCY: "CAD",
+            ORG_COUNTRY: "CA",
+          },
+          encoding: "utf8",
+        },
+      );
+      assert.equal(bootstrapped.status, 0, bootstrapped.stderr || bootstrapped.stdout);
+    }
+
+    // The spawned scenario source stays plain JavaScript: node parses `-e`
+    // modules itself; only imported .ts files go through the tsx transform.
+    const source = `
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import {
+        fileAccessLevel,
+        folderAccessLevel,
+        getFolderTree,
+        listFiles,
+        setGrant,
+      } from "./web/lib/file-cabinet.ts";
+
+      installTrustedTestDatabaseBypass();
+
+      // Fixture tree (one org):
+      //   rootA (private, alice)
+      //     workA                  – plain folder inside alice's private subtree
+      //       innerA (private, alice)
+      //         leafA              – deep leaf of alice's OWN private chain
+      //       orphanPrivate (private, owner NULL)
+      //     secB (private, bob)    – bob's own private folder nested behind
+      //                              alice's foreign private boundary
+      //         leafB              – invisible to BOTH viewers via the read path
+      const org = await createScratchOrg();
+      const orgId = org.orgId;
+      try {
+        const alice = randomUUID();
+        const bob = randomUUID();
+        const ids = Array.from({ length: 7 }, () => randomUUID());
+        const rootA = ids[0];
+        const workA = ids[1];
+        const innerA = ids[2];
+        const leafA = ids[3];
+        const orphanPrivate = ids[4];
+        const secB = ids[5];
+        const leafB = ids[6];
+
+        const roleId = (await db.execute(sql\`
+          insert into app_roles (org_id, key, name, description, is_built_in, permissions)
+          values (\${orgId}, 'member', 'Member', 'boundary fixture', false, '[]'::jsonb)
+          returning id
+        \`)).rows[0].id;
+        for (const pair of [[alice, "alice@boundary.fixture"], [bob, "bob@boundary.fixture"]]) {
+          const userId = pair[0];
+          const email = pair[1];
+          await db.execute(sql\`
+            insert into users (id, org_id, email, name, password_hash, is_active)
+            values (\${userId}, \${orgId}, \${email}, \${email.split("@")[0]}, 'x', false)
+          \`);
+          await db.execute(sql\`
+            insert into role_assignments (org_id, user_id, role_id)
+            values (\${orgId}, \${userId}, \${roleId})
+          \`);
+          await db.execute(sql\`update users set is_active = true where id = \${userId}\`);
+        }
+        const folders = [
+          [rootA, null, "rootA", true, alice],
+          [workA, rootA, "workA", false, null],
+          [innerA, workA, "innerA", true, alice],
+          [leafA, innerA, "leafA", false, null],
+          [orphanPrivate, workA, "orphanPrivate", true, null],
+          [secB, rootA, "secB", true, bob],
+          [leafB, secB, "leafB", false, null],
+        ];
+        for (const f of folders) {
+          await db.execute(sql\`
+            insert into folders (id, org_id, parent_folder_id, name, is_private, owner_id)
+            values (\${f[0]}, \${orgId}, \${f[1]}, \${f[2]}, \${f[3]}, \${f[4]})
+          \`);
+        }
+        const fileIds = {};
+        for (const folder of [leafA, leafB]) {
+          const fileId = randomUUID();
+          fileIds[folder] = fileId;
+          await db.execute(sql\`
+            insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+            values (\${fileId}, \${orgId}, \${folder}, \${"f-" + fileId.slice(0, 8) + ".txt"}, \${"text/plain"}, 3)
+          \`);
+        }
+
+        const aliceViewer = { userId: alice, isAdmin: false, baseline: "viewer" };
+        const bobViewer = { userId: bob, isAdmin: false, baseline: "viewer" };
+        const adminViewer = { userId: "no-such-user", isAdmin: true };
+
+        const level = async (viewer, folderId) => folderAccessLevel(orgId, viewer, folderId);
+
+        // Ownership intact inside one's own private subtree (no crossing).
+        assert.equal(await level(aliceViewer, rootA), "manager", "alice owns her private root");
+        assert.equal(await level(aliceViewer, workA), "manager", "alice manages her own subtree");
+        assert.equal(await level(aliceViewer, innerA), "manager", "alice manages her nested private folder");
+        assert.equal(await level(aliceViewer, leafA), "manager", "ownership reaches deep leaves");
+
+        // THE DEFECT: ownership of a private folder on the chain must not
+        // waive a foreign private boundary elsewhere on the chain.
+        assert.equal(await level(aliceViewer, secB), "none", "foreign private boundary seals bob's folder from alice");
+        assert.equal(await level(aliceViewer, leafB), "none", "alice gets nothing under bob's nested private folder");
+        assert.equal(await level(bobViewer, secB), "none", "bob's own ownership does not pierce alice's boundary above him");
+        assert.equal(await level(bobViewer, leafB), "none", "bob gets nothing in his subtree behind the boundary");
+        assert.equal(await level(bobViewer, rootA), "none", "foreign private root hides from bob");
+        assert.equal(await level(bobViewer, workA), "none");
+        assert.equal(await level(bobViewer, innerA), "none");
+        assert.equal(await level(bobViewer, leafA), "none");
+        assert.equal(await level(aliceViewer, orphanPrivate), "none", "NULL-owner private folder counts as foreign");
+        assert.equal(await level(adminViewer, leafB), "manager", "admins keep Manager everywhere");
+        assert.equal(await fileAccessLevel(orgId, aliceViewer, fileIds[leafB]), "none", "files inherit the boundary rule (alice)");
+        assert.equal(await fileAccessLevel(orgId, bobViewer, fileIds[leafB]), "none", "files inherit the boundary rule (bob)");
+
+        // Grants are the only path past a foreign boundary, and confer exactly
+        // their own tier — never the spurious Manager the defect produced.
+        await setGrant({
+          orgId, resourceType: "folder", resourceId: secB,
+          principalType: "user", principalId: alice, access: "editor", actorId: alice,
+        });
+        await setGrant({
+          orgId, resourceType: "folder", resourceId: orphanPrivate,
+          principalType: "user", principalId: bob, access: "viewer", actorId: alice,
+        });
+        assert.equal(await level(aliceViewer, leafB), "editor", "editor grant re-opens the subtree at editor tier");
+        assert.equal(await level(bobViewer, leafB), "none", "alice's grant does not leak to bob");
+        assert.equal(await level(bobViewer, orphanPrivate), "viewer", "viewer grant re-opens the NULL-owner boundary");
+        assert.equal(await fileAccessLevel(orgId, aliceViewer, fileIds[leafB]), "editor", "granted folder lifts contained files");
+
+        // Read/write parity invariant: the write-path tier agrees with the
+        // read-path scope for every viewer/folder pair — a folder the lists
+        // hide must not be actionable, and anything listed stays actionable.
+        const targets = [
+          [rootA, "rootA"], [workA, "workA"], [innerA, "innerA"], [leafA, "leafA"],
+          [orphanPrivate, "orphanPrivate"], [secB, "secB"], [leafB, "leafB"],
+        ];
+        for (const entry of [["alice", aliceViewer], ["bob", bobViewer]]) {
+          const viewerName = entry[0];
+          const viewer = entry[1];
+          const tree = new Set((await getFolderTree(orgId, viewer)).map((f) => f.id));
+          for (const target of targets) {
+            const folderId = target[0];
+            const name = target[1];
+            const visible = tree.has(folderId);
+            const tier = await level(viewer, folderId);
+            const listed = (await listFiles(orgId, viewer, { folderId })).total;
+            const wantListed = visible && (folderId === leafA || folderId === leafB) ? 1 : 0;
+            assert.equal(tier !== "none", visible, \`parity \${viewerName}/\${name}: access=\${tier} treeVisible=\${visible}\`);
+            assert.equal(listed, wantListed, \`parity \${viewerName}/\${name}: fileListings\`);
+          }
+        }
+      } finally {
+        await dropScratchOrg(orgId);
+      }
+    `;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/test-database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  },
+);

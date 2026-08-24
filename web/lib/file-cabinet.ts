@@ -226,6 +226,10 @@ function grantRankOverFolders(orgId: string, viewer: FileViewer, folderIdsCte: S
  * The caller's effective access tier on a folder — the highest of admin,
  * private-owner (Manager), org-role baseline (suppressed inside a private
  * subtree the caller doesn't own), and any grant on the folder or an ancestor.
+ * Ownership follows resolveReadScope: a private folder owned by someone else
+ * anywhere on the ancestor chain seals the subtree off — owning one's own
+ * private folder elsewhere on that chain (above or below the foreign
+ * boundary) never bypasses it, so only grants confer access past it.
  */
 export async function folderAccessLevel(
   orgId: string,
@@ -233,7 +237,7 @@ export async function folderAccessLevel(
   folderId: string,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute<{ ownsPrivate: boolean | null; hiddenByPrivate: boolean | null; grantRank: number }>(sql`
+  const r = (await db.execute<{ ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -243,16 +247,16 @@ export async function folderAccessLevel(
     )
     select
       bool_or(a.is_private and a.owner_id = ${viewer.userId}) as "ownsPrivate",
-      bool_or(a.is_private and a.owner_id is distinct from ${viewer.userId}) as "hiddenByPrivate",
+      bool_or(a.is_private and a.owner_id is distinct from ${viewer.userId}) as "foreignPrivate",
       ${grantRankOverFolders(orgId, viewer, sql`select id from ancestors`)} as "grantRank"
       from ancestors a
   `))
   const row = r.rows[0]
   if (!row) return 'none' // folder not found / not in org
+  const behindForeignBoundary = !!row.foreignPrivate
   const grantLevel = ACCESS_BY_RANK[row.grantRank] ?? 'none'
-  const ownerLevel: AccessLevel = row.ownsPrivate ? 'manager' : 'none'
-  const baselineSuppressed = !!row.hiddenByPrivate && !row.ownsPrivate
-  const baselineLevel: AccessLevel = baselineSuppressed ? 'none' : viewer.baseline ?? 'viewer'
+  const ownerLevel: AccessLevel = row.ownsPrivate && !behindForeignBoundary ? 'manager' : 'none'
+  const baselineLevel: AccessLevel = behindForeignBoundary ? 'none' : viewer.baseline ?? 'viewer'
   return maxAccess(grantLevel, ownerLevel, baselineLevel)
 }
 
