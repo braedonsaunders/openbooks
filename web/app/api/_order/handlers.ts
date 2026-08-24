@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../lib/authz'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp, toUnits } from '@openbooks/engine/src/money.ts'
@@ -40,6 +41,12 @@ export function makeGET(cfg: OrderHandlerConfig) {
     const gate = await guardFeaturePermission(cfg.readPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { id } = await params
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId}`,
+    ))
+    if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+    if (denied) return denied
     const order = await loadOrder(id, gate.user.orgId, cfg.kind)
     if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json(order)
@@ -73,16 +80,21 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { user } = gate
     const { id } = await params
 
-    const existing = (await db.execute<{ status: string; document_date: string }>(
-      sql`select status, document_date from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null }>(
+      sql`select status, document_date, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+    if (recordDenied) return recordDenied
     const status = existing.rows[0].status
 
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data as OrderPatchBody
 
+    // A restricted caller may re-home a draft only within their visible
+    // subsidiaries; clearing the header subsidiary entirely is also denied
+    // (the resolved root would sit outside their scope just as often).
     if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
       if (!(await subsidiaryFeatureEnabled(user.orgId))) {
         return NextResponse.json({ error: 'Subsidiaries are not enabled' }, { status: 422 })
@@ -98,6 +110,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       if (!subsidiary.rows[0]) {
         return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
       }
+    } else if (body.subsidiaryId === null && gate.allowedSubsidiaryIds) {
+      return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
     }
 
     // --- status transitions ------------------------------------------------
@@ -386,13 +400,15 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       // Draft discard is another lifecycle mutation. Own the same aggregate
       // lock used by issue/void before deleteDocument reads draft status, so a
       // delete that waited behind issuance cannot remove the issued order.
-      const owned = (await db.execute(sql`
-        select 1
+      const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId"
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
       `))
       if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+      if (denied) return denied
       await deleteDocument(id, user.id, user.orgId)
       return NextResponse.json({ ok: true })
     }).catch((error: unknown) => {
@@ -416,11 +432,15 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     const body = parsedBody.data as { targetKind?: string }
     if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
 
-    // Scope check: the source must be this kind, in the caller's org.
-    const owns = (await db.execute(
-      sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    // Scope check: the source must be this kind, in the caller's org, and
+    // inside the caller's subsidiary scope.
+    const owns = (await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
-    if (owns.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const source = owns.rows[0]
+    if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
+    if (denied) return denied
 
     try {
       const res = await convertOrder(user.orgId, user.id, id, body.targetKind)

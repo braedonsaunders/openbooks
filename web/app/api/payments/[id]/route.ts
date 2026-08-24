@@ -8,7 +8,7 @@ import {
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
-import { can, getAuthz, type Authz } from '../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
@@ -41,7 +41,9 @@ const paymentPatchBody = z.object({
   allocations: z.array(allocationInput).optional(),
 })
 
-/** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly. */
+/** Resolve the document's kind, then gate on ap.pay / ar.pay accordingly.
+ *  Subsidiary scope is enforced here too, so every verb (GET/PATCH/DELETE)
+ *  inherits the same fail-closed record boundary. */
 async function gateForDocument(
   id: string,
   orgId: string | null,
@@ -49,18 +51,47 @@ async function gateForDocument(
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const r = (await db.execute<{ kind: PaymentKind }>(sql`
-    select kind from documents
+  const r = (await db.execute<{ kind: PaymentKind; subsidiaryId: string | null }>(sql`
+    select kind, subsidiary_id as "subsidiaryId" from documents
      where id = ${id} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${orgId ?? authz.user.orgId}
   `))
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
+  if (denied) return denied
   const kind = r.rows[0].kind
   const perm = paymentPermission(kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
   }
   return { authz, kind }
+}
+
+/**
+ * Open-item allocations write against OTHER parties' documents — the targets
+ * are record boundaries of their own. Every referenced open line must belong
+ * to a document inside the caller's subsidiary scope (and exist in the org).
+ */
+async function assertAllocationTargetsInScope(
+  authz: Authz,
+  openLineIds: readonly string[],
+): Promise<NextResponse | null> {
+  if (!authz.allowedSubsidiaryIds || openLineIds.length === 0) return null
+  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+    select dl.id, d.subsidiary_id as "subsidiaryId"
+      from document_lines dl
+      join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+     where dl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and dl.org_id = ${authz.user.orgId}
+  `))
+  const byId = new Map(rows.rows.map((row) => [row.id, row.subsidiaryId]))
+  for (const lineId of openLineIds) {
+    // An id that does not resolve in this org fails closed the same way —
+    // it is indistinguishable from one outside the caller's scope.
+    if (!byId.has(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const denied = guardSubsidiaryScope(authz, byId.get(lineId))
+    if (denied) return denied
+  }
+  return null
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -81,6 +112,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsed = await parseJsonBody(req, paymentPatchBody, { status: 422 })
   if (!parsed.ok) return parsed.response
   const body = parsed.data
+  const allocationTargetsDenied = await assertAllocationTargetsInScope(
+    gate.authz,
+    (body.allocations ?? []).map((a) => a.openLineId),
+  )
+  if (allocationTargetsDenied) return allocationTargetsDenied
 
   try {
     await updateDraftPayment(id, body, gate.authz.user.id, gate.authz.user.orgId)

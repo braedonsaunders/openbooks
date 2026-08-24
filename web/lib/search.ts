@@ -6,6 +6,7 @@ import type { Authz } from './authz'
 import { can } from './authz'
 import { disabledDocKinds } from './documents'
 import { isFeatureEnabled } from './features'
+import { subsidiaryVisibleFilter } from './subsidiaries'
 
 /**
  * Global search — one query fans out across every primary entity (contacts,
@@ -89,9 +90,13 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   const canItems = can(authz, 'items.read')
   const canProjects = can(authz, 'projects.read') && await isFeatureEnabled(orgId, 'projects')
 
+  // Subsidiary visibility rides alongside permissions: a restricted caller's
+  // search must never surface records their lists would hide.
+  const scope = authz.allowedSubsidiaryIds
+
   const [contacts, txns, accounts, items, projects] = await Promise.all([
-    canContacts ? searchContacts(orgId, q, like) : empty(),
-    canTxn ? searchTransactions(orgId, q, like, num) : empty(),
+    canContacts ? searchContacts(orgId, q, like, scope) : empty(),
+    canTxn ? searchTransactions(orgId, q, like, num, scope) : empty(),
     canAccounts ? searchAccounts(orgId, q, like) : empty(),
     canItems ? searchItems(orgId, q, like) : empty(),
     canProjects ? searchProjects(orgId, q, like) : empty(),
@@ -118,7 +123,19 @@ async function empty(): Promise<SearchHit[]> {
   return []
 }
 
-async function searchContacts(orgId: string, q: string, like: string): Promise<SearchHit[]> {
+async function searchContacts(
+  orgId: string,
+  q: string,
+  like: string,
+  scope: ReadonlySet<string> | null,
+): Promise<SearchHit[]> {
+  // Parties are org-wide when their primary subsidiary is null — the exact
+  // predicate the party lists use (`is null or = any(...)`).
+  const scopeFilter = !scope
+    ? sql``
+    : scope.size
+      ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
+      : sql`and false`
   const r = (await db.execute(sql`
     select p.id, p.display_name, p.email, p.legal_name,
            exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
@@ -127,6 +144,7 @@ async function searchContacts(orgId: string, q: string, like: string): Promise<S
            greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q})) as sim
       from parties p
      where p.org_id = ${orgId}
+       ${scopeFilter}
        and (p.display_name % ${q} or p.display_name ilike ${like}
             or p.legal_name % ${q} or p.email ilike ${like})
      order by sim desc, p.display_name
@@ -147,6 +165,7 @@ async function searchTransactions(
   q: string,
   like: string,
   num: number | null,
+  scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
   // Amounts live on document_lines (documents.total is often 0). A numeric query
   // matches any transaction that HAS a line of that amount (±sign), and every
@@ -164,13 +183,16 @@ async function searchTransactions(
   const hiddenKindFilter = hiddenKinds.length
     ? sql`and d.kind not in (${sql.join(hiddenKinds.map((value) => sql`${value}`), sql`, `)})`
     : sql``
+  // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
+  // — null-subsidiary documents are invisible to restricted callers).
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
   const amtLeg =
     num != null
       ? sql`
         union
         (select dl.document_id as id from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${hiddenKindFilter}
+          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${hiddenKindFilter}${subsidiaryFilter}
           limit 200)`
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
@@ -178,13 +200,13 @@ async function searchTransactions(
   const r = (await db.execute(sql`
     with cand as (
       (select d.id from documents d
-        where d.org_id = ${orgId} ${hiddenKindFilter}
+        where d.org_id = ${orgId} ${hiddenKindFilter}${subsidiaryFilter}
           and (d.document_number % ${q} or d.document_number ilike ${like}
                or d.reference_number ilike ${like} or d.memo ilike ${like})
         order by d.created_at desc limit 200)
       union
       (select d.id from documents d
-        where d.org_id = ${orgId} ${hiddenKindFilter} and d.party_id in (
+        where d.org_id = ${orgId} ${hiddenKindFilter}${subsidiaryFilter} and d.party_id in (
           select p.id from parties p where p.org_id = ${orgId} and p.display_name % ${q})
         order by d.created_at desc limit 200)${amtLeg}
     )
@@ -198,7 +220,7 @@ async function searchTransactions(
       from documents d
       join cand on cand.id = d.id
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id
-     where true ${hiddenKindFilter}
+     where true ${hiddenKindFilter}${subsidiaryFilter}
      order by ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`))
   return r.rows.map((row: any): SearchHit => {

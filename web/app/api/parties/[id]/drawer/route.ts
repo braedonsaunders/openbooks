@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { can, guardPermission } from '../../../../../lib/authz'
+import { can, guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { loadFieldDefs } from '../../../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../../../lib/customization/resolve'
@@ -17,6 +17,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Party record boundary (null-subsidiary parties are org-wide).
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+  ))
+  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
 
   const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency] = await Promise.all([
     loadParty(id, gate.user.orgId),

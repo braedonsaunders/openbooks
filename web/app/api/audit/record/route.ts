@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { can, getAuthz } from '../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
 const ACTIONS = ['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'] as const
@@ -24,18 +24,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'invalid record' }, { status: 400 })
   }
 
+  // Existence, kind, and creator metadata are disclosures too: resolve the
+  // record's subsidiary alongside org scope and gate BEFORE anything is
+  // returned. Documents follow the documents-list rule (null fails closed);
+  // parties follow the party-list rule (null-subsidiary rows are org-wide).
   const record = table === 'documents'
-    ? (await db.execute(sql`
-        select org_id, kind, created_at, created_by, updated_at, updated_by
+    ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+        select org_id, kind, created_at, created_by, updated_at, updated_by,
+               subsidiary_id as "subsidiaryId"
           from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
-    : table === 'parties' ? (await db.execute(sql`
-        select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by
+    : table === 'parties' ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+        select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by,
+               subsidiary_id as "subsidiaryId"
           from parties where id = ${recordId} and org_id = ${authz.user.orgId}`))
-    : (await db.execute(sql`
+    : (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId?: string | null }>(sql`
         select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
           from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
   const metadata = record.rows[0]
   if (!metadata) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (table !== 'item_rate_versions') {
+    const denied = guardSubsidiaryScope(authz, metadata.subsidiaryId ?? null,
+      table === 'parties' ? { orgWideNull: true } : {})
+    if (denied) return denied
+  }
   const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
   if (!can(authz, permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 

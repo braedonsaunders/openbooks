@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../../lib/documents";
 import { pdfResponse, safeName } from "../../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
 import { resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
+import { loadRecordSubsidiaryScope } from "../../lib";
 
 export const runtime = "nodejs";
 
@@ -30,6 +31,10 @@ export async function GET(
   }
 
   const templateId = new URL(req.url).searchParams.get("template");
+  const owned = await loadRecordSubsidiaryScope(recordType, user.orgId, id);
+  if (!owned) return NextResponse.json({ error: "record not found" }, { status: 404 });
+  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
+  if (denied) return denied;
   const [tpl, record] = await Promise.all([
     resolvePdfTemplate(user.orgId, recordType, templateId),
     loadPdfRecordValues(recordType, user.orgId, id),

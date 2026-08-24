@@ -7,7 +7,7 @@ import {
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
 import { deleteDocument } from '@openbooks/engine/src/document-delete.ts'
-import { can, getAuthz } from '../../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../../../lib/authz'
 import {
   createPermission,
   createPostedCorrectionDraft,
@@ -29,13 +29,15 @@ export async function POST(
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const found = (await db.execute<{ kind: string; status: string }>(sql`
-    select kind, status
+  const found = (await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(sql`
+    select kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
   const source = found.rows[0]
   if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, source.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, source.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
@@ -60,6 +62,11 @@ export async function POST(
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as DocumentEditInput
+  // The replacement draft inherits the source's subsidiary unless the body
+  // re-homes it; either way it must stay inside the caller's scope.
+  if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
+    return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+  }
   let replacement: { id: string; documentNumber: string } | null = null
   try {
     replacement = await createPostedCorrectionDraft(id, body, {

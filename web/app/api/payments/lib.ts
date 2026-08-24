@@ -21,7 +21,10 @@ export function paymentErrorResponse(e: unknown): NextResponse {
   return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
 }
 
-/** Authorize a run by its actual direction, not by which page called it. */
+/** Authorize a run by its actual direction, not by which page called it.
+ *  The run's record boundary is the set of bills it pays: a restricted caller
+ *  may not operate a run whose live items touch a source document outside
+ *  their subsidiary scope (null-subsidiary sources fail closed). */
 export async function guardPaymentRunPermission(
   runId: string,
   capability: 'pay' | 'approve' = 'pay',
@@ -31,6 +34,23 @@ export async function guardPaymentRunPermission(
   const row = (await db.execute<{ direction: string }>(sql`select direction from payment_runs where id = ${runId} and org_id = ${authz.user.orgId}`))
   const run = row.rows[0]
   if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (authz.allowedSubsidiaryIds) {
+    const ids = [...authz.allowedSubsidiaryIds]
+    // Empty scope denies any run with live items at all.
+    const outsidePredicate = ids.length === 0
+      ? sql`true`
+      : sql`(d.subsidiary_id is null or not (d.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])))`
+    const outside = (await db.execute(sql`
+      select d.id
+        from payment_run_items ri
+        join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
+       where ri.payment_run_id = ${runId} and ri.org_id = ${authz.user.orgId}
+         and ri.status <> 'cancelled'
+         and ${outsidePredicate}
+       limit 1
+    `))
+    if (outside.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const permission = `${run.direction === 'inbound' ? 'ar' : 'ap'}.${capability}`
   if (!can(authz, permission)) return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
   return authz

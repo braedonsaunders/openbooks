@@ -12,7 +12,7 @@ import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/control-accounts.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
@@ -43,12 +43,14 @@ export async function POST(req: Request) {
         const outcome = await withOrgTransaction(gate.user.orgId, async () => {
           // Serialize the lifecycle and posting decision at the aggregate root.
           // If posting fails, the draft→approved release rolls back with it.
-          const owned = (await db.execute<{ id: string; status: string }>(sql`
-            select id, status from documents
+          const owned = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(sql`
+            select id, status, subsidiary_id as "subsidiaryId" from documents
              where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
              for update
           `))
           if (!owned.rows[0]) return { kind: 'not_found' as const }
+          const scopeDenied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+          if (scopeDenied) return { kind: 'scope_denied' as const, response: scopeDenied }
           const previousStatus = owned.rows[0].status
           if (previousStatus === 'draft') {
             const submission = await submitAndReleaseIfUngated(
@@ -79,6 +81,9 @@ export async function POST(req: Request) {
 
         if (outcome.kind === 'not_found') {
           return NextResponse.json({ error: 'not found' }, { status: 404 })
+        }
+        if (outcome.kind === 'scope_denied') {
+          return outcome.response
         }
         if (outcome.kind === 'flow_error') {
           return NextResponse.json(

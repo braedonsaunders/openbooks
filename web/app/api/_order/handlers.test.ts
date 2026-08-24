@@ -25,6 +25,7 @@ interface OrderDocument {
   total: string
   memo: string
   voidRequestedAt: string | null
+  subsidiaryId?: string | null
 }
 
 interface TransactionContext {
@@ -93,6 +94,7 @@ class OrderRouteHarness {
       total: '100.00',
       memo: 'original memo',
       voidRequestedAt: null,
+      subsidiaryId: null,
     }
     this.auditLog = []
     this.flowEffects = []
@@ -119,10 +121,21 @@ class OrderRouteHarness {
     const { text, params } = this.compile(query)
     const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
 
-    if (normalized.startsWith('select status, document_date from documents')) {
+    if (normalized.startsWith('select status, document_date, subsidiary_id as "subsidiaryid" from documents')) {
       return {
         rows: this.matchesDocument(params)
           ? [{ status: this.document.status, document_date: this.document.documentDate }]
+          : [],
+      }
+    }
+
+    // The record-boundary scope probes (PATCH/GET existence, DELETE lock,
+    // convert ownership) resolve the row's subsidiary alongside org scope.
+    if (normalized.startsWith('select subsidiary_id as "subsidiaryid" from documents')) {
+      if (normalized.endsWith('for update')) await this.acquireDocumentLock()
+      return {
+        rows: this.matchesDocument(params)
+          ? [{ subsidiary_id: this.document.subsidiaryId ?? null }]
           : [],
       }
     }
@@ -419,6 +432,9 @@ const mockSources = new Map<string, string>([
       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
     }
   `],
+  ['mock:authz', `
+    export function guardSubsidiaryScope() { return null }
+  `],
   ['mock:order-cycle', `
     export class ConversionError extends Error {
       constructor(message, status = 422) { super(message); this.status = status }
@@ -482,6 +498,7 @@ const resolutionMocks = new Map<string, string>([
   ['@openbooks/engine/src/db.ts', 'mock:db'],
   ['@openbooks/engine/src/document-delete.ts', 'mock:document-delete'],
   ['../../../lib/feature-gates', 'mock:feature-gates'],
+  ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/order-cycle', 'mock:order-cycle'],
   ['./lib', 'mock:order-lib'],
   ['@openbooks/engine/src/money.ts', 'mock:money'],

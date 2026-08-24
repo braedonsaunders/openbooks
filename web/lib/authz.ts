@@ -106,3 +106,68 @@ export async function guardPermission(perm: string): Promise<Authz | NextRespons
   }
   return authz;
 }
+
+/**
+ * Subsidiary visibility for ONE loaded record — the direct-read/write twin of
+ * the list WHERE fragments, so a record hidden from a restricted caller's
+ * lists is equally unreachable by id. Unrestricted callers (null set) pass.
+ *
+ *   - documents/journals/payments/orders/runs: subsidiary_id must be IN the
+ *     set; a null subsidiary fails closed, mirroring documentWhere's
+ *     `d.subsidiary_id = any(...)`.
+ *   - parties carry org-wide identity: their lists expose null-subsidiary
+ *     rows (`p.subsidiary_id is null or ...`) — pass orgWideNull for them.
+ */
+export interface SubsidiaryScopeOptions {
+  /** Null-subsidiary rows are org-wide shared (parties), not private. */
+  orgWideNull?: boolean;
+}
+
+export function subsidiaryScopeAllows(
+  scope: ReadonlySet<string> | null,
+  subsidiaryId: string | null | undefined,
+  opts: SubsidiaryScopeOptions = {},
+): boolean {
+  if (scope === null) return true;
+  if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === "") {
+    return opts.orgWideNull === true;
+  }
+  return scope.has(subsidiaryId);
+}
+
+/**
+ * Direct-record API gate over subsidiary scope. Returns the 404 response the
+ * handler must send when the loaded record sits outside the caller's
+ * subsidiary scope, or null when access may proceed. The denial is
+ * deliberately identical to the nonexistent/cross-org response so an
+ * out-of-scope record is indistinguishable from a missing one:
+ *
+ *   const row = ...select ... where id = ${id} and org_id = ${orgId};
+ *   if (!row) return not-found;
+ *   const denied = guardSubsidiaryScope(authz, row.subsidiaryId);
+ *   if (denied) return denied;
+ */
+export function guardSubsidiaryScope(
+  authz: Authz,
+  subsidiaryId: string | null | undefined,
+  opts: SubsidiaryScopeOptions = {},
+): NextResponse | null {
+  if (subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId, opts)) return null;
+  return NextResponse.json({ error: "not found" }, { status: 404 });
+}
+
+/**
+ * Write-body counterpart: true when EVERY explicitly requested subsidiary id
+ * is inside the caller's scope. Undefined/null entries mean "leave as-is /
+ * resolve at posting" and are checked by the caller's record-level gate, not
+ * here. Restricted callers may never assign a record to a subsidiary they
+ * cannot see — even one that exists and is active.
+ */
+export function subsidiariesInScope(
+  authz: Authz,
+  ids: readonly (string | null | undefined)[],
+): boolean {
+  const scope = authz.allowedSubsidiaryIds;
+  if (scope === null) return true;
+  return ids.every((id) => id !== null && id !== undefined && id !== "" && scope.has(id));
+}
