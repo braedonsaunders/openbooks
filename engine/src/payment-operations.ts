@@ -283,6 +283,18 @@ export async function submitPaymentRun(runId: string, orgId: string, userId: str
   await event({ orgId, runId, eventType: "run_submitted", actorId: userId, fromStatus: "draft", toStatus: row.status });
 }
 
+/** The maker of a controlled payment artifact can never be its checker. */
+export function assertIndependentPaymentApprover(
+  kind: "run" | "file",
+  makerId: string | null,
+  approverId: string,
+): void {
+  const subject = kind === "run" ? "payment run" : "payment file";
+  const maker = kind === "run" ? "submitter" : "generator";
+  if (makerId === null) throw new PaymentError(`${subject} approval requires an identified ${maker}`);
+  if (makerId === approverId) throw new PaymentError(`the ${subject} ${maker} cannot approve the same ${kind}`);
+}
+
 export async function decidePaymentRun(
   runId: string,
   orgId: string,
@@ -315,12 +327,7 @@ export async function decidePaymentRun(
           from payment_runs
          where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
       `)).rows[0];
-      if (pending?.submitted_by === userId) {
-        throw new PaymentError("the payment run submitter cannot approve the same run");
-      }
-      if (pending && pending.submitted_by === null) {
-        throw new PaymentError("payment run approval requires an identified submitter");
-      }
+      if (pending) assertIndependentPaymentApprover("run", pending.submitted_by, userId);
     }
     throw new PaymentError("only a run pending approval can be decided");
   }
@@ -782,12 +789,7 @@ export async function decidePaymentFile(
           from payment_files
          where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
       `)).rows[0];
-      if (pending?.generated_by === userId) {
-        throw new PaymentError("the payment file generator cannot approve the same file");
-      }
-      if (pending && pending.generated_by === null) {
-        throw new PaymentError("payment file approval requires an identified generator");
-      }
+      if (pending) assertIndependentPaymentApprover("file", pending.generated_by, userId);
     }
     throw new PaymentError("only a file pending approval can be decided");
   }
