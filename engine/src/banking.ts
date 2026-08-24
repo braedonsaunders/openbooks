@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db, schema, type SqlExecutor } from "./db.ts";
 import { fromUnits, isZero, sum, toUnits } from "./money.ts";
@@ -561,49 +560,28 @@ async function loadReconcilableAccount(orgId: string, accountId: string): Promis
 }
 
 /**
- * Stable content hash of an import batch — the per-import salt for fallback
- * dedupe keys. The same file content always yields the same token (re-import
- * stays a clean no-op); any other file yields a different token, so separate
- * imports never mint identical fallback keys.
+ * Apply the only safe automatic statement-line dedupe rule: a non-empty ID
+ * supplied by the bank may identify a transaction across imports. Content is
+ * not identity — two real transactions can share every visible field — so an
+ * ID-less line is always retained and remains ID-less in storage.
  */
-function statementBatchToken(lines: ParsedStatementLine[]): string {
-  const hash = createHash("sha256");
-  for (const l of lines) {
-    hash.update(
-      `${l.postedOn}|${l.amount}|${l.description ?? ""}|${l.counterpartyRef ?? ""}|${l.bankTransactionId ?? ""}\n`,
-    );
-  }
-  return hash.digest("hex").slice(0, 32);
-}
-
-/**
- * Deterministic fallback dedupe key for sources without a transaction id
- * (most CSV exports): hash of account + per-import batch token + date +
- * amount + description + the line's occurrence index among identical tuples
- * in the batch. The batch token salts every key per import, so genuinely
- * distinct same-day/same-amount transactions arriving in two separate imports
- * get distinct keys instead of the second being silently dropped as a
- * duplicate; re-importing the same file reproduces the same keys and remains
- * a no-op. A second identical-looking real transaction within one import
- * still imports (distinct occurrence index).
- */
-export function synthesizeTransactionIds(
-  accountId: string,
+export function filterDuplicateStatementLines(
   lines: ParsedStatementLine[],
-  batchToken: string,
-): ParsedStatementLine[] {
-  const seen = new Map<string, number>();
-  return lines.map((l) => {
-    if (l.bankTransactionId) return l;
-    const tuple = `${l.postedOn}|${l.amount}|${l.description ?? ""}`;
-    const n = seen.get(tuple) ?? 0;
-    seen.set(tuple, n + 1);
-    const hash = createHash("sha256")
-      .update(`${accountId}|${batchToken}|${tuple}|${n}`)
-      .digest("hex")
-      .slice(0, 32);
-    return { ...l, bankTransactionId: `gen:${hash}` };
-  });
+  existingTransactionIds: ReadonlySet<string>,
+): { lines: ParsedStatementLine[]; duplicates: number } {
+  const batchSeen = new Set<string>();
+  const fresh: ParsedStatementLine[] = [];
+  let duplicates = 0;
+  for (const line of lines) {
+    const key = line.bankTransactionId;
+    if (key && (existingTransactionIds.has(key) || batchSeen.has(key))) {
+      duplicates += 1;
+      continue;
+    }
+    if (key) batchSeen.add(key);
+    fresh.push(line);
+  }
+  return { lines: fresh, duplicates };
 }
 
 export interface ImportResult {
@@ -617,8 +595,10 @@ export interface ImportResult {
 
 /**
  * Import normalized statement lines for a reconcilable account. Lines whose
- * `bankTransactionId` (source-provided or synthesized) already exists on the
- * account are skipped. With `dryRun` nothing is written — used for preview.
+ * source-provided `bankTransactionId` already exists on the account are
+ * skipped. Sources without transaction IDs cannot be safely content-deduped,
+ * so their lines are retained on every import. With `dryRun` nothing is
+ * written — used for preview.
  * `rawFileRef` stays null in v1 (no object storage yet); the schema column is
  * reserved for the original file's store key.
  */
@@ -663,7 +643,6 @@ export async function importStatement(
       bankTransactionId,
     };
   });
-  const keyed = synthesizeTransactionIds(account.id, validated, statementBatchToken(validated));
   const openingBalance = opts.openingBalance
     ? normalizeAmount(opts.openingBalance, "Opening balance")
     : null;
@@ -680,27 +659,28 @@ export async function importStatement(
         hashtextextended(${`bank-statement-import:${ctx.orgId}:${account.id}`}, 0)
       )
     `);
-    const ids = keyed.map((line) => line.bankTransactionId as string);
-    const existing = (await tx.execute<{ id: string }>(sql`
-      select bank_transaction_id as id
-        from bank_statement_lines
-       where org_id = ${ctx.orgId}
-         and account_id = ${account.id}
-         and bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-    `));
-    const dupes = new Set(existing.rows.map((row) => row.id));
-    const batchSeen = new Set<string>();
-    const fresh: ParsedStatementLine[] = [];
-    let duplicates = 0;
-    for (const line of keyed) {
-      const key = line.bankTransactionId as string;
-      if (dupes.has(key) || batchSeen.has(key)) {
-        duplicates += 1;
-        continue;
-      }
-      batchSeen.add(key);
-      fresh.push(line);
+    const ids = [
+      ...new Set(
+        validated.flatMap((line) =>
+          line.bankTransactionId ? [line.bankTransactionId] : [],
+        ),
+      ),
+    ];
+    const existingIds = new Set<string>();
+    if (ids.length > 0) {
+      const existing = (await tx.execute<{ id: string }>(sql`
+        select bank_transaction_id as id
+          from bank_statement_lines
+         where org_id = ${ctx.orgId}
+           and account_id = ${account.id}
+           and bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      `));
+      for (const row of existing.rows) existingIds.add(row.id);
     }
+    const { lines: fresh, duplicates } = filterDuplicateStatementLines(
+      validated,
+      existingIds,
+    );
     if (opts.dryRun || fresh.length === 0) {
       return {
         statementId: null,

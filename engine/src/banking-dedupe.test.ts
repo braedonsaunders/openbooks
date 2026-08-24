@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { synthesizeTransactionIds, type ParsedStatementLine } from "./banking.ts";
+import { filterDuplicateStatementLines, type ParsedStatementLine } from "./banking.ts";
 import { plaidFetchAllTransactions } from "./bank-feed-providers.ts";
 
 const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine => ({
@@ -12,44 +12,44 @@ const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine
   ...overrides,
 });
 
-test("identical tuples in two different import batches get distinct fallback keys", () => {
-  // Two genuinely different same-day/same-amount transactions imported in two
-  // separate files must never share a key — the second must not be silently
-  // dropped as a duplicate of the first.
-  const lines = [line()];
-  const first = synthesizeTransactionIds("acc-1", lines, "token-file-a");
-  const second = synthesizeTransactionIds("acc-1", lines, "token-file-b");
-  assert.notEqual(first[0].bankTransactionId, second[0].bankTransactionId);
+test("content-identical ID-less transactions in separate imports both remain fresh", () => {
+  const first = filterDuplicateStatementLines([line()], new Set());
+  assert.equal(first.lines.length, 1);
+  assert.equal(first.lines[0].bankTransactionId, null);
+
+  // The first import persisted no source ID, so there is no sound identity to
+  // suppress a second real transaction with the same visible content.
+  const persistedSourceIds = new Set(
+    first.lines.flatMap((entry) =>
+      entry.bankTransactionId ? [entry.bankTransactionId] : [],
+    ),
+  );
+  const second = filterDuplicateStatementLines([line()], persistedSourceIds);
+  assert.equal(second.lines.length, 1);
+  assert.equal(second.duplicates, 0);
 });
 
-test("the same batch token reproduces the same keys, so re-importing a file is a no-op", () => {
-  const lines = [
-    line(),
-    line({ postedOn: "2026-08-02", amount: "100.0000", description: "DEPOSIT" }),
-    line({ postedOn: "2026-08-03", amount: "-9.9900", description: null }),
-  ];
-  const first = synthesizeTransactionIds("acc-1", lines, "token-file-a");
-  const reimport = synthesizeTransactionIds("acc-1", lines, "token-file-a");
+test("content-identical ID-less transactions within one import are all retained", () => {
+  const filtered = filterDuplicateStatementLines([line(), line(), line()], new Set());
+  assert.equal(filtered.lines.length, 3);
+  assert.equal(filtered.duplicates, 0);
+});
+
+test("source-provided transaction IDs still dedupe across and within imports", () => {
+  const filtered = filterDuplicateStatementLines(
+    [
+      line({ bankTransactionId: "FITID-existing" }),
+      line({ bankTransactionId: "FITID-new" }),
+      line({ bankTransactionId: "FITID-new" }),
+      line(),
+    ],
+    new Set(["FITID-existing"]),
+  );
   assert.deepEqual(
-    reimport.map((l) => l.bankTransactionId),
-    first.map((l) => l.bankTransactionId),
+    filtered.lines.map((entry) => entry.bankTransactionId),
+    ["FITID-new", null],
   );
-});
-
-test("occurrence index still disambiguates identical tuples within one batch", () => {
-  const lines = [line(), line(), line()];
-  const keyed = synthesizeTransactionIds("acc-1", lines, "token-file-a");
-  const ids = new Set(keyed.map((l) => l.bankTransactionId));
-  assert.equal(ids.size, 3);
-});
-
-test("source-provided transaction ids pass through untouched", () => {
-  const keyed = synthesizeTransactionIds(
-    "acc-1",
-    [line({ bankTransactionId: "FITID-42" })],
-    "token-file-a",
-  );
-  assert.equal(keyed[0].bankTransactionId, "FITID-42");
+  assert.equal(filtered.duplicates, 2);
 });
 
 test("plaid pagination accumulates every page until has_more is false", async () => {

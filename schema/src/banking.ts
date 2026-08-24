@@ -51,7 +51,8 @@ export const bankStatementLines = pgTable(
     currency: currencyCode("currency").notNull(),
     description: text("description"),
     counterpartyRef: text("counterparty_ref"),
-    bankTransactionId: text("bank_transaction_id"), // dedupe key from source
+    /** Source-provided dedupe key; null when the source supplies no sound transaction identity. */
+    bankTransactionId: text("bank_transaction_id"),
     matchStatus: text("match_status", { enum: ["unmatched", "matched", "excluded"] })
       .notNull()
       .default("unmatched"),
