@@ -3,6 +3,11 @@
 // them. The resolver merges this with the org's saved layout and filters by
 // permission.
 
+export type NavRecordTarget =
+  | { kind: 'query'; param: string }
+  | { kind: 'nested'; segment: string }
+  | { kind: 'project-transaction' }
+
 export interface NavModule {
   key: string
   href: string
@@ -12,6 +17,9 @@ export interface NavModule {
   requiredPermission?: string
   /** Optional-feature gate — hidden while the org has the feature off. */
   featureKey?: string
+  /** How a native list opens one of its records. Transaction links derive
+   *  their path from this module-owned contract instead of copying routes. */
+  recordTarget?: NavRecordTarget
   /** Stable default workspace key used when no org config exists. */
   group: NavGroupKey
   /** Optional nested section within the group — rendered as a collapsible
@@ -164,6 +172,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
+    featureKey: 'orders',
+    recordTarget: { kind: 'query', param: 'estimate' },
   },
   {
     key: 'sales-orders',
@@ -173,6 +183,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
+    featureKey: 'orders',
+    recordTarget: { kind: 'query', param: 'order' },
   },
   {
     key: 'ar',
@@ -201,6 +213,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'ar.read',
+    recordTarget: { kind: 'query', param: 'doc' },
   },
   {
     key: 'receipts',
@@ -210,6 +223,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'customers',
     subgroup: 'sell-collect',
     requiredPermission: 'ar.pay',
+    recordTarget: { kind: 'query', param: 'payment' },
   },
   {
     key: 'items',
@@ -267,6 +281,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'purchasing',
     subgroup: 'buy',
     requiredPermission: 'ap.read',
+    featureKey: 'orders',
+    recordTarget: { kind: 'query', param: 'order' },
   },
   {
     key: 'ap',
@@ -296,6 +312,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'purchasing',
     subgroup: 'buy',
     requiredPermission: 'ap.read',
+    recordTarget: { kind: 'query', param: 'doc' },
   },
   {
     key: 'payments',
@@ -305,6 +322,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'purchasing',
     subgroup: 'pay',
     requiredPermission: 'ap.pay',
+    recordTarget: { kind: 'query', param: 'payment' },
   },
   {
     key: 'expenses',
@@ -314,6 +332,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'purchasing',
     subgroup: 'pay',
     requiredPermission: 'expenses.read',
+    featureKey: 'expenses',
+    recordTarget: { kind: 'query', param: 'expense' },
   },
 
   // Purchasing → Compliance. Subcontractor compliance is a BUY-SIDE control: it
@@ -392,6 +412,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'banking',
     subgroup: 'processing',
     requiredPermission: 'banking.read',
+    featureKey: 'banking',
+    recordTarget: { kind: 'query', param: 'doc' },
   },
   {
     key: 'banking-match',
@@ -439,6 +461,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting',
     subgroup: 'ledger',
     requiredPermission: 'gl.read',
+    recordTarget: { kind: 'query', param: 'entry' },
   },
   {
     key: 'accounts',
@@ -536,6 +559,8 @@ export const NAV_MODULES: NavModule[] = [
     group: 'operations',
     subgroup: 'delivery',
     requiredPermission: 'projects.read',
+    featureKey: 'projects',
+    recordTarget: { kind: 'project-transaction' },
   },
   {
     key: 'employees',
@@ -574,6 +599,7 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'delivery',
     requiredPermission: 'time.read',
     featureKey: 'fieldTickets',
+    recordTarget: { kind: 'query', param: 'ticket' },
   },
   {
     key: 'payroll',
@@ -584,6 +610,7 @@ export const NAV_MODULES: NavModule[] = [
     subgroup: 'people',
     requiredPermission: 'payroll.read',
     featureKey: 'payroll',
+    recordTarget: { kind: 'nested', segment: 'runs' },
   },
 
   // Insights — reports, native analytics, custom dashboards, and saved views.
