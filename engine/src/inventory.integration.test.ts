@@ -773,6 +773,24 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
     const recall = await queryLotRecall(org.orgId, { lotId: lotA });
     assert.equal(recall.length, 2);
 
+    const legacyRecallLimit = 500;
+    await db.execute(sql`
+      insert into inventory_movements
+        (org_id, item_id, kind, moved_at, stock_location_id, lot_id,
+         quantity, unit_cost, total_value, status, created_by, updated_by)
+      select ${org.orgId}, ${org.items.fifo}, 'receipt',
+             ${org.date}::date + generated.n * interval '1 second',
+             ${org.stockLocationId}, ${lotA}, 1, 1, 1, 'posted',
+             ${actor}, ${actor}
+        from generate_series(1, ${legacyRecallLimit - 1}) as generated(n)
+    `);
+    const completeRecall = await queryLotRecall(org.orgId, { lotId: lotA });
+    assert.equal(completeRecall.length, legacyRecallLimit + 1);
+    assert.equal(
+      new Set(completeRecall.map((movement) => movement.movementId)).size,
+      legacyRecallLimit + 1,
+    );
+
     await db.execute(sql`
       update item_inventory_profiles
          set tracking = 'serial'
