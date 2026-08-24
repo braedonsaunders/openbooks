@@ -232,9 +232,10 @@ const plaid: BankFeedAdapter = {
     }
   },
   async fetch(creds, externalAccountId, sinceIso, untilIso) {
+    const accountId = externalAccountId.trim();
+    if (!accountId) throw new FeedError("Plaid account id required");
     const base = plaidApiBase(creds.env);
     const today = untilIso;
-    const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
     const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
       const res = await providerFetch(`${base}/transactions/get`, {
@@ -246,7 +247,7 @@ const plaid: BankFeedAdapter = {
           access_token: creds.accessToken,
           start_date: sinceIso,
           end_date: today,
-          options: { ...accountOptions, count: PLAID_PAGE_SIZE, offset },
+          options: { account_ids: [accountId], count: PLAID_PAGE_SIZE, offset },
         }),
       });
       const { body, raw } = await jsonResponse(res);

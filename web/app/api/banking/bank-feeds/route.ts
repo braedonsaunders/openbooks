@@ -58,6 +58,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid provider" }, { status: 400 });
   }
   if (!body.accountId) return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
+  const externalAccountId = typeof body.externalAccountId === "string"
+    ? body.externalAccountId.trim()
+    : "";
+  if (body.provider === "plaid" && !externalAccountId) {
+    return NextResponse.json({ error: "Plaid account id is required" }, { status: 400 });
+  }
 
   const acct = (await db.execute(sql`
     select id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
@@ -75,7 +81,7 @@ export async function POST(req: Request) {
       insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
                                          sync_cadence, credentials, status, created_by, updated_by)
       values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
-              ${body.externalAccountId ?? null}, ${cadence}, ${sealed}, ${status},
+              ${isApi ? externalAccountId || null : null}, ${cadence}, ${sealed}, ${status},
               ${authz.user.id}, ${authz.user.id})
       returning *
     `));

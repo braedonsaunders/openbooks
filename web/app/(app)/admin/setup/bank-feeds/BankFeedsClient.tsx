@@ -470,6 +470,7 @@ function ConfigureConnection({
   const t = useTranslations("banking.bankFeeds.client");
 
   const isApi = API_PROVIDERS.has(provider);
+  const requiresExternalAccountId = provider === "plaid";
   const color = bank?.brandColor ?? PROVIDER_COLOR[provider] ?? "#64748B";
 
   const save = async () => {
@@ -503,7 +504,7 @@ function ConfigureConnection({
           name: name || bank?.name || "Bank feed",
           provider,
           accountId,
-          externalAccountId: isApi ? externalAccountId : null,
+          externalAccountId: isApi ? externalAccountId.trim() : null,
           syncCadence: cadence,
           credentials: isApi ? creds : null,
         }),
@@ -615,7 +616,7 @@ function ConfigureConnection({
             ))}
             <div>
               <Label>{t("configure.providerAccountId")}</Label>
-              <Input value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder={t("configure.providerAccountIdPlaceholder")} />
+              <Input required={requiresExternalAccountId} value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} placeholder={t("configure.providerAccountIdPlaceholder")} />
             </div>
             <div>
               <Label>{t("configure.importHowOften")}</Label>
@@ -642,7 +643,7 @@ function ConfigureConnection({
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
       <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <Button onClick={save} disabled={busy || !accountId || (!name && !bank)}>
+        <Button onClick={save} disabled={busy || !accountId || (!name && !bank) || (requiresExternalAccountId && !externalAccountId.trim())}>
           {provider === "sftp" ? t("configure.createSftpLogin") : t("configure.addConnection")}
         </Button>
         <Button variant="ghost" onClick={onCancel}>{t("configure.cancel")}</Button>
