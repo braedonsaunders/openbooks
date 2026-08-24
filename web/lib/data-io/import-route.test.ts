@@ -14,6 +14,7 @@ import {
 
 interface ImportRouteState {
   resource: DataResource | null
+  resourceLookupCalls: number
   resourceWriteCalls: number
   rootInsertCalls: number
   transactionCalls: number
@@ -23,6 +24,7 @@ interface ImportRouteState {
 const stateKey = Symbol.for('openbooks.data-import-route-test')
 const importState: ImportRouteState = {
   resource: null,
+  resourceLookupCalls: 0,
   resourceWriteCalls: 0,
   rootInsertCalls: 0,
   transactionCalls: 0,
@@ -88,6 +90,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
       export async function getResource() {
+        state.resourceLookupCalls++
         if (!state.resource) throw new Error('transaction resource was not installed')
         return state.resource
       }
@@ -194,11 +197,35 @@ const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts'
 hooks.deregister()
 
 function resetImportState(): void {
+  importState.resourceLookupCalls = 0
   importState.resourceWriteCalls = 0
   importState.rootInsertCalls = 0
   importState.transactionCalls = 0
   importState.mappedRows = null
 }
+
+test('route rejects an unknown mode before resource lookup or writes', async () => {
+  resetImportState()
+
+  const response = await POST(new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'publish',
+      resource: 'txn:card_charge',
+      rows: [],
+    }),
+  }))
+
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'mode must be parse, preview or commit',
+  })
+  assert.equal(importState.resourceLookupCalls, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
+})
 
 test('reserved import metadata wire keys have one shared definition', async () => {
   const files = [
