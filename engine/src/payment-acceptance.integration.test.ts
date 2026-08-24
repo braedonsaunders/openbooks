@@ -269,6 +269,38 @@ test("webhook settles only the provider-confirmed quoted amount and currency", {
       /reported 100\.0000 CAD, but checkout expected 103\.0000 CAD/,
     );
 
+    const underpaymentEvidence = (await db.execute<{
+      attempt_discrepancy: Record<string, unknown> | null;
+      audit_discrepancy: Record<string, unknown> | null;
+    }>(sql`
+      select
+        attempt.event_payload->'settlementDiscrepancy' as attempt_discrepancy,
+        (
+          select audit.changes->'after'->'settlementDiscrepancy'
+            from audit_log audit
+           where audit.org_id = ${org.orgId}
+             and audit.table_name = 'payment_attempts'
+             and audit.row_id = attempt.id
+             and audit.action = 'update'
+           order by audit.at desc
+           limit 1
+        ) as audit_discrepancy
+        from payment_attempts attempt
+       where attempt.org_id = ${org.orgId}
+         and attempt.external_ref = 'cs_evidence_1'
+    `)).rows[0]!;
+    const expectedUnderpaymentEvidence = {
+      reason: "amount_currency_mismatch",
+      provider: "stripe",
+      externalRef: "cs_evidence_1",
+      reportedAmount: "100.0000",
+      reportedCurrency: "CAD",
+      expectedAmount: "103.0000",
+      expectedCurrency: "CAD",
+    };
+    assert.deepEqual(underpaymentEvidence.attempt_discrepancy, expectedUnderpaymentEvidence);
+    assert.deepEqual(underpaymentEvidence.audit_discrepancy, expectedUnderpaymentEvidence);
+
     const wrongCurrency = signedStripeBody(
       "whsec_INV-PAY-EVIDENCE",
       "cs_evidence_1",
@@ -285,17 +317,27 @@ test("webhook settles only the provider-confirmed quoted amount and currency", {
       attempt_status: string;
       invoice_balance: string;
       payment_count: number;
+      discrepancy_count: number;
     }>(sql`
       select
         (select status from payment_attempts
           where org_id = ${org.orgId} and external_ref = 'cs_evidence_1') as attempt_status,
         (select open_balance from documents where id = ${fx.invoiceId}) as invoice_balance,
         (select count(*)::int from documents
-          where org_id = ${org.orgId} and kind = 'customer_payment') as payment_count
+          where org_id = ${org.orgId} and kind = 'customer_payment') as payment_count,
+        (select count(*)::int
+           from audit_log audit
+           join payment_attempts attempt on attempt.id = audit.row_id
+          where audit.org_id = ${org.orgId}
+            and audit.table_name = 'payment_attempts'
+            and audit.action = 'update'
+            and audit.changes->'after' ? 'settlementDiscrepancy'
+            and attempt.external_ref = 'cs_evidence_1') as discrepancy_count
     `));
     assert.equal(unchanged.rows[0]!.attempt_status, "initiated");
     assert.equal(unchanged.rows[0]!.invoice_balance, "100.0000");
     assert.equal(unchanged.rows[0]!.payment_count, 0);
+    assert.equal(unchanged.rows[0]!.discrepancy_count, 2);
 
     const paid = signedStripeBody(
       "whsec_INV-PAY-EVIDENCE",
