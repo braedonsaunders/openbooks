@@ -231,7 +231,10 @@ export interface PaymentProviderAdapter {
   key: AcceptanceProvider;
   createCheckout(secrets: ProviderSecrets, req: CheckoutRequest, fetchFn?: FetchFn): Promise<CheckoutSession>;
   /** Verify and normalize a complete delivery without conflating authentication
-   *  with whether this service handles any of its event types. */
+   *  with whether this service handles any of its event types. A signature-
+   *  valid item whose fields cannot be normalized exactly is isolated — logged
+   *  under PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT and skipped — so it never
+   *  crashes the delivery boundary or starves its signed siblings. */
   verifyWebhookDelivery(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookVerification;
   /** Normalize the first actionable event in a delivery, if one exists. */
   verifyWebhook(headers: Record<string, string | string[] | undefined>, rawBody: string, secrets: ProviderSecrets): WebhookEvent | null;
@@ -246,6 +249,61 @@ function verifiedWebhook(events: WebhookEvent[]): WebhookVerification {
 }
 
 // --- Stripe ---------------------------------------------------------------
+
+/** Normalize one signature-verified Stripe event into an actionable event, or
+ *  null when acceptance does not act on its type. Same exactness contract as
+ *  the Adyen item normalizer: un-normalizable fields throw to the caller's
+ *  quarantine instead of settling on coerced data. */
+function normalizeStripeNotification(event: any): WebhookEvent | null {
+  const obj = event?.data?.object ?? {};
+  if (
+    event?.type === "checkout.session.completed" ||
+    event?.type === "checkout.session.async_payment_succeeded"
+  ) {
+    // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
+    // settling on that would post a receipt for money not yet collected.
+    const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
+    const settled =
+      event.type === "checkout.session.async_payment_succeeded" ||
+      paymentStatus === "paid" ||
+      paymentStatus === "no_payment_required";
+    return {
+      externalRef: String(obj.id ?? ""),
+      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
+      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      status: settled ? "succeeded" : "processing",
+      paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
+      paidCurrency: settled && typeof obj.currency === "string" ? obj.currency.toUpperCase() : null,
+      raw: event,
+    };
+  }
+  if (event?.type === "checkout.session.async_payment_failed") {
+    return {
+      externalRef: String(obj.id ?? ""),
+      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
+      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
+      status: "failed",
+      raw: event,
+    };
+  }
+  if (event?.type === "checkout.session.expired") {
+    return { externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event };
+  }
+  if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
+    // Checkout stores the session id as external_ref and persists
+    // payment_intent onto event_payload. Refund/dispute objects are keyed
+    // by the intent, so both refs must be set: externalRef for a later
+    // re-key, intentRef so resolution matches event_payload.paymentIntent.
+    const intent = obj.payment_intent ? String(obj.payment_intent) : null;
+    return {
+      externalRef: String(obj.payment_intent ?? obj.id ?? ""),
+      intentRef: intent,
+      status: "refunded",
+      raw: event,
+    };
+  }
+  return null;
+}
 
 function verifyStripeWebhookDelivery(
   headers: Record<string, string | string[] | undefined>,
@@ -273,54 +331,20 @@ function verifyStripeWebhookDelivery(
   } catch {
     return verifiedWebhook([]);
   }
-  const obj = event?.data?.object ?? {};
-  if (
-    event?.type === "checkout.session.completed" ||
-    event?.type === "checkout.session.async_payment_succeeded"
-  ) {
-    // Async methods (ACH/SEPA) complete with payment_status "unpaid" first;
-    // settling on that would post a receipt for money not yet collected.
-    const paymentStatus = obj.payment_status == null ? "paid" : String(obj.payment_status);
-    const settled =
-      event.type === "checkout.session.async_payment_succeeded" ||
-      paymentStatus === "paid" ||
-      paymentStatus === "no_payment_required";
-    return verifiedWebhook([{
-      externalRef: String(obj.id ?? ""),
-      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
-      status: settled ? "succeeded" : "processing",
-      paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
-      paidCurrency: settled && typeof obj.currency === "string" ? obj.currency.toUpperCase() : null,
-      raw: event,
-    }]);
+  // Authenticated content may still be un-normalizable; that quarantines the
+  // delivery's single item exactly like an unparseable body does above.
+  try {
+    const normalized = normalizeStripeNotification(event);
+    return normalized ? verifiedWebhook([normalized]) : verifiedWebhook([]);
+  } catch (error) {
+    logPaymentWebhookItemMalformed(
+      "stripe",
+      String(event?.data?.object?.id ?? ""),
+      String(event?.type ?? ""),
+      error,
+    );
+    return verifiedWebhook([]);
   }
-  if (event?.type === "checkout.session.async_payment_failed") {
-    return verifiedWebhook([{
-      externalRef: String(obj.id ?? ""),
-      intentRef: obj.payment_intent ? String(obj.payment_intent) : null,
-      linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
-      status: "failed",
-      raw: event,
-    }]);
-  }
-  if (event?.type === "checkout.session.expired") {
-    return verifiedWebhook([{ externalRef: String(obj.id ?? ""), linkToken: obj.client_reference_id ?? null, status: "cancelled", raw: event }]);
-  }
-  if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
-    // Checkout stores the session id as external_ref and persists
-    // payment_intent onto event_payload. Refund/dispute objects are keyed
-    // by the intent, so both refs must be set: externalRef for a later
-    // re-key, intentRef so resolution matches event_payload.paymentIntent.
-    const intent = obj.payment_intent ? String(obj.payment_intent) : null;
-    return verifiedWebhook([{
-      externalRef: String(obj.payment_intent ?? obj.id ?? ""),
-      intentRef: intent,
-      status: "refunded",
-      raw: event,
-    }]);
-  }
-  return verifiedWebhook([]);
 }
 
 const stripeAdapter: PaymentProviderAdapter = {
@@ -359,6 +383,37 @@ const stripeAdapter: PaymentProviderAdapter = {
 
 // --- Adyen ----------------------------------------------------------------
 
+/** Normalize one signature-verified notification item into an actionable
+ *  event, or null when acceptance does not act on its event code. Fields are
+ *  converted exactly or not at all: a value that cannot normalize (e.g. a
+ *  fractional minor-unit amount) throws to the caller's per-item quarantine
+ *  rather than settling on coerced data. */
+function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: any): WebhookEvent | null {
+  if (item.eventCode === "AUTHORISATION" && item.success === "true") {
+    return {
+      externalRef: String(item.pspReference ?? ""),
+      linkToken: item.merchantReference ?? null,
+      status: "succeeded",
+      paidAmount:
+        item.amount?.value != null && item.amount?.currency
+          ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
+          : null,
+      paidCurrency:
+        typeof item.amount?.currency === "string"
+          ? item.amount.currency.toUpperCase()
+          : null,
+      raw: payload,
+    };
+  }
+  if (item.eventCode === "AUTHORISATION") {
+    return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload };
+  }
+  if (item.eventCode === "CANCELLATION" || item.eventCode === "CANCEL_OR_REFUND") {
+    return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload };
+  }
+  return null;
+}
+
 function verifyAdyenWebhookDelivery(
   _headers: Record<string, string | string[] | undefined>,
   rawBody: string,
@@ -394,25 +449,15 @@ function verifyAdyenWebhookDelivery(
     // Authentication is delivery-wide: never process a valid item from a
     // payload that also contains an item whose signature cannot be verified.
     if (!provided || !safeEqual(expected, String(provided))) return invalidWebhook();
-    if (item.eventCode === "AUTHORISATION" && item.success === "true") {
-      events.push({
-        externalRef: String(item.pspReference ?? ""),
-        linkToken: item.merchantReference ?? null,
-        status: "succeeded",
-        paidAmount:
-          item.amount?.value != null && item.amount?.currency
-            ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
-            : null,
-        paidCurrency:
-          typeof item.amount?.currency === "string"
-            ? item.amount.currency.toUpperCase()
-            : null,
-        raw: payload,
-      });
-    } else if (item.eventCode === "AUTHORISATION" && item.success !== "true") {
-      events.push({ externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload });
-    } else if (item.eventCode === "CANCELLATION" || item.eventCode === "CANCEL_OR_REFUND") {
-      events.push({ externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload });
+    // The item is genuinely Adyen's, but its fields may still fail exact
+    // normalization. Quarantine that one item with structured evidence — it
+    // must neither crash the delivery boundary nor starve its signed siblings,
+    // and settlement never runs on best-effort-parsed amounts.
+    try {
+      const event = normalizeAdyenNotificationItem(payload, item);
+      if (event) events.push(event);
+    } catch (error) {
+      logPaymentWebhookItemMalformed("adyen", String(item.pspReference ?? ""), String(item.eventCode ?? ""), error);
     }
   }
   return verifiedWebhook(events);
@@ -972,6 +1017,33 @@ function logPaymentWebhookEventFailure(
       orgId,
       externalRef: event.externalRef,
       eventStatus: event.status,
+      error: error instanceof Error ? error.message : String(error),
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
+/**
+ * Stable structured-log key for a signature-valid provider item whose fields
+ * could not be normalized exactly. Quarantine happens during normalization —
+ * before any tenant context exists — so the emission carries the item's own
+ * identity rather than an orgId.
+ */
+export const PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT =
+  "payment_webhook.item_malformed";
+
+function logPaymentWebhookItemMalformed(
+  provider: AcceptanceProvider,
+  externalRef: string,
+  itemTypeOrCode: string,
+  error: unknown,
+): void {
+  console.error(
+    JSON.stringify({
+      event: PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
+      provider,
+      externalRef,
+      itemTypeOrCode,
       error: error instanceof Error ? error.message : String(error),
       at: new Date().toISOString(),
     }),
