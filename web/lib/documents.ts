@@ -122,9 +122,66 @@ export async function createDocumentDraft(
 
 /**
  * Materialize the user's edited replacement as a draft while preserving the
- * posted source. A `reverses` link blocks submission until the source's
- * controlled void completes.
+ * posted source. The `reverses` link carries the mandatory reversal-audit
+ * evidence (reason + requester + timestamp — see buildReversalLinkEvidence)
+ * and blocks submission until the source's controlled void completes.
  */
+/**
+ * Trimmed correction reason admissible on a posted-document amendment: the
+ * same 8..500 btrim window the database enforces on every `reverses`
+ * document_links edge (document_links_reversal_evidence CHECK), so a reason
+ * this accepts can never detonate the link insert mid-transaction.
+ */
+export function validateCorrectionReason(value: string | undefined | null): string {
+  const reason = value?.trim() ?? ''
+  if (reason.length < 8 || reason.length > 500) {
+    throw new DocumentEditError(422, 'A correction reason between 8 and 500 characters is required')
+  }
+  return reason
+}
+
+/**
+ * The mandatory, immutable controller evidence every `reverses` document_links
+ * edge must carry — `reason`, `requested_by`, and `requested_at` are not
+ * optional metadata on a correction edge; the database refuses any row without
+ * them (document_links_reversal_evidence CHECK) and submission of the
+ * replacement stays gated on the linked void either way
+ * (engine/src/flows/submit.ts). This is the same evidence the engine's own
+ * correction writer records (engine/src/document-correction.ts); the web draft
+ * path composes it instead of hand-rolling a bare edge. Fails closed: an edge
+ * without admissible evidence cannot be constructed here at all.
+ *
+ * Pure — unit-tested directly in documents.test.ts.
+ */
+export function buildReversalLinkEvidence(input: {
+  fromDocumentId: string
+  toDocumentId: string
+  reason: string | undefined | null
+  requestedBy: string
+}): {
+  fromDocumentId: string
+  toDocumentId: string
+  linkType: 'reverses'
+  reason: string
+  requestedBy: string
+  requestedAt: Date
+} {
+  if (!input.fromDocumentId || !input.toDocumentId) {
+    throw new DocumentEditError(422, 'a reversal link requires both the replacement and the corrected document')
+  }
+  if (!input.requestedBy) {
+    throw new DocumentEditError(422, 'a correction requires an attributable requester')
+  }
+  return {
+    fromDocumentId: input.fromDocumentId,
+    toDocumentId: input.toDocumentId,
+    linkType: 'reverses',
+    reason: validateCorrectionReason(input.reason),
+    requestedBy: input.requestedBy,
+    requestedAt: new Date(),
+  }
+}
+
 export async function createPostedCorrectionDraft(
   sourceId: string,
   body: DocumentEditInput,
@@ -137,10 +194,7 @@ export async function createPostedCorrectionDraft(
   if (!source || source.status !== 'posted') {
     throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
   }
-  const reason = body.amendmentReason?.trim() ?? ''
-  if (reason.length < 5 || reason.length > 500) {
-    throw new DocumentEditError(422, 'A correction reason between 5 and 500 characters is required')
-  }
+  const reason = validateCorrectionReason(body.amendmentReason)
 
   const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
     runFlows: false,
@@ -182,9 +236,12 @@ export async function createPostedCorrectionDraft(
       `)
       await tx.insert(schema.documentLinks).values({
         orgId: ctx.orgId,
-        fromDocumentId: replacement.id,
-        toDocumentId: sourceId,
-        linkType: 'reverses',
+        ...buildReversalLinkEvidence({
+          fromDocumentId: replacement.id,
+          toDocumentId: sourceId,
+          reason,
+          requestedBy: ctx.userId,
+        }),
         createdBy: ctx.userId,
       })
       await tx.execute(sql`
