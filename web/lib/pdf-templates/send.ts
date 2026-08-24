@@ -1,6 +1,5 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { PDFDocument } from 'pdf-lib'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentEmail, sendVia } from '@openbooks/emails'
 import {
@@ -11,6 +10,7 @@ import {
 } from '@openbooks/engine/src/email-config.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
+import { verifyPdfEncryption } from '@openbooks/pdf'
 import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { mergeAndPrintPdf } from './render'
@@ -40,24 +40,24 @@ export function isProtectedPayrollRecordType(recordType: string): boolean {
 }
 
 async function requireEncryptedPayrollPdf(plaintext: Buffer, candidate: Buffer): Promise<Buffer> {
-  const invalidEncryption = () => new Error(
-    'payroll compensation PDF encryption must return a valid encrypted PDF',
+  const invalidEncryption = (cause?: unknown) => new Error(
+    `payroll compensation PDF encryption must return a valid encrypted PDF`
+      + (cause ? ` (${cause instanceof Error ? cause.message : String(cause)})` : ''),
   )
   if (!Buffer.isBuffer(candidate) || candidate.length === 0 || candidate.equals(plaintext)) {
     throw invalidEncryption()
   }
 
   try {
-    // Parsing with encryption tolerated lets us distinguish a real encrypted
-    // PDF from identity/copy callbacks, alternate plaintext PDFs, and malformed
-    // output without treating an arbitrary parser failure as proof of safety.
-    const parsed = await PDFDocument.load(candidate, {
-      ignoreEncryption: true,
-      updateMetadata: false,
-    })
-    if (!parsed.isEncrypted) throw invalidEncryption()
-  } catch {
-    throw invalidEncryption()
+    // Independent certification, not parser-reported markers: any writer can
+    // forge an /Encrypt trailer entry that lenient parsers report as
+    // "encrypted" over fully readable plaintext. qpdf must be able to open
+    // the document only under a real security handler that rejects the empty
+    // password — identity, copy, alternate-plaintext, and marker-only forgeries
+    // all fail that certification and the send is refused.
+    await verifyPdfEncryption(candidate)
+  } catch (e) {
+    throw invalidEncryption(e)
   }
   return candidate
 }

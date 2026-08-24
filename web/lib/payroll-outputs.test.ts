@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { PDFDocument } from 'pdf-lib'
 import { renderPasswordExpression } from '../../packages/pdf/src/password-expression.ts'
 import { PDF_RECORD_TYPE_BY_KEY } from './pdf-templates/catalog.ts'
 
@@ -9,7 +10,8 @@ import { PDF_RECORD_TYPE_BY_KEY } from './pdf-templates/catalog.ts'
 // compensation PDF may only leave as verified ciphertext, and the batch
 // sender must supply per-employee encryption or fail the employee. The
 // dependency graph of the sender is served by mocks through module hooks;
-// the ciphertext verification itself runs against the real pdf-lib parser.
+// certification itself is delegated to the real qpdf-backed verifier, so a
+// forged encryption marker cannot pass here any more than in production.
 
 interface StubRow {
   id: string
@@ -32,9 +34,9 @@ interface SqlQuery {
   values: unknown[]
 }
 
-// Fixed one-page fixtures keep the sender test hermetic while exercising the
-// real pdf-lib encryption detector. The encrypted fixture uses a non-empty
-// user password; neither fixture contains payroll data.
+// Fixed one-page fixtures keep the sender test hermetic. The encrypted
+// fixture is genuine AES-256 ciphertext (non-empty user password, produced by
+// qpdf); neither fixture contains payroll data.
 const plainPdfFixture = Buffer.from(
   'JVBERi0xLjMKJeLjz9MKMSAwIG9iago8PAovUHJvZHVjZXIgKHB5cGRmKQo+PgplbmRvYmoKMiAwIG9iago8PAovVHlwZSAvUGFnZXMKL0NvdW50IDEKL0tpZHMgWyA0IDAgUiBdCj4+CmVuZG9iagozIDAgb2JqCjw8Ci9UeXBlIC9DYXRhbG9nCi9QYWdlcyAyIDAgUgo+PgplbmRvYmoKNCAwIG9iago8PAovVHlwZSAvUGFnZQovUmVzb3VyY2VzIDw8Cj4+Ci9NZWRpYUJveCBbIDAuMCAwLjAgNzIgNzIgXQovUGFyZW50IDIgMCBSCj4+CmVuZG9iagp4cmVmCjAgNQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA1NCAwMDAwMCBuIAowMDAwMDAwMTEzIDAwMDAwIG4gCjAwMDAwMDAxNjIgMDAwMDAgbiAKdHJhaWxlcgo8PAovU2l6ZSA1Ci9Sb290IDMgMCBSCi9JbmZvIDEgMCBSCj4+CnN0YXJ0eHJlZgoyNTQKJSVFT0YK',
   'base64',
@@ -62,6 +64,9 @@ const state = {
 
 const harness = {
   state,
+  // The mocked @openbooks/pdf delegates certification to the real qpdf-backed
+  // verifier, imported lazily at call time (after the hooks deregister).
+  pdfCryptoModuleUrl: new URL('../../packages/pdf/src/encrypt.ts', import.meta.url).href,
   async execute(query: SqlQuery) {
     if (query.text.includes('from pay_stubs s')) return { rows: state.stubs }
     if (query.text.includes("settings#>'{payroll,stubPassword}'")) {
@@ -84,9 +89,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  // The real pdf-lib stays wired in: the ciphertext detector under test is
-  // its parser. Only the qpdf wrapper is mocked, returning genuine encrypted
-  // bytes so the whole send path is exercised against a real /Encrypt dict.
+  // Only encryptPdf itself is stubbed (returning genuine encrypted bytes);
+  // certification delegates to the real qpdf-backed verifier, so the send
+  // path runs against real ciphertext AND the independent check guarding it.
   [
     'mock:openbooks-pdf',
     `
@@ -96,6 +101,11 @@ const mockSources = new Map<string, string>([
         harness.state.encryptionPasswords.push(options.userPassword)
         if (harness.state.encryptionError) throw harness.state.encryptionError
         return Buffer.from(harness.state.encryptedFixture, 'base64')
+      }
+
+      export async function verifyPdfEncryption(pdf) {
+        const crypto = await import(harness.pdfCryptoModuleUrl)
+        return crypto.verifyPdfEncryption(pdf)
       }
 
       export function renderPasswordExpression(expression, catalog, values) {
@@ -326,6 +336,36 @@ test('identity, copied, alternate-plaintext, unencrypted, and malformed outputs 
         `${recordType} accepted ${kind}`,
       )
     }
+  }
+  assert.equal(state.deliveryCalls.length, 0)
+})
+
+test('a forged encryption marker cannot smuggle plaintext past the sender', async () => {
+  reset([], { enabled: true, expression: '{surname:3|upper}' })
+  // A plaintext file whose trailer carries an /Encrypt entry: lenient parsers
+  // report it as encrypted while every viewer reads the payload without a
+  // password — exactly what the old parser-flag check accepted.
+  const doc = await PDFDocument.load(plainPdfFixture)
+  doc.context.trailerInfo.Encrypt = doc.context.register(
+    doc.context.obj({
+      Filter: 'Standard', V: 5, R: 6, Length: 256,
+      O: '00', U: '00', OE: '00', UE: '00', P: -1, Perms: '00',
+    }),
+  )
+  const forged = Buffer.from(await doc.save())
+  await assert.rejects(() => PDFDocument.load(forged), /encrypted/)
+
+  for (const recordType of protectedPayrollRecordTypes) {
+    await assert.rejects(
+      () => sendRecordPdfEmail({
+        recordType,
+        orgId: 'org-1',
+        id: 'stub-1',
+        encrypt: async () => Buffer.from(forged),
+      }),
+      /payroll compensation PDF encryption must return a valid encrypted PDF/,
+      `${recordType} accepted a forged encryption marker`,
+    )
   }
   assert.equal(state.deliveryCalls.length, 0)
 })
