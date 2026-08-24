@@ -5,6 +5,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "./db.ts";
 import {
+  decidePaymentFile,
+  decidePaymentRun,
   nachaOriginator,
   recordPaymentSettlement,
   sepaOriginator,
@@ -21,6 +23,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  type ScratchOrg,
 } from "./test-fixtures.ts";
 
 const paymentOperationsSource = readFileSync(new URL("./payment-operations.ts", import.meta.url), "utf8");
@@ -232,6 +235,289 @@ test("built-in payment format upserts pin the known tenant on the org_id/code co
     /insert into payment_formats[\s\S]*?on conflict \(org_id, code\) do update set[\s\S]*?where payment_formats\.org_id = \$\{orgId\}/,
   );
 });
+
+async function seedPaymentRun(
+  org: ScratchOrg,
+  submitterId: string,
+  opts?: {
+    profileId?: string;
+    status?: "pending_approval" | "generated";
+    approvedBy?: string;
+  },
+): Promise<string> {
+  const runId = randomUUID();
+  const status = opts?.status ?? "pending_approval";
+  await db.execute(sql`
+    insert into payment_runs
+      (id, org_id, run_number, bank_account_id, payment_bank_profile_id, method,
+       currency, status, payment_count, total_amount, submitted_at, submitted_by,
+       approved_at, approved_by, created_by, updated_by)
+    values
+      (${runId}, ${org.orgId}, ${`RUN-${runId.slice(0, 8)}`}, ${org.accounts.bank},
+       ${opts?.profileId ?? null}, 'wire', 'CAD', ${status}, 1, '25', now(),
+       ${submitterId}, ${opts?.approvedBy ? sql`now()` : null}, ${opts?.approvedBy ?? null},
+       ${submitterId}, ${submitterId})
+  `);
+  return runId;
+}
+
+async function seedPendingPaymentFile(
+  org: ScratchOrg,
+  generatorId: string,
+  runApproverId: string,
+): Promise<{ fileId: string; runId: string }> {
+  const formatId = randomUUID();
+  const profileId = randomUUID();
+  const folderId = randomUUID();
+  const storedFileId = randomUUID();
+  const versionId = randomUUID();
+  const fileId = randomUUID();
+  const hash = "0".repeat(64);
+
+  await db.execute(sql`
+    insert into payment_formats
+      (id, org_id, code, name, rail, direction, file_extension, content_type,
+       created_by, updated_by)
+    values
+      (${formatId}, ${org.orgId}, ${`TEST-${formatId.slice(0, 8)}`}, 'Test wire',
+       'wire', 'credit', 'txt', 'text/plain', ${generatorId}, ${generatorId})
+  `);
+  await db.execute(sql`
+    insert into payment_bank_profiles
+      (id, org_id, name, bank_account_id, payment_format_id, currency,
+       require_run_approval, require_file_approval, created_by, updated_by)
+    values
+      (${profileId}, ${org.orgId}, 'Approval test profile', ${org.accounts.bank},
+       ${formatId}, 'CAD', true, true, ${generatorId}, ${generatorId})
+  `);
+  const runId = await seedPaymentRun(org, generatorId, {
+    profileId,
+    status: "generated",
+    approvedBy: runApproverId,
+  });
+  await db.execute(sql`
+    insert into folders (id, org_id, name, created_by, updated_by)
+    values (${folderId}, ${org.orgId}, 'Payment approval test', ${generatorId}, ${generatorId})
+  `);
+  await db.execute(sql`
+    insert into files
+      (id, org_id, folder_id, name, extension, file_type, content_type, size_bytes,
+       storage_kind, content_hash, created_by, updated_by)
+    values
+      (${storedFileId}, ${org.orgId}, ${folderId}, 'payment-test.txt', 'txt', 'other',
+       'text/plain', 4, 'db', ${hash}, ${generatorId}, ${generatorId})
+  `);
+  await db.execute(sql`
+    insert into file_versions
+      (id, file_id, version_number, size_bytes, content_type, storage_kind,
+       content_hash, created_by)
+    values (${versionId}, ${storedFileId}, 1, 4, 'text/plain', 'db', ${hash}, ${generatorId})
+  `);
+  await db.execute(sql`
+    update files set current_version_id = ${versionId}
+     where id = ${storedFileId} and org_id = ${org.orgId}
+  `);
+  await db.execute(sql`
+    insert into payment_files
+      (id, org_id, payment_run_id, payment_bank_profile_id, payment_format_id,
+       sequence_number, filename, content_type, content_hash, file_id,
+       file_version_id, payment_count, total_amount, currency, status,
+       generated_by, created_by, updated_by)
+    values
+      (${fileId}, ${org.orgId}, ${runId}, ${profileId}, ${formatId}, 1,
+       'payment-test.txt', 'text/plain', ${hash}, ${storedFileId}, ${versionId},
+       1, '25', 'CAD', 'pending_approval', ${generatorId}, ${generatorId}, ${generatorId})
+  `);
+  return { fileId, runId };
+}
+
+async function removePaymentFileFixture(orgId: string, fileId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
+    await tx.execute(sql`
+      select set_config('openbooks.sandbox_wipe', 'on', true),
+             set_config('app.bypass_rls', 'on', true)
+    `);
+    await tx.execute(sql`
+      delete from payment_events
+       where org_id = ${orgId} and payment_file_id = ${fileId}
+    `);
+    await tx.execute(sql`
+      delete from payment_files
+       where org_id = ${orgId} and id = ${fileId}
+    `);
+  });
+}
+
+test(
+  "payment run decisions reject the submitter and accept an independent approver",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const submitterId = await withBypass(() =>
+        createScratchUser(org.orgId, "Payment Run Submitter", "payment_run_submitter"),
+      );
+      const approverId = await withBypass(() =>
+        createScratchUser(org.orgId, "Payment Run Approver", "payment_run_approver"),
+      );
+      const runId = await withOrgContext(org.orgId, () => seedPaymentRun(org, submitterId));
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          decidePaymentRun(runId, org.orgId, submitterId, "approve"),
+        ),
+        (error: Error) =>
+          error instanceof PaymentError
+          && error.message === "the payment run submitter cannot approve the same run",
+      );
+      const afterSelfAttempt = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          approved_by: string | null;
+          approval_events: number;
+        }>(sql`
+          select r.status, r.approved_by,
+                 (select count(*)::int from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_approved') as approval_events
+            from payment_runs r
+           where r.id = ${runId} and r.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterSelfAttempt, {
+        status: "pending_approval",
+        approved_by: null,
+        approval_events: 0,
+      });
+
+      await withOrgContext(org.orgId, () =>
+        decidePaymentRun(runId, org.orgId, approverId, "approve"),
+      );
+      const afterIndependentApproval = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          approved_by: string | null;
+          approved_at: boolean;
+          approval_events: number;
+          event_actor_id: string | null;
+        }>(sql`
+          select r.status, r.approved_by, r.approved_at is not null as approved_at,
+                 (select count(*)::int from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_approved') as approval_events,
+                 (select e.actor_id from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_approved'
+                   order by e.created_at desc limit 1) as event_actor_id
+            from payment_runs r
+           where r.id = ${runId} and r.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterIndependentApproval, {
+        status: "approved",
+        approved_by: approverId,
+        approved_at: true,
+        approval_events: 1,
+        event_actor_id: approverId,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "payment file decisions reject the generator and accept an independent approver",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let fileId: string | null = null;
+    try {
+      const generatorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Payment File Generator", "payment_file_generator"),
+      );
+      const approverId = await withBypass(() =>
+        createScratchUser(org.orgId, "Payment File Approver", "payment_file_approver"),
+      );
+      const seeded = await withOrgContext(org.orgId, () =>
+        seedPendingPaymentFile(org, generatorId, approverId),
+      );
+      fileId = seeded.fileId;
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          decidePaymentFile(seeded.fileId, org.orgId, generatorId, "approve"),
+        ),
+        (error: Error) =>
+          error instanceof PaymentError
+          && error.message === "the payment file generator cannot approve the same file",
+      );
+      const afterSelfAttempt = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          approved_by: string | null;
+          approval_events: number;
+        }>(sql`
+          select pf.status, pf.approved_by,
+                 (select count(*)::int from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_approved') as approval_events
+            from payment_files pf
+           where pf.id = ${seeded.fileId} and pf.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterSelfAttempt, {
+        status: "pending_approval",
+        approved_by: null,
+        approval_events: 0,
+      });
+
+      await withOrgContext(org.orgId, () =>
+        decidePaymentFile(seeded.fileId, org.orgId, approverId, "approve"),
+      );
+      const afterIndependentApproval = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          approved_by: string | null;
+          approved_at: boolean;
+          approval_events: number;
+          event_actor_id: string | null;
+          event_run_id: string | null;
+        }>(sql`
+          select pf.status, pf.approved_by, pf.approved_at is not null as approved_at,
+                 (select count(*)::int from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_approved') as approval_events,
+                 (select e.actor_id from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_approved'
+                   order by e.created_at desc limit 1) as event_actor_id,
+                 (select e.payment_run_id from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_approved'
+                   order by e.created_at desc limit 1) as event_run_id
+            from payment_files pf
+           where pf.id = ${seeded.fileId} and pf.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterIndependentApproval, {
+        status: "approved",
+        approved_by: approverId,
+        approved_at: true,
+        approval_events: 1,
+        event_actor_id: approverId,
+        event_run_id: seeded.runId,
+      });
+    } finally {
+      const cleanupFileId = fileId;
+      if (cleanupFileId) {
+        await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
+      }
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * A debit profile's originator settings arrive as decrypted tenant JSON, so the
