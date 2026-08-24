@@ -249,7 +249,13 @@ test("every bank-feed adapter confines hostile inputs to trusted HTTPS origins",
   }
 });
 
-test("Plaid requests refuse 307 redirects without forwarding credentials", async () => {
+// Every 3xx with a Location must be refused, not followed: 307/308 preserve
+// method AND body; 301/302/303 still leak whichever headers survive the
+// re-request. Each adapter carries secrets (client secret, bearer token),
+// so none of them may ever cross an HTTP redirect boundary.
+const redirectStatuses = [301, 302, 303, 307, 308] as const;
+
+test("bank-feed adapters refuse every redirect class without forwarding credentials", async () => {
   let attackerRequests = 0;
   const attacker = createServer((_req, res) => {
     attackerRequests += 1;
@@ -260,37 +266,74 @@ test("Plaid requests refuse 307 redirects without forwarding credentials", async
   const providerPaths: string[] = [];
   const redirector = createServer((req, res) => {
     providerPaths.push(req.url ?? "");
-    res.writeHead(307, { location: `${attackerOrigin}/credential-capture` });
+    // Cycle the status so each adapter call meets a different redirect class.
+    res.writeHead(redirectStatuses[providerPaths.length % redirectStatuses.length]!, {
+      location: `${attackerOrigin}/credential-capture`,
+    });
     res.end();
   });
   const providerOrigin = await listen(redirector);
   const originalFetch = globalThis.fetch;
+  const providerOrigins = [
+    "https://sandbox.plaid.com",
+    "https://production.plaid.com",
+    "https://bankaccountdata.gocardless.com",
+    "https://api.truelayer.com",
+  ];
   const redirectModes: Array<RequestRedirect | undefined> = [];
   globalThis.fetch = (input, init) => {
     redirectModes.push(init?.redirect);
-    const providerUrl = String(input).replace("https://sandbox.plaid.com", providerOrigin);
+    let providerUrl = String(input);
+    for (const origin of providerOrigins) providerUrl = providerUrl.replace(origin, providerOrigin);
     return originalFetch(providerUrl, init);
   };
 
   try {
+    const gocardless = getBankFeedAdapter("gocardless");
+    assert.ok(gocardless);
+    const gocardlessCredentials = { secretId: "secret-id", secretKey: "secret-key" };
+    assert.equal((await gocardless.test(gocardlessCredentials)).ok, false);
+    await assert.rejects(
+      gocardless.fetch(gocardlessCredentials, "account-id", "2026-01-01", "2026-01-31"),
+      /fetch failed|redirect/i,
+    );
+
     const plaid = getBankFeedAdapter("plaid");
     assert.ok(plaid);
-    const credentials = {
+    const plaidCredentials = {
       clientId: "client-id",
       secret: "provider-secret",
       accessToken: "access-token",
       env: "sandbox",
     };
-
-    const tested = await plaid.test(credentials);
-    assert.equal(tested.ok, false);
+    assert.equal((await plaid.test(plaidCredentials)).ok, false);
     await assert.rejects(
-      plaid.fetch(credentials, "account-id", "2026-01-01", "2026-01-31"),
+      plaid.fetch(plaidCredentials, "account-id", "2026-01-01", "2026-01-31"),
       /fetch failed|redirect/i,
     );
 
-    assert.deepEqual(providerPaths, ["/accounts/get", "/transactions/get"]);
-    assert.deepEqual(redirectModes, ["error", "error"]);
+    const truelayer = getBankFeedAdapter("truelayer");
+    assert.ok(truelayer);
+    const truelayerCredentials = { accessToken: "access-token" };
+    assert.equal((await truelayer.test(truelayerCredentials)).ok, false);
+    await assert.rejects(
+      truelayer.fetch(truelayerCredentials, "account-id", "2026-01-01", "2026-01-31"),
+      /fetch failed|redirect/i,
+    );
+
+    // Exactly one request per adapter call reaches the allowlisted origin —
+    // never a second, followed hop — and the attacker sees zero traffic.
+    // GoCardless fails at its token exchange on both paths, so its transaction
+    // URL is never reached; Plaid/TrueLayer fail on their first data request.
+    assert.deepEqual(providerPaths, [
+      "/api/v2/token/new/",
+      "/api/v2/token/new/",
+      "/accounts/get",
+      "/transactions/get",
+      "/data/v1/accounts",
+      `/data/v1/accounts/${encodeURIComponent("account-id")}/transactions?from=2026-01-01T00:00:00Z&to=2026-01-31T23:59:59Z`,
+    ]);
+    assert.deepEqual(redirectModes, ["error", "error", "error", "error", "error", "error"]);
     assert.equal(attackerRequests, 0, "credentials must never reach the redirect target");
   } finally {
     globalThis.fetch = originalFetch;
