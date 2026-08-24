@@ -26,6 +26,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0009_posting_effect_idempotency_keys.sql",
     "0010_bank_statement_source_evidence.sql",
     "0010_bank_statement_source_idempotency.sql",
+    "0011_payment_run_live_selection.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
