@@ -188,17 +188,17 @@ function resetImportState(failLineInsert: boolean): void {
   importState.attemptedLines.length = 0
 }
 
-async function importCardCharge() {
+async function importCardCharge(
+  row: Record<string, unknown> = {
+    documentDate: '2026-08-24',
+    account: '5000',
+    amount: '999999999999999.1234',
+  },
+) {
   const cfg = DOC_KINDS.card_charge
   assert.ok(cfg)
   return transactionResource(cfg, 'org-1').write(
-    [
-      {
-        documentDate: '2026-08-24',
-        account: '5000',
-        amount: '999999999999999.1234',
-      },
-    ],
+    [row],
     'insert',
     { orgId: 'org-1', actorId: 'actor-1', dryRun: false },
   )
@@ -272,4 +272,49 @@ test('transaction import commits its draft and lines together', async () => {
       createdBy: 'actor-1',
     },
   ])
+})
+
+test('transaction import rejects an unquoted JSON amount before writing', async () => {
+  resetImportState(false)
+  const lines = '[{"account":"5000","amount":999999999999998.99}]'
+
+  const outcome = await importCardCharge({
+    documentDate: '2026-08-24',
+    lines,
+  })
+
+  assert.equal(JSON.parse(lines)[0].amount, 999999999999999)
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [
+      {
+        row: 1,
+        message:
+          'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
+      },
+    ],
+  })
+  assert.equal(importState.transactionCalls, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.deepEqual(importState.transactionInsertTargets, [])
+  assert.deepEqual(importState.attemptedLines, [])
+  assert.deepEqual(importState.documents, [])
+  assert.deepEqual(importState.lines, [])
+})
+
+test('transaction import preserves an exact decimal string inside JSON lines', async () => {
+  resetImportState(false)
+
+  const outcome = await importCardCharge({
+    documentDate: '2026-08-24',
+    lines: '[{"account":"5000","amount":"999999999999998.9900"}]',
+  })
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.equal(importState.transactionCalls, 1)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
+  assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
 })
