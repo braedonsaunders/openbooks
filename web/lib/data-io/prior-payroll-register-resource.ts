@@ -11,7 +11,14 @@ import {
   type ComparableSlot,
   type PriorStubWrite,
 } from '@openbooks/engine/src/payroll-parallel-run-store.ts'
-import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
+import {
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
+  type CellValue,
+  type ResourceDescriptor,
+  type ResourceField,
+  type WriteOutcome,
+} from './types'
 import type { DataResource, WriteCtx } from './resources'
 
 /**
@@ -31,7 +38,7 @@ import type { DataResource, WriteCtx } from './resources'
  *
  * UNMAPPED COLUMNS ARE THE POINT. An amount nobody mapped is exactly what hides
  * a real difference, so this resource:
- *   1. reads the reserved `__unmappedColumns` key the import route preserves,
+ *   1. reads the reserved unmapped-columns metadata the import route preserves,
  *   2. reports each one as a row error (visible in the wizard's preview and
  *      result, and persisted in `import_jobs.errors`) WITHOUT failing the row,
  *      because a register legitimately carries non-amount columns too, and
@@ -45,12 +52,6 @@ import type { DataResource, WriteCtx } from './resources'
 const MAX_EXPORT_ROWS = 50_000
 
 export const PRIOR_PAYROLL_REGISTER_KEY = 'prior-payroll-register'
-
-/** Reserved key the import route uses to preserve unmapped source columns. */
-export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
-
-/** Reserved key carrying field key → the file column it was mapped from. */
-export const SOURCE_COLUMNS_KEY = '__sourceColumns'
 
 export const PRIOR_PAYROLL_REGISTER_DESCRIPTOR: ResourceDescriptor = {
   key: PRIOR_PAYROLL_REGISTER_KEY,
@@ -271,7 +272,6 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const all = await slots()
       const componentSlots = all.filter((slot) => slot.kind !== 'total')
-      const totalFieldKeys = new Set(Object.keys(TOTAL_FIELD_KEYS))
 
       // A register whose amount columns are ALL unmapped is not an import, it
       // is a population list — and it would reconcile to a pile of one-sided
@@ -444,4 +444,3 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
 export async function loadedPriorRegisters(orgId: string) {
   return priorRegisters(orgId)
 }
-

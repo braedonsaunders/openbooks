@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import ExcelJS from 'exceljs'
 import { DOC_KINDS } from '../document-kinds.ts'
+import {
+  CELL_PROVENANCE_KEY,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
+} from './types.ts'
 
 interface TransactionImportState {
   failLineInsert: boolean
@@ -175,6 +181,8 @@ const hooks = registerHooks({
 
 const resourceUrl = './transaction-resources.ts?atomic-import-test'
 const { transactionResource } = await import(resourceUrl) as typeof import('./transaction-resources.ts')
+const parseUrl = './parse.ts?transaction-xlsx-provenance-test'
+const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 function resetImportState(failLineInsert: boolean): void {
@@ -188,20 +196,134 @@ function resetImportState(failLineInsert: boolean): void {
   importState.attemptedLines.length = 0
 }
 
-async function importCardCharge() {
+async function importCardCharge(
+  row: Record<string, unknown> = {
+    documentDate: '2026-08-24',
+    account: '5000',
+    amount: '999999999999999.1234',
+  },
+) {
   const cfg = DOC_KINDS.card_charge
   assert.ok(cfg)
   return transactionResource(cfg, 'org-1').write(
-    [
-      {
-        documentDate: '2026-08-24',
-        account: '5000',
-        amount: '999999999999999.1234',
-      },
-    ],
+    [row],
     'insert',
     { orgId: 'org-1', actorId: 'actor-1', dryRun: false },
   )
+}
+
+async function xlsxTransactionRows(): Promise<Record<string, unknown>[]> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]'
+  sheet.addRow(['documentDate', 'account', 'amount', 'debit', 'credit', 'lines'])
+  sheet.addRow(['2026-08-24', '5000', 999999999999998.99, '', '', ''])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    { formula: '999999999999998.99', result: 999999999999998.99 },
+    '',
+    '',
+    '',
+  ])
+  sheet.addRow(['2026-08-24', '5000', '999999999999998.9900', '', '', ''])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    {
+      formula: 'TEXT(999999999999998.99,"0.0000")',
+      result: '999999999999999.0000',
+    },
+    '',
+    '',
+    '',
+  ])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    '',
+    {
+      formula: 'TEXT(999999999999998.99,"0.0000")',
+      result: '999999999999999.0000',
+    },
+    { sharedFormula: 'D6', result: '999999999999999.0000' },
+    '',
+  ])
+  sheet.addRow(['2026-08-24', '', '', '', '', { formula: 'A1', result: nestedLines }])
+  sheet.addRow(['2026-08-24', '', '', '', '', { sharedFormula: 'F7', result: nestedLines }])
+  const buffer = await workbook.xlsx.writeBuffer()
+  return (
+    await parseImportFile('xlsx', {
+      base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
+    })
+  ).rows
+}
+
+async function xlsxArrayFormulaRows(): Promise<Record<string, unknown>[]> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  const nestedLines = '[{"account":"5000","amount":"999999999999998.9900"}]'
+  sheet.addRow(['documentDate', 'account', 'amount', 'debit', 'credit', 'lines'])
+  for (let row = 2; row <= 8; row++) {
+    sheet.getCell(row, 1).value = '2026-08-24'
+    sheet.getCell(row, 2).value = '5000'
+  }
+  for (let row = 9; row <= 10; row++) sheet.getCell(row, 1).value = '2026-08-24'
+  const fillFormula = sheet.fillFormula.bind(sheet) as unknown as (
+    range: string,
+    formula: string,
+    results: Array<string | number>,
+    shareType: 'array',
+  ) => void
+  fillFormula(
+    'C2:C4',
+    'TEXT(999999999999998.99,"0.0000")',
+    [1, 999999999999998.99, '999999999999999.0000'],
+    'array',
+  )
+  fillFormula(
+    'D5:D6',
+    'TEXT(999999999999998.99,"0.0000")',
+    [1, '999999999999999.0000'],
+    'array',
+  )
+  fillFormula(
+    'E7:E8',
+    'TEXT(999999999999998.99,"0.0000")',
+    [1, 999999999999998.99],
+    'array',
+  )
+  fillFormula('F9:F10', 'A1', [nestedLines, nestedLines], 'array')
+  const buffer = await workbook.xlsx.writeBuffer()
+  return (
+    await parseImportFile('xlsx', {
+      base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
+    })
+  ).rows
+}
+
+function mappedTransactionRow(
+  row: Record<string, unknown>,
+  source: 'amount' | 'debit' | 'credit' | 'lines',
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    documentDate: row.documentDate,
+    account: row.account,
+    [SOURCE_COLUMNS_KEY]: {},
+  }
+  const sources = out[SOURCE_COLUMNS_KEY] as Record<string, string>
+  if (source === 'lines') {
+    out.lines = row.lines
+    sources.lines = 'lines'
+  } else {
+    out.amount = row[source]
+    sources.amount = source
+  }
+  const provenance = row[CELL_PROVENANCE_KEY]
+  if (provenance !== undefined) {
+    out[UNMAPPED_COLUMNS_KEY] = { [CELL_PROVENANCE_KEY]: provenance }
+  }
+  return out
 }
 
 test('transaction import rolls back its draft when line persistence fails', async () => {
@@ -272,4 +394,226 @@ test('transaction import commits its draft and lines together', async () => {
       createdBy: 'actor-1',
     },
   ])
+})
+
+test('transaction import rejects an unquoted JSON amount before writing', async () => {
+  resetImportState(false)
+  const lines = '[{"account":"5000","amount":999999999999998.99}]'
+
+  const outcome = await importCardCharge({
+    documentDate: '2026-08-24',
+    lines,
+  })
+
+  assert.equal(JSON.parse(lines)[0].amount, 999999999999999)
+  assert.deepEqual(outcome, {
+    created: 0,
+    updated: 0,
+    failed: 1,
+    errors: [
+      {
+        row: 1,
+        message:
+          'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
+      },
+    ],
+  })
+  assert.equal(importState.transactionCalls, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.deepEqual(importState.transactionInsertTargets, [])
+  assert.deepEqual(importState.attemptedLines, [])
+  assert.deepEqual(importState.documents, [])
+  assert.deepEqual(importState.lines, [])
+})
+
+test('transaction import preserves an exact decimal string inside JSON lines', async () => {
+  resetImportState(false)
+
+  const outcome = await importCardCharge({
+    documentDate: '2026-08-24',
+    lines: '[{"account":"5000","amount":"999999999999998.9900"}]',
+  })
+
+  assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+  assert.equal(importState.transactionCalls, 1)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
+  assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
+})
+
+test('transaction import preserves XLSX cell provenance at the write boundary', async (t) => {
+  const [numericRow, numericFormulaRow, textRow, textFormulaRow, debitCreditFormulaRow, nestedFormulaRow, sharedNestedFormulaRow] =
+    await xlsxTransactionRows()
+  assert.ok(numericRow)
+  assert.ok(numericFormulaRow)
+  assert.ok(textRow)
+  assert.ok(textFormulaRow)
+  assert.ok(debitCreditFormulaRow)
+  assert.ok(nestedFormulaRow)
+  assert.ok(sharedNestedFormulaRow)
+
+  await t.test('rejects a numeric amount before writing', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(mappedTransactionRow(numericRow, 'amount'))
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message:
+            'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
+        },
+      ],
+    })
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+
+  await t.test('rejects a numeric formula result before writing', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(mappedTransactionRow(numericFormulaRow, 'amount'))
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+        },
+      ],
+    })
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+
+  await t.test('accepts an exact text amount without changing it', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(mappedTransactionRow(textRow, 'amount'))
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.transactionCalls, 1)
+    assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
+    assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
+  })
+
+  await t.test('rejects a TEXT formula cached as a decimal string', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(mappedTransactionRow(textFormulaRow, 'amount'))
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+        },
+      ],
+    })
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+
+  for (const source of ['debit', 'credit'] as const) {
+    await t.test(`rejects a formula-derived ${source} mapped to amount`, async () => {
+      resetImportState(false)
+
+      const outcome = await importCardCharge(mappedTransactionRow(debitCreditFormulaRow, source))
+
+      assert.equal(outcome.created, 0)
+      assert.equal(outcome.failed, 1)
+      assert.deepEqual(outcome.errors, [
+        {
+          row: 1,
+          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+        },
+      ])
+      assert.equal(importState.transactionCalls, 0)
+      assert.deepEqual(importState.attemptedLines, [])
+    })
+  }
+
+  for (const [name, row] of [
+    ['formula-derived nested lines', nestedFormulaRow],
+    ['shared-formula-derived nested lines', sharedNestedFormulaRow],
+  ] as const) {
+    await t.test(`rejects ${name}`, async () => {
+      resetImportState(false)
+
+      const outcome = await importCardCharge(mappedTransactionRow(row, 'lines'))
+
+      assert.equal(outcome.created, 0)
+      assert.equal(outcome.failed, 1)
+      assert.deepEqual(outcome.errors, [
+        {
+          row: 1,
+          message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+        },
+      ])
+      assert.equal(importState.transactionCalls, 0)
+      assert.deepEqual(importState.attemptedLines, [])
+    })
+  }
+})
+
+test('transaction import rejects XLSX array-formula child values before writing', async (t) => {
+  const rows = await xlsxArrayFormulaRows()
+  assert.equal(rows.length, 9)
+  const cases = [
+    {
+      name: 'numeric amount child',
+      row: rows[1],
+      source: 'amount' as const,
+      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+    },
+    {
+      name: 'cached-string amount child',
+      row: rows[2],
+      source: 'amount' as const,
+      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+    },
+    {
+      name: 'cached-string debit child',
+      row: rows[4],
+      source: 'debit' as const,
+      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+    },
+    {
+      name: 'numeric credit child',
+      row: rows[6],
+      source: 'credit' as const,
+      message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+    },
+    {
+      name: 'nested-lines cached-string child',
+      row: rows[8],
+      source: 'lines' as const,
+      message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+    },
+  ]
+
+  for (const { name, row, source, message } of cases) {
+    assert.ok(row)
+    await t.test(`rejects ${name}`, async () => {
+      resetImportState(false)
+
+      const outcome = await importCardCharge(mappedTransactionRow(row, source))
+
+      assert.equal(outcome.created, 0)
+      assert.equal(outcome.failed, 1)
+      assert.deepEqual(outcome.errors, [{ row: 1, message }])
+      assert.equal(importState.transactionCalls, 0)
+      assert.deepEqual(importState.attemptedLines, [])
+    })
+  }
 })
