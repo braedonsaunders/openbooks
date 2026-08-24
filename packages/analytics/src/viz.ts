@@ -79,7 +79,7 @@ export function buildVizSpec(
 
   if (vizType === 'pie') {
     // Pie uses a single measure (the first) over the category.
-    const measure = values[0]
+    const measure = values[0]!
     const data = result.rows.map((r, i) => ({ name: categories[i], value: num(r[measure.key]) }))
     return {
       kind: 'chart',

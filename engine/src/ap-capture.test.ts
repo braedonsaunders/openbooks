@@ -54,7 +54,7 @@ const raw = {
 test("Azure normalization preserves line evidence and exact invoice math", () => {
   const result = normalizeAzureInvoice(raw);
   assert.equal(result.normalized.total, "11.3000");
-  assert.equal(result.normalized.lines[0].amount, "10.0000");
+  assert.equal(result.normalized.lines[0]!.amount, "10.0000");
   assert.equal(result.overallConfidence, "0.9700");
   assert.ok(result.evidence.some((field) => field.fieldKey === "lines.amount" && field.lineIndex === 0));
   assert.deepEqual(result.evidence.find((field) => field.fieldKey === "vendorName")?.polygon, {
@@ -65,7 +65,7 @@ test("Azure normalization preserves line evidence and exact invoice math", () =>
 
 test("validation blocks silent total and line math errors", () => {
   const result = normalizeAzureInvoice(raw).normalized;
-  result.lines[0].amount = "9.9900";
+  result.lines[0]!.amount = "9.9900";
   result.total = "999.0000";
   const codes = validateNormalizedCapture(result).map((issue) => issue.code);
   assert.ok(codes.includes("line_math_mismatch"));
@@ -77,7 +77,7 @@ test("validation rejects impossible dates, currencies and numeric overflow", () 
   const result = normalizeAzureInvoice(raw).normalized;
   result.invoiceDate = "2026-02-30";
   result.currency = "Canadian dollars";
-  result.lines[0].amount = "1000000000000000.0000";
+  result.lines[0]!.amount = "1000000000000000.0000";
   const codes = validateNormalizedCapture(result).map((issue) => issue.code);
   assert.ok(codes.includes("invalid_date"));
   assert.ok(codes.includes("invalid_currency"));
@@ -103,7 +103,7 @@ test("Azure adapter submits bytes and polls the provider operation", async () =>
     fetchImpl: fakeFetch,
   });
   assert.equal(result.normalized.invoiceNumber, "INV-1042");
-  assert.match(calls[0], /documentintelligence\/documentModels\/prebuilt-invoice:analyze/);
+  assert.match(calls[0]!, /documentintelligence\/documentModels\/prebuilt-invoice:analyze/);
   assert.equal(calls.length, 2);
 });
 

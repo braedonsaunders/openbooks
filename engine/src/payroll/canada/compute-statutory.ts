@@ -73,7 +73,7 @@ export async function computeCaStatutory(
   const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
 
   const t4127Input: T4127Input = {
-    payDate: run.pay_date, province: region as Province, periodsPerYear: P,
+    payDate: run.pay_date!, province: region as Province, periodsPerYear: P,
     income, nonPeriodic, pensionable, insurable,
     pensionDeductions: deduction("pension_f"),
     alimonyDeductions: deduction("alimony"),
@@ -113,7 +113,7 @@ export async function computeCaStatutory(
   let qcFactors: Record<string, string> = {};
   if (region === "QC") {
     const qc = calculateTp1015({
-      payDate: run.pay_date, periodsPerYear: P,
+      payDate: run.pay_date!, periodsPerYear: P,
       income, nonPeriodic,
       pensionDeductions: deduction("pension_f"),
       qpp: statutory.cpp, qpp2: statutory.cpp2,

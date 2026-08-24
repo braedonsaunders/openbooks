@@ -81,11 +81,13 @@ export async function groupTabs(
   opts: { subQs?: string; exclude?: string[]; orgId: string },
 ): Promise<ModuleHomeTab[]> {
   const state = await orgFeatureState(opts.orgId)
-  const defs = GROUP_TABS[group].filter(
-    (d) =>
+  const defs = GROUP_TABS[group].filter((d) => {
+    const feature = TAB_FEATURE[d.href]
+    return (
       !opts.exclude?.includes(d.href) &&
-      (!TAB_FEATURE[d.href] || featureEnabled(state, TAB_FEATURE[d.href])),
-  )
+      (!feature || featureEnabled(state, feature))
+    )
+  })
   const namespaces = [...new Set(defs.map((d) => d.ns))]
   const ts = new Map(
     await Promise.all(namespaces.map(async (ns) => [ns, await getTranslations(ns as never)] as const)),

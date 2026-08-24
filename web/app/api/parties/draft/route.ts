@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       `))
       await tx.insert(schema.customerRoles).values({
         orgId: user.orgId,
-        partyId: p.id,
+        partyId: p!.id,
         paymentTermsId: terms.rows[0]?.id ?? null,
         isActive: true,
         createdBy: user.id,
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     } else if (roleTable) {
       await tx.insert(roleTable).values({
         orgId: user.orgId,
-        partyId: p.id,
+        partyId: p!.id,
         isActive: true,
         createdBy: user.id,
         updatedBy: user.id,

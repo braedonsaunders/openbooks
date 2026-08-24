@@ -41,7 +41,7 @@ const layers = (): CostLayer[] => [
 test("FIFO consumes the oldest layer first at its cost", () => {
   const r = consumeFifo(layers(), "6", "0");
   assert.equal(r.consumptions.length, 1);
-  assert.equal(r.consumptions[0].layerId, "a");
+  assert.equal(r.consumptions[0]!.layerId, "a");
   assert.equal(r.totalCost, "12.0000"); // 6 × 2.00
   assert.equal(r.shortfallQuantity, "0");
 });
@@ -49,8 +49,8 @@ test("FIFO consumes the oldest layer first at its cost", () => {
 test("FIFO spans layers and costs each at its own rate", () => {
   const r = consumeFifo(layers(), "15", "0");
   assert.equal(r.consumptions.length, 2);
-  assert.equal(r.consumptions[0].cost, "20.0000"); // 10 × 2.00
-  assert.equal(r.consumptions[1].cost, "15.0000"); // 5 × 3.00
+  assert.equal(r.consumptions[0]!.cost, "20.0000"); // 10 × 2.00
+  assert.equal(r.consumptions[1]!.cost, "15.0000"); // 5 × 3.00
   assert.equal(r.totalCost, "35.0000");
   assert.equal(r.shortfallQuantity, "0");
 });

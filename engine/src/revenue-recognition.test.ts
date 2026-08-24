@@ -117,8 +117,8 @@ test("fair value range: zero/missing quantity falls back to the line amount", ()
 test("point_in_time recognizes the whole amount in the start month", () => {
   const plan = computeRecognitionSchedule({ total: "1200", method: "point_in_time", startOn: "2026-03-10" });
   assert.equal(plan.length, 1);
-  assert.equal(plan[0].periodMonth, "2026-03-01");
-  assert.equal(toUnits(plan[0].planned), toUnits("1200"));
+  assert.equal(plan[0]!.periodMonth, "2026-03-01");
+  assert.equal(toUnits(plan[0]!.planned), toUnits("1200"));
 });
 
 test("straight_line_even spreads evenly over the term and sums exactly", () => {
@@ -129,8 +129,8 @@ test("straight_line_even spreads evenly over the term and sums exactly", () => {
     termPeriods: 12,
   });
   assert.equal(plan.length, 12);
-  assert.equal(plan[0].periodMonth, "2026-01-01");
-  assert.equal(plan[11].periodMonth, "2026-12-01");
+  assert.equal(plan[0]!.periodMonth, "2026-01-01");
+  assert.equal(plan[11]!.periodMonth, "2026-12-01");
   for (const l of plan) assert.equal(toUnits(l.planned), toUnits("100"));
   assert.equal(plannedUnits(plan), toUnits("1200"));
 });
@@ -144,8 +144,8 @@ test("initial amount percent is recognized up front, remainder spread evenly", (
     initialAmountPercent: "10",
   });
   // 10% = 120 up front; remainder 1080 / 12 = 90; first period = 210, rest = 90.
-  assert.equal(toUnits(plan[0].planned), toUnits("210"));
-  assert.equal(toUnits(plan[1].planned), toUnits("90"));
+  assert.equal(toUnits(plan[0]!.planned), toUnits("210"));
+  assert.equal(toUnits(plan[1]!.planned), toUnits("90"));
   assert.equal(plannedUnits(plan), toUnits("1200"));
 });
 
@@ -159,7 +159,7 @@ test("straight_line_prorate_first_last weights the first and last partial months
   assert.equal(plan.length, 2);
   // Jan: 15..31 = 17 days; Feb: 1..14 = 14 days; weights [17,14] of 3100.
   assert.equal(plannedUnits(plan), toUnits("3100"));
-  assert.ok(toUnits(plan[0].planned) > toUnits(plan[1].planned));
+  assert.ok(toUnits(plan[0]!.planned) > toUnits(plan[1]!.planned));
 });
 
 test("straight_line_daily allocates by exact days in each month and sums exactly", () => {
@@ -171,9 +171,9 @@ test("straight_line_daily allocates by exact days in each month and sums exactly
   });
   assert.equal(plan.length, 3);
   // 90 days total: Jan 31, Feb 28, Mar 31 → 3100, 2800, 3100.
-  assert.equal(toUnits(plan[0].planned), toUnits("3100"));
-  assert.equal(toUnits(plan[1].planned), toUnits("2800"));
-  assert.equal(toUnits(plan[2].planned), toUnits("3100"));
+  assert.equal(toUnits(plan[0]!.planned), toUnits("3100"));
+  assert.equal(toUnits(plan[1]!.planned), toUnits("2800"));
+  assert.equal(toUnits(plan[2]!.planned), toUnits("3100"));
   assert.equal(plannedUnits(plan), toUnits("9000"));
 });
 
@@ -187,7 +187,7 @@ test("percent_complete recognizes the cumulative target minus already-recognized
   };
   const plan = computeRecognitionSchedule(base);
   assert.equal(plan.length, 1);
-  assert.equal(toUnits(plan[0].planned), toUnits("150")); // 40% of 1000 = 400; 400 − 250
+  assert.equal(toUnits(plan[0]!.planned), toUnits("150")); // 40% of 1000 = 400; 400 − 250
 });
 
 test("percent_complete claws back when the estimate falls (ASC 606 cumulative catch-up)", () => {
@@ -199,7 +199,7 @@ test("percent_complete claws back when the estimate falls (ASC 606 cumulative ca
     alreadyRecognized: "500",
   });
   // target 400 − already 500 → −100 reversal in the current period.
-  assert.equal(plan[0].planned, "-100.0000");
+  assert.equal(plan[0]!.planned, "-100.0000");
 });
 
 test("milestone recognizes exactly the entered event amounts", () => {
@@ -213,7 +213,7 @@ test("milestone recognizes exactly the entered event amounts", () => {
     ],
   });
   assert.equal(plan.length, 2);
-  assert.equal(plan[0].periodMonth, "2026-02-01");
+  assert.equal(plan[0]!.periodMonth, "2026-02-01");
   assert.equal(plannedUnits(plan), toUnits("5000"));
 });
 
@@ -225,8 +225,8 @@ test("period offset defers the whole schedule by N months", () => {
     termPeriods: 12,
     periodOffset: 2,
   });
-  assert.equal(plan[0].periodMonth, "2026-03-01");
-  assert.equal(plan[11].periodMonth, "2027-02-01");
+  assert.equal(plan[0]!.periodMonth, "2026-03-01");
+  assert.equal(plan[11]!.periodMonth, "2027-02-01");
   assert.equal(plannedUnits(plan), toUnits("1200"));
 });
 
@@ -238,7 +238,7 @@ test("start offset days pushes the recognition start into the next month when it
     termPeriods: 1,
     startOffsetDays: 15, // 2026-01-20 + 15 = 2026-02-04
   });
-  assert.equal(plan[0].periodMonth, "2026-02-01");
+  assert.equal(plan[0]!.periodMonth, "2026-02-01");
 });
 
 test("cumulative column tracks recognized-to-date and ends at the total", () => {
@@ -248,8 +248,8 @@ test("cumulative column tracks recognized-to-date and ends at the total", () => 
     startOn: "2026-01-01",
     termPeriods: 12,
   });
-  assert.equal(toUnits(plan[0].cumulative), toUnits("100"));
-  assert.equal(toUnits(plan[11].cumulative), toUnits("1200"));
+  assert.equal(toUnits(plan[0]!.cumulative), toUnits("100"));
+  assert.equal(toUnits(plan[11]!.cumulative), toUnits("1200"));
 });
 
 test("an end date before the start date is refused, not planned as silent zeros", () => {
@@ -280,7 +280,7 @@ test("a single-period term ending on the start day still plans the full amount",
     endOn: "2026-03-01",
   });
   assert.equal(plan.length, 1);
-  assert.equal(toUnits(plan[0].planned), toUnits("500"));
+  assert.equal(toUnits(plan[0]!.planned), toUnits("500"));
 });
 
 // ---------------------------------------------------------------------------
@@ -355,9 +355,9 @@ test("financing component: revenue at the cash selling price, accretion lands ex
   });
   assert.equal(f.cashSellingPrice, "100000.0000"); // 121,000 / 1.21 exactly
   assert.equal(f.financingComponent, "21000.0000");
-  assert.equal(f.accretion[0].interest, "10000.0000");
-  assert.equal(f.accretion[1].interest, "11000.0000");
-  assert.equal(f.accretion[1].closing, "121000.0000");
+  assert.equal(f.accretion[0]!.interest, "10000.0000");
+  assert.equal(f.accretion[1]!.interest, "11000.0000");
+  assert.equal(f.accretion[1]!.closing, "121000.0000");
 });
 
 test("financing accretion absorbs rounding in the final year and still lands on the billed amount", () => {
@@ -368,7 +368,7 @@ test("financing accretion absorbs rounding in the final year and still lands on 
   });
   // PV = 50,000 / 1.0725^3 — irrational in decimal; the accretion must still
   // land on exactly 50,000.0000.
-  const last = f.accretion[f.accretion.length - 1];
+  const last = f.accretion[f.accretion.length - 1]!;
   assert.equal(last.closing, "50000.0000");
   const interestSum = f.accretion.reduce((a, p) => a + toUnits(p.interest), 0n);
   assert.equal(interestSum, toUnits(f.financingComponent));

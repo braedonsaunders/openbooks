@@ -197,7 +197,7 @@ export function Waterfall({
       base.push(0)
       bar.push(s.amount)
       running = s.amount
-      colors.push(s.kind === 'total' ? PALETTE[0] : s.amount >= 0 ? '#14b8a6' : NEG)
+      colors.push(s.kind === 'total' ? PALETTE[0]! : s.amount >= 0 ? '#14b8a6' : NEG)
     } else {
       // deduct: floating bar from running down by |amount|
       const top = running
@@ -284,13 +284,13 @@ export function cashBridgeOption(startCash: number, inflows: number, outflows: n
   const bar = steps.map((s) => Math.abs(s.to - s.from))
   return {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex])}` },
+    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex]!)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
       { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
       { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
-      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: any) => money([startCash, inflows, -outflows, end][p.dataIndex]) } },
+      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: any) => money([startCash, inflows, -outflows, end][p.dataIndex]!) } },
     ],
   }
 }

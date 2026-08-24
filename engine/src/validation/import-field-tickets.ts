@@ -74,15 +74,15 @@ interface Ticket {
 interface Row { ticketId: string; empRef: string; itemRef: string; hours: { day: number; kind: string; h: number }[] }
 
 const parseTickets = (): Ticket[] =>
-  readFileSync(HEADERS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]))
+  readFileSync(HEADERS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]!))
     .map((c) => ({
-      sourceId: c[0], number: c[1], jobRef: c[2], empRef: c[3], customerRef: c[4],
-      begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9],
-      foremanRef: c[10], po: c[11] === "NULL" ? null : c[11], description: (c[12] ?? "").trim() || null,
+      sourceId: c[0]!, number: c[1]!, jobRef: c[2]!, empRef: c[3]!, customerRef: c[4]!,
+      begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9]!,
+      foremanRef: c[10]!, po: c[11] === "NULL" ? null : c[11]!, description: (c[12] ?? "").trim() || null,
     }));
 
 const parseRows = (): Row[] =>
-  readFileSync(ROWS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 25 && /^\d+$/.test(c[0]))
+  readFileSync(ROWS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 25 && /^\d+$/.test(c[0]!))
     .map((c) => {
       const hours: Row["hours"] = [];
       for (let d = 0; d < 7; d++) {
@@ -92,7 +92,7 @@ const parseRows = (): Row[] =>
           if (h > 0) hours.push({ day: d, kind, h });
         }
       }
-      return { ticketId: c[0], empRef: c[1], itemRef: c[2], hours };
+      return { ticketId: c[0]!, empRef: c[1]!, itemRef: c[2]!, hours };
     });
 
 (async () => {

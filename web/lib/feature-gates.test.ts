@@ -40,7 +40,7 @@ function featuresWithNav(): Array<{ key: string; navModules: string[] }> {
   for (const entry of list.matchAll(/\{ key: '(\w+)'[^}]*\}/g)) {
     const nav = /navModules: \[([^\]]*)\]/.exec(entry[0])
     if (!nav) continue
-    out.push({ key: entry[1], navModules: [...nav[1].matchAll(/'([\w-]+)'/g)].map((m) => m[1]) })
+    out.push({ key: entry[1]!, navModules: [...nav[1]!.matchAll(/'([\w-]+)'/g)].map((m) => m[1]!) })
   }
   assert.ok(out.length > 0, 'could not parse the feature registry')
   return out
@@ -60,7 +60,7 @@ function navHrefs(): Record<string, string> {
  * has no directory (external or dynamic), which the caller reports separately.
  */
 function routeGateState(href: string): 'gated' | 'ungated' | null {
-  const segments = href.split('?')[0].split('/').filter(Boolean)
+  const segments = href.split('?')[0]!.split('/').filter(Boolean)
   let dir = `${APP_SEGMENT}/`
   if (!exists(dir)) return null
   const candidates: string[] = []

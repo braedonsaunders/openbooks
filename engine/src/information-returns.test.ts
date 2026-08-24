@@ -436,7 +436,7 @@ test("an unmapped account is reported per account, by name", () => {
     unmappedAccountNames: ["5100 · Subcontractor Costs", "5200 · Equipment Rental"],
   });
   assert.deepEqual(found.map((e) => e.kind), ["unmapped_account", "unmapped_account"]);
-  assert.ok(found[0].detail.includes("5100 · Subcontractor Costs"));
+  assert.ok(found[0]!.detail.includes("5100 · Subcontractor Costs"));
 });
 
 test("a clean recipient raises nothing", () => {

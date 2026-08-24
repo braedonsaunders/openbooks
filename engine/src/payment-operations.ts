@@ -154,7 +154,7 @@ export async function createPaymentBankProfile(
 ): Promise<{ id: string }> {
   await validatePaymentBankProfileRefs(orgId, input);
   return db.transaction(async (tx) => {
-    const [profile] = await tx.insert(schema.paymentBankProfiles).values({
+    const profile = (await tx.insert(schema.paymentBankProfiles).values({
       orgId,
       name: input.name.trim(),
       bankAccountId: input.bankAccountId,
@@ -172,7 +172,7 @@ export async function createPaymentBankProfile(
       isActive: input.isActive ?? true,
       createdBy: userId,
       updatedBy: userId,
-    }).returning({ id: schema.paymentBankProfiles.id });
+    }).returning({ id: schema.paymentBankProfiles.id }))[0]!;
     const stored = (await tx.execute<Record<string, any>>(sql`
       select * from payment_bank_profiles where id = ${profile.id} and org_id = ${orgId}
     `));
@@ -565,10 +565,10 @@ export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings &
     values[key] = text;
   }
   return {
-    originatorName: values.originatorName,
-    originatorIban: values.originatorIban,
-    originatorBic: values.originatorBic,
-    creditorId: values.creditorId,
+    originatorName: values.originatorName!,
+    originatorIban: values.originatorIban!,
+    originatorBic: values.originatorBic!,
+    creditorId: values.creditorId!,
   };
 }
 
@@ -639,7 +639,7 @@ async function storeArtifactFile(
     }
     if (!folderId) throw new PaymentError("could not create the payment file cabinet folder");
     const extension = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : null;
-    const [file] = await tx.insert(schema.files).values({
+    const file = (await tx.insert(schema.files).values({
       orgId,
       folderId,
       name: filename,
@@ -650,15 +650,15 @@ async function storeArtifactFile(
       contentHash: hash,
       createdBy: userId,
       updatedBy: userId,
-    }).returning({ id: schema.files.id });
-    const [version] = await tx.insert(schema.fileVersions).values({
+    }).returning({ id: schema.files.id }))[0]!;
+    const version = (await tx.insert(schema.fileVersions).values({
       fileId: file.id,
       versionNumber: 1,
       sizeBytes: bytes.length,
       contentType,
       contentHash: hash,
       createdBy: userId,
-    }).returning({ id: schema.fileVersions.id });
+    }).returning({ id: schema.fileVersions.id }))[0]!;
     await tx.insert(schema.fileBlobs).values({ versionId: version.id, bytes });
     await tx.execute(sql`update files set current_version_id = ${version.id} where id = ${file.id} and org_id = ${orgId}`);
     return { fileId: file.id, versionId: version.id };
@@ -700,7 +700,7 @@ export async function generatePaymentFileArtifact(
   `));
   const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
   const total = sum(ctx.payments.map((p) => p.amount));
-  const [artifact] = await db.insert(schema.paymentFiles).values({
+  const artifact = (await db.insert(schema.paymentFiles).values({
     orgId,
     paymentRunId: runId,
     paymentBankProfileId: ctx.profile.id,
@@ -721,7 +721,7 @@ export async function generatePaymentFileArtifact(
     approvedBy: fileStatus === "approved" ? userId : null,
     createdBy: userId,
     updatedBy: userId,
-  }).returning({ id: schema.paymentFiles.id });
+  }).returning({ id: schema.paymentFiles.id }))[0]!;
   if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}`);
   await db.execute(sql`
     update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),

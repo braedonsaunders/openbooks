@@ -104,7 +104,7 @@ export function nextLockoutState(
   const failureCount = stale ? 1 : Math.max(0, previous.failureCount) + 1;
   const lockIndex = failureCount - LOCK_THRESHOLD;
   const minutes = lockIndex >= 0
-    ? LOCK_MINUTES[Math.min(lockIndex, LOCK_MINUTES.length - 1)]
+    ? LOCK_MINUTES[Math.min(lockIndex, LOCK_MINUTES.length - 1)]!
     : null;
   return {
     failureCount,

@@ -62,7 +62,7 @@ export async function computeUsStatutory(
   const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
   const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
   const statutory = calculatePub15T({
-    payDate: run.pay_date, periodsPerYear: P,
+    payDate: run.pay_date!, periodsPerYear: P,
     wages: income, supplemental: nonPeriodic,
     ficaWages: pensionable, futaWages: insurable,
     filingStatus,
@@ -100,8 +100,8 @@ export async function computeUsStatutory(
 
   const certificateKeysOnFile = (): string[] =>
     storedCertificates
-      .filter((row) => !row.effectiveFrom || row.effectiveFrom <= run.pay_date)
-      .filter((row) => !row.supersededOn || row.supersededOn > run.pay_date)
+      .filter((row) => !row.effectiveFrom || row.effectiveFrom <= run.pay_date!)
+      .filter((row) => !row.supersededOn || row.supersededOn > run.pay_date!)
       .map((row) => row.certificateKey);
 
   const subRegionsOnFile = (side: "work" | "residence"): string[] => {
@@ -152,8 +152,8 @@ export async function computeUsStatutory(
   for (const levy of resolution.levies) {
     const withheld = computeUsWithholding({
       levy,
-      payDate: run.pay_date,
-      periodEnd: run.period_end,
+      payDate: run.pay_date!,
+      periodEnd: run.period_end!,
       periodsPerYear: P,
       wages: income,
       supplemental: nonPeriodic,

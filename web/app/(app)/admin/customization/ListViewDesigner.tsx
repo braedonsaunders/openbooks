@@ -265,7 +265,7 @@ export function ListViewDesigner({
                     ) : valueKind === 'entity_ref' && filterOptions[f.key]?.length ? (
                       <Select value={Array.isArray(f.value) ? f.value[0] : (f.value as string) ?? ''} onChange={(e) => updateFilter(fi, { value: e.target.value })} className="h-7 w-52">
                         <option value="">—</option>
-                        {filterOptions[f.key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        {filterOptions[f.key]!.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </Select>
                     ) : (
                       <Input value={Array.isArray(f.value) ? f.value.join(',') : (f.value as string) ?? ''} onChange={(e) => updateFilter(fi, { value: e.target.value })} className="h-7 w-40" />

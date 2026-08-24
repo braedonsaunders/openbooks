@@ -163,7 +163,9 @@ export function verifyEnvToken(token: string | undefined): string | null {
   if (!token || token.length > 512) return null;
   const parts = token.split(".");
   if (parts.length !== 3) return null;
-  const [orgId, rawExpires, signature] = parts;
+  const orgId = parts[0]!;
+  const rawExpires = parts[1]!;
+  const signature = parts[2]!;
   const expires = Number(rawExpires);
   if (!Number.isSafeInteger(expires) || expires < Date.now() / 1000) return null;
   const payload = `${orgId}.${rawExpires}`;
@@ -1106,7 +1108,7 @@ export async function finishOidcLogin(input: {
         await recordLoginEvent({ userId: null, emailHash, outcome: "oidc_failure", authMethod: "oidc", networkHash, userAgentHash });
         return { kind: "invalid", retryAfter: 0 };
       }
-      user = candidates.rows[0];
+      user = candidates.rows[0]!;
       const linked = (await db.execute<{ userId: string }>(sql`
         insert into auth_oidc_identities (issuer, subject, user_id, email_at_link, last_login_at)
         values (${input.issuer}, ${input.subject}, ${user.id}, ${normalizedEmail}, now())

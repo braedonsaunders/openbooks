@@ -211,7 +211,9 @@ export function renderRoeXml(input: {
   }
   const roeXml: string[] = [];
   for (const { record, issue, sin } of records) {
-    const [surname, ...given] = splitName(record.employeeName);
+    const names = splitName(record.employeeName);
+    const surname = names[0]!;
+    const given = names.slice(1);
     // Block 5: the employee's own payroll program account files the ROE;
     // employees on no account fall back to the employer business number.
     const bn = record.filingAccount.accountNumber ?? employer.bn;

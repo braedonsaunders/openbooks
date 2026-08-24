@@ -194,7 +194,8 @@ export async function inspectBackupArchive(args: {
 
       const match = ROW_LINE_RE.exec(line);
       if (!match) throw new Error(`malformed row envelope at backup line ${lineNumber}`);
-      const [, tableName, rawRow] = match;
+      const tableName = match[1]!;
+      const rawRow = match[2]!;
       if (tableName !== currentTable) {
         await closeWriteStream(currentSink);
         currentSink = null;

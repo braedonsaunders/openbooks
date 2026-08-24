@@ -74,10 +74,12 @@ test("div is the non-FX counterpart to divRate", () => {
 });
 
 test("div matches divRate exactly wherever divRate is legal", () => {
-  for (const [a, b] of [
+  for (const pair of [
     ["100", "3"], ["0.0001", "7"], ["-250.5000", "1.25"],
     ["999999.9999", "0.0001"], ["12.3456", "2.50000000"],
   ]) {
+    const a = pair[0]!;
+    const b = pair[1]!;
     assert.equal(div(a, b), divRate(a, b), `${a} / ${b}`);
   }
 });
@@ -92,7 +94,9 @@ test("div then mul returns the original within one rounding step", () => {
   // Compared in exact ledger units — a money test must not measure itself with
   // binary floats. Re-multiplying a rounded share can be off by at most half a
   // unit per whole of the divisor.
-  for (const [amount, divisor] of [["100", "3"], ["7.5000", "4"], ["0.0001", "7"], ["-100", "3"]]) {
+  for (const pair of [["100", "3"], ["7.5000", "4"], ["0.0001", "7"], ["-100", "3"]]) {
+    const amount = pair[0]!;
+    const divisor = pair[1]!;
     const back = mul(div(amount, divisor), divisor);
     const drift = toUnits(back) - toUnits(amount);
     const bound = (toUnits(divisor) + 2n * 10_000n) / (2n * 10_000n);

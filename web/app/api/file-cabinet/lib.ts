@@ -37,7 +37,7 @@ export const ALLOWED_CONTENT_TYPES: Record<string, true> = {
 }
 
 export function isAllowedContentType(ct: string): boolean {
-  return ALLOWED_CONTENT_TYPES[ct.split(';')[0].trim().toLowerCase()] === true
+  return ALLOWED_CONTENT_TYPES[ct.split(';')[0]!.trim().toLowerCase()] === true
 }
 
 /**

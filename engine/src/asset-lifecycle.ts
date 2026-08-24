@@ -266,7 +266,7 @@ export async function disposeAsset(
               ${`${status === "written_off" ? "Write-off" : "Disposal"} — ${asset.asset_number}`},
               'draft', 'disposal', ${opts.actorId}, ${opts.actorId})
       returning id`));
-    const eid = entryRes.rows[0].id;
+    const eid = entryRes.rows[0]!.id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
       await tx.execute(sql`
@@ -606,7 +606,7 @@ export async function remeasureAsset(
               ${`${kind === "impaired" ? "Impairment" : "Revaluation"} — ${asset.asset_number}`},
               'draft', 'revaluation', ${opts.actorId}, ${opts.actorId})
       returning id`));
-    const eid = entryRes.rows[0].id;
+    const eid = entryRes.rows[0]!.id;
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i]!;
       await tx.execute(sql`

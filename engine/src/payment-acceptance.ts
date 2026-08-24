@@ -619,12 +619,12 @@ export async function createPaymentLink(
     `));
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'payment_links', ${id.rows[0].id}, 'insert',
+      values (${orgId}, 'payment_links', ${id.rows[0]!.id}, 'insert',
               ${JSON.stringify({ after: { documentId: doc.id, documentNumber: doc.document_number, provider: input.provider, amount: doc.open_balance, surcharge: surcharge.amount } })}::jsonb,
               ${actorId})
     `);
     const links = await listPaymentLinks(orgId, doc.id);
-    return links.find((l) => l.id === id.rows[0].id)!;
+    return links.find((l) => l.id === id.rows[0]!.id)!;
   });
 }
 

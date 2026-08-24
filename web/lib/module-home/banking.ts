@@ -150,7 +150,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
     let running = balance
     for (let i = weekStarts.length - 1; i >= 0; i--) {
       spark[i] = running
-      running -= weekly?.get(weekStarts[i]) ?? 0
+      running -= weekly?.get(weekStarts[i]!) ?? 0
     }
     return {
       id: a.id,
@@ -175,7 +175,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
 
   const trend = weekStarts.map((weekStart, i) => ({
     weekStart,
-    balance: accounts.reduce((sum, a) => (a.type === 'asset_bank' ? sum + a.spark[i] : sum), 0),
+    balance: accounts.reduce((sum, a) => (a.type === 'asset_bank' ? sum + a.spark[i]! : sum), 0),
   }))
 
   const badge = badgesRes.rows[0] ?? {}

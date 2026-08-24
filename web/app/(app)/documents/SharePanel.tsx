@@ -83,7 +83,7 @@ export function SharePanel({
   async function addGrant() {
     if (!selected) return
     const [pType, pId] = selected.split(':')
-    await post(pType, pId, tier)
+    await post(pType!, pId!, tier)
     setSelected('')
     setTier('viewer')
   }

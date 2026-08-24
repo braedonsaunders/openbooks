@@ -425,7 +425,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
   const days: string[] = []
   {
     const [y, mo, d] = ft.periodStart.split('-').map(Number)
-    const cur = new Date(Date.UTC(y, mo - 1, d, 12))
+    const cur = new Date(Date.UTC(y!, mo! - 1, d!, 12))
     for (let i = 0; i < 7; i++) {
       const dayIso = cur.toISOString().slice(0, 10)
       if (dayIso > ft.periodEnd) break
@@ -545,7 +545,7 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
       amount: m(l.amount),
     })),
   }
-  for (let i = 0; i < 7; i++) values[`day${i + 1}_label`] = days[i] ? dayLabel(days[i]) : ''
+  for (let i = 0; i < 7; i++) values[`day${i + 1}_label`] = days[i] ? dayLabel(days[i]!) : ''
 
   return { values, reference: ticket.documentNumber }
 }

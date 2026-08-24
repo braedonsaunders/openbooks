@@ -274,7 +274,7 @@ function SftpConnectionCard({
   return (
     <Card className="p-4">
       <div className="flex items-center gap-4">
-        <BankAvatar name={server.name} color={PROVIDER_COLOR.sftp} />
+        <BankAvatar name={server.name} color={PROVIDER_COLOR.sftp ?? "#64748B"} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate font-medium text-slate-900 dark:text-slate-100">{server.name}</span>

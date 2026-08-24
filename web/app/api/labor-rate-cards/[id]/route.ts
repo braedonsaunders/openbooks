@@ -456,14 +456,14 @@ export async function PUT(
           if (target.targetType === "item" && !target.targetValueId) continue;
           if (target.targetType === "item" && target.targetValueId) wroteItemTarget = true;
           await tx.execute(
-            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0].id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
+            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0]!.id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
           );
         }
         if (!wroteItemTarget) {
           const code = adjustment.code!.trim().toLowerCase();
           for (const stored of storedItemTargets.rows.filter((row) => row.code === code)) {
             await tx.execute(
-              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0].id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
+              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0]!.id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
             );
           }
         }

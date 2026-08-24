@@ -67,7 +67,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 export function ticketWindow(period: TicketPeriod, anchorIso: string): { start: string; end: string } {
   const [y, m, d] = anchorIso.split('-').map(Number)
   if (period !== 'weekly') return { start: anchorIso, end: anchorIso }
-  const date = new Date(Date.UTC(y, m - 1, d, 12))
+  const date = new Date(Date.UTC(y!, m! - 1, d!, 12))
   date.setUTCDate(date.getUTCDate() - date.getUTCDay())
   const start = iso(date)
   date.setUTCDate(date.getUTCDate() + 6)
@@ -142,10 +142,10 @@ export async function createFieldTicket(
       insert into field_tickets
         (document_id, org_id, period, period_start, period_end, foreman_party_id,
          created_by, updated_by)
-      values (${row.rows[0].id}, ${orgId}, ${period}, ${window.start}, ${window.end},
+      values (${row.rows[0]!.id}, ${orgId}, ${period}, ${window.start}, ${window.end},
               ${foreman.rows[0]?.party_id ?? null}, ${userId}, ${userId})
     `)
-    return { id: row.rows[0].id, documentNumber: row.rows[0].document_number }
+    return { id: row.rows[0]!.id, documentNumber: row.rows[0]!.document_number }
   })
 }
 
@@ -189,7 +189,7 @@ export async function updateTicketHeader(
 
   const hourCount = (
     (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
-  ).rows[0].n
+  ).rows[0]!.n
   if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
     const period = patch.period ?? ft.period
     const anchor = patch.documentDate ?? doc.document_date
@@ -451,7 +451,7 @@ export async function addTicketLine(
                                 project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,
                                 base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
                                 field_ticket_id, created_by, updated_by)
-    values (${orgId}, ${ticketId}, ${next.rows[0].n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
+    values (${orgId}, ${ticketId}, ${next.rows[0]!.n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
             ${input.employeeId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
@@ -465,7 +465,7 @@ export async function addTicketLine(
     await db.execute(sql`
       insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
                                            quantity, rate, amount, sequence, created_by, updated_by)
-      values (${orgId}, ${inserted.rows[0].id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
+      values (${orgId}, ${inserted.rows[0]!.id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
               ${component.unitName}, ${component.quantity}, ${component.rate}, ${component.amount}, ${sequence++},
               ${userId}, ${userId})`)
   }
@@ -713,7 +713,8 @@ export async function submitFieldTicket(orgId: string, userId: string, ticketId:
     const counts = (await db.execute<{ hours: number; lines: number }>(sql`
       select (select count(*) from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
              (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`))
-    if (Number(counts.rows[0].hours) === 0 && Number(counts.rows[0].lines) === 0) {
+    const countsRow = counts.rows[0]!
+    if (Number(countsRow.hours) === 0 && Number(countsRow.lines) === 0) {
       throw new FieldTicketError('Add hours or lines before submitting')
     }
 

@@ -26,6 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
   const exists = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`))
   if (exists.rows.length === 0) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
+  const existing = exists.rows[0]!
 
   const bytes = Buffer.from(await file.arrayBuffer())
   if (bytes.length === 0) return NextResponse.json({ error: 'file is empty' }, { status: 400 })
@@ -49,15 +50,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
          where org_id = ${orgId} and code = ${code}`)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'tax_return_forms', ${exists.rows[0].id}, 'update',
-                ${JSON.stringify({ officialPdf: exists.rows[0].official_pdf_file_id ? 'replaced' : 'uploaded' })}::jsonb,
+        values (${orgId}, 'tax_return_forms', ${existing.id}, 'update',
+                ${JSON.stringify({ officialPdf: existing.official_pdf_file_id ? 'replaced' : 'uploaded' })}::jsonb,
                 ${gate.user.id})`)
     })
   } catch (error) {
     await deleteFile(orgId, meta.id)
     throw error
   }
-  if (exists.rows[0].official_pdf_file_id) await deleteFile(orgId, exists.rows[0].official_pdf_file_id)
+  if (existing.official_pdf_file_id) await deleteFile(orgId, existing.official_pdf_file_id)
   return NextResponse.json({ ok: true, fileId: meta.id })
 }
 
@@ -70,15 +71,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ code:
     select id, official_pdf_file_id from tax_return_forms
      where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
   if (!old.rows[0]) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
+  const removed = old.rows[0]
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       update tax_return_forms set official_pdf_file_id = null, updated_at = now(), updated_by = ${gate.user.id}
        where org_id = ${gate.user.orgId} and code = ${code}`)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${gate.user.orgId}, 'tax_return_forms', ${old.rows[0].id}, 'update',
+      values (${gate.user.orgId}, 'tax_return_forms', ${removed.id}, 'update',
               ${JSON.stringify({ officialPdf: 'removed' })}::jsonb, ${gate.user.id})`)
   })
-  if (old.rows[0].official_pdf_file_id) await deleteFile(gate.user.orgId, old.rows[0].official_pdf_file_id)
+  if (removed.official_pdf_file_id) await deleteFile(gate.user.orgId, removed.official_pdf_file_id)
   return NextResponse.json({ ok: true })
 }

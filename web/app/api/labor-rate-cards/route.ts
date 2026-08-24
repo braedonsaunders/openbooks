@@ -42,19 +42,21 @@ export async function POST(req: Request) {
         insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
         values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})
         returning id`));
+      const bookRow = book.rows[0]!;
       const version = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, status, custom, created_by, updated_by)
-        values (${gate.user.orgId}, ${book.rows[0].id}, ${today}, 'draft', '{}'::jsonb, ${gate.user.id}, ${gate.user.id})
+        values (${gate.user.orgId}, ${bookRow.id}, ${today}, 'draft', '{}'::jsonb, ${gate.user.id}, ${gate.user.id})
         returning id`));
+      const versionRow = version.rows[0]!;
       await tx.execute(sql`
         insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
-        values (${gate.user.orgId}, ${version.rows[0].id}, 'explicit', ${gate.user.id}, ${gate.user.id})`);
+        values (${gate.user.orgId}, ${versionRow.id}, 'explicit', ${gate.user.id}, ${gate.user.id})`);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${gate.user.orgId}, 'item_rate_versions', ${version.rows[0].id}, 'insert',
-                ${JSON.stringify({ rateBookId: book.rows[0].id, code, currency, effectiveFrom: today })}::jsonb,
+        values (${gate.user.orgId}, 'item_rate_versions', ${versionRow.id}, 'insert',
+                ${JSON.stringify({ rateBookId: bookRow.id, code, currency, effectiveFrom: today })}::jsonb,
                 ${gate.user.id})`);
-      return version.rows[0].id;
+      return versionRow.id;
     });
     return NextResponse.json({ id }, { status: 201 });
   } catch {

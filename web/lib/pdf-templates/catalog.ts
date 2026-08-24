@@ -169,7 +169,7 @@ const FIELD_TICKET: PdfRecordTypeMeta = {
     { key: 'period', label: 'Period kind', sample: 'Weekly' },
     { key: 'period_start', label: 'Period start', sample: 'Jul 12, 2026' },
     { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
-    ...Array.from({ length: 7 }, (_, i) => ({ key: `day${i + 1}_label`, label: `Day ${i + 1} header`, sample: ['Sun 07-12', 'Mon 07-13', 'Tue 07-14', 'Wed 07-15', 'Thu 07-16', 'Fri 07-17', 'Sat 07-18'][i] })),
+    ...Array.from({ length: 7 }, (_, i) => ({ key: `day${i + 1}_label`, label: `Day ${i + 1} header`, sample: ['Sun 07-12', 'Mon 07-13', 'Tue 07-14', 'Wed 07-15', 'Thu 07-16', 'Fri 07-17', 'Sat 07-18'][i]! })),
     { key: 'project_name', label: 'Project / job', sample: 'S26-0471 Splitter Box' },
     { key: 'po_number', label: 'Customer PO', sample: 'PO-2024-88' },
     { key: 'foreman_name', label: 'Foreman', sample: 'J. Martin' },

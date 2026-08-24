@@ -786,7 +786,8 @@ function closeTaskActionHref(task: Row, run: Row): string | null {
     "controller-approval": "/approvals",
     "publish-package": `/close?run=${run.id}&stage=publish`,
   };
-  if (exact[task.key]) return exact[task.key];
+  const exactHref = exact[task.key];
+  if (exactHref) return exactHref;
   const workstream: Record<string, string> = {
     readiness: `/close?run=${run.id}&stage=readiness`,
     banking: "/banking/reconciliations",

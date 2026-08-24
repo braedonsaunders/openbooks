@@ -82,7 +82,7 @@ function generateCopySql(
       exprs.push(`ob_rebase("id", '${seed}')`);
     } else if (c.name === "org_id") {
       exprs.push(`'${sbx}'::uuid`);
-    } else if ((t.fks[c.name] && rebaseSet.has(t.fks[c.name])) || t.forceRebase.has(c.name)) {
+    } else if ((t.fks[c.name] && rebaseSet.has(t.fks[c.name]!)) || t.forceRebase.has(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
     } else if (tableMask?.has(c.name)) {
       exprs.push(`${maskExpr(c.name, tableMask.get(c.name)!)} `);
@@ -96,7 +96,7 @@ function generateCopySql(
   if (t.hasOrgId) {
     where = `org_id = '${prod}'`;
   } else if (PARENT_FILTER[t.name]) {
-    where = PARENT_FILTER[t.name](prod);
+    where = PARENT_FILTER[t.name]!(prod);
   } else {
     return null; // org-less, no known parent filter — skip
   }

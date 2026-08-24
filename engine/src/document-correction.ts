@@ -273,7 +273,7 @@ export async function createDocumentCorrectionDraft(input: {
         }
       }
 
-      const [link] = await tx
+      const link = (await tx
         .insert(schema.documentLinks)
         .values({
           orgId: input.orgId,
@@ -286,7 +286,7 @@ export async function createDocumentCorrectionDraft(input: {
           createdBy: input.actorId,
           updatedBy: input.actorId,
         })
-        .returning({ id: schema.documentLinks.id });
+        .returning({ id: schema.documentLinks.id }))[0]!;
 
       await tx.execute(sql`
         insert into audit_log

@@ -34,7 +34,9 @@ export function verifyOidcIdToken(input: {
 }): VerifiedOidcClaims | null {
   const segments = input.idToken.split(".");
   if (segments.length !== 3) return null;
-  const [headerSegment, payloadSegment, signatureSegment] = segments;
+  const headerSegment = segments[0]!;
+  const payloadSegment = segments[1]!;
+  const signatureSegment = segments[2]!;
   const header = decodeJson(headerSegment);
   const claims = decodeJson(payloadSegment);
   if (!header || !claims) return null;

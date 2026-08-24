@@ -157,7 +157,7 @@ test(
           from journal_entries
          where source_document_id = ${documentId} and org_id = ${org.orgId}
       `));
-      assert.equal(entryCount.rows[0].count, 1);
+      assert.equal(entryCount.rows[0]!.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }

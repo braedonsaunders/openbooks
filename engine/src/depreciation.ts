@@ -163,7 +163,7 @@ function monthStart(date: string): string {
 /** Add n months to a YYYY-MM-01 string, returning YYYY-MM-01. */
 function addMonths(monthStartDate: string, n: number): string {
   const [y, m] = monthStartDate.split("-").map(Number);
-  const total = (y * 12 + (m - 1)) + n;
+  const total = (y! * 12 + (m! - 1)) + n;
   const ny = Math.floor(total / 12);
   const nm = (total % 12) + 1;
   return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
@@ -411,7 +411,7 @@ export async function buildScheduleWithRunner(
         insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, created_by, updated_by)
         values (${orgId}, ${assetId}, ${bookId}, ${method}, ${depreciationMethodId}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${actorId}, ${actorId})
         returning id`));
-      scheduleId = ins.rows[0].id;
+      scheduleId = ins.rows[0]!.id;
     }
 
     // preserve posted lines; drop only the unposted plan and rewrite it
@@ -848,10 +848,10 @@ export async function runDepreciation(
                   ${`Depreciation — ${row.asset_name} (${row.period_name})`},
                   'draft', 'depreciation', ${actorId}, ${actorId})
           returning id`));
-        const eid = entryRes.rows[0].id;
+        const eid = entryRes.rows[0]!.id;
 
         for (let i = 0; i < lines.length; i++) {
-          const l = lines[i];
+          const l = lines[i]!;
           await tx.execute(sql`
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,

@@ -14,7 +14,7 @@ import { db, env } from '@openbooks/engine/src/db.ts'
 const b64u = (b: Buffer) => b.toString('base64url')
 
 function sign(payload: string): string {
-  return b64u(createHmac('sha256', env.SESSION_SECRET).update(payload).digest())
+  return b64u(createHmac('sha256', env.SESSION_SECRET!).update(payload).digest())
 }
 
 export function mintSigningToken(

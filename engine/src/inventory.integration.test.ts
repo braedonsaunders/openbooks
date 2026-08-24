@@ -35,7 +35,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
-  return r.rows[0].bal;
+  return r.rows[0]!.bal;
 }
 
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
@@ -43,7 +43,7 @@ async function totalLayerValue(orgId: string): Promise<string> {
   const r = (await db.execute<{ v: string }>(sql`
     select (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers where org_id=${orgId}),0)
             - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`));
-  return r.rows[0].v;
+  return r.rows[0]!.v;
 }
 
 /** Assert every posted journal entry in the org balances to zero. */
