@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../db.ts";
 import {
+  BANK_STATEMENT_PARSER_VERSION,
   importStatement,
   parseOfx,
   parseCsv,
@@ -86,7 +87,12 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
           openingBalance: null,
           closingBalance: meta.closingBalance ?? null,
           currency: meta.currency ?? null,
-          sourceEvidence: { content: sourceBytes, filename: e.name },
+          sourceEvidence: {
+            content: sourceBytes,
+            filename: e.name,
+            parserVersion: BANK_STATEMENT_PARSER_VERSION,
+            csvMapping: fmt === "csv" ? s.csv_mapping : null,
+          },
           dryRun: false,
         },
         ctx,
