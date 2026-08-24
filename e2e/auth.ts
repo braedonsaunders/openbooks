@@ -29,10 +29,13 @@ export async function authedContext(
   browser: Browser,
   baseURL?: string,
 ): Promise<{ context: BrowserContext; page: Page }> {
+  if (!baseURL) throw new Error("e2e baseURL is required for API login");
+  const origin = new URL(baseURL).origin;
   const api = await request.newContext({ baseURL });
   try {
     const res = await api.post("/api/login", {
       data: { email: E2E_EMAIL, password: E2E_PASSWORD },
+      headers: { Origin: origin },
     });
     if (!res.ok()) {
       throw new Error(
