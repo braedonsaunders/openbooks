@@ -27,11 +27,27 @@ async function close(server: Server): Promise<void> {
   });
 }
 
-test("Plaid environment allowlist rejects inherited and prototype-polluted keys", () => {
+const hostilePlaidEnvironments = [
+  "https://127.0.0.1",
+  "//169.254.169.254/latest/meta-data",
+  "production.plaid.com@127.0.0.1",
+  "sandbox/../../127.0.0.1",
+  "sandbox.plaid.com",
+  "localhost",
+  "[::1]",
+  "production%2eplaid%2ecom",
+  "toString",
+  "constructor",
+  "__proto__",
+  "hasOwnProperty",
+] as const;
+
+test("Plaid endpoint allowlist rejects SSRF payloads and inherited keys", () => {
   assert.equal(plaidApiBase(), "https://production.plaid.com");
   assert.equal(plaidApiBase(" SANDBOX "), "https://sandbox.plaid.com");
+  assert.equal(plaidApiBase("PRODUCTION"), "https://production.plaid.com");
 
-  for (const environment of ["toString", "constructor", "__proto__", "hasOwnProperty"]) {
+  for (const environment of hostilePlaidEnvironments) {
     assert.throws(() => plaidApiBase(environment), /production or sandbox/);
   }
 
@@ -43,6 +59,150 @@ test("Plaid environment allowlist rejects inherited and prototype-polluted keys"
     assert.throws(() => plaidApiBase("pollutedPlaid"), /production or sandbox/);
   } finally {
     delete (Object.prototype as Record<string, unknown>).pollutedplaid;
+  }
+});
+
+test("Plaid rejects non-allowlisted endpoints before network I/O", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async () => {
+    requests += 1;
+    throw new Error("non-allowlisted Plaid endpoints must not be contacted");
+  };
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  for (const env of hostilePlaidEnvironments) {
+    const credentials = {
+      clientId: "client-id",
+      secret: "provider-secret",
+      accessToken: "access-token",
+      env,
+    };
+    assert.deepEqual(await plaid.test(credentials), {
+      ok: false,
+      detail: "Plaid environment must be production or sandbox",
+    });
+    await assert.rejects(
+      plaid.fetch(credentials, "account-id", "2026-01-01", "2026-01-31"),
+      /Plaid environment must be production or sandbox/,
+    );
+  }
+  assert.equal(requests, 0);
+});
+
+test("bank-feed provider allowlist accepts only exact adapter keys", () => {
+  for (const provider of ["gocardless", "plaid", "truelayer"] as const) {
+    assert.equal(getBankFeedAdapter(provider)?.key, provider);
+  }
+  for (const provider of [
+    "",
+    "PLAID",
+    " plaid ",
+    "plaid.example.com",
+    "__proto__",
+    "constructor",
+    "toString",
+  ]) {
+    assert.equal(getBankFeedAdapter(provider), null);
+  }
+
+  const pollutedAdapter = getBankFeedAdapter("plaid");
+  Object.defineProperty(Object.prototype, "pollutedbankfeed", {
+    configurable: true,
+    value: pollutedAdapter,
+  });
+  try {
+    assert.equal(getBankFeedAdapter("pollutedbankfeed"), null);
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).pollutedbankfeed;
+  }
+});
+
+test("every bank-feed adapter confines hostile inputs to trusted HTTPS origins", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: URL; init?: RequestInit }> = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    requests.push({ url, init });
+    let body: unknown = {};
+    if (url.pathname === "/api/v2/token/new/") {
+      body = { access: "access-token" };
+    } else if (url.pathname === "/transactions/get") {
+      body = { transactions: [], has_more: false };
+    } else if (url.hostname === "bankaccountdata.gocardless.com") {
+      body = { transactions: { booked: [] } };
+    } else if (url.hostname === "api.truelayer.com" && url.pathname.endsWith("/transactions")) {
+      body = { results: [] };
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const credentialPayload = "credential-must-not-appear-in-a-provider-url";
+  const hostileAccountId = "https://169.254.169.254/latest/meta-data/?next=//127.0.0.1#fragment";
+  const encodedAccountId = encodeURIComponent(hostileAccountId);
+
+  const gocardless = getBankFeedAdapter("gocardless");
+  assert.ok(gocardless);
+  assert.deepEqual(await gocardless.test({
+    secretId: credentialPayload,
+    secretKey: credentialPayload,
+  }), { ok: true });
+  await gocardless.fetch(
+    { secretId: credentialPayload, secretKey: credentialPayload },
+    hostileAccountId,
+    "2026-01-01",
+    "2026-01-31",
+  );
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  const plaidCredentials = {
+    clientId: credentialPayload,
+    secret: credentialPayload,
+    accessToken: credentialPayload,
+    env: "sandbox",
+  };
+  assert.deepEqual(await plaid.test(plaidCredentials), { ok: true });
+  await plaid.fetch(plaidCredentials, hostileAccountId, "2026-01-01", "2026-01-31");
+
+  const truelayer = getBankFeedAdapter("truelayer");
+  assert.ok(truelayer);
+  assert.deepEqual(await truelayer.test({ accessToken: credentialPayload }), { ok: true });
+  await truelayer.fetch(
+    { accessToken: credentialPayload },
+    hostileAccountId,
+    "2026-01-01",
+    "2026-01-31",
+  );
+
+  assert.deepEqual(
+    requests.map(({ url }) => `${url.origin}${url.pathname}`),
+    [
+      "https://bankaccountdata.gocardless.com/api/v2/token/new/",
+      "https://bankaccountdata.gocardless.com/api/v2/token/new/",
+      `https://bankaccountdata.gocardless.com/api/v2/accounts/${encodedAccountId}/transactions/`,
+      "https://sandbox.plaid.com/accounts/get",
+      "https://sandbox.plaid.com/transactions/get",
+      "https://api.truelayer.com/data/v1/accounts",
+      `https://api.truelayer.com/data/v1/accounts/${encodedAccountId}/transactions`,
+    ],
+  );
+  for (const { url, init } of requests) {
+    assert.equal(url.protocol, "https:");
+    assert.equal(url.username, "");
+    assert.equal(url.password, "");
+    assert.equal(init?.redirect, "error");
+    assert.ok(!url.href.includes(credentialPayload));
   }
 });
 
