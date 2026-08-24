@@ -5,6 +5,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import {
   PaymentAcceptanceError,
   configSecrets,
+  normalizeAcceptanceProviderSettings,
   saveAcceptanceConfig,
   testAcceptanceConnection,
 } from "@openbooks/engine/src/payment-acceptance.ts";
@@ -166,7 +167,12 @@ export async function POST(req: Request) {
        where org_id = ${orgId} and provider = ${provider} limit 1
     `));
     if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
-    const result = await testAcceptanceConnection(provider, configSecrets(config.rows[0]));
+    let result: { ok: boolean; detail: string };
+    try {
+      result = await testAcceptanceConnection(provider, configSecrets(config.rows[0]));
+    } catch (e) {
+      result = { ok: false, detail: e instanceof Error ? e.message : String(e) };
+    }
     await db.execute(sql`
       update psp_provider_configs set last_error = ${result.ok ? null : result.detail}, updated_at = now()
        where org_id = ${orgId} and provider = ${provider}
@@ -179,6 +185,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
   }
   try {
+    if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
+      throw new PaymentAcceptanceError("provider settings must be an object");
+    }
+    const settings = normalizeAcceptanceProviderSettings(
+      provider,
+      body.settings == null ? undefined : (body.settings as Record<string, unknown>),
+    );
     await saveAcceptanceConfig(gate.user.orgId, gate.user.id, {
       provider,
       displayName: typeof body.displayName === "string" ? body.displayName : undefined,
@@ -187,7 +200,7 @@ export async function POST(req: Request) {
       defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
       publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
       surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
-      settings: typeof body.settings === "object" && body.settings ? (body.settings as Record<string, unknown>) : undefined,
+      settings,
       apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
       webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
     });

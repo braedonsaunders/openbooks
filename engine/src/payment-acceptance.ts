@@ -43,7 +43,8 @@ export interface ProviderSecrets {
   publishableKey?: string;
   /** Adyen: merchant account code. GoCardless: creditor id (optional). */
   merchantAccount?: string;
-  /** Adyen: base URL override (defaults to checkout-test; set live URL in prod). */
+  /** Allowlisted provider API base (sandbox/test by default; set a published
+   *  live provider URL in production). */
   apiBase?: string;
 }
 
@@ -93,6 +94,77 @@ export type WebhookVerification =
 type FetchFn = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<any> }>;
 
 const defaultFetch: FetchFn = (url, init) => fetch(url, init);
+
+const DEFAULT_ACCEPTANCE_API_BASES = {
+  stripe: "https://api.stripe.com",
+  adyen: "https://checkout-test.adyen.com/v71",
+  gocardless: "https://api-sandbox.gocardless.com",
+} as const satisfies Record<AcceptanceProvider, string>;
+
+function invalidProviderEndpoint(provider: AcceptanceProvider): PaymentAcceptanceError {
+  return new PaymentAcceptanceError(`${provider} API endpoint is not allowlisted`);
+}
+
+/** Validate and canonicalize a provider API base before it can reach fetch.
+ *  Adyen live Checkout hosts are merchant-specific, so their documented host
+ *  shape is allowlisted in addition to the fixed test host. */
+export function resolveAcceptanceProviderApiBase(
+  provider: AcceptanceProvider,
+  configuredApiBase?: string,
+): string {
+  const candidate = configuredApiBase ?? DEFAULT_ACCEPTANCE_API_BASES[provider];
+  let endpoint: URL;
+  try {
+    endpoint = new URL(candidate);
+  } catch {
+    throw invalidProviderEndpoint(provider);
+  }
+  if (
+    endpoint.protocol !== "https:" ||
+    endpoint.username !== "" ||
+    endpoint.password !== "" ||
+    endpoint.port !== "" ||
+    endpoint.search !== "" ||
+    endpoint.hash !== ""
+  ) {
+    throw invalidProviderEndpoint(provider);
+  }
+
+  const host = endpoint.hostname.toLowerCase();
+  const path = endpoint.pathname.replace(/\/+$/, "");
+  if (provider === "stripe") {
+    if (host !== "api.stripe.com" || path !== "") throw invalidProviderEndpoint(provider);
+  } else if (provider === "gocardless") {
+    if (
+      (host !== "api.gocardless.com" && host !== "api-sandbox.gocardless.com") ||
+      path !== ""
+    ) {
+      throw invalidProviderEndpoint(provider);
+    }
+  } else {
+    const testEndpoint = host === "checkout-test.adyen.com" && /^\/v\d+$/.test(path);
+    const liveEndpoint =
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-checkout-live(?:-(?:au|us|apse))?\.adyenpayments\.com$/.test(host) &&
+      /^\/checkout\/v\d+$/.test(path);
+    if (!testEndpoint && !liveEndpoint) throw invalidProviderEndpoint(provider);
+  }
+  return `${endpoint.origin}${path}`;
+}
+
+/** Apply endpoint policy when configuration enters the engine. The same
+ *  resolver is called again by each adapter so legacy rows also fail closed. */
+export function normalizeAcceptanceProviderSettings(
+  provider: AcceptanceProvider,
+  settings: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const normalized = { ...settings };
+  if (!Object.prototype.hasOwnProperty.call(settings, "apiBase")) return normalized;
+  if (typeof settings.apiBase !== "string" || settings.apiBase.trim() === "") {
+    throw invalidProviderEndpoint(provider);
+  }
+  normalized.apiBase = resolveAcceptanceProviderApiBase(provider, settings.apiBase.trim());
+  return normalized;
+}
 
 /** Currencies with no minor unit (provider amount = major units as-is). */
 const ZERO_DECIMAL = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
@@ -244,6 +316,7 @@ const stripeAdapter: PaymentProviderAdapter = {
   key: "stripe",
   async createCheckout(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
+    const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
     const total = add(req.invoiceAmount, req.surchargeAmount);
     const params = new URLSearchParams();
     params.set("mode", "payment");
@@ -256,7 +329,7 @@ const stripeAdapter: PaymentProviderAdapter = {
     params.set("line_items[0][price_data][currency]", req.currency.toLowerCase());
     params.set("line_items[0][price_data][unit_amount]", toMinorUnits(total, req.currency));
     params.set("line_items[0][price_data][product_data][name]", req.description.slice(0, 250));
-    const res = await fetchFn("https://api.stripe.com/v1/checkout/sessions", {
+    const res = await fetchFn(`${base}/v1/checkout/sessions`, {
       method: "POST",
       headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
       body: params.toString(),
@@ -341,7 +414,7 @@ const adyenAdapter: PaymentProviderAdapter = {
     const total = add(req.invoiceAmount, req.surchargeAmount);
     const amountValue = Number(toAdyenMinorUnits(total, req.currency));
     if (!Number.isSafeInteger(amountValue)) throw new PaymentAcceptanceError("adyen amount exceeds the safe integer range");
-    const base = secrets.apiBase ?? "https://checkout-test.adyen.com/v71";
+    const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
     const res = await fetchFn(`${base}/sessions`, {
       method: "POST",
       headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
@@ -415,7 +488,7 @@ const gocardlessAdapter: PaymentProviderAdapter = {
   async createCheckout(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("gocardless access token is not configured");
     const total = add(req.invoiceAmount, req.surchargeAmount);
-    const base = secrets.apiBase ?? "https://api-sandbox.gocardless.com";
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     // Billing request → payment → billing request flow (hosted pages).
     const brRes = await fetchFn(`${base}/billing_requests`, {
       method: "POST",
@@ -467,7 +540,7 @@ export const ACCEPTANCE_ADAPTERS: Record<AcceptanceProvider, PaymentProviderAdap
 // ---------------------------------------------------------------------------
 type ProviderConfigRow = {
   id: string;
-  provider: string;
+  provider: AcceptanceProvider;
   display_name: string;
   is_enabled: boolean;
   acceptance_enabled: boolean;
@@ -491,12 +564,13 @@ async function loadProviderConfig(orgId: string, provider: AcceptanceProvider): 
 
 export function configSecrets(config: ProviderConfigRow): ProviderSecrets {
   const sealed = unsealJson<{ apiKey?: string; webhookSecret?: string }>(config.secrets);
+  const settings = normalizeAcceptanceProviderSettings(config.provider, config.settings ?? {});
   return {
     apiKey: sealed?.apiKey,
     webhookSecret: sealed?.webhookSecret,
     publishableKey: config.publishable_key ?? undefined,
-    merchantAccount: typeof config.settings?.merchantAccount === "string" ? config.settings.merchantAccount : undefined,
-    apiBase: typeof config.settings?.apiBase === "string" ? config.settings.apiBase : undefined,
+    merchantAccount: typeof settings.merchantAccount === "string" ? settings.merchantAccount : undefined,
+    apiBase: typeof settings.apiBase === "string" ? settings.apiBase : undefined,
   };
 }
 
@@ -1356,7 +1430,8 @@ export async function testAcceptanceConnection(
   try {
     if (provider === "stripe") {
       if (!secrets.apiKey) return { ok: false, detail: "no API key configured" };
-      const res = await fetchFn("https://api.stripe.com/v1/account", {
+      const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
+      const res = await fetchFn(`${base}/v1/account`, {
         method: "GET",
         headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}` },
       });
@@ -1367,7 +1442,7 @@ export async function testAcceptanceConnection(
     }
     if (provider === "adyen") {
       if (!secrets.apiKey || !secrets.merchantAccount) return { ok: false, detail: "API key and merchant account are required" };
-      const base = secrets.apiBase ?? "https://checkout-test.adyen.com/v71";
+      const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
       const res = await fetchFn(`${base}/paymentMethods`, {
         method: "POST",
         headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
@@ -1380,7 +1455,7 @@ export async function testAcceptanceConnection(
     }
     // gocardless
     if (!secrets.apiKey) return { ok: false, detail: "no access token configured" };
-    const base = secrets.apiBase ?? "https://api-sandbox.gocardless.com";
+    const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     const res = await fetchFn(`${base}/billing_requests?limit=1`, {
       method: "GET",
       headers: { authorization: `Bearer ${secrets.apiKey}`, "GoCardless-Version": "2015-07-06" },
@@ -1409,6 +1484,7 @@ export async function saveAcceptanceConfig(
     webhookSecret?: string | null;
   },
 ): Promise<void> {
+  const settings = normalizeAcceptanceProviderSettings(input.provider, input.settings);
   await db.transaction(async (tx) => {
     type ConfigRow = NonNullable<Awaited<ReturnType<typeof loadProviderConfig>>>;
     // Snapshot the stored config first so the audit row carries the real
@@ -1445,7 +1521,7 @@ export async function saveAcceptanceConfig(
       values (${orgId}, ${input.provider}, ${input.displayName ?? input.provider}, ${input.isEnabled},
               ${input.acceptanceEnabled}, ${input.defaultBankAccountId ?? null},
               ${input.publishableKey ?? null}, ${input.surchargeRuleId ?? null},
-              ${JSON.stringify(input.settings ?? {})}::jsonb, ${secrets}, ${actorId}, ${actorId})
+              ${JSON.stringify(settings)}::jsonb, ${secrets}, ${actorId}, ${actorId})
       on conflict (org_id, provider) do update set
         display_name = excluded.display_name,
         is_enabled = excluded.is_enabled,
