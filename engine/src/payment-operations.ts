@@ -285,7 +285,7 @@ export async function submitPaymentRun(runId: string, orgId: string, userId: str
       status = case when p.require_run_approval then 'pending_approval' else 'approved' end,
       submitted_at = now(), submitted_by = ${userId},
       approved_at = case when p.require_run_approval then null else now() end,
-      approved_by = case when p.require_run_approval then null else ${userId} end,
+      approved_by = case when p.require_run_approval then null else ${userId}::uuid end,
       updated_at = now(), updated_by = ${userId}
     from payment_bank_profiles p
     where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
@@ -298,7 +298,7 @@ export async function submitPaymentRun(runId: string, orgId: string, userId: str
 }
 
 /** The maker of a controlled payment artifact can never be its checker. */
-export function assertIndependentPaymentApprover(
+function assertIndependentPaymentApprover(
   kind: "run" | "file",
   makerId: string | null,
   approverId: string,
@@ -322,9 +322,9 @@ export async function decidePaymentRun(
     update payment_runs set
       status = ${next},
       approved_at = case when ${decision} = 'approve' then now() else null end,
-      approved_by = case when ${decision} = 'approve' then ${userId} else null end,
+      approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
       rejected_at = case when ${decision} = 'reject' then now() else null end,
-      rejected_by = case when ${decision} = 'reject' then ${userId} else null end,
+      rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
       rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
       updated_at = now(), updated_by = ${userId}
     where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
@@ -784,9 +784,9 @@ export async function decidePaymentFile(
     update payment_files set
       status = ${decision === "approve" ? "approved" : "rejected"},
       approved_at = case when ${decision} = 'approve' then now() else null end,
-      approved_by = case when ${decision} = 'approve' then ${userId} else null end,
+      approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
       rejected_at = case when ${decision} = 'reject' then now() else null end,
-      rejected_by = case when ${decision} = 'reject' then ${userId} else null end,
+      rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
       rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
       updated_at = now(), updated_by = ${userId}
     where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
