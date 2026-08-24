@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -9,7 +10,9 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import {
   applyDocumentEdit,
+  DOCUMENT_EDIT_VERSION_REQUIRED,
   DocumentEditError,
+  documentRevisionSql,
   loadDocument,
   DOC_KINDS,
   createPermission,
@@ -72,7 +75,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const owned = (await db.execute<(DocumentEditCurrent & { subsidiaryId: string | null })>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-               document_date as "documentDate", updated_at as "updatedAt",
+               document_date as "documentDate",
+               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt",
                subsidiary_id as "subsidiaryId"
           from documents where id = ${id} and org_id = ${user.orgId}`,
   ))
@@ -118,6 +122,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // cannot see — even one that exists and is active.
   if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
     return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+  }
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 409 })
   }
   // Stored inventory / assembly / kit lines stay. Turning Inventory off must
   // 404 a write that would persist a new one of those kinds.

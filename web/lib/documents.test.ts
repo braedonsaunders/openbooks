@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { sql } from 'drizzle-orm'
 
 // documents.ts and bills.ts are server-only services (they pull the engine's
 // DB pool and the flows engine), so the runner cannot import them as-is. The
 // marker package gates only RSC bundling; shimming it to an empty module lets
-// these tests exercise the modules' pure seams directly. node's test runner
+// these tests exercise the production services directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -17,11 +19,125 @@ registerHooks({
   },
 })
 
-const { DocumentEditError, validateEditableDocumentLines, validateCorrectionReason, buildReversalLinkEvidence } =
-  await import('./documents.ts')
+const {
+  applyDocumentEdit,
+  assertDocumentEditRevision,
+  buildReversalLinkEvidence,
+  createPostedCorrectionDraft,
+  DocumentEditError,
+  requireDocumentEditRevision,
+  runDocumentVersionedTransaction,
+  validateCorrectionReason,
+  validateEditableDocumentLines,
+} = await import('./documents.ts')
 const { computeBillTotals } = await import('./bills.ts')
+const { withSimClock } = await import('@openbooks/engine/src/clock.ts')
+const { db, env, pool, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const { postDocument } = await import('@openbooks/engine/src/posting.ts')
+const {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} = await import('@openbooks/engine/src/test-fixtures.ts')
+const { createApplicationRecord } = await import('./application/records.ts')
+const { correctPostedDocument } = await import('./application/documents.ts')
 
 const NO_PROFILES = { codes: new Map(), groups: new Map() }
+const DOCUMENTS_SOURCE = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
+
+type StoredDocument = {
+  kind: string
+  status: string
+  total: string
+  taxTotal: string
+  partyId: string | null
+  documentDate: string
+  updatedAt: string
+  memo: string | null
+}
+
+type Settled<Result> =
+  | { status: 'fulfilled'; value: Result }
+  | { status: 'rejected'; reason: unknown }
+
+function settle<Result>(work: Promise<Result>): Promise<Settled<Result>> {
+  return work.then(
+    (value) => ({ status: 'fulfilled' as const, value }),
+    (reason: unknown) => ({ status: 'rejected' as const, reason }),
+  )
+}
+
+function isConflict(error: unknown): boolean {
+  return error instanceof DocumentEditError && error.status === 409
+}
+
+function errorChainIncludes(error: unknown, pattern: RegExp): boolean {
+  let current: unknown = error
+  const seen = new Set<unknown>()
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    if (current instanceof Error && pattern.test(current.message)) return true
+    current = typeof current === 'object' && current !== null && 'cause' in current
+      ? (current as { cause?: unknown }).cause
+      : null
+  }
+  return false
+}
+
+async function loadStoredDocument(orgId: string, id: string): Promise<StoredDocument> {
+  const result = await withOrgContext(orgId, async () => db.execute<StoredDocument>(sql`
+    select kind, status, total::text as "total", tax_total::text as "taxTotal",
+           party_id as "partyId", document_date::text as "documentDate", memo,
+           to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
+      from documents
+     where org_id = ${orgId} and id = ${id}
+  `))
+  assert.ok(result.rows[0], `document ${id} should exist`)
+  return result.rows[0]
+}
+
+function pids(value: unknown): number[] {
+  if (Array.isArray(value)) return value.map(Number)
+  return String(value ?? '')
+    .replace(/^\{|\}$/g, '')
+    .split(',')
+    .filter(Boolean)
+    .map(Number)
+}
+
+async function waitForBlockedWriter(
+  possibleBlockers: ReadonlySet<number>,
+  excludedPids: ReadonlySet<number> = new Set(),
+): Promise<{ pid: number; query: string; blockingPids: number[] }> {
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    const rows = await withBypass(async () => (await db.execute<{
+      pid: number
+      query: string
+      blockingPids: unknown
+    }>(sql`
+      select pid, query, pg_blocking_pids(pid) as "blockingPids"
+        from pg_stat_activity
+       where datname = current_database()
+         and pid <> pg_backend_pid()
+         and cardinality(pg_blocking_pids(pid)) > 0
+    `)).rows)
+    for (const row of rows) {
+      const blockingPids = pids(row.blockingPids)
+      if (
+        !excludedPids.has(Number(row.pid))
+        && blockingPids.some((pid) => possibleBlockers.has(pid))
+        && /for\s+update/i.test(row.query)
+      ) {
+        return { pid: Number(row.pid), query: row.query, blockingPids }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  throw new Error(
+    `timed out waiting for a SELECT FOR UPDATE blocked by PostgreSQL pid(s) ${[...possibleBlockers].join(', ')}`,
+  )
+}
 
 test('negative and zero lines survive editor validation untouched', () => {
   const lines = validateEditableDocumentLines([
@@ -67,8 +183,634 @@ test('computeBillTotals carries negative and zero lines into the totals', () => 
 test('the generic editor no longer filters lines by positive amount', () => {
   // Regression pin (source-level, like wip-billing.test.ts): the save path
   // must validate every submitted line, never silently drop non-positive ones.
-  const source = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /const valid = body\.lines\.filter/)
+  assert.doesNotMatch(DOCUMENTS_SOURCE, /const valid = body\.lines\.filter/)
+})
+
+test(
+  'PostgreSQL enforces exact, atomic document optimistic concurrency',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async (t) => {
+    const missingId = randomUUID()
+    const nullId = randomUUID()
+    const exactConflictId = randomUUID()
+    const serializedId = randomUUID()
+    const rollbackId = randomUUID()
+    const rollbackLineId = randomUUID()
+    const correctionSourceId = randomUUID()
+    const correctionEntryId = randomUUID()
+    const applicationCorrectionSourceId = randomUUID()
+    const createFlowId = randomUUID()
+    const correctionFlowId = randomUUID()
+    const correctionFlowGuard = `occ_correction_flow_${correctionFlowId.replaceAll('-', '')}`
+
+    const fixture = await withBypass(async () => {
+      const org = await createScratchOrg()
+      const actorId = (await seedFlowActors(org.orgId)).adminId
+
+      const insertDraft = async (
+        id: string,
+        number: string,
+        revision: string,
+        memo: string,
+      ) => db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, subsidiary_id, document_date,
+           currency, status, subtotal, tax_total, total, memo, custom,
+           extra_dims, created_by, created_at, updated_at, updated_by)
+        values
+          (${id}, ${org.orgId}, 'transfer', ${number}, ${org.subsidiaryId},
+           ${org.date}, 'CAD', 'draft', '0', '0', '0', ${memo}, '{}'::jsonb,
+           '{}'::jsonb, ${actorId}, ${revision}::timestamptz,
+           ${revision}::timestamptz, null)
+      `)
+
+      await insertDraft(missingId, 'OCC-MISSING', '2026-08-24T12:00:00.100001Z', 'missing retained')
+      await insertDraft(nullId, 'OCC-NULL', '2026-08-24T12:00:00.100002Z', 'null retained')
+      await insertDraft(exactConflictId, 'OCC-EXACT', '2026-08-24T12:00:00.123001Z', 'opened value')
+      await insertDraft(serializedId, 'OCC-SERIAL', '2026-08-24T12:00:00.500001Z', 'serialized original')
+      await insertDraft(rollbackId, 'OCC-ROLLBACK', '2026-08-24T12:00:00.700001Z', 'rollback header')
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, description,
+           quantity, unit_price, amount, tax_input_amount, tax_amount,
+           tax_overridden, extra_dims, custom)
+        values
+          (${rollbackLineId}, ${org.orgId}, ${rollbackId}, 1,
+           ${org.accounts.bank}, 'original line', '1', '7', '7', '7', '0',
+           false, '{}'::jsonb, '{}'::jsonb)
+      `)
+
+      await insertDraft(
+        correctionSourceId,
+        'OCC-CORRECTION-SOURCE',
+        '2026-08-24T12:00:00.900001Z',
+        'posted source',
+      )
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, source_document_id, origin, custom,
+           created_by, updated_by)
+        values
+          (${correctionEntryId}, ${org.orgId}, ${org.bookId},
+           ${org.subsidiaryId}, 'OCC-CORRECTION-ENTRY', ${org.date},
+           ${org.periodId}, 'posted source identity', 'draft',
+           ${correctionSourceId}, 'document', '{}'::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        update documents
+           set status = 'posted', posted_entry_id = ${correctionEntryId},
+               posting_period_id = ${org.periodId}, posting_date = ${org.date}
+         where id = ${correctionSourceId} and org_id = ${org.orgId}
+      `)
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, fx_rate, status, subtotal,
+           tax_total, total, memo, custom, extra_dims, created_by, updated_by)
+        values
+          (${applicationCorrectionSourceId}, ${org.orgId}, 'vendor_bill',
+           'OCC-APPLICATION-CORRECTION', ${org.vendorId}, ${org.subsidiaryId},
+           ${org.date}, ${org.date}, 'CAD', '1', 'approved', '125', '0', '125',
+           'application correction source', '{}'::jsonb, '{}'::jsonb,
+           ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, extra_dims, custom, created_by, updated_by)
+        values
+          (${org.orgId}, ${applicationCorrectionSourceId}, 1,
+           ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
+           '{}'::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        insert into flows
+          (id, org_id, name, subject_kind, enabled, graph, created_by, updated_by)
+        values
+          (${createFlowId}, ${org.orgId}, 'OCC create settlement',
+           'customer_invoice', true, ${JSON.stringify({
+             schemaVersion: 1,
+             nodes: [
+               {
+                 id: 'created',
+                 position: { x: 0, y: 0 },
+                 data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+               },
+               {
+                 id: 'settled-field',
+                 position: { x: 200, y: 0 },
+                 data: {
+                   kind: 'action',
+                   action: {
+                     action: 'set_field',
+                     field: 'internalNotes',
+                     value: { kind: 'literal', value: 'settled by on_create' },
+                   },
+                 },
+               },
+             ],
+             edges: [
+               { id: 'created-to-field', source: 'created', target: 'settled-field' },
+             ],
+          })}::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        insert into flows
+          (id, org_id, name, subject_kind, enabled, graph, created_by, updated_by)
+        values
+          (${correctionFlowId}, ${org.orgId}, 'OCC correction post-commit',
+           'vendor_bill', true, ${JSON.stringify({
+             schemaVersion: 1,
+             nodes: [
+               {
+                 id: 'created',
+                 position: { x: 0, y: 0 },
+                 data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+               },
+               {
+                 id: 'notify',
+                 position: { x: 200, y: 0 },
+                 data: {
+                   kind: 'action',
+                   action: {
+                     action: 'notify',
+                     to: [{ type: 'user', userId: actorId }],
+                     title: 'Correction committed',
+                   },
+                 },
+               },
+             ],
+             edges: [{ id: 'created-to-notify', source: 'created', target: 'notify' }],
+           })}::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql.raw(`
+        create function public.${correctionFlowGuard}_fn() returns trigger
+        language plpgsql as $guard$
+        begin
+          if new.flow_id = '${correctionFlowId}'::uuid and exists (
+            select 1
+              from document_links link
+             where link.org_id = new.org_id
+               and link.from_document_id = new.subject_id
+               and link.xmin::text::bigint = txid_current()
+          ) then
+            raise exception 'correction flow dispatched before correction commit';
+          end if;
+          return new;
+        end
+        $guard$;
+        create trigger ${correctionFlowGuard}
+          before insert on flow_runs
+          for each row execute function public.${correctionFlowGuard}_fn();
+      `))
+
+      return { actorId, org }
+    })
+
+    const { actorId, org } = fixture
+    const editContext = {
+      orgId: org.orgId,
+      userId: actorId,
+      source: 'ui' as const,
+      runFlows: false,
+    }
+
+    try {
+      await withOrgContext(org.orgId, () => postDocument(
+        applicationCorrectionSourceId,
+        {
+          control: {
+            ar: org.accounts.ar,
+            ap: org.accounts.ap,
+            bank: org.accounts.bank,
+          },
+        },
+        { audit: { actorId, source: 'test' } },
+      ))
+
+      await t.test('pristine existing drafts reject missing and null revisions', async () => {
+        for (const [id, expectedMemo, expectedUpdatedAt, body] of [
+          [missingId, 'missing retained', '2026-08-24T12:00:00.100001Z', { memo: 'missing bypassed' }],
+          [nullId, 'null retained', '2026-08-24T12:00:00.100002Z', {
+            expectedUpdatedAt: null as never,
+            memo: 'null bypassed',
+          }],
+        ] as const) {
+          const stored = await loadStoredDocument(org.orgId, id)
+          const { updatedAt: _omittedRevision, memo: _memo, ...currentWithoutRevision } = stored
+          await assert.rejects(
+            withOrgContext(org.orgId, () => applyDocumentEdit(
+              id,
+              currentWithoutRevision as never,
+              body,
+              editContext,
+            )),
+            isConflict,
+          )
+          const retained = await loadStoredDocument(org.orgId, id)
+          assert.equal(retained.memo, expectedMemo)
+          assert.equal(retained.updatedAt, expectedUpdatedAt)
+        }
+      })
+
+      await t.test('same-millisecond PostgreSQL microseconds produce a real stale conflict', async () => {
+        const opened = await loadStoredDocument(org.orgId, exactConflictId)
+        assert.equal(opened.updatedAt, '2026-08-24T12:00:00.123001Z')
+        assert.equal(
+          new Date(opened.updatedAt).getTime(),
+          new Date('2026-08-24T12:00:00.123999Z').getTime(),
+          'JavaScript Date intentionally cannot distinguish these database revisions',
+        )
+
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            update documents
+               set memo = 'concurrent exact update',
+                   updated_at = '2026-08-24T12:00:00.123999Z'::timestamptz,
+                   updated_by = ${actorId}
+             where id = ${exactConflictId} and org_id = ${org.orgId}
+          `)
+        })
+
+        await assert.rejects(
+          withOrgContext(org.orgId, () => applyDocumentEdit(
+            exactConflictId,
+            opened,
+            { expectedUpdatedAt: opened.updatedAt, memo: 'stale overwrite' },
+            editContext,
+          )),
+          isConflict,
+        )
+        const retained = await loadStoredDocument(org.orgId, exactConflictId)
+        assert.equal(retained.memo, 'concurrent exact update')
+        assert.equal(retained.updatedAt, '2026-08-24T12:00:00.123999Z')
+      })
+
+      await t.test('SELECT FOR UPDATE serializes two writers from one exact revision', async () => {
+        const opened = await loadStoredDocument(org.orgId, serializedId)
+        const blocker = await withOrgContext(org.orgId, async () => pool.connect())
+        let blockerCommitted = false
+        let firstWrite: Promise<Settled<void>> | undefined
+        let secondWrite: Promise<Settled<void>> | undefined
+        let results: [Settled<void>, Settled<void>] | undefined
+        try {
+          await blocker.query('begin')
+          await blocker.query(
+            "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+            [org.orgId],
+          )
+          const backend = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')
+          const blockerPid = Number(backend.rows[0]!.pid)
+          await blocker.query(
+            'select id from documents where org_id = $1 and id = $2 for update',
+            [org.orgId, serializedId],
+          )
+
+          firstWrite = settle(withOrgContext(org.orgId, () => applyDocumentEdit(
+            serializedId,
+            opened,
+            { expectedUpdatedAt: opened.updatedAt, memo: 'first writer' },
+            editContext,
+          )))
+          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]))
+          assert.deepEqual(firstBlocked.blockingPids.includes(blockerPid), true)
+
+          secondWrite = settle(withOrgContext(org.orgId, () => applyDocumentEdit(
+            serializedId,
+            opened,
+            { expectedUpdatedAt: opened.updatedAt, memo: 'stale writer' },
+            editContext,
+          )))
+          const secondBlocked = await waitForBlockedWriter(
+            new Set([blockerPid, firstBlocked.pid]),
+            new Set([firstBlocked.pid]),
+          )
+          assert.notEqual(secondBlocked.pid, firstBlocked.pid)
+
+          await blocker.query('commit')
+          blockerCommitted = true
+          results = await Promise.all([firstWrite, secondWrite])
+        } finally {
+          if (!blockerCommitted) await blocker.query('rollback').catch(() => undefined)
+          blocker.release()
+          if (!results) {
+            await Promise.all([firstWrite, secondWrite].filter(Boolean) as Promise<Settled<void>>[])
+          }
+        }
+
+        assert.ok(results)
+        assert.equal(results[0].status, 'fulfilled')
+        assert.equal(results[1].status, 'rejected')
+        assert.ok(results[1].status === 'rejected' && isConflict(results[1].reason))
+        const saved = await loadStoredDocument(org.orgId, serializedId)
+        assert.equal(saved.memo, 'first writer')
+        assert.match(saved.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.notEqual(saved.updatedAt, opened.updatedAt)
+      })
+
+      await t.test('a failed second replacement line rolls the entire edit back', async () => {
+        const opened = await loadStoredDocument(org.orgId, rollbackId)
+        const invalidAccountId = randomUUID()
+        await assert.rejects(
+          withOrgContext(org.orgId, () => applyDocumentEdit(
+            rollbackId,
+            opened,
+            {
+              expectedUpdatedAt: opened.updatedAt,
+              memo: 'header must roll back',
+              lines: [
+                { accountId: org.accounts.cogs, description: 'inserted before failure', amount: '12' },
+                { accountId: invalidAccountId, description: 'foreign-key failure', amount: '3' },
+              ],
+            },
+            editContext,
+          )),
+          (error: unknown) => errorChainIncludes(
+            error,
+            /document_lines_account_id_fkey|violates foreign key constraint/,
+          ),
+        )
+
+        const retained = await loadStoredDocument(org.orgId, rollbackId)
+        assert.equal(retained.memo, 'rollback header')
+        assert.equal(retained.updatedAt, opened.updatedAt)
+        const lines = await withOrgContext(org.orgId, async () => (await db.execute<{
+          id: string
+          accountId: string
+          description: string
+          amount: string
+        }>(sql`
+          select id, account_id as "accountId", description, amount::text
+            from document_lines
+           where org_id = ${org.orgId} and document_id = ${rollbackId}
+           order by line_number
+        `)).rows)
+        assert.deepEqual(lines, [{
+          id: rollbackLineId,
+          accountId: org.accounts.bank,
+          description: 'original line',
+          amount: '7.0000',
+        }])
+      })
+
+      await t.test('API and MCP creation reload the revision settled by on_create flows', async () => {
+        const user = {
+          id: actorId,
+          email: 'occ-writer@scratch.test',
+          name: 'OCC Writer',
+          roles: [{ key: 'admin', name: 'Admin' }],
+          orgId: org.orgId,
+          envKind: 'production' as const,
+          productionOrgId: org.orgId,
+          isSuperAdmin: false,
+          homeUserId: actorId,
+          homeOrgId: org.orgId,
+        }
+
+        for (const source of ['api', 'mcp'] as const) {
+          const writeResult = await withOrgContext(
+            org.orgId,
+            () => createApplicationRecord(
+              {
+                authz: {
+                  user,
+                  permissions: new Set(['*']),
+                  allowedSubsidiaryIds: null,
+                },
+                source,
+                requestId: `occ-create-${source}`,
+                apiKeyId: null,
+              },
+              {
+                typeKey: 'invoices',
+                body: { memo: `${source} request persisted` },
+                idempotencyKey: `occ-create-${source}-0001`,
+              },
+            ),
+          )
+          assert.equal(writeResult.status, 201)
+          assert.equal(writeResult.replayed, false)
+          const payload = writeResult.result as {
+            doc: { id: string; memo: string | null; internal_notes: string | null; updated_at: string }
+          }
+          assert.equal(payload.doc.memo, `${source} request persisted`)
+          assert.equal(payload.doc.internal_notes, 'settled by on_create')
+          assert.match(payload.doc.updated_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+          const persisted = await loadStoredDocument(org.orgId, payload.doc.id)
+          assert.equal(payload.doc.updated_at, persisted.updatedAt)
+        }
+
+        const runs = await withOrgContext(org.orgId, async () => (await db.execute<{
+          status: string
+        }>(sql`
+          select status
+            from flow_runs
+           where org_id = ${org.orgId} and flow_id = ${createFlowId}
+             and trigger = 'on_create'
+           order by started_at
+        `)).rows)
+        assert.deepEqual(runs, [
+          { status: 'completed' },
+          { status: 'completed' },
+        ])
+      })
+
+      await t.test('concurrent posted corrections retain exactly one winner', async () => {
+        const source = await loadStoredDocument(org.orgId, correctionSourceId)
+        assert.equal(source.status, 'posted')
+        assert.equal(source.updatedAt, '2026-08-24T12:00:00.900001Z')
+        const correctionBody = {
+          expectedUpdatedAt: source.updatedAt,
+          amendmentReason: 'Correct duplicated allocation',
+          memo: 'retained correction',
+        }
+        const blocker = await withOrgContext(org.orgId, async () => pool.connect())
+        type CorrectionResult = Awaited<ReturnType<typeof createPostedCorrectionDraft>>
+        let blockerCommitted = false
+        let firstAttempt: Promise<Settled<CorrectionResult>> | undefined
+        let secondAttempt: Promise<Settled<CorrectionResult>> | undefined
+        let attempts: Array<Settled<CorrectionResult>> | undefined
+        try {
+          await blocker.query('begin')
+          await blocker.query(
+            "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+            [org.orgId],
+          )
+          const backend = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')
+          const blockerPid = Number(backend.rows[0]!.pid)
+          await blocker.query(
+            'select id from documents where org_id = $1 and id = $2 for update',
+            [org.orgId, correctionSourceId],
+          )
+
+          firstAttempt = settle(withOrgContext(org.orgId, () => createPostedCorrectionDraft(
+            correctionSourceId,
+            correctionBody,
+            editContext,
+          )))
+          const firstBlocked = await waitForBlockedWriter(new Set([blockerPid]))
+          secondAttempt = settle(withOrgContext(org.orgId, () => createPostedCorrectionDraft(
+            correctionSourceId,
+            correctionBody,
+            editContext,
+          )))
+          await waitForBlockedWriter(
+            new Set([blockerPid, firstBlocked.pid]),
+            new Set([firstBlocked.pid]),
+          )
+          await blocker.query('commit')
+          blockerCommitted = true
+          attempts = await Promise.all([firstAttempt, secondAttempt])
+        } finally {
+          if (!blockerCommitted) await blocker.query('rollback').catch(() => undefined)
+          blocker.release()
+          if (!attempts) {
+            await Promise.all([firstAttempt, secondAttempt].filter(Boolean) as Array<
+              Promise<Settled<CorrectionResult>>
+            >)
+          }
+        }
+        assert.ok(attempts)
+        assert.equal(attempts.filter((attempt) => attempt.status === 'fulfilled').length, 1)
+        const loser = attempts.find((attempt) => attempt.status === 'rejected')
+        assert.ok(loser?.status === 'rejected' && isConflict(loser.reason))
+
+        const links = await withOrgContext(org.orgId, async () => (await db.execute<{
+          replacementId: string
+          status: string
+          memo: string | null
+          correctionOf: string | null
+        }>(sql`
+          select link.from_document_id as "replacementId", replacement.status,
+                 replacement.memo, replacement.custom->>'correctionOf' as "correctionOf"
+            from document_links link
+            join documents replacement
+              on replacement.org_id = link.org_id
+             and replacement.id = link.from_document_id
+           where link.org_id = ${org.orgId}
+             and link.to_document_id = ${correctionSourceId}
+             and link.link_type = 'reverses'
+        `)).rows)
+        assert.equal(links.length, 1)
+        assert.equal(links[0]!.status, 'draft')
+        assert.equal(links[0]!.memo, 'retained correction')
+        assert.equal(links[0]!.correctionOf, correctionSourceId)
+      })
+
+      await t.test('application correction dispatches flows only after its idempotent transaction commits', async () => {
+        const source = await loadStoredDocument(org.orgId, applicationCorrectionSourceId)
+        assert.equal(source.status, 'posted')
+        const user = {
+          id: actorId,
+          email: 'occ-correction@scratch.test',
+          name: 'OCC Correction Controller',
+          roles: [{ key: 'admin', name: 'Admin' }],
+          orgId: org.orgId,
+          envKind: 'production' as const,
+          productionOrgId: org.orgId,
+          isSuperAdmin: false,
+          homeUserId: actorId,
+          homeOrgId: org.orgId,
+        }
+        const result = await withSimClock(org.date, () => withOrgContext(
+          org.orgId,
+          () => correctPostedDocument(
+            {
+              authz: {
+                user,
+                permissions: new Set(['*']),
+                allowedSubsidiaryIds: null,
+              },
+              source: 'api',
+              requestId: 'occ-application-correction',
+              apiKeyId: null,
+            },
+            {
+              documentId: applicationCorrectionSourceId,
+              correction: {
+                expectedUpdatedAt: source.updatedAt,
+                amendmentReason: 'Correct duplicated vendor charge',
+                partyId: org.vendorId,
+                documentDate: org.date,
+                memo: 'application correction committed',
+                lines: [{ accountId: org.accounts.cogs, amount: '125' }],
+              },
+              idempotencyKey: 'occ-correction-postcommit-api-0001',
+            },
+          ),
+        ))
+        assert.equal(result.replayed, false)
+        const outcome = result.result as { correctionId: string; voidStatus: string }
+        assert.match(outcome.correctionId, /^[0-9a-f-]{36}$/)
+        assert.equal(outcome.voidStatus, 'voided')
+
+        const committed = await withOrgContext(org.orgId, async () => (await db.execute<{
+          sourceStatus: string
+          replacementMemo: string | null
+          runs: number
+          notifications: number
+        }>(sql`
+          select source.status as "sourceStatus", replacement.memo as "replacementMemo",
+                 (select count(*)::int from flow_runs
+                   where org_id = ${org.orgId} and flow_id = ${correctionFlowId}) as runs,
+                 (select count(*)::int from notifications
+                   where org_id = ${org.orgId} and kind = 'flow'
+                     and title = 'Correction committed') as notifications
+            from documents source
+            join document_links link
+              on link.org_id = source.org_id
+             and link.to_document_id = source.id
+             and link.link_type = 'reverses'
+            join documents replacement
+              on replacement.org_id = link.org_id
+             and replacement.id = link.from_document_id
+           where source.org_id = ${org.orgId}
+             and source.id = ${applicationCorrectionSourceId}
+        `)).rows[0])
+        assert.deepEqual(committed, {
+          sourceStatus: 'voided',
+          replacementMemo: 'application correction committed',
+          runs: 1,
+          notifications: 1,
+        })
+      })
+    } finally {
+      await withBypass(async () => {
+        await db.execute(sql.raw(`drop trigger if exists ${correctionFlowGuard} on flow_runs`))
+        await db.execute(sql.raw(`drop function if exists public.${correctionFlowGuard}_fn()`))
+      })
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+test('load and lock SQL preserve the exact revision token end to end', () => {
+  assert.match(
+    DOCUMENTS_SOURCE,
+    /function documentRevisionSql[\s\S]*?at time zone 'UTC'[\s\S]*?HH24:MI:SS\.US/,
+  )
+  // Every load and every lock projects the exact canonical token: the list
+  // read, loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
+  // correction lock, and the edit lock.
+  assert.equal(DOCUMENTS_SOURCE.match(/documentRevisionSql\(sql\.raw\('(d\.)?updated_at'\)\)/g)?.length, 5)
+  assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionSql[\s\S]*?for update/)
+  // Draft minting is attributable: the insert stamps the creating user, and
+  // on_create flows settle before the writer ever receives a token.
+  assert.match(
+    DOCUMENTS_SOURCE,
+    /createDocumentDraft[\s\S]*?createdBy: userId,[\s\S]*?runRecordFlows\(\{ kind: 'on_create'/,
+  )
+  assert.match(
+    DOCUMENTS_SOURCE,
+    /updated_at = greatest\([\s\S]*?clock_timestamp\(\)[\s\S]*?interval '1 microsecond'/,
+  )
+  assert.doesNotMatch(
+    DOCUMENTS_SOURCE.slice(
+      DOCUMENTS_SOURCE.indexOf('export function requireDocumentEditRevision'),
+      DOCUMENTS_SOURCE.indexOf('export function assertNoExistingDocumentCorrection'),
+    ),
+    /new Date|getTime\(/,
+  )
 })
 
 test('reversal link evidence carries the full mandatory audit contract', () => {

@@ -6,7 +6,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { API_RECORD_TYPES, type ApiRecordTypeSchema } from "./registry-data.ts";
+import {
+  API_RECORD_TYPES,
+  DOCUMENT_REVISION_PATTERN,
+  DOCUMENT_REVISION_READ_METADATA,
+  DOCUMENT_REVISION_WRITE_FIELD,
+  withDocumentRevisionWriteField,
+  type ApiRecordTypeSchema,
+} from "./registry-data.ts";
 import { buildOpenApiSpec } from "./openapi.ts";
 
 test("every write op is backed by a write permission and a writing writer", () => {
@@ -90,7 +97,7 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
     );
   }
 
-  // Write bodies reference the *Write model (writable fields only).
+  // Create and update bodies use distinct stage-aware models.
   assert.ok(coll.post.requestBody, "create operation should define a request body");
   const writeRef = coll.post.requestBody.content["application/json"].schema.$ref;
   assert.ok(typeof writeRef === "string");
@@ -101,6 +108,11 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   assert.ok(writeModel.properties.cf_color, "write model keeps custom fields");
   assert.ok(!writeModel.properties.id, "write model drops read-only id");
   assert.deepEqual(writeModel.required, ["name"], "write model requires the required writable field");
+  const updateRef = item.patch.requestBody?.content["application/json"].schema.$ref;
+  assert.match(String(updateRef), /WidgetsUpdate$/);
+  const updateModel = spec.components.schemas.WidgetsUpdate;
+  assert.ok(updateModel?.properties?.name, "update model keeps writable fields");
+  assert.equal(updateModel.required, undefined, "partial updates do not inherit create requirements");
 
   // Read model keeps everything, including read-only id.
   assert.ok(spec.components.schemas.Widgets?.properties?.id, "read model keeps id");
@@ -111,4 +123,66 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   assert.ok(ledgerColl && ledgerItem, "ledger paths should exist");
   assert.ok(ledgerColl.get && !ledgerColl.post, "readonly type must not document POST");
   assert.ok(ledgerItem.get && !ledgerItem.patch && !ledgerItem.delete, "readonly type must not document writes");
+});
+
+test("document OpenAPI exposes one exact update-only revision contract", () => {
+  const documentFields = withDocumentRevisionWriteField(
+    { kind: "document", docKind: "vendor_bill" },
+    [],
+  );
+  assert.deepEqual(documentFields, [{ ...DOCUMENT_REVISION_WRITE_FIELD }]);
+  assert.deepEqual(withDocumentRevisionWriteField({ kind: "entity", table: "parties" }, []), []);
+
+  const schema: ApiRecordTypeSchema[] = [{
+    key: "bills",
+    label: "Vendor Bills",
+    description: "test document",
+    table: "documents",
+    searchColumn: "document_number",
+    readPermission: "ap.read",
+    writePermission: "ap.create",
+    operations: ["list", "get", "create", "update"],
+    writer: { kind: "document", docKind: "vendor_bill" },
+    dynamic: false,
+    path: "/api/v1/records/bills",
+    fields: [
+      {
+        name: "updated_at",
+        type: "string (date-time)",
+        required: false,
+        writable: false,
+        custom: false,
+        ...DOCUMENT_REVISION_READ_METADATA,
+      },
+      {
+        name: "documentDate",
+        type: "string (date)",
+        required: true,
+        writable: true,
+        description: null,
+        custom: false,
+      },
+      ...documentFields,
+    ],
+  }];
+
+  const spec = buildOpenApiSpec(schema, "https://example.test");
+  const read = spec.components.schemas.Bills;
+  const create = spec.components.schemas.BillsWrite;
+  const update = spec.components.schemas.BillsUpdate;
+  assert.equal(read!.properties?.updated_at?.pattern, DOCUMENT_REVISION_PATTERN);
+  assert.deepEqual(read!.required, ["updated_at", "documentDate"]);
+  assert.equal(read!.properties?.expectedUpdatedAt, undefined, "write token is not a parallel read field");
+  assert.equal(create!.properties?.expectedUpdatedAt, undefined, "create has no preexisting revision");
+  assert.deepEqual(create!.required, ["documentDate"]);
+  assert.equal(update!.properties?.expectedUpdatedAt?.pattern, DOCUMENT_REVISION_PATTERN);
+  assert.equal(update!.properties?.expectedUpdatedAt?.writeOnly, true);
+  assert.deepEqual(update!.required, ["expectedUpdatedAt"]);
+
+  const patch = spec.paths["/api/v1/records/bills/{id}"]?.patch;
+  assert.equal(
+    patch?.requestBody?.content["application/json"].schema.$ref,
+    "#/components/schemas/BillsUpdate",
+  );
+  assert.ok(patch?.responses?.["409"], "stale document updates advertise their conflict response");
 });

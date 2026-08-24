@@ -2,6 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
+import { isDocumentRevisionToken } from '@/lib/api/registry-data'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -87,9 +88,90 @@ interface LineRow extends Record<string, unknown> {
   taxOverridden: boolean
   taxAmount: string
 }
-interface DocPayload {
+export interface DocPayload {
   doc: Record<string, any>
   lines: Record<string, any>[]
+}
+
+export type DocumentSaveRequest<Method extends 'PATCH' | 'POST' = 'PATCH' | 'POST'> = {
+  path: string
+  method: Method
+  body: Record<string, unknown> & { expectedUpdatedAt: string }
+}
+
+/** The revision is an opaque value loaded from persisted document state. */
+export function persistedDocumentRevision(value: unknown): string {
+  if (!isDocumentRevisionToken(value)) {
+    throw new Error('DOCUMENT_REVISION_REQUIRED')
+  }
+  return value
+}
+
+export function buildDocumentSaveRequest(
+  documentId: string,
+  persistedRevision: string,
+  payload: Record<string, unknown>,
+  isPosted: boolean,
+  amendmentReason?: string,
+): DocumentSaveRequest {
+  const body = {
+    ...payload,
+    expectedUpdatedAt: persistedDocumentRevision(persistedRevision),
+  }
+  if (!isPosted) {
+    return {
+      path: `/api/documents/${documentId}`,
+      method: 'PATCH',
+      body,
+    } satisfies DocumentSaveRequest<'PATCH'>
+  }
+  return {
+    path: `/api/documents/${documentId}/correct`,
+    method: 'POST',
+    body: { ...body, amendmentReason },
+  } satisfies DocumentSaveRequest<'POST'>
+}
+
+export function revisionFromSuccessfulDocumentSave(data: unknown): string {
+  const saved = data as { doc?: { updated_at?: unknown } }
+  return persistedDocumentRevision(saved?.doc?.updated_at)
+}
+
+export type PersistedDocumentSnapshot<Payload> = {
+  documentId: string
+  revision: string
+  payload: Payload
+}
+
+export function reconcilePersistedDocumentSnapshot<Payload>(
+  current: PersistedDocumentSnapshot<Payload>,
+  incoming: PersistedDocumentSnapshot<Payload>,
+  isDirty: boolean,
+  seenPersistedRevisions: ReadonlySet<string>,
+): { snapshot: PersistedDocumentSnapshot<Payload>; rehydrate: boolean } {
+  const exactIncoming = {
+    ...incoming,
+    revision: persistedDocumentRevision(incoming.revision),
+  }
+  persistedDocumentRevision(current.revision)
+  if (current.documentId !== exactIncoming.documentId) {
+    return { snapshot: exactIncoming, rehydrate: true }
+  }
+  if (isDirty || seenPersistedRevisions.has(exactIncoming.revision)) {
+    return { snapshot: current, rehydrate: false }
+  }
+  return { snapshot: exactIncoming, rehydrate: true }
+}
+
+export async function readDocumentSaveFailure(
+  response: Pick<Response, 'status' | 'json'>,
+  fallbackMessage: string,
+): Promise<{ message: string; isConflict: boolean }> {
+  const data = await response.json().catch(() => ({})) as { error?: unknown }
+  return {
+    message: typeof data.error === 'string' && data.error ? data.error : fallbackMessage,
+    isConflict: response.status === 409,
+  }
 }
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -286,19 +368,30 @@ export function DocumentDrawer({
   const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
 
   // -- transfer: dedicated to/from + amount state ---------------------------
-  const initialTransfer = isTransfer
+  const transferFromPayload = (source: DocPayload) => isTransfer
     ? {
-        toAccount: payload.lines[0]?.account_id ?? '',
-        fromAccount: payload.lines[1]?.account_id ?? '',
-        amount: payload.lines[0]?.amount != null ? String(payload.lines[0].amount) : '',
+        toAccount: source.lines[0]?.account_id ?? '',
+        fromAccount: source.lines[1]?.account_id ?? '',
+        amount: source.lines[0]?.amount != null ? String(source.lines[0].amount) : '',
       }
     : null
+  const initialTransfer = transferFromPayload(payload)
   const [transfer, setTransfer] = useState(initialTransfer)
 
   const [rows, setRows] = useState<LineRow[]>(
     payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()],
   )
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+  const persistedPropRevision = persistedDocumentRevision(doc.updated_at)
+  const [documentRevision, setDocumentRevision] = useState(persistedPropRevision)
+  const seenPersistedRevisions = useRef(new Set([persistedPropRevision]))
+  const persistedBaseline = useRef<PersistedDocumentSnapshot<DocPayload>>({
+    documentId: String(doc.id),
+    revision: persistedPropRevision,
+    payload,
+  })
+  const rehydratingPersistedPayload = useRef(false)
+  const [rehydrationEpoch, setRehydrationEpoch] = useState(0)
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
@@ -414,39 +507,82 @@ export function DocumentDrawer({
   }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config])
 
   const [dirty, setDirty] = useState(false)
+  useEffect(() => {
+    const incoming = {
+      documentId: String(doc.id),
+      revision: persistedPropRevision,
+      payload,
+    }
+    const previousDocumentId = persistedBaseline.current.documentId
+    const previouslySeen = new Set(seenPersistedRevisions.current)
+    const decision = reconcilePersistedDocumentSnapshot(
+      persistedBaseline.current,
+      incoming,
+      dirty,
+      previouslySeen,
+    )
+    if (previousDocumentId !== incoming.documentId) {
+      seenPersistedRevisions.current = new Set([persistedPropRevision])
+    } else if (decision.rehydrate) {
+      seenPersistedRevisions.current.add(persistedPropRevision)
+    }
+    if (decision.rehydrate) {
+      persistedBaseline.current = decision.snapshot
+      resetForm(decision.snapshot.payload)
+      setDocumentRevision(decision.snapshot.revision)
+      setDirty(false)
+      setMode('view')
+    }
+    // The payload is inseparable from its revision. A changed payload with an
+    // unchanged revision is an invalid server contract and is not adopted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id, persistedPropRevision, dirty])
   const first = useRef(true)
   useEffect(() => {
     if (first.current) {
       first.current = false
       return
     }
+    if (rehydratingPersistedPayload.current) {
+      return
+    }
     if (editable) setDirty(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload_])
 
-  function resetForm() {
-    setPartyId(doc.party_id ?? '')
-    setPaymentCardId(doc.payment_card_id ?? '')
-    setDocumentDate(doc.document_date ?? '')
-    setDueDate(doc.due_date ?? '')
-    setReferenceNumber(doc.reference_number ?? '')
-    setMemo(doc.memo ?? '')
-    setPostingDate(doc.posting_date ?? '')
-    setDepartmentId(doc.department_id ?? '')
-    setProjectIdHeader(doc.project_id ?? '')
-    setLocationId(doc.location_id ?? '')
-    setClassId(doc.class_id ?? '')
-    setSubsidiaryId(doc.subsidiary_id ?? '')
-    setExpectedPayDate(doc.expected_pay_date ?? '')
-    setPaymentHoldReason(doc.payment_hold_reason ?? '')
-    setInternalNotes(doc.internal_notes ?? '')
-    setBillingMethod(doc.billing_method ?? '')
-    setIsFinalInvoice(doc.is_final_invoice === true)
-    setCustomValues(doc.custom ?? {})
-    setExtraDims(doc.extra_dims ?? {})
-    setTransfer(initialTransfer)
-    setRows(payload.lines.length > 0 ? payload.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
-    setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
+  useEffect(() => {
+    // resetForm always advances this epoch, even when the incoming values are
+    // identical and payload_ therefore does not change. Bound the suppression
+    // to that render so the next real user edit can never be ignored.
+    rehydratingPersistedPayload.current = false
+  }, [rehydrationEpoch])
+
+  function resetForm(source: DocPayload) {
+    rehydratingPersistedPayload.current = true
+    setRehydrationEpoch((epoch) => epoch + 1)
+    const sourceDoc = source.doc
+    setPartyId(sourceDoc.party_id ?? '')
+    setPaymentCardId(sourceDoc.payment_card_id ?? '')
+    setDocumentDate(sourceDoc.document_date ?? '')
+    setDueDate(sourceDoc.due_date ?? '')
+    setReferenceNumber(sourceDoc.reference_number ?? '')
+    setMemo(sourceDoc.memo ?? '')
+    setPostingDate(sourceDoc.posting_date ?? '')
+    setDepartmentId(sourceDoc.department_id ?? '')
+    setProjectIdHeader(sourceDoc.project_id ?? '')
+    setLocationId(sourceDoc.location_id ?? '')
+    setClassId(sourceDoc.class_id ?? '')
+    setSubsidiaryId(sourceDoc.subsidiary_id ?? '')
+    setExpectedPayDate(sourceDoc.expected_pay_date ?? '')
+    setPaymentHoldReason(sourceDoc.payment_hold_reason ?? '')
+    setInternalNotes(sourceDoc.internal_notes ?? '')
+    setBillingMethod(sourceDoc.billing_method ?? '')
+    setIsFinalInvoice(sourceDoc.is_final_invoice === true)
+    setCustomValues(sourceDoc.custom ?? {})
+    setExtraDims(sourceDoc.extra_dims ?? {})
+    setTransfer(transferFromPayload(source))
+    setRows(source.lines.length > 0 ? source.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
+    setTotals({ subtotal: sourceDoc.subtotal, taxTotal: sourceDoc.tax_total, total: sourceDoc.total })
   }
 
   async function save() {
@@ -473,18 +609,17 @@ export function DocumentDrawer({
       return
     }
     for (const w of gate.warnings) toast.warning(w)
-    const res = await fetch(isPosted ? `/api/documents/${doc.id}/correct` : `/api/documents/${doc.id}`, {
-      method: isPosted ? 'POST' : 'PATCH',
+    const request = buildDocumentSaveRequest(
+      String(doc.id),
+      documentRevision,
+      payload_,
+      isPosted,
+      amendmentReason,
+    )
+    const res = await fetch(request.path, {
+      method: request.method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...payload_,
-        ...(isPosted
-          ? {
-              amendmentReason,
-              expectedUpdatedAt: String(doc.updated_at),
-            }
-          : {}),
-      }),
+      body: JSON.stringify(request.body),
     })
     if (res.ok) {
       const data = (await res.json()) as DocPayload & {
@@ -502,20 +637,49 @@ export function DocumentDrawer({
         router.refresh()
         return
       }
-      setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
+      const savedRevision = revisionFromSuccessfulDocumentSave(data)
+      persistedBaseline.current = {
+        documentId: String(data.doc.id),
+        revision: savedRevision,
+        payload: data,
+      }
+      seenPersistedRevisions.current.add(savedRevision)
+      resetForm(data)
+      setDocumentRevision(savedRevision)
       setSaveState('saved')
       setDirty(false)
       setMode('view')
       router.refresh()
     } else {
+      const failure = await readDocumentSaveFailure(res, t('toasts.actionFailed'))
       setSaveState('error')
-      toast.error((await res.json()).error ?? t('toasts.actionFailed'))
+      toast.error(failure.message)
     }
     setBusy(false)
   }
 
   function cancel() {
-    resetForm()
+    const incoming = {
+      documentId: String(doc.id),
+      revision: persistedPropRevision,
+      payload,
+    }
+    const previousDocumentId = persistedBaseline.current.documentId
+    const previouslySeen = new Set(seenPersistedRevisions.current)
+    const decision = reconcilePersistedDocumentSnapshot(
+      persistedBaseline.current,
+      incoming,
+      false,
+      previouslySeen,
+    )
+    if (previousDocumentId !== incoming.documentId) {
+      seenPersistedRevisions.current = new Set([persistedPropRevision])
+    } else if (decision.rehydrate) {
+      seenPersistedRevisions.current.add(persistedPropRevision)
+    }
+    persistedBaseline.current = decision.snapshot
+    resetForm(decision.snapshot.payload)
+    setDocumentRevision(decision.snapshot.revision)
     setDirty(false)
     setSaveState('saved')
     setMode('view')

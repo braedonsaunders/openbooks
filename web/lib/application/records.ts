@@ -10,6 +10,10 @@ import {
 } from "../api/schema-registry";
 import { createRecord, deleteRecord, updateRecord, type WriteResult } from "../api/writers";
 import { clamp, isUuid } from "../list-params";
+import {
+  documentRevisionProjection,
+  normalizeDocumentRecordRevisions,
+} from "../documents";
 import type { ApplicationContext } from "./context";
 import {
   assertApplicationPermission,
@@ -37,6 +41,8 @@ interface RecordScope {
   resolved: ResolvedApiType;
   schema: ApiRecordTypeSchema;
 }
+
+export { normalizeDocumentRecordRevisions } from "../documents";
 
 async function scopeFor(
   context: ApplicationContext,
@@ -102,8 +108,8 @@ function baseWhere(
 ): SQL {
   const conditions: SQL[] = [sql`org_id = ${context.authz.user.orgId}`];
   if (input.id) conditions.push(sql`id = ${input.id}`);
-  if (scope.resolved.writer.kind === "document") {
-    conditions.push(sql`kind = ${scope.resolved.writer.docKind}`);
+  if (scope.resolved.documentKinds) {
+    conditions.push(sql`kind = any(${[...scope.resolved.documentKinds]}::text[])`);
   }
   if (scope.resolved.dynamic) {
     conditions.push(sql`type_key = ${scope.resolved.key}`);
@@ -150,7 +156,7 @@ function writerError(result: WriteResult): never {
   });
 }
 
-function writerValue(result: WriteResult): { status: number; body: unknown } {
+export function applicationWriteValue(result: WriteResult): { status: number; body: unknown } {
   if (result.status >= 400) writerError(result);
   return { status: result.status, body: result.body };
 }
@@ -196,7 +202,7 @@ export async function listRecords(
   const table = sql.raw(`"${scope.resolved.table}"`);
   const [rows, count] = await Promise.all([
     db.execute(sql`
-      select * from ${table}
+      select *${documentRevisionProjection(scope.resolved.table)} from ${table}
        where ${where}
        order by created_at desc, id desc
        limit ${perPage} offset ${(page - 1) * perPage}
@@ -206,7 +212,7 @@ export async function listRecords(
     }>,
   ]);
   return {
-    records: rows.rows,
+    records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows),
     total: Number(count.rows[0]?.count ?? 0),
     page,
     perPage,
@@ -222,10 +228,10 @@ export async function getRecord(
   const table = sql.raw(`"${scope.resolved.table}"`);
   const where = baseWhere(context, scope, { id: input.id });
   const result = (await db.execute<Record<string, unknown>>(sql`
-    select * from ${table} where ${where} limit 1
+    select *${documentRevisionProjection(scope.resolved.table)} from ${table} where ${where} limit 1
   `));
   if (!result.rows[0]) throw notFound();
-  return result.rows[0];
+  return normalizeDocumentRecordRevisions(scope.resolved.table, result.rows)[0]!;
 }
 
 export async function createApplicationRecord(
@@ -243,7 +249,7 @@ export async function createApplicationRecord(
     operation: `records.${input.typeKey}.create`,
     idempotencyKey: input.idempotencyKey,
     request: input.body,
-    execute: async () => writerValue(await createRecord(
+    execute: async () => applicationWriteValue(await createRecord(
       context.authz.user,
       scope.resolved,
       scope.schema.fields,
@@ -272,7 +278,7 @@ export async function updateApplicationRecord(
     operation: `records.${input.typeKey}.update`,
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id, body: input.body },
-    execute: async () => writerValue(await updateRecord(
+    execute: async () => applicationWriteValue(await updateRecord(
       context.authz.user,
       scope.resolved,
       scope.schema.fields,
@@ -296,7 +302,7 @@ export async function deleteApplicationRecord(
     operation: `records.${input.typeKey}.delete`,
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id },
-    execute: async () => writerValue(await deleteRecord(
+    execute: async () => applicationWriteValue(await deleteRecord(
       context.authz.user,
       scope.resolved,
       input.id,

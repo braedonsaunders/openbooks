@@ -20,7 +20,7 @@ import { orgToday, rangeInputFields, resolveToolRange, type RangeArgs } from "./
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
-import { isDocKindEnabled } from "../documents";
+import { documentRevisionSql, isDocKindEnabled } from "../documents";
 import { isFeatureEnabled } from "../features";
 
 /**
@@ -309,7 +309,7 @@ async function allowedKinds(authz: Authz): Promise<string[]> {
 const findDocuments: AssistantToolDef = {
   name: "find_documents",
   description:
-    "Search transaction documents — vendor bills, customer invoices, expense reports, payments, orders, journals — by kind, status, document number, party name, or date range. Returns a capped list plus the total match count. Read-only.",
+    "Search transaction documents — vendor bills, customer invoices, expense reports, payments, orders, journals — by kind, status, document number, party name, or date range. Returns a capped list plus the total match count and each exact persisted updatedAt revision. Read-only.",
   category: "search",
   gate: {
     mode: "anyOf",
@@ -357,6 +357,7 @@ const findDocuments: AssistantToolDef = {
     const rows = (await db.execute<any>(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
              d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
+             ${documentRevisionSql(sql.raw("d.updated_at"))} as "documentRevision",
              p.id as party_id, p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
@@ -390,6 +391,7 @@ const findDocuments: AssistantToolDef = {
           party: r.party,
           partyId: r.party_id,
           postedEntryId: r.posted_entry_id,
+          updatedAt: r.documentRevision,
           memo: truncateText(r.memo, 160),
         })),
       },
@@ -400,7 +402,7 @@ const findDocuments: AssistantToolDef = {
 const getDocument: AssistantToolDef = {
   name: "get_document",
   description:
-    "One transaction document in full: header (number, party, dates, status, totals) plus every line with account/item, description, quantity, and amount. Read-only.",
+    "One transaction document in full: header (number, party, dates, status, totals), its exact persisted updatedAt revision, plus every line with account/item, description, quantity, and amount. Copy updatedAt verbatim to expectedUpdatedAt for a write; never parse or reformat it. Read-only.",
   category: "read",
   gate: {
     mode: "anyOf",
@@ -410,7 +412,8 @@ const getDocument: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { documentId: string };
     const doc = (await db.execute<any>(sql`
-      select d.*, p.display_name as party
+      select d.*, ${documentRevisionSql(sql.raw("d.updated_at"))} as "documentRevision",
+             p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
@@ -449,6 +452,7 @@ const getDocument: AssistantToolDef = {
         total: num(d.total),
         memo: truncateText(d.memo, 500),
         postedEntryId: d.posted_entry_id,
+        updatedAt: d.documentRevision,
         lines: lines.rows.map((l) => ({
           lineNumber: l.line_number,
           account: l.account_name ? `${l.account_number ?? ""} ${l.account_name}`.trim() : null,

@@ -1,6 +1,11 @@
 import "server-only";
 import { z, type ZodTypeAny } from "zod";
 import { can, type Authz } from "../authz";
+import {
+  DOCUMENT_REVISION_DESCRIPTION,
+  DOCUMENT_REVISION_PATTERN,
+  RECORD_TYPE_BY_KEY,
+} from "../api/registry-data";
 import { decideApproval, listApprovalWorklist } from "./approvals";
 import {
   advanceCloseRun,
@@ -54,8 +59,21 @@ const RATE = z.string().regex(/^\d+(?:\.\d{1,10})?$/)
 const IDEMPOTENCY_KEY = z.string().regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
 const CUSTOM = z.record(z.string(), z.unknown());
+const DOCUMENT_REVISION = z.string()
+  .regex(new RegExp(DOCUMENT_REVISION_PATTERN), "must be the exact persisted document updated_at token")
+  .describe(DOCUMENT_REVISION_DESCRIPTION);
+const RECORD_UPDATE_BODY = z.object({
+  expectedUpdatedAt: DOCUMENT_REVISION.optional(),
+}).catchall(z.unknown());
 const DIMENSIONS = z.record(z.string(), UUID.nullable());
 const CLOSE_MODULE = z.enum(["ar", "ap", "banking", "assets", "tax", "gl"]);
+
+const DOCUMENT_RECORD_TYPE_KEYS = [...RECORD_TYPE_BY_KEY.entries()]
+  .filter(([, recordType]) => recordType.writer.kind === "document")
+  .map(([key]) => key);
+if (DOCUMENT_RECORD_TYPE_KEYS.length === 0) {
+  throw new Error("the application tool catalog has no document record types");
+}
 
 const allocationSchema = z.object({
   openLineId: UUID,
@@ -91,7 +109,7 @@ const documentLineSchema = z.object({
 
 const correctionSchema = z.object({
   amendmentReason: z.string().trim().min(5).max(500),
-  expectedUpdatedAt: z.string().datetime().optional(),
+  expectedUpdatedAt: DOCUMENT_REVISION,
   partyId: UUID.nullable().optional(),
   paymentCardId: UUID.nullable().optional(),
   documentDate: DATE.optional(),
@@ -112,6 +130,34 @@ const correctionSchema = z.object({
   isFinalInvoice: z.boolean().optional(),
   custom: CUSTOM.optional(),
   lines: z.array(documentLineSchema).min(1).max(500).optional(),
+});
+
+const updateRecordSchema = z.object({
+  typeKey: TYPE_KEY,
+  id: UUID,
+  body: RECORD_UPDATE_BODY,
+  idempotencyKey: IDEMPOTENCY_KEY,
+}).superRefine((input, context) => {
+  if (
+    RECORD_TYPE_BY_KEY.get(input.typeKey)?.writer.kind === "document"
+    && input.body.expectedUpdatedAt === undefined
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["body", "expectedUpdatedAt"],
+      message: "required for document updates; copy the exact updated_at returned by a read",
+    });
+  }
+}).meta({
+  allOf: [{
+    if: {
+      properties: { typeKey: { enum: DOCUMENT_RECORD_TYPE_KEYS } },
+      required: ["typeKey"],
+    },
+    then: {
+      properties: { body: { required: ["expectedUpdatedAt"] } },
+    },
+  }],
 });
 
 const paymentPatchSchema = z.object({
@@ -167,21 +213,21 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "list_record_types", title: "List Record Types",
-    description: "List record types and live fields this actor may read, including tenant-defined custom records.",
+    description: "List record types and live read/write fields this actor may use, including update-only requirements and tenant-defined custom records.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context) => ({ ok: true, recordTypes: await listRecordTypes(context) }),
   }),
   definition({
     name: "list_records", title: "List Records",
-    description: "List one authorized record type with tenant, search, pagination, and subsidiary restrictions enforced.",
+    description: "List one authorized record type with tenant, search, pagination, and subsidiary restrictions enforced. Document updated_at values retain their exact persisted revision.",
     inputSchema: z.object({ typeKey: TYPE_KEY, query: z.string().max(200).optional(), page: z.number().int().min(1).max(10_000).optional(), perPage: z.number().int().min(5).max(100).optional(), subsidiaryId: UUID.optional() }),
     readOnly: true, destructive: false, openWorld: false, assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await listRecords(context, input) }),
   }),
   definition({
     name: "get_record", title: "Get Record",
-    description: "Get one authorized record by stable UUID with tenant, type, and subsidiary controls enforced.",
+    description: "Get one authorized record by stable UUID with tenant, type, and subsidiary controls enforced. Copy a document's exact updated_at verbatim when updating it.",
     inputSchema: z.object({ typeKey: TYPE_KEY, id: UUID }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, record: await getRecord(context, input) }),
@@ -195,8 +241,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "update_record", title: "Update Record",
-    description: "Update an authorized record through its authoritative domain writer.",
-    inputSchema: z.object({ typeKey: TYPE_KEY, id: UUID, body: CUSTOM, idempotencyKey: IDEMPOTENCY_KEY }),
+    description: "Update an authorized record through its authoritative domain writer. Document bodies require expectedUpdatedAt copied verbatim from the persisted updated_at returned by get_record; never generate or reformat it.",
+    inputSchema: updateRecordSchema,
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await updateApplicationRecord(context, input) }),
   }),
@@ -294,7 +340,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   }),
   definition({
     name: "correct_document", title: "Correct Posted Document",
-    description: "Create a correcting replacement draft and request a controlled void of the posted source in one exactly-once transaction.",
+    description: "Create a correcting replacement draft and request a controlled void of the posted source in one exactly-once transaction. The correction requires expectedUpdatedAt copied verbatim from the persisted source revision.",
     inputSchema: z.object({ documentId: UUID, correction: correctionSchema, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
     execute: async (context, input) => ({ ok: true, ...await correctPostedDocument(context, input) }),

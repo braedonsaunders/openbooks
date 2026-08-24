@@ -33,6 +33,8 @@ export interface ApiRecordType {
   operations: ApiOperation[];
   writer: Writer;
   dynamic: boolean;
+  /** Required read discriminator for a documents-backed non-document writer. */
+  documentKinds?: readonly string[];
   /** When set, the type disappears from the API catalog if that Features switch is off. */
   featureKey?: string;
 }
@@ -103,6 +105,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     operations: RO,
     writer: { kind: "readonly" },
     dynamic: false,
+    documentKinds: ["vendor_payment", "customer_payment"],
   },
   {
     key: "parties",
@@ -170,15 +173,72 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
 
 export const RECORD_TYPE_BY_KEY = new Map(API_RECORD_TYPES.map((t) => [t.key, t]));
 
+/**
+ * Canonical wire shape of a document revision. PostgreSQL retains six
+ * fractional digits; callers must treat the value as opaque and copy it
+ * verbatim instead of parsing it through JavaScript Date.
+ */
+export const DOCUMENT_REVISION_PATTERN =
+  "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{6}Z$";
+const DOCUMENT_REVISION_REGEX = new RegExp(DOCUMENT_REVISION_PATTERN);
+
+export const DOCUMENT_REVISION_DESCRIPTION =
+  "Exact persisted document revision used for optimistic concurrency. Copy the returned updated_at value verbatim into expectedUpdatedAt for updates; never generate, parse, or reformat it.";
+
+export function isDocumentRevisionToken(value: unknown): value is string {
+  return typeof value === "string" && DOCUMENT_REVISION_REGEX.test(value);
+}
+
 export interface ApiField {
   name: string;
   type: string;
   required: boolean;
+  /** Defaults to `required`; overrides presence in read representations. */
+  requiredOnRead?: boolean;
   writable: boolean;
+  /** Defaults to true for writable fields; false means update-only. */
+  writableOnCreate?: boolean;
+  /** PATCH is partial unless a field explicitly carries this invariant. */
+  requiredOnUpdate?: boolean;
+  /** Excluded from read representations while remaining visible in writes. */
+  writeOnly?: boolean;
+  /** JSON Schema pattern used by OpenAPI clients. */
+  pattern?: string;
   description: string | null;
   custom: boolean;
   /** Closed set advertised to REST/MCP. Omitted values are hidden, not unknown. */
   enum?: string[];
+}
+
+export const DOCUMENT_REVISION_READ_METADATA: Readonly<
+  Pick<ApiField, "requiredOnRead" | "pattern" | "description">
+> = Object.freeze({
+  requiredOnRead: true,
+  pattern: DOCUMENT_REVISION_PATTERN,
+  description: DOCUMENT_REVISION_DESCRIPTION,
+});
+
+/** Update-only field layered onto every writable document schema. */
+export const DOCUMENT_REVISION_WRITE_FIELD: Readonly<ApiField> = Object.freeze({
+  name: "expectedUpdatedAt",
+  type: "string (date-time)",
+  required: false,
+  writable: true,
+  writableOnCreate: false,
+  requiredOnUpdate: true,
+  writeOnly: true,
+  pattern: DOCUMENT_REVISION_PATTERN,
+  description: DOCUMENT_REVISION_DESCRIPTION,
+  custom: false,
+});
+
+export function withDocumentRevisionWriteField(
+  writer: Writer,
+  fields: ApiField[],
+): ApiField[] {
+  return writer.kind === "document"
+    ? [...fields, { ...DOCUMENT_REVISION_WRITE_FIELD }]
+    : fields;
 }
 
 export interface ApiRecordTypeSchema extends ApiRecordType {
@@ -306,6 +366,24 @@ export interface ResolvedApiType {
   operations: ApiOperation[];
   writer: Writer;
   dynamic: boolean;
+  /** Null off the documents table; otherwise a nonempty, authoritative read scope. */
+  documentKinds: readonly string[] | null;
+}
+
+/**
+ * Documents-backed record types must always read through an explicit,
+ * nonempty kind allowlist: document writers contribute their own docKind and
+ * every other writer backed by the documents table must declare one. This
+ * fails closed at resolve time so a new registry entry can never silently
+ * read (or let a caller read) another kind's rows.
+ */
+export function resolveDocumentReadKinds(t: ApiRecordType): readonly string[] | null {
+  if (t.table !== "documents") return null;
+  const kinds = t.writer.kind === "document" ? [t.writer.docKind] : t.documentKinds;
+  if (!kinds || kinds.length === 0 || kinds.some((kind) => !kind.trim())) {
+    throw new Error(`documents-backed record type ${t.key} requires a nonempty document kind scope`);
+  }
+  return [...new Set(kinds)];
 }
 
 export function toResolved(t: ApiRecordType): ResolvedApiType {
@@ -318,5 +396,6 @@ export function toResolved(t: ApiRecordType): ResolvedApiType {
     operations: t.operations,
     writer: t.writer,
     dynamic: t.dynamic,
+    documentKinds: resolveDocumentReadKinds(t),
   };
 }

@@ -84,6 +84,17 @@ test("skills are unique, resource-addressable, and non-empty", () => {
   }
 });
 
+test("document playbooks forward persisted revisions without synthesizing tokens", () => {
+  const groundRules = MCP_SKILLS.find((skill) => skill.slug === "ground-rules")?.body ?? "";
+  const documentFlow = MCP_SKILLS.find((skill) => skill.slug === "draft-and-post-a-document")?.body ?? "";
+  for (const body of [groundRules, documentFlow]) {
+    assert.match(body, /updatedAt/);
+    assert.match(body, /expectedUpdatedAt/);
+    assert.match(body, /exact/);
+  }
+  assert.match(groundRules, /never generate, parse, or reformat it/);
+});
+
 test("the tools the playbooks depend on are registered with the right shape", () => {
   const catalogSource = readFileSync(join(here, "../application/tool-catalog.ts"), "utf8");
   const vitals = catalogSource.match(/name: "get_vitals"[\s\S]{0,600}?readOnly: (\w+)/);

@@ -14,6 +14,10 @@ import {
   type ResolvedApiType,
 } from '@/lib/api/schema-registry'
 import { createRecord, deleteRecord, updateRecord, type WriteResult } from '@/lib/api/writers'
+import {
+  documentRevisionProjection,
+  normalizeDocumentRecordRevisions,
+} from '@/lib/documents'
 import { isUuid } from '@/lib/list-params'
 
 type PlatformOperation = ApiOperation | 'schema'
@@ -171,7 +175,7 @@ async function listRecords(
   if (filters.length > 20) throw new AppPlatformError('a list call supports at most 20 filters')
 
   const conditions: SQL[] = [sql`org_id = ${ctx.orgId}`]
-  if (resolved.writer.kind === 'document') conditions.push(sql`kind = ${resolved.writer.docKind}`)
+  if (resolved.documentKinds) conditions.push(sql`kind = any(${[...resolved.documentKinds]}::text[])`)
   if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`)
   if (ctx.allowedSubsidiaryIds && typeSchema.fields.some((field) => field.name === 'subsidiary_id')) {
     const ids = [...ctx.allowedSubsidiaryIds]
@@ -201,15 +205,20 @@ async function listRecords(
   const where = sql.join(conditions, sql` and `)
 
   const [records, count] = (await Promise.all([
-    db.execute(sql`
-      select * from ${table}
+    db.execute<Record<string, unknown>>(sql`
+      select *${documentRevisionProjection(resolved.table)} from ${table}
        where ${where}
        order by ${sortExpression} ${direction}
        limit ${perPage} offset ${(page - 1) * perPage}`),
     db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`),
   ]))
 
-  return { records: records.rows, total: Number(count.rows[0]?.n ?? 0), page, perPage }
+  return {
+    records: normalizeDocumentRecordRevisions(resolved.table, records.rows),
+    total: Number(count.rows[0]?.n ?? 0),
+    page,
+    perPage,
+  }
 }
 
 async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): Promise<unknown> {
@@ -221,14 +230,14 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
       ? [...ctx.allowedSubsidiaryIds]
       : null
   const table = quoteIdentifier(resolved.table)
-  const result = (await db.execute(sql`
-    select * from ${table}
+  const result = (await db.execute<Record<string, unknown>>(sql`
+    select *${documentRevisionProjection(resolved.table)} from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
-       ${resolved.writer.kind === 'document' ? sql`and kind = ${resolved.writer.docKind}` : sql``}
+       ${resolved.documentKinds ? sql`and kind = any(${[...resolved.documentKinds]}::text[])` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryScope ? (subsidiaryScope.length > 0 ? sql`and subsidiary_id in ${subsidiaryScope}` : sql`and false`) : sql``}
      limit 1`))
-  return result.rows[0] ?? null
+  return normalizeDocumentRecordRevisions(resolved.table, result.rows)[0] ?? null
 }
 
 async function writableFields(ctx: AppPlatformContext, resolved: ResolvedApiType): Promise<ApiField[]> {
