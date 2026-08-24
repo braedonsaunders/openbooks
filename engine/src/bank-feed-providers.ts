@@ -315,7 +315,8 @@ const truelayer: BankFeedAdapter = {
 const ADAPTERS: Record<BankFeedProvider, BankFeedAdapter> = { gocardless, plaid, truelayer };
 
 export function getBankFeedAdapter(provider: string): BankFeedAdapter | null {
-  return (ADAPTERS as Record<string, BankFeedAdapter>)[provider] ?? null;
+  if (!Object.hasOwn(ADAPTERS, provider)) return null;
+  return ADAPTERS[provider as BankFeedProvider];
 }
 
 /**
