@@ -9,7 +9,7 @@ import {
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
-import { exactMoney, parseJsonBody, uuidId } from '../../../../lib/api/json'
+import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
 export const runtime = 'nodejs'
@@ -24,6 +24,7 @@ const allocationInput = z.object({
   settlementRate: z.string().min(1),
   settlementRateSource: z.enum(['same_currency', 'provider', 'manual', 'contractual', 'imported']),
   settlementRateReference: z.string(),
+  settlementFxRateId: nullableUuidId.optional(),
 })
 
 const postWithApplicationsBody = z.object({

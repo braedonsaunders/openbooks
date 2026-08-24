@@ -129,3 +129,20 @@ test("every JSON mutation route parses its body through the shared zod boundary"
     `${failures.length} mutation route boundary violation(s):\n${failures.map((failure) => `- ${failure}`).join("\n")}`,
   );
 });
+
+test("payment posting preserves provider FX evidence through its request boundary", () => {
+  const routeSource = readFileSync(
+    join(API_ROOT, "payments/post-with-applications/route.ts"),
+    "utf8",
+  );
+  const allocationStart = routeSource.indexOf("const allocationInput = z.object({");
+  const bodyStart = routeSource.indexOf("const postWithApplicationsBody", allocationStart);
+
+  assert.notEqual(allocationStart, -1, "payment posting allocation boundary is missing");
+  assert.notEqual(bodyStart, -1, "payment posting body boundary is missing");
+  assert.match(
+    routeSource.slice(allocationStart, bodyStart),
+    /settlementFxRateId:\s*nullableUuidId\.optional\(\)/,
+    "payment posting must retain the tenant-owned provider FX observation id",
+  );
+});
