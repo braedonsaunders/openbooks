@@ -59,6 +59,10 @@ export async function POST(req: Request) {
   const body = (parsedBody.data) as ImportBody
   const mode = body.mode ?? 'preview'
 
+  if (mode !== 'columns' && mode !== 'preview' && mode !== 'import') {
+    return NextResponse.json({ error: 'mode must be columns, preview or import' }, { status: 400 })
+  }
+
   if (typeof body.text !== 'string' || !body.text.trim()) {
     return NextResponse.json({ error: 'Paste or upload statement text first' }, { status: 400 })
   }
