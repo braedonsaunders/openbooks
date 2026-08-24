@@ -197,7 +197,10 @@ function sheetCellRange(ref: string): SheetCellRange | null {
 
 export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: SheetCellValue[][] }> {
   const wb = new ExcelJS.Workbook()
-  await wb.xlsx.load(buffer as unknown as ArrayBuffer)
+  // ExcelJS otherwise decorates hyperlinked formula cells as hyperlink values
+  // and drops their formula/result shape. Imports do not expose link targets,
+  // so ignore that decoration and retain the underlying formula provenance.
+  await wb.xlsx.load(buffer as unknown as ArrayBuffer, { ignoreNodes: ['hyperlinks'] })
   const ws = wb.worksheets[0]
   if (!ws) return { headers: [], rows: [] }
   const arrayFormulaRanges: SheetCellRange[] = []
