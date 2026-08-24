@@ -49,6 +49,11 @@ export async function POST(req: Request) {
     post?: boolean
   }
   const mode = body.mode ?? 'parse'
+
+  if (mode !== 'parse' && mode !== 'preview' && mode !== 'commit') {
+    return NextResponse.json({ error: 'mode must be parse, preview or commit' }, { status: 400 })
+  }
+
   const format: ImportFormat = IMPORT_FORMATS.includes(body.format as ImportFormat)
     ? (body.format as ImportFormat)
     : 'csv'
