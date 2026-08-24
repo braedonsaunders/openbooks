@@ -17,6 +17,8 @@ import {
 } from './resource-core'
 import {
   CELL_PROVENANCE_KEY,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
   type CellValue,
   type ResourceDescriptor,
   type ResourceField,
@@ -91,9 +93,6 @@ interface TxnLineInput {
 // route retains the selected source entries under that key and records each
 // mapped source header under SOURCE_COLUMNS_KEY. The nested lookup accepts rows
 // produced by the earlier metadata handoff as well.
-const SOURCE_COLUMNS_KEY = '__sourceColumns'
-const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
-
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>

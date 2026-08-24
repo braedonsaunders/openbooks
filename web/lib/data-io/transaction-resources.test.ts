@@ -3,7 +3,11 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import { DOC_KINDS } from '../document-kinds.ts'
-import { CELL_PROVENANCE_KEY } from './types.ts'
+import {
+  CELL_PROVENANCE_KEY,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
+} from './types.ts'
 
 interface TransactionImportState {
   failLineInsert: boolean
@@ -305,9 +309,9 @@ function mappedTransactionRow(
   const out: Record<string, unknown> = {
     documentDate: row.documentDate,
     account: row.account,
-    __sourceColumns: {},
+    [SOURCE_COLUMNS_KEY]: {},
   }
-  const sources = out.__sourceColumns as Record<string, string>
+  const sources = out[SOURCE_COLUMNS_KEY] as Record<string, string>
   if (source === 'lines') {
     out.lines = row.lines
     sources.lines = 'lines'
@@ -317,7 +321,7 @@ function mappedTransactionRow(
   }
   const provenance = row[CELL_PROVENANCE_KEY]
   if (provenance !== undefined) {
-    out.__unmappedColumns = { [CELL_PROVENANCE_KEY]: provenance }
+    out[UNMAPPED_COLUMNS_KEY] = { [CELL_PROVENANCE_KEY]: provenance }
   }
   return out
 }

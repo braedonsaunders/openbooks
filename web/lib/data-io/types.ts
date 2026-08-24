@@ -83,6 +83,12 @@ export type CellValue = string | number | boolean | null
 export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
 export type CellProvenance = 'formula'
 
+/** Reserved row key: target field → source column selected by the mapping. */
+export const SOURCE_COLUMNS_KEY = '__sourceColumns'
+
+/** Reserved row key: source columns the mapping intentionally left unused. */
+export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
+
 /** A single row's error during preview/commit. */
 export interface RowError {
   /** 1-based source row number (excluding the header row). */
