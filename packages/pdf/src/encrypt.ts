@@ -72,8 +72,13 @@ export async function encryptPdf(
     await writeFile(input, pdf, { mode: 0o600 })
     // One argument per line, read from stdin: qpdf's @- form. Order matters —
     // --encrypt takes the user password, the owner password, the key length,
-    // then its own options, terminated by `--`.
+    // then its own options, terminated by `--`. Object streams stay off: with
+    // them on, qpdf 12 hides document structure inside encrypted streams that
+    // pdf-lib (which cannot decrypt) fails to walk, breaking the app's own
+    // re-ingestion of protected files; plain object layout does not weaken
+    // the AES-256 protection in any way.
     const args = [
+      '--object-streams=disable',
       '--encrypt',
       userPassword,
       ownerPassword,
@@ -85,7 +90,60 @@ export async function encryptPdf(
       output,
     ]
     await runQpdf(args)
-    return await readFile(output)
+    const encrypted = await readFile(output)
+    // Certify our own product before releasing it: qpdf must refuse to open
+    // the result without the secret, so a broken or hostile qpdf can never
+    // smuggle marker-only bytes out through this function as "encrypted".
+    await verifyPdfEncryption(encrypted)
+    return encrypted
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * Certify that bytes are genuinely password-protected, independent of who
+ * produced them.
+ *
+ * SECURITY: a parser-reported encryption flag is not evidence of encryption —
+ * any writer can put an `/Encrypt` entry in the trailer dictionary of an
+ * otherwise-plaintext file and every lenient parser will then report the
+ * document as encrypted. Verification therefore asks qpdf — the same
+ * authority the encryptor itself relies on — to open the document with an
+ * EMPTY password:
+ * - opens cleanly → whatever the markers claim, there is no protection;
+ * - "invalid password" → a real security handler rejected the only
+ *   credential a non-owner could have, so the payload is locked;
+ * - anything else (malformed handler, unreadable file, missing binary) →
+ *   certification is impossible and the caller must fail closed.
+ *
+ * A hand-crafted dict with internally consistent key material can still make
+ * qpdf say "invalid password" over unencrypted streams — but such a file is
+ * unreadable garbage to every spec-compliant viewer until it is given the
+ * secret, so it leaks nothing; and the sanctioned producer below certifies its
+ * own output with the live password before releasing it.
+ */
+export async function verifyPdfEncryption(pdf: Buffer | Uint8Array): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'openbooks-pdf-verify-'))
+  const input = join(dir, 'candidate.pdf')
+  try {
+    await writeFile(input, pdf, { mode: 0o600 })
+    let locked = false
+    let failure: Error | null = null
+    try {
+      await runQpdf(['--check', input])
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      // The empty-password attempt failing authentication is the one verdict
+      // that proves protection; every other failure means we cannot certify.
+      locked = /invalid password/i.test(message)
+      if (!locked) failure = new Error(message)
+    }
+    if (locked) return
+    if (failure) {
+      throw new PdfEncryptionError(`the document could not be verified as encrypted (${failure.message})`)
+    }
+    throw new PdfEncryptionError('the document opens without a password')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

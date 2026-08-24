@@ -18,9 +18,16 @@ export {
   htmlToPlainText,
   TEMPLATE_RENDER_LIMITS,
 } from './template'
-// Confidential output: AES-256 encryption (qpdf) + the configurable password
+// Confidential output: AES-256 encryption (qpdf) + independent certification
+// that bytes are genuinely password-protected, plus the configurable password
 // expression any sensitive record PDF derives its password from.
-export { encryptPdf, pdfEncryptionAvailable, PdfEncryptionError, type PdfEncryptionOptions } from './encrypt'
+export {
+  encryptPdf,
+  verifyPdfEncryption,
+  pdfEncryptionAvailable,
+  PdfEncryptionError,
+  type PdfEncryptionOptions,
+} from './encrypt'
 export {
   assertValidPasswordExpression,
   parsePasswordExpression,
