@@ -302,9 +302,28 @@ export async function decidePaymentRun(
       rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
       updated_at = now(), updated_by = ${userId}
     where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
+      and (
+        ${decision} = 'reject'
+        or (submitted_by is not null and submitted_by <> ${userId})
+      )
     returning id
   `));
-  if (!result.rows[0]) throw new PaymentError("only a run pending approval can be decided");
+  if (!result.rows[0]) {
+    if (decision === "approve") {
+      const pending = (await db.execute<{ submitted_by: string | null }>(sql`
+        select submitted_by
+          from payment_runs
+         where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
+      `)).rows[0];
+      if (pending?.submitted_by === userId) {
+        throw new PaymentError("the payment run submitter cannot approve the same run");
+      }
+      if (pending && pending.submitted_by === null) {
+        throw new PaymentError("payment run approval requires an identified submitter");
+      }
+    }
+    throw new PaymentError("only a run pending approval can be decided");
+  }
   await event({ orgId, runId, eventType: `run_${decision}d`, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
 }
 
@@ -750,9 +769,28 @@ export async function decidePaymentFile(
       rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
       updated_at = now(), updated_by = ${userId}
     where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+      and (
+        ${decision} = 'reject'
+        or (generated_by is not null and generated_by <> ${userId})
+      )
     returning payment_run_id
   `));
-  if (!result.rows[0]) throw new PaymentError("only a file pending approval can be decided");
+  if (!result.rows[0]) {
+    if (decision === "approve") {
+      const pending = (await db.execute<{ generated_by: string | null }>(sql`
+        select generated_by
+          from payment_files
+         where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+      `)).rows[0];
+      if (pending?.generated_by === userId) {
+        throw new PaymentError("the payment file generator cannot approve the same file");
+      }
+      if (pending && pending.generated_by === null) {
+        throw new PaymentError("payment file approval requires an identified generator");
+      }
+    }
+    throw new PaymentError("only a file pending approval can be decided");
+  }
   await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType: `file_${decision}d`, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
 }
 
