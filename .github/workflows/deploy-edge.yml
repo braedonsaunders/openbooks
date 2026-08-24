@@ -103,7 +103,7 @@ jobs:
             exit 1
           fi
 
-          dokploy_endpoint="${DOKPLOY_URL%/}/api/deploy"
+          dokploy_endpoint="${DOKPLOY_URL%/}/api/application.deploy"
           dokploy_payload="$(
             jq --compact-output --null-input \
               --arg applicationId "$DOKPLOY_APP_ID" \
@@ -113,7 +113,8 @@ jobs:
           echo "Requesting Dokploy production redeploy for the configured application."
           curl --fail-with-body --silent --show-error \
             --request POST \
-            --header "Authorization: Bearer ${DOKPLOY_TOKEN}" \
+            --header "accept: application/json" \
+            --header "x-api-key: ${DOKPLOY_TOKEN}" \
             --header "Content-Type: application/json" \
             --data "$dokploy_payload" \
             "$dokploy_endpoint"
