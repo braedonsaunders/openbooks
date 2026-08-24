@@ -1,8 +1,11 @@
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { businessToday } from "./business-date.ts";
 import { db, schema } from "./db.ts";
 import { sum } from "./money.ts";
-import { cancelPaymentRun, createPaymentDocument, nextNumber, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
+import { cancelPaymentRun, createPaymentDocument, isPaymentRunSourceClaimConflict, nextNumber, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
+
+const DIRECT_DEBIT_SOURCE_CONFLICT =
+  "a selected invoice is already reserved by another live payment run";
 
 /** Build an inbound collection run from open invoices backed by active mandates. */
 export async function createDirectDebitRun(opts: {
@@ -49,6 +52,24 @@ export async function createDirectDebitRun(opts: {
   const run = (await db.insert(schema.paymentRuns).values({ orgId: opts.orgId, runNumber, bankAccountId: profile.bank_account_id, paymentBankProfileId: profile.id, subsidiaryId: profile.subsidiary_id, method: "direct_debit", direction: "inbound", purpose: "customer_collections", currency: profile.currency, status: "draft", scheduledFor: opts.scheduledFor ?? null, createdBy: opts.createdBy }).returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber }))[0]!;
   const createdReceiptIds: string[] = [];
   try {
+    // Claim the complete source population before creating receipt documents.
+    // payment_instruction_id is intentionally nullable while a draft run is
+    // being assembled; the partial unique index is the final race authority.
+    await db.insert(schema.paymentRunItems).values(result.rows.map((invoice) => ({
+      orgId: opts.orgId,
+      paymentRunId: run.id,
+      sourceDocumentId: invoice.document_id,
+      sourceOpenLineId: invoice.open_line_id,
+      kind: "receivable" as const,
+      grossAmount: invoice.open,
+      discountAmount: "0",
+      creditAmount: "0",
+      paymentAmount: invoice.open,
+      currency: invoice.currency,
+      fxRate: invoice.fx_rate,
+      status: "selected" as const,
+      createdBy: opts.createdBy,
+    })));
     for (const invoices of groups.values()) {
       const first = invoices[0]!;
       const allocations: AllocationInput[] = invoices.map((i) => sameCurrencyAllocation(i.open_line_id, i.open, i.open_base));
@@ -57,11 +78,25 @@ export async function createDirectDebitRun(opts: {
       createdReceiptIds.push(receipt.id);
       await updateDraftPayment(receipt.id, { partyId: first.party_id, bankAccountId: profile.bank_account_id, allocations, controlAccountId: first.control_account_id }, opts.createdBy, opts.orgId);
       const instruction = (await db.insert(schema.paymentInstructions).values({ orgId: opts.orgId, paymentRunId: run.id, payeePartyId: first.party_id, payeeBankAccountId: first.party_bank_account_id, mandateId: first.mandate_id, amount: total, currency: profile.currency, paymentDocumentId: receipt.id, status: "pending", createdBy: opts.createdBy }).returning({ id: schema.paymentInstructions.id }))[0]!;
-      await db.insert(schema.paymentRunItems).values(invoices.map((i) => ({ orgId: opts.orgId, paymentRunId: run.id, paymentInstructionId: instruction.id, sourceDocumentId: i.document_id, sourceOpenLineId: i.open_line_id, kind: "receivable" as const, grossAmount: i.open, discountAmount: "0", creditAmount: "0", paymentAmount: i.open, currency: i.currency, fxRate: i.fx_rate, status: "selected" as const, createdBy: opts.createdBy })));
+      const associated = await db
+        .update(schema.paymentRunItems)
+        .set({ paymentInstructionId: instruction.id, updatedAt: new Date(), updatedBy: opts.createdBy })
+        .where(and(
+          eq(schema.paymentRunItems.orgId, opts.orgId),
+          eq(schema.paymentRunItems.paymentRunId, run.id),
+          inArray(schema.paymentRunItems.sourceOpenLineId, invoices.map((invoice) => invoice.open_line_id)),
+        ))
+        .returning({ id: schema.paymentRunItems.id });
+      if (associated.length !== invoices.length) {
+        throw new PaymentError("the collection run could not associate every claimed invoice");
+      }
     }
     await db.execute(sql`update payment_runs r set payment_count = x.n, total_amount = x.total, updated_at = now(), updated_by = ${opts.createdBy} from (select payment_run_id, count(*)::int as n, coalesce(sum(amount), 0) as total from payment_instructions where org_id = ${opts.orgId} and payment_run_id = ${run.id} group by payment_run_id) x where r.id = x.payment_run_id and r.org_id = ${opts.orgId}`);
     await db.insert(schema.paymentEvents).values({ orgId: opts.orgId, paymentRunId: run.id, eventType: "run_created", toStatus: "draft", details: { paymentBankProfileId: profile.id, sourceCount: result.rows.length, direction: "inbound" }, actorId: opts.createdBy });
   } catch (error) {
+    const failure = isPaymentRunSourceClaimConflict(error)
+      ? new PaymentError(DIRECT_DEBIT_SOURCE_CONFLICT)
+      : error;
     await cancelPaymentRun(run.id, opts.orgId);
     if (createdReceiptIds.length > 0) {
       await db.transaction(async (tx) => {
@@ -70,7 +105,7 @@ export async function createDirectDebitRun(opts: {
       });
     }
     await db.insert(schema.paymentEvents).values({ orgId: opts.orgId, paymentRunId: run.id, eventType: "run_creation_failed", fromStatus: "draft", toStatus: "cancelled", details: { error: error instanceof Error ? error.message : String(error), direction: "inbound" }, actorId: opts.createdBy });
-    throw error;
+    throw failure;
   }
   return run;
 }

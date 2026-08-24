@@ -1125,14 +1125,17 @@ interface CreatePaymentRunOptions {
   selectionCriteria?: Record<string, unknown>;
 }
 
-function postgresConstraintFailure(error: unknown): { code?: string; constraint?: string } | null {
+/** The storage-enforced race when another live run claims the same open item. */
+export function isPaymentRunSourceClaimConflict(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
     const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-    if (candidate.code || candidate.constraint) return candidate;
+    if (candidate.code === "23505" && candidate.constraint === "payment_run_items_live_source") {
+      return true;
+    }
     current = candidate.cause;
   }
-  return null;
+  return false;
 }
 
 async function recordPaymentRunCreationChecks(
@@ -1184,8 +1187,7 @@ export async function createPaymentRun(opts: CreatePaymentRunOptions): Promise<{
       await withOrgTransaction(opts.orgId, () =>
         recordPaymentRunCreationChecks(opts, evaluatedReleaseDecisions));
     }
-    const failure = postgresConstraintFailure(error);
-    if (failure?.code === "23505" && failure.constraint === "payment_run_items_live_source") {
+    if (isPaymentRunSourceClaimConflict(error)) {
       throw new PaymentError(
         "a selected bill or credit is already reserved by another live payment run",
       );
