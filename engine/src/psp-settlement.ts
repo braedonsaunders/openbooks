@@ -45,6 +45,20 @@ export interface ParsedSettlement {
   raw?: Record<string, unknown>;
 }
 
+function fromPspMinorUnits(
+  amount: number,
+  field: string,
+  absolute = false,
+): string {
+  if (!Number.isSafeInteger(amount)) {
+    throw new PspSettlementError(
+      `${field} must be a safe integer in provider minor units`,
+    );
+  }
+  const units = BigInt(amount);
+  return fromUnits((absolute && units < 0n ? -units : units) * 100n);
+}
+
 /** Pure: roll line-level amounts into batch totals. */
 export function summarizeSettlement(lines: ParsedSettlementLine[]): {
   grossAmount: string;
@@ -119,7 +133,14 @@ export function parseStripeBalanceTransactions(
     currency = (r.currency ?? currency).toUpperCase();
     // Stripe amounts are in the smallest currency unit (cents). money uses 4dp of major unit.
     // 123 cents = 1.2300 → units = 12300 = cents * 100
-    const major = fromUnits(BigInt(Math.round(r.amount)) * 100n);
+    const major = fromPspMinorUnits(r.amount, "Stripe amount");
+    const fee =
+      r.fee == null
+        ? null
+        : fromPspMinorUnits(r.fee, "Stripe fee", true);
+    if (r.net != null) {
+      fromPspMinorUnits(r.net, "Stripe net amount");
+    }
     const kind: SettlementLineKind =
       r.type === "stripe_fee" || r.type === "fee"
         ? "fee"
@@ -141,10 +162,10 @@ export function parseStripeBalanceTransactions(
       currency,
       meta: { stripeType: r.type, fee: r.fee, net: r.net },
     });
-    if (r.fee && r.fee !== 0 && kind === "charge") {
+    if (fee != null && r.fee !== 0 && kind === "charge") {
       lines.push({
         kind: "fee",
-        amount: fromUnits(BigInt(Math.round(Math.abs(r.fee))) * 100n),
+        amount: fee,
         externalRef: `${r.id}_fee`,
         description: "Stripe processing fee",
         currency,
@@ -248,6 +269,12 @@ export function parseChargebeeSettlement(payload: {
   // taxes/fees may appear as special entity types
 }, fallbackDate?: string): ParsedSettlement {
   const currency = (payload.currency_code ?? "USD").toUpperCase();
+  if (payload.amount_paid != null) {
+    fromPspMinorUnits(payload.amount_paid, "Chargebee amount paid");
+  }
+  if (payload.amount_adjusted != null) {
+    fromPspMinorUnits(payload.amount_adjusted, "Chargebee amount adjusted");
+  }
   const settlementDate =
     typeof payload.date === "number"
       ? new Date(payload.date * 1000).toISOString().slice(0, 10)
@@ -263,7 +290,10 @@ export function parseChargebeeSettlement(payload: {
           : "charge";
       lines.push({
         kind,
-        amount: fromUnits(BigInt(Math.round(li.amount ?? 0)) * 100n),
+        amount: fromPspMinorUnits(
+          li.amount ?? 0,
+          "Chargebee line-item amount",
+        ),
         externalRef: li.id ?? null,
         description: li.description ?? et,
         currency,
@@ -272,17 +302,23 @@ export function parseChargebeeSettlement(payload: {
   } else if (payload.total != null) {
     lines.push({
       kind: "charge",
-      amount: fromUnits(BigInt(Math.round(payload.total)) * 100n),
+      amount: fromPspMinorUnits(payload.total, "Chargebee total"),
       currency,
     });
   }
   // Chargebee often separate-refunds via credits
-  if (payload.credits_applied) {
+  const creditsApplied =
+    payload.credits_applied == null
+      ? null
+      : fromPspMinorUnits(
+          payload.credits_applied,
+          "Chargebee credits applied",
+          true,
+        );
+  if (creditsApplied != null && payload.credits_applied !== 0) {
     lines.push({
       kind: "refund",
-      amount: fromUnits(
-        BigInt(Math.round(Math.abs(payload.credits_applied))) * 100n,
-      ),
+      amount: creditsApplied,
       description: "Credits applied",
       currency,
     });
