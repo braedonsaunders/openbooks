@@ -19,7 +19,7 @@ jobs:
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 125
     steps:
       - name: Check out the tested commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -51,7 +51,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for edge container publish
-        timeout-minutes: 40
+        timeout-minutes: 120
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_RUN_ID: ${{ steps.publish.outputs.previous_run_id }}
