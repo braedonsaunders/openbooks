@@ -2098,7 +2098,12 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/(app)/entities/[role]/page.tsx'),
-    /payrollEnabled[\s\S]{0,80}worker_comp_groups/,
+    /async function loadWorkerCompGroups[\s\S]{0,240}if \(!enabled\) return \{ rows: \[\] \}[\s\S]{0,240}worker_comp_groups/,
+    'entities must guard the worker-comp query when Payroll is off',
+  )
+  assert.match(
+    read('app/(app)/entities/[role]/page.tsx'),
+    /loadWorkerCompGroups\(orgId, payrollEnabled\)/,
     'entities must not load the worker-comp picker when Payroll is off',
   )
   assert.match(
