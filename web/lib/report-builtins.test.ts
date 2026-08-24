@@ -188,6 +188,39 @@ test('legacy, native screen, saved-view and export paths share the built-in filt
   assert.match(executor, /while \(offset < \(expectedRows \?\? 0\)\)/)
 })
 
+test('legacy lot-recall entry fails closed and forwards only its allowlisted controls', () => {
+  const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
+
+  // The route renders per-user authorization state, so it must never be
+  // statically cached, and every gate below resolves before any redirect.
+  assert.match(legacy, /export const dynamic = 'force-dynamic'/)
+  assert.match(legacy, /requirePermission\('reports\.read'\)/)
+  assert.match(legacy, /!\(await isFeatureEnabled\(authz\.user\.orgId, 'inventory'\)\)\) notFound\(\)/)
+  assert.match(
+    legacy,
+    /if \(!definitionId\) notFound\(\)/,
+    'an org without the seeded built-in must 404, never redirect to another tenant\'s id',
+  )
+
+  // The forward list is a boundary: exactly the recall controls plus the
+  // engine's paging keys ride along, so anything else smuggled into an old
+  // saved link never reaches the native runner.
+  const allowlist = legacy.match(/const FORWARDED_PARAMS = new Set\(\[(?<body>[^\]]*)\]\)/)
+  assert.ok(allowlist?.groups?.body, 'FORWARDED_PARAMS must remain a declared allowlist')
+  const forwarded = [...allowlist.groups.body.matchAll(/'([^']+)'/g)].map((entry) => entry[1])
+  assert.deepEqual(
+    [...forwarded].sort(),
+    ['expiresOnOrBefore', 'expiring', 'itemId', 'lotNumber', 'page', 'perPage'],
+    'the allowlist owns the recall filters plus page/perPage — nothing more',
+  )
+  assert.match(legacy, /FORWARDED_PARAMS\.has\(key\)[^\n]*continue/)
+  // Repeated params survive as repeated values instead of collapsing.
+  assert.match(legacy, /Array\.isArray\(raw\) \? raw : raw \? \[raw\] : \[\]/)
+  assert.match(legacy, /forwarded\.append\(key, value\)/)
+  // A clean handoff: no stray '?' when nothing qualifies for forwarding.
+  assert.match(legacy, /redirect\(`\/reports\/custom\/run\/\$\{definitionId\}\$\{query \? `\?\$\{query\}` : ''\}`\)/)
+})
+
 test('native report paging is URL-backed and uses the engine count', () => {
   const screen = read('../app/(app)/reports/custom/run/[id]/page.tsx')
   assert.match(screen, /pickString\(sp\.page\)/)
