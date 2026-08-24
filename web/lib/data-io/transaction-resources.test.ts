@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import ExcelJS from 'exceljs'
 import { DOC_KINDS } from '../document-kinds.ts'
 
 interface TransactionImportState {
@@ -175,6 +176,8 @@ const hooks = registerHooks({
 
 const resourceUrl = './transaction-resources.ts?atomic-import-test'
 const { transactionResource } = await import(resourceUrl) as typeof import('./transaction-resources.ts')
+const parseUrl = './parse.ts?transaction-xlsx-provenance-test'
+const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 function resetImportState(failLineInsert: boolean): void {
@@ -202,6 +205,25 @@ async function importCardCharge(
     'insert',
     { orgId: 'org-1', actorId: 'actor-1', dryRun: false },
   )
+}
+
+async function xlsxTransactionRows(): Promise<Record<string, unknown>[]> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  sheet.addRow(['documentDate', 'account', 'amount'])
+  sheet.addRow(['2026-08-24', '5000', 999999999999998.99])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    { formula: '999999999999998.99', result: 999999999999998.99 },
+  ])
+  sheet.addRow(['2026-08-24', '5000', '999999999999998.9900'])
+  const buffer = await workbook.xlsx.writeBuffer()
+  return (
+    await parseImportFile('xlsx', {
+      base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
+    })
+  ).rows
 }
 
 test('transaction import rolls back its draft when line persistence fails', async () => {
@@ -317,4 +339,64 @@ test('transaction import preserves an exact decimal string inside JSON lines', a
   assert.equal(importState.rootInsertCalls, 0)
   assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
   assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
+})
+
+test('transaction import preserves XLSX cell provenance at the write boundary', async (t) => {
+  const [numericRow, formulaRow, textRow] = await xlsxTransactionRows()
+  assert.ok(numericRow)
+  assert.ok(formulaRow)
+  assert.ok(textRow)
+
+  await t.test('rejects a numeric amount before writing', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(numericRow)
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message:
+            'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
+        },
+      ],
+    })
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+
+  await t.test('rejects a numeric formula result before writing', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(formulaRow)
+
+    assert.deepEqual(outcome, {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message:
+            'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
+        },
+      ],
+    })
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+
+  await t.test('accepts an exact text amount without changing it', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge(textRow)
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.transactionCalls, 1)
+    assert.equal(importState.attemptedLines[0]?.amount, '999999999999998.9900')
+    assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
+  })
 })
