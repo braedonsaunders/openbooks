@@ -79,6 +79,10 @@ export type ImportMode = 'insert' | 'upsert'
 
 export type CellValue = string | number | boolean | null
 
+/** Reserved row key: source header → spreadsheet cell provenance. */
+export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
+export type CellProvenance = 'formula'
+
 /** A single row's error during preview/commit. */
 export interface RowError {
   /** 1-based source row number (excluding the header row). */

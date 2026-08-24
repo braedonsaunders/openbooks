@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import { DOC_KINDS } from '../document-kinds.ts'
+import { CELL_PROVENANCE_KEY } from './types.ts'
 
 interface TransactionImportState {
   failLineInsert: boolean
@@ -177,7 +178,7 @@ const hooks = registerHooks({
 const resourceUrl = './transaction-resources.ts?atomic-import-test'
 const { transactionResource } = await import(resourceUrl) as typeof import('./transaction-resources.ts')
 const parseUrl = './parse.ts?transaction-xlsx-provenance-test'
-const { CELL_PROVENANCE_KEY, parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
+const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 function resetImportState(failLineInsert: boolean): void {

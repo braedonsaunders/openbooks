@@ -3,6 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import type { FormSection } from '@openbooks/forms-core'
+import { CELL_PROVENANCE_KEY } from './types.ts'
 
 interface RecordImportState {
   searchData: Record<string, unknown> | null
@@ -91,7 +92,7 @@ const hooks = registerHooks({
 const resourceUrl = './record-resources.ts?xlsx-field-aware-import-test'
 const { recordResource } = await import(resourceUrl) as typeof import('./record-resources.ts')
 const parseUrl = './parse.ts?record-xlsx-field-aware-import-test'
-const { CELL_PROVENANCE_KEY, parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
+const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 const sections: FormSection[] = [

@@ -1,11 +1,7 @@
 import 'server-only'
 import { parseCsvRows } from '@openbooks/engine/src/banking.ts'
 import { isSheetFormulaCellValue, readSheet, type SheetCellValue } from '@openbooks/office'
-import type { ImportFormat } from './types'
-
-/** Reserved row key: source header → spreadsheet cell provenance. */
-export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
-export type CellProvenance = 'formula'
+import { CELL_PROVENANCE_KEY, type CellProvenance, type ImportFormat } from './types'
 
 export interface ParsedFile {
   /** Column headers found in the file (in order). */
