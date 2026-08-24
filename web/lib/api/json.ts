@@ -108,7 +108,7 @@ export const nullableUuidId = z
   .refine((v) => v === null || isUuid(v), UUID_MESSAGE);
 
 /** Calendar date (YYYY-MM-DD), matching every document-date column. */
-export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const ISO_DATE_RE = z.regexes.date;
 
 export function isoDate(message = "must be YYYY-MM-DD") {
   return z.string({ error: message }).regex(ISO_DATE_RE, message);

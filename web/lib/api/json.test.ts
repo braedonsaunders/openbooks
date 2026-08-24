@@ -124,10 +124,31 @@ test("nullableUuidId allows null but rejects junk strings", () => {
   assert.deepEqual(schema.parse({}), {});
 });
 
-test("isoDate enforces YYYY-MM-DD shape", () => {
+test("isoDate accepts only real YYYY-MM-DD calendar dates", () => {
   assert.equal(isoDate().parse("2026-02-28"), "2026-02-28");
-  assert.throws(() => isoDate().parse("2026-2-28"));
-  assert.throws(() => isoDate().parse("28/02/2026"));
-  assert.throws(() => isoDate("A valid effective date is required").parse("junk"),
-    (e: unknown) => e instanceof z.ZodError && e.issues[0]?.message === "A valid effective date is required");
+  assert.equal(isoDate().parse("2024-02-29"), "2024-02-29");
+
+  for (const invalid of [
+    "2026-02-29",
+    "2100-02-29",
+    "2026-04-31",
+    "2026-01-32",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-01-00",
+    "2026-2-28",
+    "28/02/2026",
+  ]) {
+    assert.throws(
+      () => isoDate().parse(invalid),
+      `${invalid} must be rejected`,
+    );
+  }
+
+  assert.throws(
+    () => isoDate("A valid effective date is required").parse("2026-02-29"),
+    (e: unknown) =>
+      e instanceof z.ZodError &&
+      e.issues[0]?.message === "A valid effective date is required",
+  );
 });
