@@ -40,6 +40,26 @@ async function provenanceWorkbook(): Promise<string> {
   return Buffer.from(buffer as ArrayBuffer).toString('base64')
 }
 
+async function arrayFormulaWorkbook(): Promise<string> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  sheet.getCell('A1').value = 'amount'
+  const fillFormula = sheet.fillFormula.bind(sheet) as unknown as (
+    range: string,
+    formula: string,
+    results: Array<string | number>,
+    shareType: 'array',
+  ) => void
+  fillFormula(
+    'A2:A4',
+    'TEXT(999999999999998.99,"0.0000")',
+    [1, 999999999999998.99, '999999999999999.0000'],
+    'array',
+  )
+  const buffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(buffer as ArrayBuffer).toString('base64')
+}
+
 test('XLSX parsing retains numeric, formula, and text cell provenance', async () => {
   const parsed = await parseImportFile('xlsx', { base64: await provenanceWorkbook() })
 
@@ -68,4 +88,20 @@ test('XLSX parsing retains numeric, formula, and text cell provenance', async ()
     textFormulaAmount: 'formula',
     sharedTextFormulaAmount: 'formula',
   })
+})
+
+test('XLSX parsing retains array-formula child provenance for numeric and string results', async () => {
+  const parsed = await parseImportFile('xlsx', { base64: await arrayFormulaWorkbook() })
+
+  assert.equal(parsed.rows.length, 3)
+  const [master, numericChild, stringChild] = parsed.rows
+  assert.ok(master)
+  assert.ok(numericChild)
+  assert.ok(stringChild)
+  assert.equal(master.amount, 1)
+  assert.equal(numericChild.amount, 999999999999999)
+  assert.equal(stringChild.amount, '999999999999999.0000')
+  for (const row of parsed.rows) {
+    assert.deepEqual(row[CELL_PROVENANCE_KEY], { amount: 'formula' })
+  }
 })
