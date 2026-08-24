@@ -9,6 +9,8 @@ import {
 } from "./business-date.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
 
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
 test("formatInZone lands local midnights on the local calendar day", () => {
   // 2026-01-15T00:00 in Toronto (EST, UTC−5) is 05:00Z on the same day.
   assert.equal(formatInZone(new Date("2026-01-15T05:00:00Z"), "America/Toronto"), "2026-01-15");
@@ -51,7 +53,7 @@ test("an unrecognized zone is refused, never silently misformatted", () => {
   assert.throws(() => formatInZone(new Date(), "Mars/Olympus_Mons"), RangeError);
 });
 
-test("businessToday honours the org's zone and falls back to the UTC day", async () => {
+test("businessToday honours the org's zone and falls back to the UTC day", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     // 13:00Z on Jun 15 is already 01:00 on Jun 16 in Auckland (NZST, +12).
