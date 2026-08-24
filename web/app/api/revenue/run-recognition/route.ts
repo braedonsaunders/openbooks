@@ -13,8 +13,11 @@ const runRecognitionBody = z.object({
   asOfDate: isoDate().optional(),
   obligationId: z
     .string({ error: 'invalid obligation' })
-    .refine((v) => uuidId.safeParse(v).success, 'invalid obligation'),
+    .refine((v) => uuidId.safeParse(v).success, 'invalid obligation')
+    .optional(),
 })
+
+export type RunRecognitionRequest = z.input<typeof runRecognitionBody>
 
 /**
  * Run revenue recognition: post every due, unposted schedule line through the
