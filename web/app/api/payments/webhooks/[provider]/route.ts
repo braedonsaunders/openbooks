@@ -22,7 +22,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   if (!result) {
     return NextResponse.json({ error: "signature verification failed" }, { status: 401 });
   }
-  // Always 200 once verified+processed — provider retries on 4xx/5xx would
-  // otherwise redeliver forever; idempotency makes retries safe anyway.
-  return NextResponse.json({ received: true, status: result.status });
+  // Always 200 once authenticated, including recognized deliveries containing
+  // no actionable event types. Provider retries on 4xx/5xx would otherwise
+  // redeliver forever; idempotency makes retries safe anyway.
+  return NextResponse.json({
+    received: true,
+    status: result.status,
+    events: result.eventResults.map(({ externalRef, status }) => ({ externalRef, status })),
+  });
 }
