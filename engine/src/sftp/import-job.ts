@@ -72,12 +72,23 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
     result.filesSeen++;
     const filePath = `${s.folder}/${e.name}`;
     try {
-      const text = (await backend.read(filePath)).toString("utf8");
+      const sourceBytes = await backend.read(filePath);
+      const text = sourceBytes.toString("utf8");
       const fmt = s.format === "auto" ? detectFormat(e.name, text) : s.format;
       if (!fmt) throw new Error(`could not detect a statement format for ${e.name}`);
       const { lines, meta } = parse(fmt, text, s.csv_mapping);
       const res = await importStatement(
-        { accountId: s.account_id, source: fmt === "csv" ? "csv" : fmt, lines, statementDate: meta.statementDate ?? null, openingBalance: null, closingBalance: meta.closingBalance ?? null, currency: meta.currency ?? null, dryRun: false },
+        {
+          accountId: s.account_id,
+          source: fmt === "csv" ? "csv" : fmt,
+          lines,
+          statementDate: meta.statementDate ?? null,
+          openingBalance: null,
+          closingBalance: meta.closingBalance ?? null,
+          currency: meta.currency ?? null,
+          sourceEvidence: { content: sourceBytes, filename: e.name },
+          dryRun: false,
+        },
         ctx,
       );
       result.imported += res.imported;

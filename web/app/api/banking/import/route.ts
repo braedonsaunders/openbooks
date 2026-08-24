@@ -24,6 +24,7 @@ interface ImportBody {
   accountId?: string
   source?: 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'
   text?: string
+  filename?: string | null
   mapping?: CsvMapping
   /**
    * columns — CSV only: return header + sample rows so the client can build
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
   const body = (parsedBody.data) as ImportBody
   const mode = body.mode ?? 'preview'
 
-  if (!body.text?.trim()) {
+  if (typeof body.text !== 'string' || !body.text.trim()) {
     return NextResponse.json({ error: 'Paste or upload statement text first' }, { status: 400 })
   }
 
@@ -119,6 +120,10 @@ export async function POST(req: Request) {
         openingBalance,
         closingBalance: closingFromRequest ?? meta.closingBalance ?? null,
         currency: meta.currency ?? null,
+        sourceEvidence: {
+          content: body.text,
+          filename: typeof body.filename === 'string' ? body.filename : null,
+        },
         dryRun: mode === 'preview',
       },
       { orgId: user.orgId, userId: user.id },
@@ -132,6 +137,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       statementId: result.statementId,
+      sourceEvidenceRef: result.sourceEvidenceRef,
       imported: result.imported,
       duplicates: result.duplicates,
       statementDate: meta.statementDate ?? null,
