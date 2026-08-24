@@ -382,17 +382,25 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    const owned = (await db.execute(
-      sql`select 1 from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
-    ))
-    if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    try {
+    return withOrgTransaction(user.orgId, async () => {
+      // Draft discard is another lifecycle mutation. Own the same aggregate
+      // lock used by issue/void before deleteDocument reads draft status, so a
+      // delete that waited behind issuance cannot remove the issued order.
+      const owned = (await db.execute(sql`
+        select 1
+          from documents
+         where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
+         for update
+      `))
+      if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       await deleteDocument(id, user.id, user.orgId)
       return NextResponse.json({ ok: true })
-    } catch (e) {
-      if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })
-      throw e
-    }
+    }).catch((error: unknown) => {
+      if (error instanceof DeleteError) {
+        return NextResponse.json({ error: error.message }, { status: 422 })
+      }
+      throw error
+    })
   }
 }
 
