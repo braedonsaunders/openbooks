@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { DOC_KINDS } from '../document-kinds.ts'
 import type { DataResource } from './resource-core.ts'
+import { CELL_PROVENANCE_KEY } from './types.ts'
 
 interface ImportRouteState {
   resource: DataResource | null
@@ -88,8 +89,6 @@ const mockSources = new Map<string, string>([
   [
     'mock:parse',
     `
-      export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
-
       export async function parseImportFile() {
         throw new Error('route parse mode is not expected in this preview test')
       }
@@ -183,7 +182,7 @@ importState.resource = {
 const routeUrl = '../../app/api/data/import/route.ts?duplicate-mapping-test'
 const { POST } = await import(routeUrl) as typeof import('../../app/api/data/import/route.ts')
 const parseUrl = './parse.ts?duplicate-mapping-route-test'
-const { CELL_PROVENANCE_KEY, parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
+const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 function resetImportState(): void {
@@ -439,7 +438,6 @@ test('route carries hyperlinked formula provenance into transaction validation b
     await t.test(`rejects ${name}`, async () => {
       resetImportState()
       assert.equal(row[source], value)
-      assert.deepEqual(row[CELL_PROVENANCE_KEY], { [source]: 'formula' })
 
       const response = await preview([row], {
         documentDate: 'documentDate',
@@ -447,6 +445,10 @@ test('route carries hyperlinked formula provenance into transaction validation b
         [source]: 'amount',
       })
 
+      assert.equal(importState.resourceWriteCalls, 1)
+      assert.equal(importState.rootInsertCalls, 0)
+      assert.equal(importState.transactionCalls, 0)
+      assert.deepEqual(row[CELL_PROVENANCE_KEY], { [source]: 'formula' })
       assert.equal(response.status, 200)
       assert.deepEqual(await response.json(), {
         outcome: {
@@ -462,9 +464,6 @@ test('route carries hyperlinked formula provenance into transaction validation b
         },
         total: 1,
       })
-      assert.equal(importState.resourceWriteCalls, 1)
-      assert.equal(importState.rootInsertCalls, 0)
-      assert.equal(importState.transactionCalls, 0)
     })
   }
 })

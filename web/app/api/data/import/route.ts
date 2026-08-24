@@ -4,8 +4,14 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
-import { CELL_PROVENANCE_KEY, guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
-import { IMPORT_FORMATS, type ImportFormat, type ImportMode } from '../../../../lib/data-io/types'
+import { guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
+import {
+  CELL_PROVENANCE_KEY,
+  IMPORT_FORMATS,
+  type CellProvenance,
+  type ImportFormat,
+  type ImportMode,
+} from '../../../../lib/data-io/types'
 
 export const runtime = 'nodejs'
 
@@ -164,7 +170,7 @@ function applyMapping(raw: Record<string, unknown>, mapping: Record<string, stri
     rawProvenance !== null && typeof rawProvenance === 'object' && !Array.isArray(rawProvenance)
       ? rawProvenance as Record<string, unknown>
       : null
-  const mappedProvenance: Record<string, 'formula'> = {}
+  const mappedProvenance: Record<string, CellProvenance> = {}
   for (const [source, field] of Object.entries(mapping)) {
     if (!field) continue
     out[field] = raw[source]
