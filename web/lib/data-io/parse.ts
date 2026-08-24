@@ -6,7 +6,11 @@ import type { ImportFormat } from './types'
 export interface ParsedFile {
   /** Column headers found in the file (in order). */
   headers: string[]
-  /** Every data row, keyed by header. */
+  /**
+   * Every data row, keyed by header. XLSX numeric cells and numeric formula
+   * results remain numbers so exact-decimal write boundaries can reject values
+   * that have already crossed IEEE-754; text cells remain strings.
+   */
   rows: Record<string, unknown>[]
 }
 
