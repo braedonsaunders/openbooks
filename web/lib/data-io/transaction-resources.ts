@@ -272,38 +272,43 @@ async function writeTransactions(
       // Create the draft document + lines.
       const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
       const currency = String(src.currency ?? '').trim() || baseCurrency
-      const [doc] = await db
-        .insert(schema.documents)
-        .values({
-          orgId: ctx.orgId,
-          kind: cfg.kind,
-          documentNumber: number,
-          partyId,
-          documentDate,
-          dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
-          currency,
-          referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
-          memo: src.memo ? String(src.memo) : null,
-          status: 'draft',
-          createdBy: ctx.actorId,
-        })
-        .returning({ id: schema.documents.id })
-      await db.insert(schema.documentLines).values(
-        built.map((l, idx) => ({
-          orgId: ctx.orgId,
-          documentId: doc!.id,
-          lineNumber: idx + 1,
-          accountId: l.accountId,
-          description: l.description,
-          amount: l.amount,
-          taxCodeId: l.taxCodeId,
-          createdBy: ctx.actorId,
-        })),
-      )
+      const documentId = await db.transaction(async (tx) => {
+        const [doc] = await tx
+          .insert(schema.documents)
+          .values({
+            orgId: ctx.orgId,
+            kind: cfg.kind,
+            documentNumber: number,
+            partyId,
+            documentDate,
+            dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
+            currency,
+            referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
+            memo: src.memo ? String(src.memo) : null,
+            status: 'draft',
+            createdBy: ctx.actorId,
+          })
+          .returning({ id: schema.documents.id })
+        if (!doc) throw new Error('document insert did not return an id')
+
+        await tx.insert(schema.documentLines).values(
+          built.map((l, idx) => ({
+            orgId: ctx.orgId,
+            documentId: doc.id,
+            lineNumber: idx + 1,
+            accountId: l.accountId,
+            description: l.description,
+            amount: l.amount,
+            taxCodeId: l.taxCodeId,
+            createdBy: ctx.actorId,
+          })),
+        )
+        return doc.id
+      })
 
       if (ctx.post && deps) {
         try {
-          await postDocument(doc!.id, deps)
+          await postDocument(documentId, deps)
         } catch (e) {
           // Draft persists for review; report why posting failed.
           outcome.created++
