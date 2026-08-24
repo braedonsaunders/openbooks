@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -133,6 +134,9 @@ export const paymentRunItems = pgTable(
     index("payment_run_items_run").on(t.paymentRunId),
     index("payment_run_items_instruction").on(t.paymentInstructionId),
     uniqueIndex("payment_run_items_source").on(t.paymentRunId, t.sourceOpenLineId),
+    uniqueIndex("payment_run_items_live_source")
+      .on(t.orgId, t.sourceOpenLineId)
+      .where(sql`${t.status} = 'selected'`),
   ],
 );
 
