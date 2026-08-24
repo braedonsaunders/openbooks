@@ -1,0 +1,120 @@
+name: Deploy edge
+
+on:
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: write
+  packages: read
+
+jobs:
+  deploy-edge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+      DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+      DOKPLOY_APP_ID: ${{ secrets.DOKPLOY_APP_ID }}
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Dispatch edge container publish
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          short_sha="${TRIGGER_SHA:0:7}"
+          version="edge-${short_sha}"
+          previous_run_id="$(
+            gh run list \
+              --workflow publish-container.yml \
+              --event workflow_dispatch \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId // 0'
+          )"
+
+          echo "Dispatching publish-container.yml for ${TRIGGER_SHA} as ${version}."
+          gh workflow run publish-container.yml -f "version=${version}"
+
+          echo "previous_run_id=${previous_run_id}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for edge container publish
+        timeout-minutes: 40
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RUN_ID: ${{ steps.publish.outputs.previous_run_id }}
+          VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          set -euo pipefail
+          publish_run_id=""
+
+          for attempt in $(seq 1 60); do
+            publish_run_id="$(
+              gh run list \
+                --workflow publish-container.yml \
+                --event workflow_dispatch \
+                --limit 20 \
+                --json databaseId \
+                --jq "map(select(.databaseId > ${PREVIOUS_RUN_ID})) | sort_by(.databaseId) | .[0].databaseId // empty"
+            )"
+            if [ -n "$publish_run_id" ]; then
+              break
+            fi
+            echo "Waiting for the ${VERSION} publish run to appear (attempt ${attempt}/60)."
+            sleep 5
+          done
+
+          if [ -z "$publish_run_id" ]; then
+            echo "The ${VERSION} publish run did not appear within five minutes." >&2
+            exit 1
+          fi
+
+          echo "Watching publish run ${publish_run_id} for ${VERSION}."
+          gh run watch "$publish_run_id" --exit-status --interval 10
+
+      - name: Skip Dokploy redeploy when not configured
+        if: env.DOKPLOY_URL == '' || env.DOKPLOY_TOKEN == ''
+        run: |
+          echo "Dokploy redeploy skipped: DOKPLOY_URL and DOKPLOY_TOKEN are not both configured."
+          exit 0
+
+      - name: Trigger Dokploy production redeploy
+        if: env.DOKPLOY_URL != '' && env.DOKPLOY_TOKEN != ''
+        run: |
+          set -euo pipefail
+          if [ -z "$DOKPLOY_APP_ID" ]; then
+            echo "DOKPLOY_APP_ID must be configured when Dokploy redeployment is enabled." >&2
+            exit 1
+          fi
+
+          dokploy_endpoint="${DOKPLOY_URL%/}/api/deploy"
+          dokploy_payload="$(
+            jq --compact-output --null-input \
+              --arg applicationId "$DOKPLOY_APP_ID" \
+              '{applicationId: $applicationId}'
+          )"
+
+          echo "Requesting Dokploy production redeploy for the configured application."
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${DOKPLOY_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$dokploy_payload" \
+            "$dokploy_endpoint"
+          echo "Dokploy accepted the production redeploy request."
