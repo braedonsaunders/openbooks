@@ -278,7 +278,7 @@ test("every confirmed poison row bumps openbooks.terminal_failures exactly once 
       point.attributes[ATTR_KIND] === undefined,
   );
   assert.equal(delivery.length, 1);
-  assert.equal(Number(delivery[0].value), 1);
+  assert.equal(Number(delivery[0]!.value), 1);
   assert.equal(
     sumPoints(terminal, {
       [ATTR_SURFACE]: "posting_effects",

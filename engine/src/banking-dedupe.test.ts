@@ -61,7 +61,7 @@ test("plaid pagination accumulates every page until has_more is false", async ()
   const offsetsSeen: number[] = [];
   const all = await plaidFetchAllTransactions(async (offset) => {
     offsetsSeen.push(offset);
-    return pages[offsetsSeen.length - 1];
+    return pages[offsetsSeen.length - 1]!;
   });
   assert.deepEqual(offsetsSeen, [0, 500, 1000]);
   assert.deepEqual(all, pages.flatMap((p) => p.transactions));
