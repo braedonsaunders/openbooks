@@ -284,7 +284,7 @@ export default function QueryConsole() {
   function saveSnippet() {
     const sql = sqlText.trim()
     if (!sql) return
-    const name = snippetName.trim() || sql.split('\n')[0].slice(0, 60)
+    const name = snippetName.trim() || sql.split('\n')[0]!.slice(0, 60)
     const item: SavedSnippet = { id: `${Date.now()}-${saved.length}`, name, sql, at: Date.now() }
     persistSaved([item, ...saved.filter((s) => s.name !== name)].slice(0, 100))
     setSnippetName('')

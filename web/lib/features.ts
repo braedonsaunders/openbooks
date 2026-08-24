@@ -524,7 +524,7 @@ export async function featureDisableStatuses(
       .filter((k) => FEATURE_DISABLE_CHECKS[k])
       .map(async (k) => {
         try {
-          return [k, await FEATURE_DISABLE_CHECKS[k](orgId)] as const
+          return [k, await FEATURE_DISABLE_CHECKS[k]!(orgId)] as const
         } catch {
           return [k, { blocked: true, impacts: [{ labelKey: 'controlCheckUnavailable', count: 1 }] }] as const
         }

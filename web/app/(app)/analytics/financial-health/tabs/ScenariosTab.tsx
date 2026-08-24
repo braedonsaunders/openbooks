@@ -73,7 +73,7 @@ export function ScenariosTab({ data }: { data: HealthData }) {
           <div className="space-y-4">
             <div>
               <span className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">Template</span>
-              <Select value="" placeholder="Custom Scenario" onChange={(e) => e.target.value && setInp(TEMPLATES[e.target.value].inputs)} triggerClassName="h-8 w-full text-sm">
+              <Select value="" placeholder="Custom Scenario" onChange={(e) => e.target.value && setInp(TEMPLATES[e.target.value]!.inputs)} triggerClassName="h-8 w-full text-sm">
                 <option value="">Custom Scenario</option>
                 {Object.entries(TEMPLATES).map(([k, t]) => <option key={k} value={k}>{t.label}</option>)}
               </Select>

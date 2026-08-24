@@ -210,6 +210,10 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
 export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }): Promise<UtilizationData> {
   const { money } = await getMoneyFormatter(orgId)
   const cfg = await analyticsConfig(orgId, "utilization");
+  // mergeConfig always materializes every default key for the dashboard.
+  const targetBillablePct = cfg.targetBillablePct!;
+  const costSpikeThreshold = cfg.costSpikeThreshold!;
+  const minHours = cfg.minHours!;
   const rangeStart = new Date(period.from + "T00:00:00Z");
   const rangeEnd = new Date(period.to + "T00:00:00Z");
   const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000) + 1;
@@ -286,9 +290,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   const pCompany = companySum(prior);
 
   const alerts: UAlert[] = [];
-  if (cCompany.percentBilled < cfg.targetBillablePct)
-    alerts.push({ type: "warning", message: `Billable % below ${cfg.targetBillablePct}% target` });
-  if (cCompany.nonBillableCost - pCompany.nonBillableCost > cfg.costSpikeThreshold)
+  if (cCompany.percentBilled < targetBillablePct)
+    alerts.push({ type: "warning", message: `Billable % below ${targetBillablePct}% target` });
+  if (cCompany.nonBillableCost - pCompany.nonBillableCost > costSpikeThreshold)
     alerts.push({
       type: "danger",
       message: `Non-billable cost spiked by ${money(cCompany.nonBillableCost - pCompany.nonBillableCost, { maximumFractionDigits: 0 })}`,
@@ -315,7 +319,7 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   return {
     period: { ...period, days },
     prior: { from: priorFrom, to: priorTo },
-    config: { target: cfg.targetBillablePct, costSpike: cfg.costSpikeThreshold, minHours: cfg.minHours },
+    config: { target: targetBillablePct, costSpike: costSpikeThreshold, minHours },
     company: {
       range: cCompany,
       prior: pCompany,
@@ -325,9 +329,9 @@ export async function utilizationData(orgId: string, period: { from: string; to:
       },
       alerts,
     },
-    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, cfg.minHours),
-    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, cfg.minHours),
-    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, cfg.minHours),
+    departments: buildGroup(curr, prior, "department", titleByEmp, noBillDepts, minHours),
+    items: buildGroup(curr, prior, "item", titleByEmp, noBillDepts, minHours),
+    employees: buildGroup(curr, prior, "employee", titleByEmp, noBillDepts, minHours),
     history: { periodMonths, periods },
   };
 }

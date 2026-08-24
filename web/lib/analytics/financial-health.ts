@@ -235,7 +235,7 @@ function totalOf(items: StatementRow[], types: string[]): ExactDecimal {
 /** Shift an ISO date back one year (prior-year comparison period). */
 function priorYear(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return `${y - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${y! - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function monthsBetween(from: string, to: string): number {

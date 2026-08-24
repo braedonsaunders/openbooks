@@ -95,7 +95,7 @@ export async function POST(req: Request) {
                 ${JSON.stringify(snapshot.boxes)}::jsonb, ${JSON.stringify(normalizedAdjustments)}::jsonb,
                 ${snapshotHash}, ${gate.user.id}, ${gate.user.id})
         returning id, version`))
-      const row = inserted.rows[0]
+      const row = inserted.rows[0]!
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'tax_filings', ${row.id}, 'insert',

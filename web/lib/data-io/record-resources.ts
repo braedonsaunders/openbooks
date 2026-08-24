@@ -162,7 +162,7 @@ async function writeRecords(
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
-    const src = rows[i]
+    const src = rows[i]!
     try {
       // Assemble the record `data` map from the flat/nested row.
       const data: FieldValueMap = {}
@@ -276,5 +276,5 @@ async function allocateRecordNumber(orgId: string, typeKey: string): Promise<str
     select count(*)::int as c from custom_records where org_id = ${orgId} and type_key = ${typeKey}`)) as {
     rows: { c: number }[]
   }
-  return `${typeKey.slice(0, 3).toUpperCase()}-${(c.rows[0].c ?? 0) + 1}`
+  return `${typeKey.slice(0, 3).toUpperCase()}-${(c.rows[0]!.c ?? 0) + 1}`
 }

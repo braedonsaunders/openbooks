@@ -108,7 +108,7 @@ function dayOfMonth(iso: string): number {
 /** Formatted week endpoints from the week's Sunday, for the "Week of …" title. */
 function weekRange(sundayIso: string): { from: string; to: string } {
   const [y, m, d] = sundayIso.split('-').map(Number)
-  const sun = new Date(Date.UTC(y, m - 1, d, 12))
+  const sun = new Date(Date.UTC(y!, m! - 1, d!, 12))
   const sat = new Date(sun)
   sat.setUTCDate(sat.getUTCDate() + 6)
   const fmtDate = (dt: Date, withYear: boolean) =>
@@ -124,14 +124,14 @@ function weekRange(sundayIso: string): { from: string; to: string } {
 /** Shift an ISO Sunday by ±7 days, returning the new Sunday ISO. */
 function shiftWeek(sundayIso: string, deltaWeeks: number): string {
   const [y, m, d] = sundayIso.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d, 12))
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12))
   dt.setUTCDate(dt.getUTCDate() + deltaWeeks * 7)
   return dt.toISOString().slice(0, 10)
 }
 
 function sundayOf(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d, 12))
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12))
   dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay())
   return dt.toISOString().slice(0, 10)
 }
@@ -228,12 +228,12 @@ export function WeeklyGrid({
   // hasn't diverged — we keep it simple and always follow the default here).
   const onTimeType = (i: number, value: string) => {
     const tt = timeTypeById.get(value)
-    setRow(i, { timeTypeId: value, isBillable: tt?.isBillableDefault ?? rows[i].isBillable })
+    setRow(i, { timeTypeId: value, isBillable: tt?.isBillableDefault ?? rows[i]!.isBillable })
   }
 
   const dayTotals = useMemo(() => {
     const totals = [0, 0, 0, 0, 0, 0, 0]
-    for (const r of rows) for (let d = 0; d < 7; d++) totals[d] += num(r.hours[d])
+    for (const r of rows) for (let d = 0; d < 7; d++) totals[d]! += num(r.hours[d]!)
     return totals
   }, [rows])
   const rowTotal = (r: GridRow) => r.hours.reduce((s, h) => s + num(h), 0)

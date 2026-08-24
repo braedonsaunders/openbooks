@@ -229,7 +229,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
 
       for (let index = 0; index < rows.length; index++) {
         const rowNo = index + 1
-        const src = rows[index]
+        const src = rows[index]!
         try {
           const taxYear = assertTaxYear(src.taxYear)
           const employee = await resolveEmployee(ctx.orgId, src.employee)
@@ -391,7 +391,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
 
       for (let index = 0; index < rows.length; index++) {
         const rowNo = index + 1
-        const src = rows[index]
+        const src = rows[index]!
         try {
           const employee = await resolveEmployee(ctx.orgId, src.employee)
           if ('error' in employee) {

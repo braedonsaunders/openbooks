@@ -1009,7 +1009,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
     if (laborAgg === 'average') return laborPool.reduce((s, e) => s + e.rate, 0) / laborPool.length
     if (laborAgg === 'median') {
       const sorted = [...laborPool].sort((a, b) => a.rate - b.rate)
-      return sorted[Math.floor(sorted.length / 2)].rate
+      return sorted[Math.floor(sorted.length / 2)]!.rate
     }
     const h = laborPool.reduce((s, e) => s + e.hours, 0)
     return h > 0 ? laborPool.reduce((s, e) => s + e.rate * e.hours, 0) / h : 0
@@ -1269,8 +1269,8 @@ function TrendsTab({ data }: { data: TrueCostData }) {
   const rate = useRate()
   const [mode, setMode] = useState<TrendMode>('composite')
   const active = data.monthly.filter((m) => m.billedHours > 0)
-  const current = active.length ? active[active.length - 1].rate : 0
-  const prev = active.length > 1 ? active[active.length - 2].rate : current
+  const current = active.length ? active[active.length - 1]!.rate : 0
+  const prev = active.length > 1 ? active[active.length - 2]!.rate : current
   const change = prev > 0 ? ((current - prev) / prev) * 100 : 0
   const avg = active.length ? active.reduce((s, m) => s + m.rate, 0) / active.length : 0
   const min = active.length ? Math.min(...active.map((m) => m.rate)) : 0
@@ -1290,7 +1290,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
         ...base,
         series: [
           { name: 'Composite Rate', type: 'line' as const, areaStyle: { opacity: 0.12 }, data: [...data.monthly.map((m) => m.rate), ...data.forecast.map(() => null)], lineStyle: { width: 2, color: '#14b8a6' }, itemStyle: { color: '#14b8a6' } },
-          { name: 'Forecast', type: 'line' as const, data: [...data.monthly.map((_, i) => (i === data.monthly.length - 1 ? data.monthly[i].rate : null)), ...data.forecast.map((f) => f.rate)], lineStyle: { width: 2, type: 'dashed' as const, color: '#14b8a6' }, itemStyle: { color: '#14b8a6' }, symbol: 'diamond' },
+          { name: 'Forecast', type: 'line' as const, data: [...data.monthly.map((_, i) => (i === data.monthly.length - 1 ? data.monthly[i]!.rate : null)), ...data.forecast.map((f) => f.rate)], lineStyle: { width: 2, type: 'dashed' as const, color: '#14b8a6' }, itemStyle: { color: '#14b8a6' }, symbol: 'diamond' },
         ],
       }
     }
@@ -1316,7 +1316,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
 
   const movers = useMemo(() => {
     if (active.length < 2) return []
-    const last = active[active.length - 1], before = active[active.length - 2]
+    const last = active[active.length - 1]!, before = active[active.length - 2]!
     return data.categories.map((c) => {
       const curr = last.byCategory[c.key] ?? 0
       const prior = before.byCategory[c.key] ?? 0

@@ -850,7 +850,7 @@ function ConfigTab({ data }: { data: SentinelData }) {
   const money = (n: number) => fmtMoney(n, { compact: true })
   const c = data.config
   const items = [
-    { label: t('detectors.duplicates'), value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount)}`, note: t('config.duplicatesNote') },
+    { label: t('detectors.duplicates'), value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount!)}`, note: t('config.duplicatesNote') },
     { label: t('config.benfordConformity'), value: 'MAD (Nigrini)', note: t('config.benfordNote') },
     { label: t('flag.rsf'), value: '≥10×', note: t('config.rsfNote', { floor: money(100) }) },
     { label: t('analysis.zscoreWord'), value: '|z| ≥ 3', note: t('config.zscoreNote', { sigma: money(10) }) },

@@ -77,7 +77,7 @@ export async function POST(req: Request) {
           ${JSON.stringify(b.backupProfile)}::jsonb,
           ${gate.user.id}, ${gate.user.id})
         returning id`))
-      const createdId = r.rows[0].id
+      const createdId = r.rows[0]!.id
       await publishProjectFinancialProfileInTransaction(tx, {
         orgId,
         projectTypeId: createdId,

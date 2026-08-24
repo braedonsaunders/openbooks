@@ -137,7 +137,7 @@ const STATUS_VARIANT: Record<string, 'secondary' | 'warning' | 'success' | 'outl
 function daysBetween(start: string, end: string): string[] {
   const out: string[] = []
   const [y, m, d] = start.split('-').map(Number)
-  const cur = new Date(Date.UTC(y, m - 1, d, 12))
+  const cur = new Date(Date.UTC(y!, m! - 1, d!, 12))
   for (let i = 0; i < 14; i++) {
     const isoDay = cur.toISOString().slice(0, 10)
     out.push(isoDay)
@@ -150,7 +150,7 @@ function daysBetween(start: string, end: string): string[] {
 function ticketWindow(period: string, anchor: string): { start: string; end: string } {
   const [y, m, d] = anchor.split('-').map(Number)
   if (period !== 'weekly') return { start: anchor, end: anchor }
-  const date = new Date(Date.UTC(y, m - 1, d, 12))
+  const date = new Date(Date.UTC(y!, m! - 1, d!, 12))
   date.setUTCDate(date.getUTCDate() - date.getUTCDay())
   const start = date.toISOString().slice(0, 10)
   date.setUTCDate(date.getUTCDate() + 6)
@@ -443,7 +443,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           const [timeTypeId, day] = k.split('|')
           const h = Number(v)
           if (!Number.isFinite(h) || h <= 0) continue
-          ;(byType[timeTypeId] ??= {})[day] = h
+          ;(byType[timeTypeId!] ??= {})[day!] = h
         }
         return Object.entries(byType).map(([timeTypeId, hours]) => ({
           employeePartyId: r.employeePartyId,

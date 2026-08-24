@@ -33,7 +33,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     orgId: gate.user.orgId,
     fileId: id,
     filename: file.name || 'file',
-    contentType: file.type.split(';')[0].trim().toLowerCase(),
+    contentType: file.type.split(';')[0]!.trim().toLowerCase(),
     bytes,
     updatedBy: gate.user.id,
   })

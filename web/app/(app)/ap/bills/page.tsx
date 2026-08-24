@@ -184,7 +184,7 @@ export default async function ApBills({
         sp={sp}
         drawer={drawer}
         emptyAction={newButton}
-        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]} openHref={`/ap/bills?doc=${row.id}`} />}
+        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]!} openHref={`/ap/bills?doc=${row.id}`} />}
       />
     </ListPageLayout>
   )

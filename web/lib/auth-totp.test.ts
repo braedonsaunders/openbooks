@@ -34,8 +34,8 @@ test("recovery codes are normalized without reducing entropy", () => {
   const codes = generateRecoveryCodes();
   assert.equal(codes.length, 10);
   assert.equal(new Set(codes).size, 10);
-  assert.match(codes[0], /^[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}$/);
-  assert.equal(normalizeRecoveryCode(codes[0].toLowerCase()), codes[0].replaceAll("-", ""));
+  assert.match(codes[0]!, /^[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}$/);
+  assert.equal(normalizeRecoveryCode(codes[0]!.toLowerCase()), codes[0]!.replaceAll("-", ""));
 });
 
 test("recovery codes use salted hashes independent of the session signing key", () => {

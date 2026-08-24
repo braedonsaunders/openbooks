@@ -141,7 +141,7 @@ export function SetupWizard(props: {
     [toggles.payroll],
   )
 
-  const step = steps[stepIdx]
+  const step = steps[stepIdx]!
 
   // When an industry is selected, prefill the toggles from its feature preset
   const selectedIndustry = useMemo(

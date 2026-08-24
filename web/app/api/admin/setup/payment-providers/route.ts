@@ -135,7 +135,7 @@ export async function POST(req: Request) {
       `));
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'payment_surcharge_rules', ${ins.rows[0].id}, 'insert', ${JSON.stringify({ after: values })}::jsonb, ${gate.user.id})
+        values (${orgId}, 'payment_surcharge_rules', ${ins.rows[0]!.id}, 'insert', ${JSON.stringify({ after: values })}::jsonb, ${gate.user.id})
       `);
     }
     return NextResponse.json({ ok: true });

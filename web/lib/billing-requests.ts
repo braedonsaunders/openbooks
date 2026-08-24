@@ -160,7 +160,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
       values (
         ${orgId}, ${input.projectId}, ${requestNumber}, ${input.invoiceType ?? 'progress'}, ${basis},
         ${drawAmount}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
-        ${input.invoiceDescription ?? null}, ${input.customerPo ?? proj.rows[0].customer_po_number},
+        ${input.invoiceDescription ?? null}, ${input.customerPo ?? proj.rows[0]!.customer_po_number},
         ${projectType.billingMethod}, ${backupRequired}, ${backupType},
         ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
         ${input.notes ?? null}, 'open', ${userId}, ${userId})

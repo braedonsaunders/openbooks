@@ -42,8 +42,8 @@ test('boxes without a layout fall into a single untitled section', () => {
   const s = taxReturnToStructured(gstr())
   // No facsimile layout is registered for IN_GSTR3B → one untitled section.
   assert.equal(s.sections.length, 1)
-  assert.equal(s.sections[0].title, null)
-  assert.equal(s.sections[0].boxes.length, 5)
+  assert.equal(s.sections[0]!.title, null)
+  assert.equal(s.sections[0]!.boxes.length, 5)
   assert.equal(s.basis, 'working-copy')
   assert.match(s.notice ?? '', /GST portal/)
 })

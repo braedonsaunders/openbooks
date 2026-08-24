@@ -28,7 +28,7 @@ export function buildRunResult(
 }
 
 /** Booleans render as text in spreadsheets; numbers/strings pass through. */
-function cellForSheet(v: CellValue): string | number | null {
+function cellForSheet(v: CellValue | undefined): string | number | null {
   if (v === null || v === undefined) return null
   if (typeof v === 'boolean') return v ? 'true' : 'false'
   return v

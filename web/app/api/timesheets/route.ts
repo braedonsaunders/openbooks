@@ -157,7 +157,7 @@ async function save(req: Request) {
         return bad('Invalid project, item, time type, or department')
       }
       toPersist.push({
-        workedOn: days[i],
+        workedOn: days[i]!,
         hours: h,
         projectId: ownedRefs.projectId,
         itemId: ownedRefs.itemId,

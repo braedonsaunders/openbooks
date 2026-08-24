@@ -185,7 +185,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
       },
       series: [{
         type: 'scatter' as const,
-        symbolSize: (d: number[]) => Math.max(8, Math.min(25, 8 + (d[2] / maxSpend) * 17)),
+        symbolSize: (d: number[]) => Math.max(8, Math.min(25, 8 + (d[2]! / maxSpend) * 17)),
         data: accounts.map((a) => [a.velocity, a.acceleration, a.totalSpend, a.name]),
         itemStyle: {
           color: (p: any) => {

@@ -26,14 +26,14 @@ import { AccountRegisterLink } from '../../../components/account-register-link'
 /** Last descendant index of row `i` (section → its account rows; parent account
  *  → its deeper account rows). Returns `i` when the row has no children. */
 function descendantEnd(lines: StatementView['lines'], i: number): number {
-  const row = lines[i]
+  const row = lines[i]!
   let j = i + 1
   if (row.kind === 'section') {
-    while (j < lines.length && lines[j].kind === 'account') j++
+    while (j < lines.length && lines[j]!.kind === 'account') j++
     return j - 1
   }
   if (row.kind === 'account') {
-    while (j < lines.length && lines[j].kind === 'account' && lines[j].depth > row.depth) j++
+    while (j < lines.length && lines[j]!.kind === 'account' && lines[j]!.depth > row.depth) j++
     return j - 1
   }
   return i

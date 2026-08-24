@@ -87,7 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const country = optionalCountry(body.country)
       if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
       const row = await db.transaction(async (tx) => {
-        const [created] = await tx.insert(schema.paymentFormats).values({
+        const createdFormat = (await tx.insert(schema.paymentFormats).values({
           orgId: gate.user.orgId,
           code: body.code.trim().toUpperCase(),
           name: body.name.trim(),
@@ -102,10 +102,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
           isActive: body.isActive !== false,
           createdBy: gate.user.id,
           updatedBy: gate.user.id,
-        }).returning()
-        await auditConfigChange(tx, gate.user.orgId, 'payment_formats', created.id, 'insert',
-          { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
-        return created
+        }).returning())[0]!
+        await auditConfigChange(tx, gate.user.orgId, 'payment_formats', createdFormat.id, 'insert',
+          { after: createdFormat }, gate.user.id, req.headers.get('X-Request-Id'))
+        return createdFormat
       })
       return NextResponse.json({ id: row.id }, { status: 201 })
     }
@@ -152,7 +152,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
       const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
       if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       const row = await db.transaction(async (tx) => {
-        const [created] = await tx.insert(schema.paymentSchedules).values({
+        const created = (await tx.insert(schema.paymentSchedules).values({
           orgId: gate.user.orgId,
           name: body.name.trim(),
           paymentBankProfileId: body.paymentBankProfileId,
@@ -164,7 +164,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
           isActive: body.isActive !== false,
           createdBy: gate.user.id,
           updatedBy: gate.user.id,
-        }).returning()
+        }).returning())[0]!
         await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', created.id, 'insert',
           { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
         return created
@@ -181,7 +181,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
     `))
     if (!mandateBank.rows[0]) return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
     const row = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(schema.paymentMandates).values({
+      const created = (await tx.insert(schema.paymentMandates).values({
         orgId: gate.user.orgId,
         partyId: body.partyId,
         partyBankAccountId: body.partyBankAccountId,
@@ -194,7 +194,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         proofFileId: isUuid(body.proofFileId) ? body.proofFileId : null,
         createdBy: gate.user.id,
         updatedBy: gate.user.id,
-      }).returning()
+      }).returning())[0]!
       await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', created.id, 'insert',
         { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
       return created

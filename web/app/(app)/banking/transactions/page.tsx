@@ -145,7 +145,7 @@ export default async function BankingTransactions({
           <DocumentRowActions
             id={String(row.id)}
             status={String(row.status)}
-            config={DOC_KINDS[row.kind]}
+            config={DOC_KINDS[row.kind]!}
             openHref={buildListDrawerHref(basePath, sp, 'doc', String(row.id))}
           />
         )}

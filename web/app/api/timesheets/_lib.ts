@@ -34,7 +34,7 @@ function toIso(d: Date): string {
 /** Parse an ISO date as a UTC-noon Date (noon avoids any TZ day-shift). */
 function parseIso(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  return new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0))
 }
 
 /**
@@ -199,7 +199,7 @@ export async function loadWeek(
   const ownedEmployee = await pinTimesheetEmployee(orgId, employeeId)
   if (!ownedEmployee) throw new Error('employee not found')
   const days = weekWindow(sundayIso)
-  const week = days[0]
+  const week = days[0]!
   // The header owns the week's lifecycle. It is created on demand so a week
   // that has never been touched still reads consistently.
   const header = await ensureTimesheetWeek(orgId, ownedEmployee, week)
@@ -277,7 +277,7 @@ export async function loadWeek(
     }
     const idx = dayIndex.get(r.worked_on)
     if (idx != null) {
-      row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx], String(r.hours))
+      row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx]!, String(r.hours))
     }
     row.entryStatuses.push(r.status)
     if (r.status === 'approved' || r.status === 'submitted' || r.amends_entry_id != null) {
@@ -352,12 +352,12 @@ export async function ensureTimesheetWeek(
     on conflict (org_id, employee_party_id, week_start) do nothing
     returning id, status, rejection_reason
   `))
-  const row = inserted.rows[0]
+  const row = (inserted.rows[0]
     ?? ((await db.execute<{ id: string; status: WeekStatus; rejection_reason: string | null }>(sql`
       select id, status, rejection_reason from timesheet_weeks
        where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
          and week_start = ${week}
-    `))).rows[0]
+    `))).rows[0])!
   return { id: row.id, status: row.status, rejectionReason: row.rejection_reason }
 }
 

@@ -181,7 +181,7 @@ export default async function ArInvoices({
         sp={sp}
         drawer={drawer}
         emptyAction={newButton}
-        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]} openHref={`/ar/invoices?doc=${row.id}`} />}
+        renderRowActions={(row) => <DocumentRowActions id={row.id} status={row.status} config={DOC_KINDS[row.kind]!} openHref={`/ar/invoices?doc=${row.id}`} />}
       />
     </ListPageLayout>
   )
