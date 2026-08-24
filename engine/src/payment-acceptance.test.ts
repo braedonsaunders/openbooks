@@ -6,6 +6,7 @@ import {
   CLAIMABLE_FROM,
   computeSurcharge,
   normalizeAcceptanceProviderSettings,
+  PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
   resolveAcceptanceProviderApiBase,
   testAcceptanceConnection,
   toMinorUnits,
@@ -116,6 +117,48 @@ test("stripe webhook: replay window accepts provider retries within 24h, rejects
   );
 });
 
+test("stripe webhook: signature-valid un-normalizable amounts are quarantined like unparseable bodies", () => {
+  const secret = "whsec_stripe_malformed";
+  const body = JSON.stringify({
+    id: "evt_malformed",
+    type: "checkout.session.completed",
+    data: { object: { id: "cs_bad", client_reference_id: "tok_bad", amount_total: "103.5", currency: "cad" } },
+  });
+  const captured = captureConsoleError();
+  let delivery;
+  try {
+    delivery = ACCEPTANCE_ADAPTERS.stripe.verifyWebhookDelivery(
+      { "stripe-signature": stripeSignature(secret, body) },
+      body,
+      { webhookSecret: secret },
+    );
+  } finally {
+    captured.restore();
+  }
+  assert.equal(delivery.signatureValid, true, "malformed content must not downgrade authentication");
+  assert.deepEqual(delivery.events, [], "an un-normalizable authenticated event must not settle or crash");
+
+  const emitted = captured.logs
+    .map((line) => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
+  assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`);
+  assert.deepEqual(
+    {
+      provider: emitted[0]!.provider,
+      externalRef: emitted[0]!.externalRef,
+      itemTypeOrCode: emitted[0]!.itemTypeOrCode,
+    },
+    { provider: "stripe", externalRef: "cs_bad", itemTypeOrCode: "checkout.session.completed" },
+  );
+  assert.match(String(emitted[0]!.error), /103\.5/);
+});
+
 test("stripe webhook: unpaid async completion stays in flight until the async terminal events", () => {
   const secret = "whsec_async";
   const session = { id: "cs_async_1", client_reference_id: "tok_async", amount_total: 10300, payment_intent: "pi_async_1" };
@@ -176,7 +219,7 @@ test("webhook claims: only pre-terminal states are claimable so redeliveries ded
 test("adyen webhook: per-item HMAC verified", () => {
   const keyBytes = Buffer.alloc(32, 7);
   const hmacKey = keyBytes.toString("base64");
-  const item = {
+  const { body } = signedAdyenDelivery(keyBytes, [{
     pspReference: "PSP-1",
     originalReference: "",
     merchantAccountCode: "TestMerchant",
@@ -184,20 +227,7 @@ test("adyen webhook: per-item HMAC verified", () => {
     amount: { value: 10300, currency: "CAD" },
     eventCode: "AUTHORISATION",
     success: "true",
-    additionalData: {} as Record<string, string>,
-  };
-  const message = [
-    item.pspReference,
-    item.originalReference,
-    item.merchantAccountCode,
-    item.merchantReference,
-    item.amount.value,
-    item.amount.currency,
-    item.eventCode,
-    item.success,
-  ].join(":");
-  item.additionalData["metadata.hmacSignature"] = createHmac("sha256", keyBytes).update(message, "utf8").digest("base64");
-  const body = JSON.stringify({ notificationItems: [{ NotificationRequestItem: item }] });
+  }]);
 
   const ok = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: hmacKey });
   assert.ok(ok);
@@ -208,6 +238,134 @@ test("adyen webhook: per-item HMAC verified", () => {
   const tampered = JSON.parse(body);
   tampered.notificationItems[0].NotificationRequestItem.amount.value = 99900;
   assert.equal(ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, JSON.stringify(tampered), { webhookSecret: hmacKey }), null);
+});
+
+/** Build an Adyen delivery whose every item carries its own valid HMAC. */
+function signedAdyenDelivery(
+  keyBytes: Buffer,
+  items: Record<string, any>[],
+): { body: string } {
+  for (const item of items) {
+    const message = [
+      item.pspReference ?? "",
+      item.originalReference ?? "",
+      item.merchantAccountCode ?? "",
+      item.merchantReference ?? "",
+      item.amount?.value ?? "",
+      item.amount?.currency ?? "",
+      item.eventCode ?? "",
+      item.success ?? "",
+    ].join(":");
+    item.additionalData = {
+      ...item.additionalData,
+      "metadata.hmacSignature": createHmac("sha256", keyBytes).update(message, "utf8").digest("base64"),
+    };
+  }
+  return { body: JSON.stringify({ notificationItems: items.map((item) => ({ NotificationRequestItem: item })) }) };
+}
+
+function captureConsoleError(): { logs: string[]; restore: () => void } {
+  const originalConsoleError = console.error;
+  const logs: string[] = [];
+  console.error = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+  return { logs, restore: () => { console.error = originalConsoleError; } };
+}
+
+test("adyen webhook: a signature-valid malformed item is isolated without starving its signed siblings", () => {
+  const hmacKey = Buffer.alloc(32, 11).toString("base64");
+  // The HMAC is valid — the signature covers the fractional value — so this
+  // delivery authenticates, yet exact minor-unit normalization cannot parse it.
+  const malformed = {
+    pspReference: "PSP-BAD",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_bad",
+    amount: { value: "103.5", currency: "CAD" },
+    eventCode: "AUTHORISATION",
+    success: "true",
+  };
+  const sibling = {
+    pspReference: "PSP-GOOD",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_good",
+    amount: { value: 10300, currency: "CAD" },
+    eventCode: "AUTHORISATION",
+    success: "true",
+  };
+  const { body } = signedAdyenDelivery(Buffer.alloc(32, 11), [malformed, sibling]);
+
+  const captured = captureConsoleError();
+  let delivery;
+  try {
+    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+  } finally {
+    captured.restore();
+  }
+
+  assert.equal(delivery.signatureValid, true, "malformed content must not downgrade authentication");
+  assert.deepEqual(
+    delivery.events.map((event) => [event.externalRef, event.status, event.paidAmount]),
+    [["PSP-GOOD", "succeeded", "103.0000"]],
+    "the malformed item is quarantined while its later signed sibling still normalizes",
+  );
+
+  const emitted = captured.logs
+    .map((line) => {
+      try {
+        return JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
+  assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`);
+  assert.deepEqual(
+    {
+      provider: emitted[0]!.provider,
+      externalRef: emitted[0]!.externalRef,
+      itemTypeOrCode: emitted[0]!.itemTypeOrCode,
+    },
+    { provider: "adyen", externalRef: "PSP-BAD", itemTypeOrCode: "AUTHORISATION" },
+  );
+  assert.match(String(emitted[0]!.error), /103\.5/);
+  assert.match(String(emitted[0]!.at), /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("adyen webhook: a delivery whose only actionable item is malformed stays authenticated and unhandled", () => {
+  const hmacKey = Buffer.alloc(32, 13).toString("base64");
+  // Fractional JSON *number* hits BigInt's RangeError branch (the sibling
+  // test above covers the string/SyntaxError branch).
+  const { body } = signedAdyenDelivery(Buffer.alloc(32, 13), [{
+    pspReference: "PSP-NUMBER",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_number",
+    amount: { value: 99.95, currency: "USD" },
+    eventCode: "AUTHORISATION",
+    success: "true",
+  }]);
+
+  const captured = captureConsoleError();
+  let delivery;
+  try {
+    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+  } finally {
+    captured.restore();
+  }
+  assert.equal(delivery.signatureValid, true);
+  assert.deepEqual(delivery.events, [], "an un-normalizable authenticated item must not settle or crash");
+
+  const capturedSecond = captureConsoleError();
+  let firstEvent;
+  try {
+    firstEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: hmacKey });
+  } finally {
+    capturedSecond.restore();
+  }
+  assert.equal(firstEvent, null);
 });
 
 test("gocardless webhook: raw-body HMAC verified", () => {

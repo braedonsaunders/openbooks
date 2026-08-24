@@ -9,6 +9,7 @@ import {
   createPaymentLink,
   handleProviderWebhook,
   PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT,
+  PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
   PaymentAcceptanceError,
   PaymentWebhookBatchError,
   publicPaymentPage,
@@ -255,6 +256,116 @@ test("a poison webhook event rolls back without starving its later batch sibling
       },
     );
     assert.match(String(emitted[0]!.at), /^\d{4}-\d{2}-\d{2}T/);
+  } finally {
+    console.error = originalConsoleError;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * A signature-valid Adyen item whose fields cannot be normalized exactly is
+ * quarantined during verification instead of crashing handleProviderWebhook:
+ * the delivery stays authenticated, its signed sibling still reaches event
+ * processing, and the quarantine leaves structured evidence behind.
+ */
+test("an authenticated adyen delivery quarantines an un-normalizable item and processes its sibling", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const originalConsoleError = console.error;
+  const malformedLogs: string[] = [];
+  try {
+    const userId = await createScratchUser(org.orgId, "Adyen Quarantine Tester", "admin");
+    const webhookSecret = Buffer.alloc(32, 17).toString("base64");
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled,
+         default_bank_account_id, secrets, created_by, updated_by)
+      values (${org.orgId}, 'adyen', 'Adyen', true, true,
+              ${org.accounts.bank}, ${sealJson({ webhookSecret })}, ${userId}, ${userId})
+    `);
+
+    const keyBytes = Buffer.from(webhookSecret, "base64");
+    const signItem = (item: Record<string, any>) => {
+      const message = [
+        item.pspReference ?? "",
+        item.originalReference ?? "",
+        item.merchantAccountCode ?? "",
+        item.merchantReference ?? "",
+        item.amount?.value ?? "",
+        item.amount?.currency ?? "",
+        item.eventCode ?? "",
+        item.success ?? "",
+      ].join(":");
+      item.additionalData = {
+        ...item.additionalData,
+        "metadata.hmacSignature": createHmac("sha256", keyBytes).update(message, "utf8").digest("base64"),
+      };
+    };
+    const malformed = {
+      pspReference: "PSP-INT-BAD",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_int_bad",
+      amount: { value: "103.5", currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    };
+    const sibling = {
+      pspReference: "PSP-INT-GOOD",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_int_good",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    };
+    signItem(malformed);
+    signItem(sibling);
+    const body = JSON.stringify({
+      notificationItems: [
+        { NotificationRequestItem: malformed },
+        { NotificationRequestItem: sibling },
+      ],
+    });
+
+    console.error = (...args: unknown[]) => {
+      malformedLogs.push(args.map(String).join(" "));
+    };
+    let result;
+    try {
+      result = await handleProviderWebhook("adyen", {}, body);
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // The batch resolves — no rejection — and only the normalizable sibling
+    // reaches event processing (no attempts exist, so it resolves unknown).
+    assert.deepEqual(result, {
+      signatureValid: true,
+      orgId: org.orgId,
+      status: "unknown_attempt",
+      eventResults: [
+        { externalRef: "PSP-INT-GOOD", orgId: org.orgId, status: "unknown_attempt" },
+      ],
+    });
+
+    const emitted = malformedLogs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
+    assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(malformedLogs)}`);
+    assert.deepEqual(
+      {
+        provider: emitted[0]!.provider,
+        externalRef: emitted[0]!.externalRef,
+        itemTypeOrCode: emitted[0]!.itemTypeOrCode,
+      },
+      { provider: "adyen", externalRef: "PSP-INT-BAD", itemTypeOrCode: "AUTHORISATION" },
+    );
   } finally {
     console.error = originalConsoleError;
     await dropScratchOrg(org.orgId);

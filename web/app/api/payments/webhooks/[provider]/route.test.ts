@@ -3,7 +3,10 @@ import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env } from "../../../../../../engine/src/db.ts";
-import { ACCEPTANCE_ADAPTERS } from "../../../../../../engine/src/payment-acceptance.ts";
+import {
+  ACCEPTANCE_ADAPTERS,
+  PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
+} from "../../../../../../engine/src/payment-acceptance.ts";
 import { sealJson } from "../../../../../../engine/src/secrets.ts";
 import {
   createScratchOrg,
@@ -71,6 +74,104 @@ test("GoCardless webhook verification distinguishes invalid signatures and prese
   );
   assert.equal(invalid.signatureValid, false);
   assert.deepEqual(invalid.events, []);
+});
+
+test("the route acknowledges a signed adyen delivery after isolating its malformed item", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const originalConsoleError = console.error;
+  const malformedLogs: string[] = [];
+  try {
+    const userId = await createScratchUser(org.orgId, "Adyen Route Tester", "admin");
+    const webhookSecret = Buffer.alloc(32, 19).toString("base64");
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled,
+         default_bank_account_id, secrets, created_by, updated_by)
+      values (${org.orgId}, 'adyen', 'Adyen', true, true,
+              ${org.accounts.bank}, ${sealJson({ webhookSecret })}, ${userId}, ${userId})
+    `);
+
+    const keyBytes = Buffer.from(webhookSecret, "base64");
+    const signItem = (item: Record<string, any>) => {
+      const message = [
+        item.pspReference ?? "",
+        item.originalReference ?? "",
+        item.merchantAccountCode ?? "",
+        item.merchantReference ?? "",
+        item.amount?.value ?? "",
+        item.amount?.currency ?? "",
+        item.eventCode ?? "",
+        item.success ?? "",
+      ].join(":");
+      item.additionalData = {
+        ...item.additionalData,
+        "metadata.hmacSignature": createHmac("sha256", keyBytes).update(message, "utf8").digest("base64"),
+      };
+    };
+    const malformed = {
+      pspReference: "PSP-ROUTE-BAD",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_route_bad",
+      amount: { value: "103.5", currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    };
+    const sibling = {
+      pspReference: "PSP-ROUTE-GOOD",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_route_good",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    };
+    signItem(malformed);
+    signItem(sibling);
+    const body = JSON.stringify({
+      notificationItems: [
+        { NotificationRequestItem: malformed },
+        { NotificationRequestItem: sibling },
+      ],
+    });
+
+    console.error = (...args: unknown[]) => {
+      malformedLogs.push(args.map(String).join(" "));
+    };
+    let response;
+    try {
+      response = await POST(
+        new Request("http://localhost/api/payments/webhooks/adyen", { method: "POST", body }),
+        { params: Promise.resolve({ provider: "adyen" }) },
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Isolation keeps the boundary a structured acknowledgement — never an
+    // unhandled crash — and the quarantined item is absent from the response.
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      received: true,
+      status: "unknown_attempt",
+      events: [{ externalRef: "PSP-ROUTE-GOOD", status: "unknown_attempt" }],
+    });
+
+    const emitted = malformedLogs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
+    assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(malformedLogs)}`);
+    assert.equal(emitted[0]!.externalRef, "PSP-ROUTE-BAD");
+  } finally {
+    console.error = originalConsoleError;
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 test("a valid webhook containing only unhandled events remains authenticated", () => {
