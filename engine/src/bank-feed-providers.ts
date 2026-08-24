@@ -182,10 +182,23 @@ const PLAID_API_BASES = {
 
 /** Resolve only Plaid's published API environments. Credential data must never
  * become part of an outbound hostname: besides misconfiguration, values with a
- * slash can turn string interpolation into a request to an arbitrary host. */
-export function plaidApiBase(environment?: string): string {
-  const normalized = environment?.trim().toLowerCase() || "production";
+ * slash can turn string interpolation into a request to an arbitrary host.
+ * Two independent fences: the name must strictly equal a known environment,
+ * and the lookup must hit an own key of the base table — inherited prototype
+ * names ("toString", "constructor") or polluted Object.prototype entries once
+ * resolved as truthy bases here. Non-string credential values (JSON payloads
+ * are untrusted) fail closed instead of reaching String methods. */
+export function plaidApiBase(environment?: unknown): string {
+  const normalized =
+    environment === undefined
+      ? "production"
+      : typeof environment === "string"
+        ? environment.trim().toLowerCase() || "production"
+        : "";
   if (normalized !== "production" && normalized !== "sandbox") {
+    throw new FeedError("Plaid environment must be production or sandbox");
+  }
+  if (!Object.hasOwn(PLAID_API_BASES, normalized)) {
     throw new FeedError("Plaid environment must be production or sandbox");
   }
   return PLAID_API_BASES[normalized];
