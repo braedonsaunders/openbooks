@@ -2,13 +2,23 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
+import { DOC_KINDS } from '../document-kinds.ts'
+import type { DataResource } from './resource-core.ts'
 
 interface ImportRouteState {
-  writes: Record<string, unknown>[][]
+  resource: DataResource | null
+  resourceWriteCalls: number
+  rootInsertCalls: number
+  transactionCalls: number
 }
 
 const stateKey = Symbol.for('openbooks.data-import-route-test')
-const importState: ImportRouteState = { writes: [] }
+const importState: ImportRouteState = {
+  resource: null,
+  resourceWriteCalls: 0,
+  rootInsertCalls: 0,
+  transactionCalls: 0,
+}
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
 const mockSources = new Map<string, string>([
@@ -32,10 +42,22 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export const schema = {}
+      const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
+      export const schema = {
+        documents: Symbol.for('openbooks.data-import-route-test.documents'),
+        documentLines: Symbol.for('openbooks.data-import-route-test.document-lines'),
+      }
       export const db = {
         async execute() {
-          throw new Error('database execution is not expected for a rejected preview')
+          return { rows: [{ base_currency: 'CAD' }] }
+        },
+        insert() {
+          state.rootInsertCalls++
+          throw new Error('root inserts are not expected during a preview')
+        },
+        async transaction() {
+          state.transactionCalls++
+          throw new Error('transactions are not expected during a preview')
         },
       }
     `,
@@ -56,37 +78,62 @@ const mockSources = new Map<string, string>([
     'mock:resources',
     `
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
-      const resource = {
-        descriptor: {
-          key: 'txn:card_charge',
-          label: 'Card charge',
-          supportsImport: true,
-          writePermission: 'transactions.card_charge.create',
-          canPost: false,
-        },
-        async fields() {
-          return []
-        },
-        async write(rows) {
-          state.writes.push(rows)
-          return { created: rows.length, updated: 0, failed: 0, errors: [] }
-        },
-      }
-
       export async function getResource() {
-        return resource
+        if (!state.resource) throw new Error('transaction resource was not installed')
+        return state.resource
       }
     `,
   ],
   [
     'mock:parse',
     `
+      export const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
+
       export async function parseImportFile() {
         throw new Error('route parse mode is not expected in this preview test')
       }
 
       export function guessMapping() {
         return {}
+      }
+    `,
+  ],
+  [
+    'mock:posting',
+    `
+      export async function postDocument() {
+        throw new Error('postDocument is not expected during a preview')
+      }
+    `,
+  ],
+  [
+    'mock:documents',
+    `
+      export async function controlDeps() {
+        throw new Error('controlDeps is not expected during a preview')
+      }
+
+      export async function nextDocumentNumber() {
+        throw new Error('nextDocumentNumber is not expected during a preview')
+      }
+    `,
+  ],
+  [
+    'mock:resource-core',
+    `
+      export const MAX_EXPORT_ROWS = 50_000
+
+      export async function orgFeatureEnabled() {
+        return false
+      }
+
+      export class RefResolver {
+        async resolveId(target, human) {
+          if (target.resource === 'accounts' && String(human) === '5000') {
+            return 'account-1'
+          }
+          return null
+        }
       }
     `,
   ],
@@ -101,6 +148,9 @@ const hooks = registerHooks({
       ['@/lib/api/json', 'mock:json'],
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/db.ts', 'mock:db'],
+      ['@openbooks/engine/src/posting.ts', 'mock:posting'],
+      ['../documents', 'mock:documents'],
+      ['./resource-core', 'mock:resource-core'],
       ['../../../../lib/authz', 'mock:authz'],
       ['../../../../lib/data-io/resources', 'mock:resources'],
       ['../../../../lib/data-io/parse', 'mock:parse'],
@@ -117,11 +167,29 @@ const hooks = registerHooks({
   },
 })
 
+const transactionUrl = './transaction-resources.ts?generic-import-route-test'
+const { transactionResource } = await import(transactionUrl) as typeof import('./transaction-resources.ts')
+const cardCharge = DOC_KINDS.card_charge
+assert.ok(cardCharge)
+const actualResource = transactionResource(cardCharge, 'org-1')
+importState.resource = {
+  ...actualResource,
+  async write(rows, mode, ctx) {
+    importState.resourceWriteCalls++
+    return actualResource.write(rows, mode, ctx)
+  },
+}
 const routeUrl = '../../app/api/data/import/route.ts?duplicate-mapping-test'
 const { POST } = await import(routeUrl) as typeof import('../../app/api/data/import/route.ts')
 const parseUrl = './parse.ts?duplicate-mapping-route-test'
 const { CELL_PROVENANCE_KEY, parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
+
+function resetImportState(): void {
+  importState.resourceWriteCalls = 0
+  importState.rootInsertCalls = 0
+  importState.transactionCalls = 0
+}
 
 async function parsedFormulaRow(kind: 'amount' | 'lines'): Promise<Record<string, unknown>> {
   const workbook = new ExcelJS.Workbook()
@@ -170,7 +238,7 @@ async function preview(
 }
 
 test('route rejects duplicate amount mappings before a formula value can outrun its provenance', async () => {
-  importState.writes.length = 0
+  resetImportState()
   const row = await parsedFormulaRow('amount')
   assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_amount: 'formula' })
 
@@ -187,11 +255,13 @@ test('route rejects duplicate amount mappings before a formula value can outrun 
     field: 'amount',
     sources: ['literal_amount', 'formula_amount'],
   })
-  assert.equal(importState.writes.length, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
 })
 
 test('route rejects duplicate nested-lines mappings before a formula value can outrun its provenance', async () => {
-  importState.writes.length = 0
+  resetImportState()
   const row = await parsedFormulaRow('lines')
   assert.deepEqual(row[CELL_PROVENANCE_KEY], { formula_lines: 'formula' })
 
@@ -207,5 +277,86 @@ test('route rejects duplicate nested-lines mappings before a formula value can o
     field: 'lines',
     sources: ['literal_lines', 'formula_lines'],
   })
-  assert.equal(importState.writes.length, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
+})
+
+test('route carries renamed amount provenance into transaction validation before writes', async () => {
+  resetImportState()
+  const row = await parsedFormulaRow('amount')
+
+  const response = await preview([row], {
+    documentDate: 'documentDate',
+    account: 'account',
+    formula_amount: 'amount',
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    outcome: {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+        },
+      ],
+    },
+    total: 1,
+  })
+  assert.equal(importState.resourceWriteCalls, 1)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
+})
+
+test('route binds provenance to the selected amount source', async () => {
+  resetImportState()
+  const row = await parsedFormulaRow('amount')
+
+  const response = await preview([row], {
+    documentDate: 'documentDate',
+    account: 'account',
+    literal_amount: 'amount',
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    outcome: { created: 1, updated: 0, failed: 0, errors: [] },
+    total: 1,
+  })
+  assert.equal(importState.resourceWriteCalls, 1)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
+})
+
+test('route carries renamed nested-lines provenance into transaction validation before writes', async () => {
+  resetImportState()
+  const row = await parsedFormulaRow('lines')
+
+  const response = await preview([row], {
+    documentDate: 'documentDate',
+    formula_lines: 'lines',
+  })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    outcome: {
+      created: 0,
+      updated: 0,
+      failed: 1,
+      errors: [
+        {
+          row: 1,
+          message: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+        },
+      ],
+    },
+    total: 1,
+  })
+  assert.equal(importState.resourceWriteCalls, 1)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.equal(importState.transactionCalls, 0)
 })
