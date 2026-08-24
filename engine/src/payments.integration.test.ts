@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypass, withOrgContext } from "./db.ts";
 import {
+  cancelPaymentRun,
   createPaymentDocument,
+  createPaymentRun,
+  PaymentError,
   postPaymentWithApplications,
   reversePaymentForReturn,
   updateDraftPayment,
@@ -13,6 +16,19 @@ import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+/** The storage-enforced duplicate-live-reservation violation, anywhere in a cause chain. */
+function isLiveSourceConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (candidate.code === "23505" && candidate.constraint === "payment_run_items_live_source") {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
 
 test("cross-currency payment, dual-amount application, realized FX, evidence, and reversal are atomic", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -136,6 +152,122 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
       reversals: 2,
       unapplied: 1,
       document_status: "voided",
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an open item can be reserved by only one live payment run at a time", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await withBypass(async () => {
+      const actorId = await createScratchUser(org.orgId, "Run Operator", "accountant");
+      const formatId = randomUUID();
+      const profileId = randomUUID();
+      const billId = randomUUID();
+
+      await db.execute(sql`
+        insert into payment_formats
+          (id, org_id, code, name, rail, direction, country, currency, created_by, updated_by)
+        values
+          (${formatId}, ${org.orgId}, 'CPA005-RESERVE', 'CPA-005 credit reservation test',
+           'cpa005_credit', 'credit', 'CA', 'CAD', ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into payment_bank_profiles
+          (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
+           currency, country, created_by, updated_by)
+        values
+          (${profileId}, ${org.orgId}, 'Reservation run profile', ${org.accounts.bank},
+           ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${billId}, ${org.orgId}, 'vendor_bill', 'approved', 'BILL-RESERVE-1',
+                ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
+                '125', '0', '125', ${actorId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount)
+        values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
+                '125', '0')`);
+      await postDocument(billId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+
+      return { actorId, profileId, billId };
+    });
+
+    await withOrgContext(org.orgId, async () => {
+      const openLineId = (await db.execute<{ id: string }>(sql`
+        select jl.id as id
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where je.source_document_id = ${options.billId}
+           and je.status = 'posted' and jl.is_open_item and jl.amount < 0
+      `)).rows[0]!.id;
+
+      const createRun = () =>
+        createPaymentRun({
+          orgId: org.orgId,
+          createdBy: options.actorId,
+          paymentBankProfileId: options.profileId,
+          billDocumentIds: [options.billId],
+          scheduledFor: org.date,
+        });
+      const itemStatuses = (runId: string) =>
+        db.execute<{ status: string; n: number }>(sql`
+          select status, count(*)::int as n
+            from payment_run_items
+           where org_id = ${org.orgId} and payment_run_id = ${runId}
+             and source_open_line_id = ${openLineId}
+           group by status`);
+
+      // The first live run reserves the bill's payable line.
+      const firstRun = await createRun();
+      assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "selected", n: 1 }]);
+
+      // An overlapping selection of the reserved bill is refused while that
+      // run is live.
+      await assert.rejects(createRun, (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /already selected in another live payment run/);
+        return true;
+      });
+
+      // PostgreSQL — not the service-level selection filter — is the final
+      // authority: a writer that skips the filter still cannot double-reserve.
+      const ghostRunId = randomUUID();
+      await db.execute(sql`
+        insert into payment_runs
+          (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
+           method, direction, purpose, currency, status, created_by)
+        values (${ghostRunId}, ${org.orgId}, 'RUN-RESERVE-GHOST', ${org.accounts.bank},
+                ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
+                'CAD', 'draft', ${options.actorId})`);
+      await assert.rejects(
+        db.execute(sql`
+          insert into payment_run_items
+            (org_id, payment_run_id, source_document_id, source_open_line_id, kind,
+             gross_amount, payment_amount, currency, status, created_by)
+          values (${org.orgId}, ${ghostRunId}, ${options.billId}, ${openLineId}, 'bill',
+                  '125', '125', 'CAD', 'selected', ${options.actorId})`),
+        isLiveSourceConflict,
+      );
+
+      // Cancelling the live run releases the reservation through the
+      // lifecycle triggers...
+      await cancelPaymentRun(firstRun.id, org.orgId);
+      assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "excluded", n: 1 }]);
+
+      // ...and only a live (`selected`) item reserves its source line, so a
+      // new run can reserve the released bill immediately while the excluded
+      // history coexists.
+      const secondRun = await createRun();
+      assert.notEqual(secondRun.id, firstRun.id);
+      assert.deepEqual((await itemStatuses(secondRun.id)).rows, [{ status: "selected", n: 1 }]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
