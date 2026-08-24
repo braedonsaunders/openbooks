@@ -94,7 +94,7 @@ export default async function Documents({
       limit: params.perPage,
       offset: (params.page - 1) * params.perPage,
     }),
-    activeFolderId ? getFolderPath(orgId, activeFolderId) : Promise.resolve([]),
+    activeFolderId ? getFolderPath(orgId, viewer, activeFolderId) : Promise.resolve([]),
   ])
   const { folders: childFolderNodes, files, total } = contents
   const localizedTree = tree.map((folder) => ({

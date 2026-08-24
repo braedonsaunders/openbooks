@@ -526,40 +526,64 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
 }
 
 /**
- * Ancestor chain (root → … → the folder itself) for a breadcrumb. Works for any
- * folder, including the per-record leaf folders the sidebar tree excludes, so a
- * deep link into an attachment folder still shows its full path.
+ * Ancestor chain (root → … → the folder itself) for a breadcrumb, filtered to
+ * the caller's read scope: folders hidden by a foreign private boundary are
+ * omitted (a grant re-opens exactly its own subtree), and a chain whose target
+ * itself is hidden comes back empty — the same visibility the tree and lists
+ * enforce, so breadcrumbs can never reveal hidden names or ids.
  */
 export async function getFolderPath(
   orgId: string,
+  viewer: FileViewer,
   folderId: string,
 ): Promise<{ id: string; name: string; systemKind: string | null }[]> {
+  const scope = await resolveReadScope(orgId, viewer)
+  const visible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)
   const r = (await db.execute<{ id: string; name: string; systemKind: string | null }>(sql`
     with recursive chain as (
       select id, name, system_kind, parent_folder_id, 0 as depth
-        from folders where id = ${folderId} and org_id = ${orgId}
+        from folders f
+       where f.id = ${folderId} and f.org_id = ${orgId} and ${visible}
       union all
       select f.id, f.name, f.system_kind, f.parent_folder_id, c.depth + 1
         from folders f join chain c on f.id = c.parent_folder_id and f.org_id = ${orgId}
+       where ${visible}
     )
     select id, name, system_kind as "systemKind" from chain order by depth desc
   `))
   return r.rows
 }
 
+/**
+ * One folder's metadata. Org-scoped always; when a viewer is passed the same
+ * private-folder read scope as the tree/lists applies — a folder hidden behind
+ * a foreign private boundary reads as not found, an inaccessible parent id is
+ * masked to null instead of leaking the hidden ancestor, and childCount counts
+ * only children the viewer could actually open.
+ */
 export async function getFolder(
   orgId: string,
   id: string,
+  viewer?: FileViewer,
 ): Promise<(FolderNode & { ownerId: string | null }) | null> {
+  const scope = viewer ? await resolveReadScope(orgId, viewer) : null
+  const selfVisible = scope ? visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`) : sql`true`
+  const parentVisible = scope
+    ? visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)
+    : sql`true`
+  const childVisible = scope ? visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`) : sql`true`
   const r = (await db.execute<FolderNode & { ownerId: string | null }>(sql`
-    select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
+    select f.id, f.name,
+           case when ${parentVisible} then f.parent_folder_id end as "parentId",
+           f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
            f.record_id as "recordId", f.owner_id as "ownerId",
-           (select count(*) from folders c where c.parent_folder_id = f.id and c.org_id = ${orgId}) as "childCount",
-           (select count(*) from files fi where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
+           (select count(*)::int from folders c
+             where c.parent_folder_id = f.id and c.org_id = ${orgId} and ${childVisible}) as "childCount",
+           (select count(*)::int from files fi where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
       from folders f
-     where f.id = ${id} and f.org_id = ${orgId}
+     where f.id = ${id} and f.org_id = ${orgId} and ${selfVisible}
   `))
   return r.rows[0] ?? null
 }

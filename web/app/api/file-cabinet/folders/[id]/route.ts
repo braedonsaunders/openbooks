@@ -11,17 +11,18 @@ import {
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { recordFileEvent } from '../../../../../lib/file-audit'
-import { requireFolderAccess, requireSession } from '../../lib'
+import { fileViewer, requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
 
-/** Get a single folder. */
+/** Get a single folder. Private-folder visibility applies: a folder hidden
+ *  behind someone else's private boundary reads as not found. */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('documents.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const folder = await getFolder(gate.user.orgId, id)
+  const folder = await getFolder(gate.user.orgId, id, fileViewer(gate))
   if (!folder) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ folder })
 }
