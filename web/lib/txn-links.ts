@@ -1,22 +1,86 @@
-// Where each source-document kind lives, so a report can open a transaction in
-// its REAL native view/edit drawer (with the org's custom form applied) instead
-// of a generic read-only flyout. The module list pages read these params and
-// mount their own document/journal drawer.
+import { DOC_KIND_FEATURE } from './document-kinds'
+import { MODULE_BY_KEY, type NavModule } from './nav/registry'
 
-const DOC_MODULE: Record<string, { path: string; param: string }> = {
-  vendor_bill: { path: '/ap', param: 'doc' },
-  vendor_credit: { path: '/ap', param: 'doc' },
-  customer_invoice: { path: '/ar', param: 'doc' },
-  customer_credit: { path: '/ar', param: 'doc' },
-  card_charge: { path: '/banking/transactions', param: 'doc' },
-  card_refund: { path: '/banking/transactions', param: 'doc' },
-  check: { path: '/banking/transactions', param: 'doc' },
-  deposit: { path: '/banking/transactions', param: 'doc' },
-  transfer: { path: '/banking/transactions', param: 'doc' },
-  vendor_payment: { path: '/payments', param: 'payment' },
-  customer_payment: { path: '/payments', param: 'payment' },
-  expense_report: { path: '/expenses/reports', param: 'expense' },
-  journal: { path: '/journal', param: 'entry' },
+/**
+ * Searchable/posting document kind → stable native module identity. Module
+ * metadata, permission, feature consistency, and record addressing stay in
+ * their established catalogs instead of being copied by each consumer.
+ */
+export const TRANSACTION_MODULE_BY_KIND = Object.freeze({
+  vendor_bill: 'ap-bills',
+  vendor_credit: 'ap-bills',
+  purchase_order: 'purchase-orders',
+  customer_invoice: 'ar-invoices',
+  customer_credit: 'ar-invoices',
+  quote: 'estimates',
+  sales_order: 'sales-orders',
+  card_charge: 'banking-transactions',
+  card_refund: 'banking-transactions',
+  check: 'banking-transactions',
+  deposit: 'banking-transactions',
+  transfer: 'banking-transactions',
+  vendor_payment: 'payments',
+  customer_payment: 'receipts',
+  expense_report: 'expenses',
+  field_ticket: 'field-tickets',
+  journal: 'journal',
+  project_charge: 'projects',
+  pay_run: 'payroll',
+} as const)
+
+export type TransactionKind = keyof typeof TRANSACTION_MODULE_BY_KIND
+
+export const TRANSACTION_KINDS = Object.freeze(
+  Object.keys(TRANSACTION_MODULE_BY_KIND) as TransactionKind[],
+)
+
+export function transactionModule(docKind: string | null | undefined): NavModule | undefined {
+  if (!docKind) return undefined
+  const moduleKey = TRANSACTION_MODULE_BY_KIND[docKind as TransactionKind]
+  return moduleKey ? MODULE_BY_KEY.get(moduleKey) : undefined
+}
+
+/** A module switch that hides navigation/search without disabling the generic
+ * document domain APIs. True API gates remain exclusively in DOC_KIND_FEATURE. */
+export function transactionNavigationOnlyFeature(
+  docKind: string | null | undefined,
+): string | undefined {
+  if (!docKind) return undefined
+  const navigationFeature = transactionModule(docKind)?.featureKey
+  return navigationFeature !== DOC_KIND_FEATURE[docKind] ? navigationFeature : undefined
+}
+
+/**
+ * Validate the joins between the shared kind, feature, and navigation catalogs.
+ * Called at module load so a missing permission or native destination fails
+ * closed before a consumer can expose a record.
+ */
+export function assertTransactionLinkRegistry(
+  modules: ReadonlyMap<string, NavModule> = MODULE_BY_KEY,
+): void {
+  const issues: string[] = []
+  for (const [docKind, moduleKey] of Object.entries(TRANSACTION_MODULE_BY_KIND)) {
+    const module = modules.get(moduleKey)
+    if (!module) {
+      issues.push(`${docKind}: missing navigation module "${moduleKey}"`)
+      continue
+    }
+    if (!module.requiredPermission) issues.push(`${docKind}: module "${moduleKey}" has no permission`)
+    if (!module.recordTarget) issues.push(`${docKind}: module "${moduleKey}" has no record target`)
+    const feature = DOC_KIND_FEATURE[docKind]
+    if (feature && module.featureKey !== feature) {
+      issues.push(
+        `${docKind}: domain feature "${feature}" does not match module "${module.featureKey ?? 'none'}"`,
+      )
+    }
+  }
+  if (issues.length > 0) throw new Error(`invalid transaction link registry:\n${issues.join('\n')}`)
+}
+
+assertTransactionLinkRegistry()
+
+export interface ModuleDrawerContext {
+  projectId?: string | null
 }
 
 /**
@@ -24,10 +88,26 @@ const DOC_MODULE: Record<string, { path: string; param: string }> = {
  * entry has no source document (system-generated GL entries — depreciation,
  * closing, fx revaluation — which only have the read-only ledger flyout).
  */
-export function moduleDrawerHref(docKind: string | null | undefined, docId: string | null | undefined): string | null {
+export function moduleDrawerHref(
+  docKind: string | null | undefined,
+  docId: string | null | undefined,
+  context: ModuleDrawerContext = {},
+): string | null {
   if (!docKind || !docId) return null
-  const m = DOC_MODULE[docKind]
-  return m ? `${m.path}?${m.param}=${docId}` : null
+  const module = transactionModule(docKind)
+  const target = module?.recordTarget
+  if (!module || !target) return null
+  const encodedId = encodeURIComponent(docId)
+  if (target.kind === 'query') return `${module.href}?${target.param}=${encodedId}`
+  if (target.kind === 'nested') return `${module.href}/${target.segment}/${encodedId}`
+  if (!context.projectId) return `${module.href}?projectTab=transactions`
+  const params = new URLSearchParams({
+    project: context.projectId,
+    projectTab: 'transactions',
+    projectTxn: docId,
+    projectTxnKind: docKind,
+  })
+  return `${module.href}?${params}`
 }
 
 /**

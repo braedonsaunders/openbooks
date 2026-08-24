@@ -1,12 +1,17 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { moduleDrawerHref } from './txn-links'
 import type { Authz } from './authz'
 import { can } from './authz'
 import { disabledDocKinds } from './documents'
 import { isFeatureEnabled } from './features'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import {
+  moduleDrawerHref,
+  TRANSACTION_KINDS,
+  transactionNavigationOnlyFeature,
+  transactionModule,
+} from './txn-links'
 
 /**
  * Global search — one query fans out across every primary entity (contacts,
@@ -44,25 +49,18 @@ export interface SearchResponse {
   total: number
 }
 
-// Document kind → { human label, nav icon }. Mirrors txn-links' DOC_MODULE.
-const DOC_META: Record<string, { label: string; icon: string }> = {
-  vendor_bill: { label: 'Bill', icon: 'clipboard' },
-  vendor_credit: { label: 'Vendor Credit', icon: 'clipboard' },
-  customer_invoice: { label: 'Invoice', icon: 'clipboard-check' },
-  customer_credit: { label: 'Credit Memo', icon: 'clipboard-check' },
-  card_charge: { label: 'Card Charge', icon: 'building' },
-  card_refund: { label: 'Card Refund', icon: 'building' },
-  check: { label: 'Check', icon: 'building' },
-  deposit: { label: 'Deposit', icon: 'building' },
-  transfer: { label: 'Transfer', icon: 'building' },
-  vendor_payment: { label: 'Payment', icon: 'check' },
-  customer_payment: { label: 'Customer Payment', icon: 'check' },
-  expense_report: { label: 'Expense', icon: 'scroll' },
-  journal: { label: 'Journal', icon: 'journal' },
-}
-
-function docMeta(kind: string) {
-  return DOC_META[kind] ?? { label: kind.replace(/_/g, ' '), icon: 'file' }
+// Master data (parties, accounts) is usable org-wide when its subsidiary is
+// null — the canonical list predicate is `is null or = any(...)`, not the
+// fail-closed document rule. There is no shared export for this variant yet;
+// keep it next to its single consumer instead of forking subsidiaries.ts.
+function masterDataSubsidiaryFilter(
+  column: SQL,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): SQL {
+  if (allowedSubsidiaryIds === null) return sql``
+  const ids = [...allowedSubsidiaryIds]
+  if (ids.length === 0) return sql`and false`
+  return sql`and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`
 }
 
 function money(v: unknown): string {
@@ -72,6 +70,17 @@ function money(v: unknown): string {
 }
 
 const PER_GROUP = 6
+
+// Per-kind authorization comes from the native module's own read permission
+// (single source in the nav registry): documents share one table, but access
+// to one module must never make records from another module discoverable.
+// Kinds without an authorizing module never enter the allowlist at all.
+function allowedTransactionKinds(authz: Authz): string[] {
+  return TRANSACTION_KINDS.filter((kind) => {
+    const permission = transactionModule(kind)?.requiredPermission
+    return Boolean(permission && can(authz, permission))
+  })
+}
 
 /** Run the full multi-entity search. `q` should already be trimmed. */
 export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchResponse> {
@@ -84,7 +93,7 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   const num = numeric ? Number(q.replace(/[^0-9.]/g, '')) : null
 
   // Permission gates per entity.
-  const canTxn = can(authz, 'gl.read') || can(authz, 'ap.read') || can(authz, 'ar.read')
+  const transactionKinds = allowedTransactionKinds(authz)
   const canContacts = can(authz, 'parties.read')
   const canAccounts = can(authz, 'gl.read')
   const canItems = can(authz, 'items.read')
@@ -96,10 +105,12 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
 
   const [contacts, txns, accounts, items, projects] = await Promise.all([
     canContacts ? searchContacts(orgId, q, like, scope) : empty(),
-    canTxn ? searchTransactions(orgId, q, like, num, scope) : empty(),
-    canAccounts ? searchAccounts(orgId, q, like) : empty(),
+    transactionKinds.length
+      ? searchTransactions(orgId, q, like, num, transactionKinds, scope)
+      : empty(),
+    canAccounts ? searchAccounts(orgId, q, like, scope) : empty(),
     canItems ? searchItems(orgId, q, like) : empty(),
-    canProjects ? searchProjects(orgId, q, like) : empty(),
+    canProjects ? searchProjects(orgId, q, like, scope) : empty(),
   ])
 
   // Numeric queries most likely want a transaction; else contacts lead.
@@ -131,11 +142,7 @@ async function searchContacts(
 ): Promise<SearchHit[]> {
   // Parties are org-wide when their primary subsidiary is null — the exact
   // predicate the party lists use (`is null or = any(...)`).
-  const scopeFilter = !scope
-    ? sql``
-    : scope.size
-      ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${`{${[...scope].join(',')}}`}::uuid[]))`
-      : sql`and false`
+  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
   const r = (await db.execute(sql`
     select p.id, p.display_name, p.email, p.legal_name,
            exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
@@ -144,7 +151,7 @@ async function searchContacts(
            greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q})) as sim
       from parties p
      where p.org_id = ${orgId}
-       ${scopeFilter}
+       ${subsidiaryFilter}
        and (p.display_name % ${q} or p.display_name ilike ${like}
             or p.legal_name % ${q} or p.email ilike ${like})
      order by sim desc, p.display_name
@@ -165,6 +172,7 @@ async function searchTransactions(
   q: string,
   like: string,
   num: number | null,
+  allowedKinds: string[],
   scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
   // Amounts live on document_lines (documents.total is often 0). A numeric query
@@ -179,20 +187,45 @@ async function searchTransactions(
   // leg is a bounded scan by design: numeric_eq is not LEAKPROOF, so under
   // RLS a numeric predicate can never become a btree index condition — an
   // (org_id, amount) index cannot help any tenant-scoped query.
-  const hiddenKinds = await disabledDocKinds(orgId)
-  const hiddenKindFilter = hiddenKinds.length
-    ? sql`and d.kind not in (${sql.join(hiddenKinds.map((value) => sql`${value}`), sql`, `)})`
-    : sql``
+  //
+  // Visibility is a POSITIVE kind allowlist derived from the caller's module
+  // permissions, intersected with domain feature gates (`DOC_KIND_FEATURE`,
+  // mirrored by disabledDocKinds) and navigation-only gates (a module switch
+  // like Banking hides search/nav while generic document APIs stay live).
+  // Every candidate leg and the final sensitive-field read repeat the same
+  // allowlist — a shared CTE alone would leak across module boundaries.
+  const navigationFeatures = [...new Set(allowedKinds.flatMap((kind) => {
+    const feature = transactionNavigationOnlyFeature(kind)
+    return feature ? [feature] : []
+  }))]
+  const [hiddenKinds, navigationFeatureStates] = await Promise.all([
+    disabledDocKinds(orgId),
+    Promise.all(navigationFeatures.map(async (feature) => (
+      [feature, await isFeatureEnabled(orgId, feature)] as const
+    ))),
+  ])
+  const hiddenKindSet = new Set(hiddenKinds)
+  const navigationFeatureEnabled = new Map(navigationFeatureStates)
+  const visibleKinds = allowedKinds.filter((kind) => {
+    if (hiddenKindSet.has(kind)) return false
+    const feature = transactionNavigationOnlyFeature(kind)
+    return !feature || navigationFeatureEnabled.get(feature) === true
+  })
+  if (visibleKinds.length === 0) return []
+  const visibleKindFilter = sql`and d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
   // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
-  // — null-subsidiary documents are invisible to restricted callers).
-  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
+  // — null-subsidiary documents are invisible to restricted callers); parties
+  // keep their org-wide-null master-data semantics.
+  const documentSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
+  const partySubsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
+  const resultPartySubsidiaryFilter = masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope)
   const amtLeg =
     num != null
       ? sql`
         union
         (select dl.document_id as id from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${hiddenKindFilter}${subsidiaryFilter}
+          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${visibleKindFilter}${documentSubsidiaryFilter}
           limit 200)`
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
@@ -200,17 +233,17 @@ async function searchTransactions(
   const r = (await db.execute(sql`
     with cand as (
       (select d.id from documents d
-        where d.org_id = ${orgId} ${hiddenKindFilter}${subsidiaryFilter}
+        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
           and (d.document_number % ${q} or d.document_number ilike ${like}
                or d.reference_number ilike ${like} or d.memo ilike ${like})
         order by d.created_at desc limit 200)
       union
       (select d.id from documents d
-        where d.org_id = ${orgId} ${hiddenKindFilter}${subsidiaryFilter} and d.party_id in (
-          select p.id from parties p where p.org_id = ${orgId} and p.display_name % ${q})
+        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter} and d.party_id in (
+          select p.id from parties p where p.org_id = ${orgId} ${partySubsidiaryFilter} and p.display_name % ${q})
         order by d.created_at desc limit 200)${amtLeg}
     )
-    select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status,
+    select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
            pr.display_name as party_name,
            ${amtExpr} as amount,
            greatest(similarity(d.document_number, ${q}),
@@ -219,30 +252,40 @@ async function searchTransactions(
                     similarity(coalesce(pr.display_name, ''), ${q})) as sim
       from documents d
       join cand on cand.id = d.id
-      left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id
-     where true ${hiddenKindFilter}${subsidiaryFilter}
+      left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
+     where true ${visibleKindFilter}${documentSubsidiaryFilter}
      order by ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`))
-  return r.rows.map((row: any): SearchHit => {
-    const meta = docMeta(row.kind)
-    const href = moduleDrawerHref(row.kind, row.id)
-    return {
+  // No generic journal fallback: a stored kind without an authorized native
+  // module is dropped rather than linked into the wrong module's ledger view.
+  return r.rows.flatMap((row: any): SearchHit[] => {
+    const module = transactionModule(row.kind)
+    const href = moduleDrawerHref(row.kind, row.id, { projectId: row.project_id })
+    if (!module || !href) return []
+    return [{
       id: row.id,
       type: 'transaction',
-      title: `${meta.label} ${row.document_number}`,
+      title: `${module.label} ${row.document_number}`,
       subtitle: row.party_name || row.memo || undefined,
-      href: href ?? `/journal?entry=${row.id}`,
-      iconKey: meta.icon,
+      href,
+      iconKey: module.iconKey,
       badge: row.status && row.status !== 'posted' ? row.status : undefined,
       amount: money(row.amount),
-    }
+    }]
   })
 }
 
-async function searchAccounts(orgId: string, q: string, like: string): Promise<SearchHit[]> {
+async function searchAccounts(
+  orgId: string,
+  q: string,
+  like: string,
+  scope: ReadonlySet<string> | null,
+): Promise<SearchHit[]> {
+  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`subsidiary_id`, scope)
   const r = (await db.execute(sql`
     select id, number, name, type from accounts
      where org_id = ${orgId} and not is_summary
+       ${subsidiaryFilter}
        and (name % ${q} or name ilike ${like} or number ilike ${like})
      order by similarity(name, ${q}) desc, number nulls last
      limit ${PER_GROUP}`))
@@ -272,10 +315,19 @@ async function searchItems(orgId: string, q: string, like: string): Promise<Sear
   }))
 }
 
-async function searchProjects(orgId: string, q: string, like: string): Promise<SearchHit[]> {
+async function searchProjects(
+  orgId: string,
+  q: string,
+  like: string,
+  scope: ReadonlySet<string> | null,
+): Promise<SearchHit[]> {
+  // Project records behave like documents: restricted callers see only their
+  // subsidiaries (no org-wide null escape hatch).
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`subsidiary_id`, scope)
   const r = (await db.execute(sql`
     select id, code, name from projects
-     where org_id = ${orgId} and (name % ${q} or name ilike ${like} or code ilike ${like})
+     where org_id = ${orgId} ${subsidiaryFilter}
+       and (name % ${q} or name ilike ${like} or code ilike ${like})
      order by similarity(name, ${q}) desc, name
      limit ${PER_GROUP}`))
   return r.rows.map((row: any): SearchHit => ({

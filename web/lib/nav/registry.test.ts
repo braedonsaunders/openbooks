@@ -108,3 +108,18 @@ test('every module belongs to a declared workspace and has a unique stable key',
     }
   }
 })
+
+test('native record targets are deterministic data contracts', () => {
+  for (const module of NAV_MODULES) {
+    const target = module.recordTarget
+    if (!target) continue
+    assert.ok(module.requiredPermission, `${module.key}: record targets require an authorization boundary`)
+    if (target.kind === 'query') {
+      assert.match(target.param, /^[a-z][A-Za-z]*$/, module.key)
+    } else if (target.kind === 'nested') {
+      assert.match(target.segment, /^[a-z][a-z-]*$/, module.key)
+    } else {
+      assert.equal(module.key, 'projects')
+    }
+  }
+})
