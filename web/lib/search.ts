@@ -335,7 +335,7 @@ async function searchProjects(
     type: 'project',
     title: row.name,
     subtitle: row.code || undefined,
-    href: `/projects/${row.id}`,
+    href: `/projects?project=${row.id}`,
     iconKey: 'timer',
   }))
 }
