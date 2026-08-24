@@ -846,6 +846,18 @@ export interface ProviderWebhookResult {
   }[];
 }
 
+interface SettlementDiscrepancyEvidence {
+  reason: "missing_settlement_evidence" | "amount_currency_mismatch";
+  provider: AcceptanceProvider;
+  externalRef: string;
+  reportedAmount: string | null;
+  reportedCurrency: string | null;
+  expectedAmount: string;
+  expectedCurrency: string;
+}
+
+type WebhookEventOutcome = string | { discrepancy: PaymentAcceptanceError };
+
 export async function handleProviderWebhook(
   provider: AcceptanceProvider,
   headers: Record<string, string | string[] | undefined>,
@@ -870,7 +882,11 @@ export async function handleProviderWebhook(
   for (const event of events) {
     let unresolved: ProviderWebhookResult["eventResults"][number] | null = null;
     for (const candidate of verified) {
-      const status = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+      const outcome = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+      // A discrepancy is returned, rather than thrown inside withOrg, so its
+      // attempt marker and audit row commit before the webhook fails closed.
+      if (typeof outcome !== "string") throw outcome.discrepancy;
+      const status = outcome;
       const result = { externalRef: event.externalRef, orgId: candidate.orgId, status };
       if (status !== "unknown_attempt") {
         eventResults.push(result);
@@ -920,7 +936,7 @@ async function processWebhookEvent(
   orgId: string,
   provider: AcceptanceProvider,
   event: WebhookEvent,
-): Promise<string> {
+): Promise<WebhookEventOutcome> {
   // Resolve the attempt: by provider object id, by its alternate id (e.g.
   // GoCardless billing request vs payment id), by an intent id persisted from
   // the completed session, then by link token. Absent refs are bound as real
@@ -970,6 +986,9 @@ async function processWebhookEvent(
   if (event.status === "succeeded") {
     const hasPaidAmount = event.paidAmount != null;
     const hasPaidCurrency = event.paidCurrency != null;
+    const expectedAmount = add(found.amount, found.surcharge_amount);
+    const expectedCurrency = found.currency.toUpperCase();
+    const reportedCurrency = event.paidCurrency?.toUpperCase() ?? null;
     // Stripe and Adyen success payloads always carry both values. GoCardless
     // payment lifecycle webhooks carry neither, but must still be checked if a
     // future/provider-expanded payload supplies either value.
@@ -977,19 +996,39 @@ async function processWebhookEvent(
       hasPaidAmount !== hasPaidCurrency ||
       (provider !== "gocardless" && (!hasPaidAmount || !hasPaidCurrency))
     ) {
-      throw new PaymentAcceptanceError(
+      return recordSettlementDiscrepancy(
+        orgId,
+        found.id,
+        {
+          reason: "missing_settlement_evidence",
+          provider,
+          externalRef: event.externalRef,
+          reportedAmount: event.paidAmount ?? null,
+          reportedCurrency,
+          expectedAmount,
+          expectedCurrency,
+        },
         `${provider} settlement did not report both paid amount and currency`,
       );
     }
     if (hasPaidAmount && hasPaidCurrency) {
-      const expectedAmount = add(found.amount, found.surcharge_amount);
-      const paidCurrency = event.paidCurrency!.toUpperCase();
       if (
         cmp(event.paidAmount!, expectedAmount) !== 0 ||
-        paidCurrency !== found.currency.toUpperCase()
+        reportedCurrency !== expectedCurrency
       ) {
-        throw new PaymentAcceptanceError(
-          `${provider} reported ${event.paidAmount} ${paidCurrency}, but checkout expected ${expectedAmount} ${found.currency.toUpperCase()}`,
+        return recordSettlementDiscrepancy(
+          orgId,
+          found.id,
+          {
+            reason: "amount_currency_mismatch",
+            provider,
+            externalRef: event.externalRef,
+            reportedAmount: event.paidAmount!,
+            reportedCurrency,
+            expectedAmount,
+            expectedCurrency,
+          },
+          `${provider} reported ${event.paidAmount} ${reportedCurrency}, but checkout expected ${expectedAmount} ${expectedCurrency}`,
         );
       }
     }
@@ -1064,6 +1103,35 @@ async function processWebhookEvent(
     return "refunded_noted";
   }
   return event.status;
+}
+
+/**
+ * Persist normalized provider-vs-checkout evidence without advancing the
+ * attempt. The caller returns the error through the tenant transaction so
+ * both writes commit, then throws it at the outer webhook boundary.
+ */
+async function recordSettlementDiscrepancy(
+  orgId: string,
+  attemptId: string,
+  evidence: SettlementDiscrepancyEvidence,
+  message: string,
+): Promise<{ discrepancy: PaymentAcceptanceError }> {
+  await db.execute(sql`
+    update payment_attempts
+       set event_payload = coalesce(event_payload, '{}'::jsonb)
+                           || ${JSON.stringify({ settlementDiscrepancy: evidence })}::jsonb,
+           updated_at = now()
+     where id = ${attemptId} and org_id = ${orgId}
+  `);
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (
+      ${orgId}, 'payment_attempts', ${attemptId}, 'update',
+      ${JSON.stringify({ after: { settlementDiscrepancy: evidence } })}::jsonb,
+      null
+    )
+  `);
+  return { discrepancy: new PaymentAcceptanceError(message) };
 }
 
 /**
