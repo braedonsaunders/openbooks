@@ -8,6 +8,8 @@ import {
   createCheckoutSession,
   createPaymentLink,
   handleProviderWebhook,
+  PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT,
+  PaymentWebhookBatchError,
   publicPaymentPage,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
@@ -103,6 +105,155 @@ function signedStripeBody(
   const v1 = createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
   return { body, headers: { "stripe-signature": `t=${t},v1=${v1}` } };
 }
+
+test("a poison webhook event rolls back without starving its later batch sibling", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const originalConsoleError = console.error;
+  const failureLogs: string[] = [];
+  try {
+    const userId = await createScratchUser(org.orgId, "Poison Batch Tester", "admin");
+    const invoiceId = randomUUID();
+    const linkId = randomUUID();
+    const secret = `gc-poison-${randomUUID()}`;
+    const linkToken = `gc-poison-link-${randomUUID()}`;
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total,
+         open_balance, created_by)
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-GC-POISON',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              '20', '0', '20', '20', ${userId})
+    `);
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled,
+         default_bank_account_id, secrets, created_by, updated_by)
+      values (${org.orgId}, 'gocardless', 'GoCardless', true, true,
+              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret })}, ${userId}, ${userId})
+    `);
+    await db.execute(sql`
+      insert into payment_links
+        (id, org_id, token, document_id, party_id, subsidiary_id, provider,
+         bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
+      values (${linkId}, ${org.orgId}, ${linkToken}, ${invoiceId}, ${org.customerId},
+              ${org.subsidiaryId}, 'gocardless', ${org.accounts.bank}, '20', '0', 'CAD',
+              ${userId}, ${userId})
+    `);
+    await db.execute(sql`
+      insert into payment_attempts
+        (org_id, link_id, provider, external_ref, status, amount, surcharge_amount)
+      values (${org.orgId}, ${linkId}, 'gocardless', 'BRQ-ENGINE-POISON', 'initiated', '10', '0'),
+             (${org.orgId}, ${linkId}, 'gocardless', 'BRQ-ENGINE-LATER', 'initiated', '10', '0')
+    `);
+
+    const body = JSON.stringify({
+      events: [
+        {
+          resource_type: "payments",
+          action: "confirmed",
+          links: { payment: "PM-ENGINE-POISON", billing_request: "BRQ-ENGINE-POISON" },
+        },
+        {
+          resource_type: "payments",
+          action: "failed",
+          links: { payment: "PM-ENGINE-LATER", billing_request: "BRQ-ENGINE-LATER" },
+        },
+      ],
+    });
+    const signature = createHmac("sha256", secret).update(body, "utf8").digest("hex");
+    let batchError: PaymentWebhookBatchError | undefined;
+    console.error = (...args: unknown[]) => {
+      failureLogs.push(args.map(String).join(" "));
+    };
+
+    await assert.rejects(
+      handleProviderWebhook("gocardless", { "webhook-signature": signature }, body),
+      (error: unknown) => {
+        if (!(error instanceof PaymentWebhookBatchError)) return false;
+        batchError = error;
+        return true;
+      },
+    );
+    console.error = originalConsoleError;
+
+    assert.ok(batchError);
+    assert.match(batchError.message, /invoice open item not found/);
+    assert.deepEqual(batchError.result, {
+      signatureValid: true,
+      orgId: org.orgId,
+      status: "processing_failed",
+      eventResults: [
+        {
+          externalRef: "PM-ENGINE-POISON",
+          orgId: org.orgId,
+          status: "processing_failed",
+        },
+        {
+          externalRef: "PM-ENGINE-LATER",
+          orgId: org.orgId,
+          status: "failed",
+        },
+      ],
+    });
+
+    const attempts = await db.execute<{
+      external_ref: string;
+      status: string;
+      event_payload: Record<string, unknown> | null;
+    }>(sql`
+      select external_ref, status, event_payload
+        from payment_attempts
+       where org_id = ${org.orgId} and link_id = ${linkId}
+       order by external_ref
+    `);
+    assert.deepEqual(attempts.rows, [
+      {
+        external_ref: "BRQ-ENGINE-POISON",
+        status: "initiated",
+        event_payload: null,
+      },
+      {
+        external_ref: "PM-ENGINE-LATER",
+        status: "failed",
+        event_payload: { webhook: true, status: "failed" },
+      },
+    ]);
+
+    const emitted = failureLogs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry?.event === PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT);
+    assert.equal(emitted.length, 1, `expected one poison-event emission, got ${JSON.stringify(emitted)}`);
+    assert.deepEqual(
+      {
+        event: emitted[0]!.event,
+        provider: emitted[0]!.provider,
+        orgId: emitted[0]!.orgId,
+        externalRef: emitted[0]!.externalRef,
+        eventStatus: emitted[0]!.eventStatus,
+        error: emitted[0]!.error,
+      },
+      {
+        event: PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT,
+        provider: "gocardless",
+        orgId: org.orgId,
+        externalRef: "PM-ENGINE-POISON",
+        eventStatus: "succeeded",
+        error: "invoice open item not found",
+      },
+    );
+    assert.match(String(emitted[0]!.at), /^\d{4}-\d{2}-\d{2}T/);
+  } finally {
+    console.error = originalConsoleError;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /**
  * The full acceptance loop against a real org: link → checkout → signed

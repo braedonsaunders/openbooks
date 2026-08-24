@@ -5,6 +5,12 @@ import { businessToday } from "./business-date.ts";
 import { add, cmp, fromUnits, mulPercent, toUnits } from "./money.ts";
 import { sealJson, unsealJson } from "./secrets.ts";
 import {
+  ATTR_KIND,
+  ATTR_ORG_ID,
+  ATTR_SURFACE,
+  runInSpan,
+} from "./telemetry.ts";
+import {
   createPaymentDocument,
   openItemsForParty,
   postPaymentWithApplications,
@@ -947,6 +953,31 @@ export class PaymentWebhookBatchError extends PaymentAcceptanceError {
   }
 }
 
+/** Stable structured-log key for an event whose tenant transaction rolled
+ * back. The emission happens outside that transaction so poison evidence is
+ * not lost with the accounting writes it protects. */
+export const PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT =
+  "payment_webhook.event_failed";
+
+function logPaymentWebhookEventFailure(
+  provider: AcceptanceProvider,
+  orgId: string,
+  event: WebhookEvent,
+  error: unknown,
+): void {
+  console.error(
+    JSON.stringify({
+      event: PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT,
+      provider,
+      orgId,
+      externalRef: event.externalRef,
+      eventStatus: event.status,
+      error: error instanceof Error ? error.message : String(error),
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
 interface SettlementDiscrepancyEvidence {
   reason: "missing_settlement_evidence" | "amount_currency_mismatch";
   provider: AcceptanceProvider;
@@ -988,11 +1019,22 @@ export async function handleProviderWebhook(
     for (const candidate of verified) {
       let outcome: WebhookEventOutcome;
       try {
-        outcome = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+        outcome = await runInSpan(
+          "payment_webhook.event",
+          {
+            [ATTR_SURFACE]: "payment_webhooks",
+            [ATTR_KIND]: provider,
+            [ATTR_ORG_ID]: candidate.orgId,
+            "openbooks.external_ref": event.externalRef,
+            "openbooks.webhook_status": event.status,
+          },
+          () => withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event)),
+        );
       } catch (error) {
         // A tenant transaction failure rolls back only this event. Keep going
         // so a poison event cannot starve later collections in the delivery;
         // the aggregate error below still makes the provider retry honestly.
+        logPaymentWebhookEventFailure(provider, candidate.orgId, event, error);
         firstFailure ??=
           error instanceof Error
             ? error

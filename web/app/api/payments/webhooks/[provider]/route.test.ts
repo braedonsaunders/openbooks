@@ -3,16 +3,14 @@ import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, env } from "../../../../../../engine/src/db.ts";
-import {
-  ACCEPTANCE_ADAPTERS,
-  handleProviderWebhook,
-} from "../../../../../../engine/src/payment-acceptance.ts";
+import { ACCEPTANCE_ADAPTERS } from "../../../../../../engine/src/payment-acceptance.ts";
 import { sealJson } from "../../../../../../engine/src/secrets.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
 } from "../../../../../../engine/src/test-fixtures.ts";
+import { POST } from "./route.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const priorDataKey = env.OPENBOOKS_DATA_KEY;
@@ -98,7 +96,7 @@ test("a valid webhook containing only unhandled events remains authenticated", (
   assert.deepEqual(verified.events, []);
 });
 
-test("GoCardless ingestion dispatches every actionable event in one authenticated batch", { skip: !DB }, async () => {
+test("the route returns 500 after isolating a poison event and committing its later sibling", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Webhook Tester", "admin");
@@ -108,10 +106,11 @@ test("GoCardless ingestion dispatches every actionable event in one authenticate
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
-         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+         document_date, currency, fx_rate, subtotal, tax_total, total,
+         open_balance, created_by)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-GC-BATCH',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
-              '20', '0', '20', ${userId})
+              '20', '0', '20', '20', ${userId})
     `);
     await db.execute(sql`
       insert into psp_provider_configs
@@ -138,35 +137,46 @@ test("GoCardless ingestion dispatches every actionable event in one authenticate
     const body = JSON.stringify({
       events: [
         { resource_type: "mandates", action: "created", links: { mandate: "MD-1" } },
-        { resource_type: "payments", action: "failed", links: { payment: "PM-1", billing_request: "BRQ-1" } },
+        { resource_type: "payments", action: "confirmed", links: { payment: "PM-1", billing_request: "BRQ-1" } },
         { resource_type: "payments", action: "failed", links: { payment: "PM-2", billing_request: "BRQ-2" } },
       ],
     });
     const signature = createHmac("sha256", secret).update(body, "utf8").digest("hex");
-    const result = await handleProviderWebhook("gocardless", { "webhook-signature": signature }, body);
-
-    assert.ok(result);
-    assert.equal(result.signatureValid, true);
-    assert.equal(result.status, "processed");
-    assert.deepEqual(
-      result.eventResults.map(({ externalRef, status }) => [externalRef, status]),
-      [
-        ["PM-1", "failed"],
-        ["PM-2", "failed"],
-      ],
+    const response = await POST(
+      new Request("http://localhost/api/payments/webhooks/gocardless", {
+        method: "POST",
+        headers: { "webhook-signature": signature },
+        body,
+      }),
+      { params: Promise.resolve({ provider: "gocardless" }) },
     );
-    const attempts = await db.execute<{ external_ref: string; status: string }>(sql`
-      select external_ref, status from payment_attempts
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      received: true,
+      status: "processing_failed",
+      events: [
+        { externalRef: "PM-1", status: "processing_failed" },
+        { externalRef: "PM-2", status: "failed" },
+      ],
+    });
+    const attempts = await db.execute<{
+      external_ref: string;
+      status: string;
+      event_payload: Record<string, unknown> | null;
+    }>(sql`
+      select external_ref, status, event_payload from payment_attempts
        where org_id = ${org.orgId} and link_id = ${linkId}
        order by external_ref
     `);
-    assert.deepEqual(
-      attempts.rows.map(({ external_ref, status }) => [external_ref, status]),
-      [
-        ["PM-1", "failed"],
-        ["PM-2", "failed"],
-      ],
-    );
+    assert.deepEqual(attempts.rows, [
+      { external_ref: "BRQ-1", status: "initiated", event_payload: null },
+      {
+        external_ref: "PM-2",
+        status: "failed",
+        event_payload: { webhook: true, status: "failed" },
+      },
+    ]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
