@@ -20,8 +20,8 @@ import { sendRecordPdfEmail } from './pdf-templates/send'
  *
  * Delivery is per employee (employee_payroll_profiles.stub_delivery): 'email'
  * employees are emailed, 'print' employees are in the print set, 'both' are in
- * each. Emailed stubs are encrypted when the org configures a stub password
- * policy — the password is derived per employee from a configurable token
+ * each. Emailed stubs are always encrypted. The org must configure a stub
+ * password policy; the password is derived per employee from its token
  * expression, used once, and never logged or stored (the employer publishes
  * the rule to staff out of band).
  */
@@ -193,9 +193,9 @@ export interface EmailStubsResult {
 
 /**
  * Email each employee their own stub PDF, honouring the delivery preference;
- * never partial-fails the batch. When a stub password policy is configured the
- * attachment is encrypted per employee, and an employee whose password cannot
- * be derived FAILS rather than receiving an unprotected stub.
+ * never partial-fails the batch. Every attachment is encrypted per employee;
+ * a missing policy or a password that cannot be derived FAILS rather than
+ * sending an unprotected stub.
  */
 export async function emailRunStubs(orgId: string, documentId: string): Promise<EmailStubsResult> {
   const stubs = await runStubs(orgId, documentId)
@@ -210,6 +210,13 @@ export async function emailRunStubs(orgId: string, documentId: string): Promise<
       result.noEmail.push(stub.name)
       continue
     }
+    if (!policy.enabled) {
+      result.failed.push({
+        name: stub.name,
+        error: 'pay-stub email delivery requires an enabled password policy',
+      })
+      continue
+    }
     try {
       await sendRecordPdfEmail({
         recordType: 'pay_stub',
@@ -217,9 +224,7 @@ export async function emailRunStubs(orgId: string, documentId: string): Promise<
         id: stub.id,
         // Encryption fails closed: a policy that cannot produce this
         // employee's password stops their email, it never downgrades it.
-        ...(policy.enabled
-          ? { encrypt: async (pdf: Buffer) => encryptPdf(pdf, { userPassword: stubPassword(policy, stub) }) }
-          : {}),
+        encrypt: async (pdf: Buffer) => encryptPdf(pdf, { userPassword: stubPassword(policy, stub) }),
       })
       result.sent += 1
     } catch (e) {

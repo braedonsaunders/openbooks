@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { PDFDocument } from 'pdf-lib'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentEmail, sendVia } from '@openbooks/emails'
 import {
@@ -28,6 +29,37 @@ export interface RecipientInfo {
   docTitle: string
   reference: string
   partyName: string | null
+}
+
+// Payroll PDFs can expose compensation detail under more than one record key:
+// payroll_cheque, for example, includes the pay-stub earnings and deductions
+// as its voucher. Derive protection from the catalog's payroll boundary so a
+// future alias cannot quietly fall back to the generic plaintext path.
+export function isProtectedPayrollRecordType(recordType: string): boolean {
+  return PDF_RECORD_TYPE_BY_KEY[recordType]?.readPermission === 'payroll.read'
+}
+
+async function requireEncryptedPayrollPdf(plaintext: Buffer, candidate: Buffer): Promise<Buffer> {
+  const invalidEncryption = () => new Error(
+    'payroll compensation PDF encryption must return a valid encrypted PDF',
+  )
+  if (!Buffer.isBuffer(candidate) || candidate.length === 0 || candidate.equals(plaintext)) {
+    throw invalidEncryption()
+  }
+
+  try {
+    // Parsing with encryption tolerated lets us distinguish a real encrypted
+    // PDF from identity/copy callbacks, alternate plaintext PDFs, and malformed
+    // output without treating an arbitrary parser failure as proof of safety.
+    const parsed = await PDFDocument.load(candidate, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    })
+    if (!parsed.isEncrypted) throw invalidEncryption()
+  } catch {
+    throw invalidEncryption()
+  }
+  return candidate
 }
 
 /** Default recipient + labels for the send dialog (the party's email on file). */
@@ -65,6 +97,14 @@ export async function sendRecordPdfEmail(args: {
   const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType]
   if (!meta) throw new Error('unknown record type')
 
+  // A protected payroll attachment must leave as ciphertext or not at all.
+  // Enforced before any dependency work so no caller can reach the render or
+  // send path for a compensation PDF without a protection pass supplied.
+  const protectedPayrollRecord = isProtectedPayrollRecordType(args.recordType)
+  if (protectedPayrollRecord && !args.encrypt) {
+    throw new Error('payroll compensation PDFs must be encrypted before email delivery')
+  }
+
   const [tpl, record, transport] = await Promise.all([
     resolvePdfTemplate(args.orgId, args.recordType, args.templateId ?? null),
     loadPdfRecordValues(args.recordType, args.orgId, args.id),
@@ -83,7 +123,14 @@ export async function sendRecordPdfEmail(args: {
   const stamp = await businessToday(args.orgId)
   const attachmentName = `${meta.docTitle}-${record.reference}-${stamp}.pdf`.replace(/\s+/g, '-')
   const rendered = await mergeAndPrintPdf(tpl, record.values)
-  const pdf = args.encrypt ? await args.encrypt(rendered) : rendered
+  // Give post-processors a copy so they cannot mutate the plaintext baseline
+  // used to verify that protected output was actually transformed.
+  const processed = args.encrypt ? await args.encrypt(Buffer.from(rendered)) : rendered
+  const pdf = protectedPayrollRecord
+    // Fail closed: identity, copy, and alternate-plaintext outputs are refused
+    // here — the attachment is either verified ciphertext or there is no send.
+    ? await requireEncryptedPayrollPdf(rendered, processed)
+    : processed
   // When the invoice has an active hosted payment link, include it as a
   // pay-online call-to-action. Creating the link is the opt-in; nothing is
   // attached for invoices without one. Stored links stay when the feature is
