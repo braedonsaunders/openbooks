@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
+import JSZip from 'jszip'
 import { DOC_KINDS } from '../document-kinds.ts'
 import type { DataResource } from './resource-core.ts'
 
@@ -219,6 +220,60 @@ async function parsedFormulaRow(kind: 'amount' | 'lines'): Promise<Record<string
   return row
 }
 
+async function parsedHyperlinkedFormulaRows(): Promise<Record<string, unknown>[]> {
+  const workbook = new ExcelJS.Workbook()
+  const sheet = workbook.addWorksheet('Transactions')
+  sheet.addRow([
+    'documentDate',
+    'account',
+    'numeric_hyperlink_amount',
+    'string_hyperlink_amount',
+  ])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    { formula: '999999999999998.99', result: 999999999999998.99 },
+    '',
+  ])
+  sheet.addRow([
+    '2026-08-24',
+    '5000',
+    '',
+    {
+      formula: 'TEXT(999999999999998.99,"0.0000")',
+      result: '999999999999999.0000',
+    },
+  ])
+
+  // ExcelJS cannot author a formula and hyperlink on the same cell through
+  // its public value API, but real workbooks can carry both. Add the standard
+  // worksheet hyperlink relationships to the XLSX package after serialization.
+  const zip = await JSZip.loadAsync(Buffer.from(await workbook.xlsx.writeBuffer() as ArrayBuffer))
+  const sheetFile = zip.file('xl/worksheets/sheet1.xml')
+  assert.ok(sheetFile)
+  const sheetXml = await sheetFile.async('string')
+  assert.match(sheetXml, /<\/worksheet>$/)
+  zip.file(
+    'xl/worksheets/sheet1.xml',
+    sheetXml.replace(
+      '</worksheet>',
+      '<hyperlinks><hyperlink ref="C2" r:id="rId1"/><hyperlink ref="D3" r:id="rId2"/></hyperlinks></worksheet>',
+    ),
+  )
+  zip.file(
+    'xl/worksheets/_rels/sheet1.xml.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test/numeric" TargetMode="External"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test/string" TargetMode="External"/>' +
+      '</Relationships>',
+  )
+  const linkedWorkbook = await zip.generateAsync({ type: 'nodebuffer' })
+  return (
+    await parseImportFile('xlsx', { base64: linkedWorkbook.toString('base64') })
+  ).rows
+}
+
 async function preview(
   rows: Record<string, unknown>[],
   mapping: Record<string, string>,
@@ -359,4 +414,57 @@ test('route carries renamed nested-lines provenance into transaction validation 
   assert.equal(importState.resourceWriteCalls, 1)
   assert.equal(importState.rootInsertCalls, 0)
   assert.equal(importState.transactionCalls, 0)
+})
+
+test('route carries hyperlinked formula provenance into transaction validation before writes', async (t) => {
+  const [numericRow, stringRow] = await parsedHyperlinkedFormulaRows()
+  assert.ok(numericRow)
+  assert.ok(stringRow)
+  const cases = [
+    {
+      name: 'numeric cached result',
+      row: numericRow,
+      source: 'numeric_hyperlink_amount',
+      value: 999999999999999,
+    },
+    {
+      name: 'string cached result',
+      row: stringRow,
+      source: 'string_hyperlink_amount',
+      value: '999999999999999.0000',
+    },
+  ] as const
+
+  for (const { name, row, source, value } of cases) {
+    await t.test(`rejects ${name}`, async () => {
+      resetImportState()
+      assert.equal(row[source], value)
+      assert.deepEqual(row[CELL_PROVENANCE_KEY], { [source]: 'formula' })
+
+      const response = await preview([row], {
+        documentDate: 'documentDate',
+        account: 'account',
+        [source]: 'amount',
+      })
+
+      assert.equal(response.status, 200)
+      assert.deepEqual(await response.json(), {
+        outcome: {
+          created: 0,
+          updated: 0,
+          failed: 1,
+          errors: [
+            {
+              row: 1,
+              message: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+            },
+          ],
+        },
+        total: 1,
+      })
+      assert.equal(importState.resourceWriteCalls, 1)
+      assert.equal(importState.rootInsertCalls, 0)
+      assert.equal(importState.transactionCalls, 0)
+    })
+  }
 })
