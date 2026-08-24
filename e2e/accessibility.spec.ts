@@ -21,7 +21,7 @@ test("authenticated reports hub has no automatically detectable WCAG A/AA violat
   browser,
   baseURL,
 }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     await page.goto("/reports");
     await expect(page.locator("main")).toBeVisible();

@@ -14,6 +14,7 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/mcp",
   "/favicon.ico",
   "/icon.svg",
+  "/socialmedia.png",
 ]);
 
 const PUBLIC_SEGMENT_ROOTS = [

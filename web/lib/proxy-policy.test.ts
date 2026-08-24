@@ -18,6 +18,7 @@ test("public authentication and hosted-payment routes match complete segments", 
     "/api/payments/webhooks/stripe",
     "/api/flows/email-action",
     "/mcp",
+    "/socialmedia.png",
     "/_next/static/chunk.js",
   ]) assert.equal(isPublicPath(pathname), true, pathname);
 });
