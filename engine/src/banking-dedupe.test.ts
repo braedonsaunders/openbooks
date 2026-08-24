@@ -5,7 +5,11 @@ import {
   statementSourceSha256,
   type ParsedStatementLine,
 } from "./banking.ts";
-import { plaidFetchAllTransactions } from "./bank-feed-providers.ts";
+import {
+  bankFeedSourceEvidence,
+  getBankFeedAdapter,
+  plaidFetchAllTransactions,
+} from "./bank-feed-providers.ts";
 
 const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine => ({
   postedOn: "2026-08-01",
@@ -108,4 +112,64 @@ test("plaid pagination aborts loudly past the hard page cap instead of truncatin
     /exceeded 20 pages/,
   );
   assert.equal(calls, 20);
+});
+
+test("live provider fetch retains exact response bytes for statement audit", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const rawResponse = `{
+  "results": [{
+    "transaction_id": "txn-audit-1",
+    "timestamp": "2026-08-22T14:03:00Z",
+    "amount": -12.34,
+    "currency": "CAD",
+    "description": "ORIGINAL PROVIDER PAYLOAD"
+  }],
+  "provider_request_id": "request-preserved-verbatim"
+}\n`;
+  globalThis.fetch = async () => new Response(rawResponse, {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+
+  const adapter = getBankFeedAdapter("truelayer");
+  assert.ok(adapter);
+  const fetched = await adapter.fetch(
+    { accessToken: "test-token" },
+    "external-account-1",
+    "2026-08-01",
+    "2026-08-23",
+  );
+
+  const evidenceContent = fetched.sourceEvidence.content;
+  const evidenceBytes = typeof evidenceContent === "string"
+    ? Buffer.from(evidenceContent, "utf8")
+    : Buffer.from(evidenceContent);
+  assert.deepEqual(evidenceBytes, Buffer.from(rawResponse, "utf8"));
+  assert.equal(fetched.sourceEvidence.contentType, "application/json");
+});
+
+test("paginated provider evidence keeps every response byte-for-byte recoverable", () => {
+  const pages = [
+    Buffer.from("{\n  \"transactions\": [{\"transaction_id\": \"page-1\"}], \"has_more\": true\n}\n"),
+    Buffer.from("{\"transactions\":[],\"has_more\":false,\"request_id\":\"page-2\"}"),
+  ];
+  const evidence = bankFeedSourceEvidence("plaid", pages);
+  assert.equal(typeof evidence.content, "string");
+  const bundle = JSON.parse(evidence.content as string) as {
+    format: string;
+    provider: string;
+    encoding: string;
+    responses: string[];
+  };
+
+  assert.equal(bundle.format, "openbooks.bank-feed-response-bundle.v1");
+  assert.equal(bundle.provider, "plaid");
+  assert.equal(bundle.encoding, "base64");
+  assert.deepEqual(
+    bundle.responses.map((encoded) => Buffer.from(encoded, "base64")),
+    pages,
+  );
 });
