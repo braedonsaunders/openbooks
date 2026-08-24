@@ -71,6 +71,17 @@ export async function POST(req: Request) {
   // preview / commit both need mapped rows.
   const rawRows = Array.isArray(body.rows) ? body.rows : []
   const mapping = body.mapping ?? {}
+  const duplicateTarget = duplicateMappingTarget(mapping)
+  if (duplicateTarget) {
+    return NextResponse.json(
+      {
+        error: 'multiple source columns map to the same target field',
+        field: duplicateTarget.field,
+        sources: duplicateTarget.sources,
+      },
+      { status: 400 },
+    )
+  }
   const importMode: ImportMode = body.importMode === 'insert' ? 'insert' : 'upsert'
   const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping))
 
@@ -130,6 +141,19 @@ export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
  */
 export const SOURCE_COLUMNS_KEY = '__sourceColumns'
 
+function duplicateMappingTarget(
+  mapping: Record<string, string>,
+): { field: string; sources: [string, string] } | null {
+  const firstSource = new Map<string, string>()
+  for (const [source, field] of Object.entries(mapping)) {
+    if (!field) continue
+    const first = firstSource.get(field)
+    if (first !== undefined) return { field, sources: [first, source] }
+    firstSource.set(field, source)
+  }
+  return null
+}
+
 /** Map a raw source row (keyed by file header) onto field-keyed values. */
 function applyMapping(raw: Record<string, unknown>, mapping: Record<string, string>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -139,7 +163,7 @@ function applyMapping(raw: Record<string, unknown>, mapping: Record<string, stri
     if (!field) continue
     out[field] = raw[source]
     mapped.add(source)
-    sources[field] ??= source
+    sources[field] = source
   }
   if (Object.keys(sources).length > 0) out[SOURCE_COLUMNS_KEY] = sources
   // Header → its raw value, so a resource can tell "unmapped and empty" from
