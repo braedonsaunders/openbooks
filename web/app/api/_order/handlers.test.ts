@@ -19,6 +19,7 @@ interface OrderDocument {
   orgId: string
   kind: 'quote'
   status: string
+  documentNumber: string
   documentDate: string
   partyId: string
   total: string
@@ -28,10 +29,12 @@ interface OrderDocument {
 
 interface TransactionContext {
   ownsLock: boolean
+  dirty: boolean
   snapshot: {
     document: OrderDocument
     auditLog: Record<string, unknown>[]
     flowEffects: Record<string, unknown>[]
+    deleted: boolean
   }
 }
 
@@ -62,6 +65,8 @@ class OrderRouteHarness {
   voidCalls = 0
   lockAttempts = 0
   headerWrites = 0
+  deleteCalls = 0
+  deleted = false
   voidFailure: string | null = null
 
   private readonly transactions = new AsyncLocalStorage<TransactionContext>()
@@ -82,6 +87,7 @@ class OrderRouteHarness {
       orgId: ORG_ID,
       kind: 'quote',
       status,
+      documentNumber: 'Q-LOCK-001',
       documentDate: '2026-08-24',
       partyId: PARTY_ID,
       total: '100.00',
@@ -94,6 +100,8 @@ class OrderRouteHarness {
     this.voidCalls = 0
     this.lockAttempts = 0
     this.headerWrites = 0
+    this.deleteCalls = 0
+    this.deleted = false
     this.voidFailure = null
     this.submitPause = null
     this.voidPause = null
@@ -120,7 +128,7 @@ class OrderRouteHarness {
     }
 
     if (normalized.startsWith('select status, party_id, total from documents')) {
-      await this.acquireDocumentLock()
+      if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params)
           ? [{
@@ -143,14 +151,20 @@ class OrderRouteHarness {
       }
     }
 
-    if (normalized.startsWith('select status from documents') && normalized.endsWith('for update')) {
-      await this.acquireDocumentLock()
+    if (normalized.startsWith('select status from documents')) {
+      if (normalized.endsWith('for update')) await this.acquireDocumentLock()
       return {
         rows: this.matchesDocument(params) ? [{ status: this.document.status }] : [],
       }
     }
 
+    if (normalized.startsWith('select 1 from documents')) {
+      if (normalized.endsWith('for update')) await this.acquireDocumentLock()
+      return { rows: this.matchesDocument(params) ? [{ exists: 1 }] : [] }
+    }
+
     if (normalized.startsWith('update documents set')) {
+      this.markTransactionDirty()
       const memo = normalized.match(/\bmemo = __p(\d+)__/)
       if (memo) this.document.memo = String(params[Number(memo[1])])
       this.headerWrites += 1
@@ -165,10 +179,12 @@ class OrderRouteHarness {
 
     const context: TransactionContext = {
       ownsLock: false,
+      dirty: false,
       snapshot: {
         document: { ...this.document },
         auditLog: this.auditLog.map((row) => ({ ...row })),
         flowEffects: this.flowEffects.map((row) => ({ ...row })),
+        deleted: this.deleted,
       },
     }
 
@@ -176,9 +192,12 @@ class OrderRouteHarness {
       try {
         return await work()
       } catch (error) {
-        this.document = { ...context.snapshot.document }
-        this.auditLog = context.snapshot.auditLog.map((row) => ({ ...row }))
-        this.flowEffects = context.snapshot.flowEffects.map((row) => ({ ...row }))
+        if (context.dirty) {
+          this.document = { ...context.snapshot.document }
+          this.auditLog = context.snapshot.auditLog.map((row) => ({ ...row }))
+          this.flowEffects = context.snapshot.flowEffects.map((row) => ({ ...row }))
+          this.deleted = context.snapshot.deleted
+        }
         throw error
       } finally {
         if (context.ownsLock) this.releaseDocumentLock()
@@ -223,6 +242,7 @@ class OrderRouteHarness {
     if (this.document.status !== 'draft') {
       throw new Error(`document is ${this.document.status}, not draft`)
     }
+    this.markTransactionDirty()
     this.document.status = 'approved'
     return { gated: false, runId: null, flowError: null, autoApproved: true }
   }
@@ -237,6 +257,7 @@ class OrderRouteHarness {
       return { failure: 'the order changed while the void request was being created' }
     }
 
+    this.markTransactionDirty()
     this.document.voidRequestedAt = '2026-08-24T12:00:00.000Z'
     this.auditLog.push({ action: 'void_requested', documentId: this.document.id })
     this.flowEffects.push({ kind: 'before_void', documentId: this.document.id })
@@ -249,6 +270,27 @@ class OrderRouteHarness {
 
     this.document.status = 'voided'
     return { status: 'voided', reversalEntryId: null, runId: null }
+  }
+
+  async deleteDocument(): Promise<
+    | { documentId: string }
+    | { failure: string }
+  > {
+    this.deleteCalls += 1
+    if (this.deleted) return { failure: 'document not found' }
+    if (this.document.status !== 'draft') {
+      return {
+        failure: `${this.document.documentNumber} is ${this.document.status} and cannot be deleted — use the controlled void/cancel action`,
+      }
+    }
+
+    // Production checks draft status in an unlocked SELECT, then its DELETE
+    // statement acquires the row lock. Without the route-level lock, issuance
+    // can commit while this command waits and the unconditional DELETE wins.
+    await this.acquireDocumentLock()
+    this.markTransactionDirty()
+    this.deleted = true
+    return { documentId: this.document.id }
   }
 
   loadOrder(): Record<string, unknown> {
@@ -293,7 +335,8 @@ class OrderRouteHarness {
   }
 
   private matchesDocument(params: unknown[]): boolean {
-    return params[0] === this.document.id
+    return !this.deleted
+      && params[0] === this.document.id
       && params[1] === this.document.kind
       && params[2] === this.document.orgId
   }
@@ -316,6 +359,11 @@ class OrderRouteHarness {
     const next = this.lockWaiters.shift()
     if (next) next()
     else this.lockHeld = false
+  }
+
+  private markTransactionDirty(): void {
+    const context = this.transactions.getStore()
+    if (context) context.dirty = true
   }
 
   private async holdClaimedPause(pause: InternalPauseControl | null): Promise<void> {
@@ -356,8 +404,15 @@ const mockSources = new Map<string, string>([
     }
   `],
   ['mock:document-delete', `
+    const state = ${stateExpression}
     export class DeleteError extends Error {}
-    export async function deleteDocument() { return undefined }
+    export async function deleteDocument() {
+      return state.transaction(async () => {
+        const result = await state.deleteDocument()
+        if ('failure' in result) throw new DeleteError(result.failure)
+        return result
+      })
+    }
   `],
   ['mock:feature-gates', `
     export async function guardFeaturePermission() {
@@ -454,10 +509,11 @@ const hooks = registerHooks({
 })
 
 const handlerUrl = './handlers.ts?order-route-concurrency-test'
-const { makePATCH } = await import(handlerUrl) as typeof import('./handlers.ts')
+const { makeDELETE, makePATCH } = await import(handlerUrl) as typeof import('./handlers.ts')
 hooks.deregister()
 
 const PATCH = makePATCH({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
+const DELETE = makeDELETE({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
@@ -465,6 +521,15 @@ function patch(body: Record<string, unknown>): Promise<Response> {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ id: DOCUMENT_ID }) },
+  )
+}
+
+function discard(): Promise<Response> {
+  return DELETE(
+    new Request(`http://openbooks.test/api/estimates/${DOCUMENT_ID}`, {
+      method: 'DELETE',
     }),
     { params: Promise.resolve({ id: DOCUMENT_ID }) },
   )
@@ -515,6 +580,37 @@ test('issuing serializes a stale draft replacement and rejects it after approval
   assert.equal(harness.document.status, 'approved')
   assert.equal(harness.document.memo, 'original memo')
   assert.equal(harness.headerWrites, 0)
+})
+
+test('issuing serializes draft discard and prevents deletion of the issued order', async () => {
+  harness.reset('draft')
+  const control = harness.pauseNextSubmit()
+  const issue = patch({ status: 'approved' })
+  await control.entered
+
+  const deleteRequest = discard()
+  let deleteCallsWhileIssueHeldTheLock = 0
+  try {
+    await waitForConcurrentPath(
+      () => harness.lockAttempts >= 2 || harness.deleteCalls > 0,
+      'draft discard to reach the lifecycle boundary',
+    )
+    deleteCallsWhileIssueHeldTheLock = harness.deleteCalls
+  } finally {
+    control.release()
+  }
+
+  const settled = await Promise.allSettled([issue, deleteRequest])
+  const issueResponse = fulfilledResponse(settled[0], 'issue request')
+  const deleteResponse = fulfilledResponse(settled[1], 'draft discard request')
+  assert.equal(deleteCallsWhileIssueHeldTheLock, 0)
+  assert.deepEqual([issueResponse.status, deleteResponse.status], [200, 422])
+  assert.deepEqual(await deleteResponse.json(), {
+    error: 'Q-LOCK-001 is approved and cannot be deleted — use the controlled void/cancel action',
+  })
+  assert.equal(harness.deleteCalls, 1)
+  assert.equal(harness.deleted, false)
+  assert.equal(harness.document.status, 'approved')
 })
 
 test('two concurrent issue requests perform one lifecycle transition', async () => {
