@@ -20,10 +20,13 @@ import {
   type ReportBreakout,
   type ReportCustomQuery,
   type ReportMeasure,
+  type ReportPageRequest,
 } from './types'
 
 export const DEFAULT_REPORT_LIMIT = 1000
 export const MAX_REPORT_ROWS = 10_000
+/** Reserved raw-row key carrying COUNT(*) OVER() for a paged result. */
+export const REPORT_TOTAL_ROWS_COLUMN = '__report_total_rows'
 
 export type CompiledReportQuery = {
   text: string
@@ -39,6 +42,11 @@ export type CompiledReportQuery = {
   /** Sectioned summarize: totals flags echoed for the shaper. */
   totals?: ReportCustomQuery['totals']
   limit: number
+  /** Normalized page request. Present only for a rows-mode paged execution. */
+  page?: ReportPageRequest
+  /** Exact same FROM/WHERE as `text`, used only when a nonzero offset returns
+   *  no rows and therefore COUNT(*) OVER() has no carrier row. */
+  countText?: string
 }
 
 export type CompileCustomQueryOpts = {
@@ -50,6 +58,10 @@ export type CompileCustomQueryOpts = {
   /** Org business day (YYYY-MM-DD). Required when the entity FROM uses the
    *  as-of sentinel — bound as a parameter, never CURRENT_DATE. */
   asOf?: string
+  /** Request one page from an entity whose catalog declares `pagination`.
+   *  This deliberately overrides the saved query's legacy materialization
+   *  limit, allowing complete history to be retrieved page by page. */
+  page?: ReportPageRequest
 }
 
 /**
@@ -66,6 +78,9 @@ export function compileCustomQuery(
   const q = (customQuery ?? null) as ReportCustomQuery | null
   if (!q || q.entity !== entity.key) {
     throw new Error('Custom query missing or has unknown entity')
+  }
+  if (opts.page && q.mode === 'summarize') {
+    throw new Error('Paged report execution supports rows mode only')
   }
   return q.mode === 'summarize'
     ? compileSummarize(entity, q, orgId, opts)
@@ -98,6 +113,7 @@ function compileRows(
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, orgId, params)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
+  const countFrom = from.replace(/\r?\n/g, ' ')
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
 
@@ -106,7 +122,26 @@ function compileRows(
   const selectKeys = [...requestedColumns]
   if (groupBy && !selectKeys.includes(groupBy)) selectKeys.push(groupBy)
 
-  const selectList = selectKeys.map((c) => `${columnRef(entity, c)} AS "${c}"`).join(', ')
+  // Native cell-link metadata travels in hidden selected columns. Catalog
+  // mistakes fail loudly instead of producing a display value that opens the
+  // wrong record.
+  const activeCellLinks = (entity.cellLinks ?? []).filter((link) => requestedColumns.includes(link.column))
+  for (const link of activeCellLinks) {
+    for (const key of [link.entryIdColumn, link.docIdColumn, link.docKindColumn]) {
+      if (!key) continue
+      if (!columnRef(entity, key)) {
+        throw new Error(`entity ${entity.key} cell link references unknown column ${key}`)
+      }
+      if (!selectKeys.includes(key)) selectKeys.push(key)
+    }
+  }
+
+  const page = opts.page ? resolveReportPage(entity, opts.page, opts.maxRows) : null
+
+  const selectList = [
+    ...selectKeys.map((c) => `${columnRef(entity, c)} AS "${c}"`),
+    ...(page ? [`COUNT(*) OVER() AS "${REPORT_TOTAL_ROWS_COLUMN}"`] : []),
+  ].join(', ')
   // Every sort column resolves through the catalog; unknowns are dropped.
   const sortSpecs = (q.sorts ?? [])
     .map((s) => {
@@ -115,7 +150,7 @@ function compileRows(
     })
     .filter((s): s is string => s !== null)
     .slice(0, 3)
-  const limit = resolveLimit(q.limit, opts.maxRows)
+  const limit = page?.limit ?? resolveLimit(q.limit, opts.maxRows)
 
   const text = [
     `SELECT ${selectList}`,
@@ -123,6 +158,7 @@ function compileRows(
     `WHERE ${whereParts.join(' AND ')}`,
     sortSpecs.length ? `ORDER BY ${sortSpecs.join(', ')}` : '',
     `LIMIT ${limit}`,
+    page ? `OFFSET ${page.offset}` : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -136,6 +172,10 @@ function compileRows(
     measures: [],
     groupBy,
     limit,
+    ...(page ? {
+      page,
+      countText: `SELECT COUNT(*) AS "${REPORT_TOTAL_ROWS_COLUMN}" FROM ${countFrom} WHERE ${whereParts.join(' AND ')}`,
+    } : {}),
   }
 }
 
@@ -295,6 +335,35 @@ export function resolveLimit(requested: number | null | undefined, maxRows?: num
   let limit = Math.min(Math.max(Number.isFinite(n) ? n : DEFAULT_REPORT_LIMIT, 1), MAX_REPORT_ROWS)
   if (maxRows) limit = Math.min(limit, maxRows)
   return limit
+}
+
+/** Normalize untrusted page numbers against the entity-authored policy. */
+export function resolveReportPage(
+  entity: ReportEntity,
+  requested: ReportPageRequest,
+  maxRows?: number,
+): ReportPageRequest {
+  if (!entity.pagination) {
+    throw new Error(`entity ${entity.key} does not support paged execution`)
+  }
+  const configuredMax = Math.min(
+    Math.max(Math.trunc(entity.pagination.maxPageSize) || 1, 1),
+    MAX_REPORT_ROWS,
+  )
+  const effectiveMax = Number.isFinite(maxRows) && Number(maxRows) > 0
+    ? Math.min(configuredMax, Math.max(1, Math.trunc(Number(maxRows))))
+    : configuredMax
+  const configuredDefault = Math.min(
+    Math.max(Math.trunc(entity.pagination.defaultPageSize) || 1, 1),
+    effectiveMax,
+  )
+  const rawLimit = Number(requested.limit)
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(Math.max(Math.trunc(rawLimit), 1), effectiveMax)
+    : configuredDefault
+  const rawOffset = Number(requested.offset)
+  const offset = Number.isSafeInteger(rawOffset) && rawOffset > 0 ? rawOffset : 0
+  return { offset, limit }
 }
 
 const DEFAULT_COLUMN_COUNT = 7

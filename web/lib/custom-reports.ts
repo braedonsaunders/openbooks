@@ -6,6 +6,8 @@ import {
   runCustomQuery,
   validateCustomQuery,
   type ReportCustomQuery,
+  type ReportGroup,
+  type ReportPageRequest,
   type ReportRule,
   type ReportRuleGroup,
   type ReportRunLabels,
@@ -40,8 +42,10 @@ const TEMPORAL_OPS = new Set([
 
 /**
  * The date field a report's period filter governs: the first filter leaf with
- * a temporal op on a date-kind column, else the entity's first date column.
- * Lets the native period picker drive ANY saved query report.
+ * a temporal op on a date-kind column, else the entity-authored default. An
+ * explicit filter remains authoritative even when the entity opts out of an
+ * implicit period (lot recall may filter expiry on purpose, but an unfiltered
+ * recall must remain complete history rather than silently becoming fiscal).
  */
 export function reportPeriodField(query: ReportCustomQuery): string | null {
   const entity = REPORT_ENTITY_MAP[query.entity]
@@ -63,6 +67,10 @@ export function reportPeriodField(query: ReportCustomQuery): string | null {
   }
   walk(query.filters ?? undefined)
   if (found) return found
+  if (entity.defaultPeriodField === null) return null
+  if (entity.defaultPeriodField !== undefined) {
+    return dateColumns.has(entity.defaultPeriodField) ? entity.defaultPeriodField : null
+  }
   return entity.columns.find((c) => c.kind === 'date')?.key ?? null
 }
 
@@ -143,6 +151,28 @@ export async function statementDefinitionId(
   return r.rows[0]?.id ?? null
 }
 
+/**
+ * Resolve one catalog-owned entity report to the stable per-org definition id
+ * materialised by ensureReportDefinitions. A custom report that happened to
+ * claim the slug first is never captured: only built-in query definitions are
+ * eligible, matching the seed boundary's ownership rules.
+ */
+export async function builtInReportDefinitionId(
+  orgId: string,
+  slug: string,
+): Promise<string | null> {
+  await ensureReportDefinitions(orgId)
+  const r = (await db.execute<{ id: string }>(sql`
+    select id from report_definitions
+     where org_id = ${orgId}
+       and kind = 'built_in'
+       and coalesce(report_type, 'query') = 'query'
+       and slug = ${slug}
+     limit 1
+  `))
+  return r.rows[0]?.id ?? null
+}
+
 /** Load one definition scoped to the caller's org, or null. */
 export async function loadReportDefinition(
   orgId: string,
@@ -194,19 +224,174 @@ export async function executeReport(
   maxRows: number = REPORT_MAX_ROWS,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
+  const prepared = await prepareReportExecution(orgId, query, labels)
+  return runCustomQuery(pool, prepared.query, {
+    ...prepared.options,
+    maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
+  })
+}
+
+/** Execute one causally counted page for an entity that explicitly supports
+ * paging. The engine binds COUNT(*) OVER() to the exact same FROM/WHERE as the
+ * rows, and normalizes the untrusted request against the entity's page policy. */
+export async function executeReportPage(
+  orgId: string,
+  query: ReportCustomQuery,
+  page: ReportPageRequest,
+  labels?: ReportRunLabels,
+): Promise<ReportRunResult> {
+  const prepared = await prepareReportExecution(orgId, query, labels)
+  return runCustomQuery(pool, prepared.query, {
+    ...prepared.options,
+    page,
+  })
+}
+
+/**
+ * Materialize every page for an export without falling back to the legacy
+ * 10,000-row query cap. All pages run inside one repeatable-read, read-only
+ * transaction: inserts or corrections arriving while a large export runs
+ * cannot shift page boundaries and duplicate or omit movements.
+ *
+ * Only catalog entities with an explicit paging policy take this path. Other
+ * report types retain their established bounded/summarized execution contract.
+ */
+export async function executeReportAllPages(
+  orgId: string,
+  query: ReportCustomQuery,
+  labels?: ReportRunLabels,
+): Promise<ReportRunResult> {
+  const entity = REPORT_ENTITY_MAP[query.entity]
+  if (query.mode !== 'rows' || !entity?.pagination) {
+    return executeReport(orgId, query, REPORT_MAX_ROWS, labels)
+  }
+
+  const prepared = await prepareReportExecution(orgId, query, labels)
+  const client = await pool.connect()
+  const pages: ReportRunResult[] = []
+  let expectedRows: number | null = null
+  let offset = 0
+  try {
+    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    do {
+      const page = await runCustomQuery(client, prepared.query, {
+        ...prepared.options,
+        page: { offset, limit: entity.pagination.maxPageSize },
+      })
+      if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+      if (expectedRows === null) expectedRows = page.pageInfo.totalRows
+      if (page.pageInfo.totalRows !== expectedRows) {
+        throw new Error('Paged report total changed inside a stable export snapshot')
+      }
+      pages.push(page)
+      offset += page.rowCount
+      if (offset < expectedRows && page.rowCount === 0) {
+        throw new Error('Paged report stopped before all rows were returned')
+      }
+    } while (offset < (expectedRows ?? 0))
+    if (offset !== (expectedRows ?? 0)) {
+      throw new Error('Paged report returned an inconsistent row count')
+    }
+    await client.query('COMMIT')
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK')
+    } catch {
+      // Preserve the causal execution error; release() discards a poisoned
+      // checked-out connection through the engine pool's protection wrapper.
+    }
+    throw error
+  } finally {
+    client.release()
+  }
+
+  return mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels)
+}
+
+async function prepareReportExecution(
+  orgId: string,
+  query: ReportCustomQuery,
+  labels?: ReportRunLabels,
+) {
   const featureKey = reportEntityFeatureKey(query)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new Error(`${featureKey} feature is disabled`)
   }
-  const resolved = await resolvePeriodPresets(query, orgId)
-  return runCustomQuery(pool, resolved, {
-    orgId,
-    entityMap: REPORT_ENTITY_MAP,
-    maxRows: Math.min(maxRows, REPORT_MAX_ROWS),
-    fiscalStartMonth: await fiscalStartMonth(),
-    asOf: await businessToday(orgId),
-    labels: labels ?? (await reportRunLabels()),
-  })
+  const [resolved, startMonth, asOf, runLabels] = await Promise.all([
+    resolvePeriodPresets(query, orgId),
+    fiscalStartMonth(),
+    businessToday(orgId),
+    labels ? Promise.resolve(labels) : reportRunLabels(),
+  ])
+  return {
+    query: resolved,
+    options: {
+      orgId,
+      entityMap: REPORT_ENTITY_MAP,
+      fiscalStartMonth: startMonth,
+      asOf,
+      labels: runLabels,
+    },
+  }
+}
+
+/** Merge page-shaped groups without dropping native cell metadata. Grouped
+ * rows may span a page boundary, so they are coalesced by their raw group key
+ * (falling back to their stable display identity for ungrouped results). */
+function mergeReportPages(
+  pages: ReportRunResult[],
+  totalRows: number,
+  labels: ReportRunLabels,
+): ReportRunResult {
+  const merged: ReportGroup[] = []
+  const byKey = new Map<string, ReportGroup>()
+  for (const page of pages) {
+    for (const source of page.groups) {
+      const key = source.groupKey
+        ? `${source.kind}\u0000${source.groupKey.field}\u0000${source.groupKey.value}`
+        : `${source.kind}\u0000${source.title}\u0000${source.columns.join('\u0000')}`
+      let target = byKey.get(key)
+      if (!target) {
+        target = {
+          ...source,
+          rows: [],
+          ...(source.cellLinks ? { cellLinks: [] } : {}),
+          isEmpty: true,
+        }
+        byKey.set(key, target)
+        merged.push(target)
+      }
+      const priorRowCount = target.rows.length
+      target.rows.push(...source.rows)
+      target.isEmpty = target.rows.length === 0
+      if (target.cellLinks || source.cellLinks) {
+        target.cellLinks ??= Array.from(
+          { length: priorRowCount },
+          () => target!.columns.map(() => null),
+        )
+        target.cellLinks.push(...(
+          source.cellLinks
+            ?? source.rows.map(() => source.columns.map(() => null))
+        ))
+      }
+      if (source.totalRows?.length) {
+        target.totalRows = [
+          ...(target.totalRows ?? []),
+          ...source.totalRows.map((index) => priorRowCount + index),
+        ]
+      }
+    }
+  }
+
+  for (const group of merged) {
+    if (group.subtitle !== undefined) {
+      group.subtitle = labels.rowCount?.(group.rows.length) ?? `${group.rows.length} row(s)`
+    }
+  }
+  const summary = pages[0]?.summary.map((item, index) => (
+    index === 0 ? { ...item, value: totalRows } : item
+  )) ?? []
+  return { groups: merged, summary, rowCount: totalRows }
 }
 
 /**

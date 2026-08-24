@@ -13,12 +13,15 @@ import {
   compileCustomQuery,
   labelFor,
   measureLabel,
+  REPORT_TOTAL_ROWS_COLUMN,
   type CompileCustomQueryOpts,
 } from './custom-query'
 import {
   formatLabel,
   isoDate,
+  pickUuid,
   type ReportBreakout,
+  type ReportCellLink,
   type ReportCustomQuery,
   type ReportGroup,
   type ReportMeasure,
@@ -101,17 +104,49 @@ export async function runCustomQuery(
     maxRows: opts.maxRows,
     fiscalStartMonth: opts.fiscalStartMonth,
     asOf: opts.asOf,
+    page: opts.page,
   })
   const { rows } = await client.query(compiled.text, compiled.values)
 
   const labels = opts.labels ?? {}
+  let result: ReportRunResult
   if (compiled.mode === 'summarize') {
-    return shapeSummarizeResult(
+    result = shapeSummarizeResult(
       entity, compiled.breakouts, compiled.measures, rows, labels,
       compiled.groupBy, compiled.totals ?? null,
     )
+  } else {
+    result = shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
   }
-  return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
+
+  if (!compiled.page) return result
+  let totalRows: number
+  if (rows.length > 0) {
+    totalRows = parseTotalRows(rows[0]?.[REPORT_TOTAL_ROWS_COLUMN])
+  } else if (compiled.page.offset > 0) {
+    if (!compiled.countText) throw new Error('Paged report query is missing its count probe')
+    const count = await client.query(compiled.countText, compiled.values)
+    totalRows = parseTotalRows(count.rows[0]?.[REPORT_TOTAL_ROWS_COLUMN])
+  } else {
+    totalRows = 0
+  }
+  return {
+    ...result,
+    pageInfo: {
+      ...compiled.page,
+      totalRows,
+      hasNext: compiled.page.offset + rows.length < totalRows,
+      hasPrevious: compiled.page.offset > 0 && totalRows > 0,
+    },
+  }
+}
+
+function parseTotalRows(value: unknown): number {
+  const total = Number(value)
+  if (!Number.isSafeInteger(total) || total < 0) {
+    throw new Error('Paged report returned an invalid total row count')
+  }
+  return total
 }
 
 // --- rows mode ---------------------------------------------------------------
@@ -140,6 +175,32 @@ function shapeRowsResult(
     const kind = entity.columns.find((col) => col.key === c)?.kind
     return kind === 'money' || kind === 'number' ? ('right' as const) : ('left' as const)
   })
+  const cellLinkByColumn = new Map(
+    (entity.cellLinks ?? [])
+      .filter((link) => requestedColumns.includes(link.column))
+      .map((link) => [link.column, link] as const),
+  )
+  const rowCellLinks = (row: Record<string, unknown>): (ReportCellLink | null)[] =>
+    requestedColumns.map((column) => {
+      const spec = cellLinkByColumn.get(column)
+      // Do not create an invisible click target for a null/empty display cell.
+      if (!spec || row[column] == null || String(row[column]).trim() === '') return null
+      const docId = spec.docIdColumn ? pickUuid(row[spec.docIdColumn]) : null
+      const entryId = pickUuid(row[spec.entryIdColumn]) ?? docId
+      if (!entryId) return null
+      const rawKind = spec.docKindColumn ? row[spec.docKindColumn] : null
+      return {
+        kind: 'transaction',
+        entryId,
+        docId,
+        docKind: typeof rawKind === 'string' && rawKind ? rawKind : null,
+      }
+    })
+  const linkedCells = (data: Record<string, unknown>[]) => {
+    if (cellLinkByColumn.size === 0) return undefined
+    const matrix = data.map(rowCellLinks)
+    return matrix.some((row) => row.some(Boolean)) ? matrix : undefined
+  }
 
   if (groupBy) {
     const byKey = new Map<string, Record<string, unknown>[]>()
@@ -153,6 +214,7 @@ function shapeRowsResult(
       groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, align })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
+        const cellLinks = linkedCells(list)
         groups.push({
           kind: 'section',
           title:
@@ -164,10 +226,12 @@ function shapeRowsResult(
           money,
           align,
           groupKey: { field: groupBy, value: k },
+          ...(cellLinks ? { cellLinks } : {}),
         })
       }
     }
   } else {
+    const cellLinks = linkedCells(dataRows)
     groups.push({
       kind: 'results',
       title: resultsTitle,
@@ -177,6 +241,7 @@ function shapeRowsResult(
       isEmpty: dataRows.length === 0,
       money,
       align,
+      ...(cellLinks ? { cellLinks } : {}),
     })
   }
 

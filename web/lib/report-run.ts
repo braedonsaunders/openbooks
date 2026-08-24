@@ -1,7 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { validateCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
+import {
+  applyBuiltInUrlFilters,
+  BUILT_IN_REPORT_DEFINITION_MAP,
+  validateCustomQuery,
+  type ReportRuleGroup,
+} from '@openbooks/reports'
 import {
   agingByParty,
   cashFlow,
@@ -35,7 +40,12 @@ import {
   type ExportData,
   type Translator,
 } from './report-pdf'
-import { applyPeriodOverride, executeReport, mergeReportFilters, reportPeriodField } from './custom-reports'
+import {
+  applyPeriodOverride,
+  executeReportAllPages,
+  mergeReportFilters,
+  reportPeriodField,
+} from './custom-reports'
 import type { ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 import { STATEMENT_KIND_FEATURE } from './report-authz'
@@ -304,13 +314,15 @@ export async function resolveDefinitionToExportData(
   options: { extraFilters?: ReportRuleGroup | null } = {},
 ): Promise<ExportData> {
   const r = (await db.execute<{
+      kind: string
+      slug: string
       report_type: string
       name: string
       description: string | null
       query: Record<string, unknown> | null
       statement: { kind?: string; params?: Record<string, string> } | null
     }>(sql`
-    select report_type, name, description, query, statement
+    select kind, slug, report_type, name, description, query, statement
       from report_definitions
      where id = ${id} and org_id = ${orgId}
   `))
@@ -340,13 +352,26 @@ export async function resolveDefinitionToExportData(
   if (!row.query) throw new Error('report has no query')
   let query = mergeReportFilters(validateCustomQuery(row.query), options.extraFilters)
   const periodTouched = p.has('period') || p.has('from') || p.has('to')
+  // Derive the native period field before URL-backed built-in filters land.
+  // expiresOnOrBefore is an intentional recall cutoff, not permission to turn
+  // the entire recall into an implicit fiscal-period report.
   const periodField = periodTouched ? reportPeriodField(query) : null
+  const builtIn = row.kind === 'built_in'
+    ? BUILT_IN_REPORT_DEFINITION_MAP[row.slug]
+    : undefined
+  if (builtIn) {
+    // The catalog owns URL-binding semantics, while the stored plan remains
+    // authoritative: orgs may tune seeded definitions in place.
+    query = applyBuiltInUrlFilters({ ...builtIn, query }, p)
+  }
   if (periodField) {
     query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to })
   }
-  const result = await executeReport(orgId, query)
+  // Pageable entity exports deliberately collect every causally stable page;
+  // they never inherit the interactive page or the engine's legacy 10k cap.
+  const result = await executeReportAllPages(orgId, query)
   return runResultToExportData(result, {
-    title: row.name,
+    title: builtIn ? ctx.t(`builtIns.${row.slug}.name`) : row.name,
     dateRangeLabel: periodField ? ctx.period.label ?? '' : '',
   })
 }

@@ -211,6 +211,11 @@ export type ReportGroup = {
    *  whose bucket cannot be scoped exactly carry null (viewers omit the
    *  drill rather than show unrelated records). */
   rowKeys?: (ReportRowScopeRule[] | null)[]
+  /** Optional native navigation target for each displayed cell. The matrix is
+   *  aligned exactly to `rows`; null cells remain plain text. Link metadata is
+   *  authored by the entity catalog and selected as hidden query columns, so
+   *  viewers never have to infer a record id from formatted display values. */
+  cellLinks?: (ReportCellLink | null)[][]
   /** If true, render an "empty" placeholder row instead of the table. */
   isEmpty?: boolean
 }
@@ -223,10 +228,39 @@ export type ReportRowScopeRule =
 
 export type ReportSummaryItem = { label: string; value: string | number; money?: boolean }
 
+/** Native record navigation carried alongside a report cell. `entryId` is
+ *  always present because the transaction link can also open a ledger entry
+ *  that has no source document. For document-backed rows it may deliberately
+ *  equal `docId` when no posted journal entry exists yet. */
+export type ReportCellLink = {
+  kind: 'transaction'
+  entryId: string
+  docId?: string | null
+  docKind?: string | null
+}
+
+/** Requested slice of an entity whose catalog opts into paging. Values are
+ *  normalized by the compiler; callers may pass untrusted URL numbers. */
+export type ReportPageRequest = {
+  offset: number
+  limit: number
+}
+
+/** Page facts returned with a paged run. `totalRows` is the count under the
+ *  exact same org scope and effective filter tree as the displayed rows. */
+export type ReportPageInfo = {
+  offset: number
+  limit: number
+  totalRows: number
+  hasNext: boolean
+  hasPrevious: boolean
+}
+
 export type ReportRunResult = {
   groups: ReportGroup[]
   summary: ReportSummaryItem[]
   rowCount: number
+  pageInfo?: ReportPageInfo
 }
 
 // --- Small shared formatting helpers ------------------------------------------
