@@ -14,6 +14,13 @@ interface PreviewLine {
   counterpartyRef?: string | null
 }
 
+interface StatementPreview {
+  lines: PreviewLine[]
+  imported: number
+  duplicates: number
+  sourceRevision: number
+}
+
 interface Mapping {
   date: string
   amount: string
@@ -21,6 +28,14 @@ interface Mapping {
   description: string
   counterpartyRef: string
   bankTransactionId: string
+}
+
+type StatementTextSource = 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'
+
+interface BrowserUploadEvidence {
+  bytesBase64: string
+  filename: string
+  contentType: string | null
 }
 
 const EMPTY_MAPPING: Mapping = {
@@ -52,12 +67,50 @@ function toEngineMapping(m: Mapping) {
   }
 }
 
+function statementSourceForFilename(filename: string): StatementTextSource | null {
+  const lower = filename.toLowerCase()
+  if (lower.endsWith('.csv')) return 'csv'
+  if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) return 'ofx'
+  if (lower.endsWith('.xml')) return 'camt053'
+  if (lower.endsWith('.bai') || lower.endsWith('.bai2')) return 'bai2'
+  if (lower.endsWith('.sta') || lower.endsWith('.mt940')) return 'mt940'
+  return null
+}
+
+const BROWSER_BASE64_CHUNK_BYTES = 0x8000
+
+function browserBase64FromBytes(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  for (let offset = 0; offset < bytes.length; offset += BROWSER_BASE64_CHUNK_BYTES) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + BROWSER_BASE64_CHUNK_BYTES)))
+  }
+  return btoa(chunks.join(''))
+}
+
+/** Build exact upload evidence from one browser file read; only the engine decodes it. */
+async function prepareBrowserStatementUpload(
+  file: Pick<File, 'arrayBuffer' | 'name' | 'type'>,
+  fallbackSource: StatementTextSource,
+) {
+  const source = statementSourceForFilename(file.name) ?? fallbackSource
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  return {
+    source,
+    evidence: {
+      bytesBase64: browserBase64FromBytes(bytes),
+      filename: file.name,
+      contentType: file.type.split(';')[0]?.trim() || null,
+    } satisfies BrowserUploadEvidence,
+  }
+}
+
 const PREVIEW_CAP = 100
 
 /**
- * Import-statement flyout: paste OFX/CSV text or read a file client-side
- * (FileReader → text POST — no object storage in v1), map CSV columns,
- * preview the parsed + deduped lines, then import.
+ * Import-statement flyout: paste OFX/CSV text or read a file client-side,
+ * retaining browser uploads as base64 source bytes. The engine is the sole
+ * decoding authority and returns review text before parsed preview/import.
+ * Map CSV columns, preview parsed + deduped lines, then import.
  */
 export function ImportStatementButton({ accountId }: { accountId: string }) {
   const { money } = useMoney()
@@ -66,21 +119,25 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+  const fileReadVersion = useRef(0)
+  const sourceRevision = useRef(0)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [source, setSource] = useState<'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940'>('ofx')
+  const [source, setSource] = useState<StatementTextSource>('ofx')
   const [text, setText] = useState('')
-  const [fileName, setFileName] = useState<string | null>(null)
+  const [uploadEvidence, setUploadEvidence] = useState<BrowserUploadEvidence | null>(null)
   const [header, setHeader] = useState<string[] | null>(null)
   const [mapping, setMapping] = useState<Mapping>(EMPTY_MAPPING)
-  const [preview, setPreview] = useState<{ lines: PreviewLine[]; imported: number; duplicates: number } | null>(null)
+  const [preview, setPreview] = useState<StatementPreview | null>(null)
   const [statementDate, setStatementDate] = useState('')
   const [openingBalance, setOpeningBalance] = useState('')
   const [closingBalance, setClosingBalance] = useState('')
 
   function reset() {
+    fileReadVersion.current += 1
+    sourceRevision.current += 1
     setText('')
-    setFileName(null)
+    setUploadEvidence(null)
     setHeader(null)
     setMapping(EMPTY_MAPPING)
     setPreview(null)
@@ -90,25 +147,39 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   }
 
   function onTextChanged(next: string) {
+    fileReadVersion.current += 1
+    sourceRevision.current += 1
     setText(next)
+    setUploadEvidence(null)
     setHeader(null)
     setPreview(null)
   }
 
-  function readFile(file: File) {
-    const reader = new FileReader()
-    reader.onload = () => {
-      onTextChanged(String(reader.result ?? ''))
-      setFileName(file.name)
-      const lower = file.name.toLowerCase()
-      if (lower.endsWith('.csv')) setSource('csv')
-      else if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) setSource('ofx')
-      else if (lower.endsWith('.xml')) setSource('camt053')
-      else if (lower.endsWith('.bai') || lower.endsWith('.bai2')) setSource('bai2')
-      else if (lower.endsWith('.sta') || lower.endsWith('.mt940')) setSource('mt940')
+  async function readFile(file: File) {
+    const readVersion = ++fileReadVersion.current
+    const readSourceRevision = ++sourceRevision.current
+    setText('')
+    setUploadEvidence(null)
+    setHeader(null)
+    setPreview(null)
+
+    try {
+      const upload = await prepareBrowserStatementUpload(file, source)
+      const decoded = await post({
+        source: upload.source,
+        sourceBytesBase64: upload.evidence.bytesBase64,
+        mode: 'decode',
+      }) as { text?: unknown }
+      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current) return
+      if (typeof decoded.text !== 'string') throw new Error()
+
+      setText(decoded.text)
+      setUploadEvidence(upload.evidence)
+      setSource(upload.source)
+    } catch {
+      if (readVersion !== fileReadVersion.current || readSourceRevision !== sourceRevision.current) return
+      toast.error(tBanking('errors.fileReadFailed', { name: file.name }))
     }
-    reader.onerror = () => toast.error(tBanking('errors.fileReadFailed', { name: file.name }))
-    reader.readAsText(file)
   }
 
   async function post(body: Record<string, unknown>) {
@@ -122,11 +193,24 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     return data
   }
 
+  const sourcePayload = uploadEvidence
+    ? {
+        sourceBytesBase64: uploadEvidence.bytesBase64,
+        filename: uploadEvidence.filename,
+        contentType: uploadEvidence.contentType,
+      }
+    : { text }
+  const hasSource = uploadEvidence !== null || text.trim() !== ''
+
   async function detectColumns() {
+    const requestRevision = sourceRevision.current
     setBusy(true)
     try {
-      const data = (await post({ source: 'csv', text, mode: 'columns' })) as { header: string[] }
+      const data = (await post({ source: 'csv', ...sourcePayload, mode: 'columns' })) as { header: string[] }
+      if (requestRevision !== sourceRevision.current) return
+      sourceRevision.current += 1
       setHeader(data.header)
+      setPreview(null)
       setMapping({
         date: guessColumn(data.header, [/^date$/i, /date/i]),
         amount: guessColumn(data.header, [/^amount$/i, /amount|value|credit/i]),
@@ -136,40 +220,55 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         bankTransactionId: guessColumn(data.header, [/transaction ?id|fitid/i]),
       })
     } catch (e) {
-      toast.error((e as Error).message)
+      if (requestRevision === sourceRevision.current) toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const csvReady = source !== 'csv' || (mapping.date !== '' && mapping.amount !== '' && mapping.description !== '')
 
   async function runPreview() {
+    const requestRevision = sourceRevision.current
     setBusy(true)
     try {
       const data = await post({
         accountId,
         source,
-        text,
+        ...sourcePayload,
         mode: 'preview',
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
-      setPreview({ lines: data.lines ?? [], imported: data.imported, duplicates: data.duplicates })
-      if (data.statementDate && !statementDate) setStatementDate(data.statementDate)
-      if (data.closingBalance && !closingBalance) setClosingBalance(data.closingBalance)
+      if (requestRevision !== sourceRevision.current) return
+      setPreview({
+        lines: data.lines ?? [],
+        imported: data.imported,
+        duplicates: data.duplicates,
+        sourceRevision: requestRevision,
+      })
+      if (data.statementDate) setStatementDate((current) => current || data.statementDate)
+      if (data.closingBalance) setClosingBalance((current) => current || data.closingBalance)
     } catch (e) {
-      setPreview(null)
-      toast.error((e as Error).message)
+      if (requestRevision === sourceRevision.current) {
+        setPreview(null)
+        toast.error((e as Error).message)
+      }
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   async function runImport() {
+    if (!preview || preview.sourceRevision !== sourceRevision.current) {
+      setPreview(null)
+      return
+    }
     setBusy(true)
     try {
       const data = await post({
         accountId,
         source,
-        text,
+        ...sourcePayload,
         mode: 'import',
         statementDate: statementDate || null,
         openingBalance: openingBalance || null,
@@ -182,8 +281,9 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const field = 'space-y-1.5'
@@ -195,8 +295,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           {required ? <span className="text-red-500"> *</span> : null}
         </Label>
         <Select
+          disabled={busy}
           value={mapping[key]}
           onChange={(e) => {
+            sourceRevision.current += 1
             setMapping((m) => ({ ...m, [key]: e.target.value }))
             setPreview(null)
           }}
@@ -224,7 +326,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         description={t('description')}
         headerActions={
           <>
-            <Button variant="outline" disabled={busy || !text.trim() || !csvReady} onClick={runPreview}>
+            <Button variant="outline" disabled={busy || !hasSource || !csvReady} onClick={runPreview}>
               {t('preview')}
             </Button>
             <Button disabled={busy || !preview || preview.imported === 0} onClick={runImport}>
@@ -249,9 +351,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
             <div className={field}>
               <Label>{t('format')}</Label>
               <Select
+                disabled={busy}
                 value={source}
                 onChange={(e) => {
-                  setSource(e.target.value as 'ofx' | 'csv' | 'camt053' | 'bai2' | 'mt940')
+                  fileReadVersion.current += 1
+                  sourceRevision.current += 1
+                  setSource(e.target.value as StatementTextSource)
                   setHeader(null)
                   setPreview(null)
                 }}
@@ -271,16 +376,19 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                   type="file"
                   accept=".ofx,.qfx,.csv,.xml,.bai,.bai2,.sta,.mt940,.txt"
                   className="hidden"
+                  disabled={busy}
                   onChange={(e) => {
                     const f = e.target.files?.[0]
-                    if (f) readFile(f)
+                    if (f) void readFile(f)
                     e.target.value = ''
                   }}
                 />
-                <Button variant="outline" onClick={() => fileRef.current?.click()}>
+                <Button variant="outline" disabled={busy} onClick={() => fileRef.current?.click()}>
                   {t('chooseFile')}
                 </Button>
-                <span className="truncate text-sm text-slate-500 dark:text-slate-400">{fileName ?? t('orPasteBelow')}</span>
+                <span className="truncate text-sm text-slate-500 dark:text-slate-400">
+                  {uploadEvidence?.filename ?? t('orPasteBelow')}
+                </span>
               </div>
             </div>
           </div>
@@ -288,6 +396,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           <div className={field}>
             <Label>{t('statementText')}</Label>
             <Textarea
+              disabled={busy}
               value={text}
               onChange={(e) => onTextChanged(e.target.value)}
               rows={8}
@@ -312,7 +421,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('mappingHelp')}</p>
               </div>
             ) : (
-              <Button variant="outline" disabled={busy || !text.trim()} onClick={detectColumns}>
+              <Button variant="outline" disabled={busy || !hasSource} onClick={detectColumns}>
                 {t('detectColumns')}
               </Button>
             )
@@ -323,11 +432,17 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
                   <Label>{tBanking('labels.statementDate')}</Label>
-                  <Input type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} />
+                  <Input
+                    disabled={busy}
+                    type="date"
+                    value={statementDate}
+                    onChange={(e) => setStatementDate(e.target.value)}
+                  />
                 </div>
                 <div className={field}>
                   <Label>{tBanking('labels.openingBalance')}</Label>
                   <Input
+                    disabled={busy}
                     inputMode="decimal"
                     value={openingBalance}
                     onChange={(e) => setOpeningBalance(e.target.value)}
@@ -338,6 +453,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                 <div className={field}>
                   <Label>{tBanking('labels.closingBalance')}</Label>
                   <Input
+                    disabled={busy}
                     inputMode="decimal"
                     value={closingBalance}
                     onChange={(e) => setClosingBalance(e.target.value)}
