@@ -9,6 +9,7 @@ import {
   createPaymentLink,
   handleProviderWebhook,
   PAYMENT_WEBHOOK_EVENT_FAILURE_LOG_EVENT,
+  PaymentAcceptanceError,
   PaymentWebhookBatchError,
   publicPaymentPage,
 } from "./payment-acceptance.ts";
@@ -179,6 +180,11 @@ test("a poison webhook event rolls back without starving its later batch sibling
 
     assert.ok(batchError);
     assert.match(batchError.message, /invoice open item not found/);
+    assert.ok(
+      batchError.cause instanceof PaymentAcceptanceError,
+      "batch error must retain the original event-processing error as its cause",
+    );
+    assert.equal(batchError.cause.message, "invoice open item not found");
     assert.deepEqual(batchError.result, {
       signatureValid: true,
       orgId: org.orgId,
