@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
-import { importStatement, type ParsedStatementLine } from "./banking.ts";
+import {
+  importStatement,
+  type ParsedStatementLine,
+  type StatementSourceEvidence,
+} from "./banking.ts";
 import { addCalendarDays, businessToday } from "./business-date.ts";
 import { neg, normalizeMoney } from "./money.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -22,6 +26,8 @@ export type BankFeedProvider = "plaid" | "gocardless" | "truelayer";
 export interface FeedFetchResult {
   lines: ParsedStatementLine[];
   currency?: string | null;
+  /** Exact provider response bytes retained by the statement audit log. */
+  sourceEvidence: StatementSourceEvidence;
 }
 
 export interface BankFeedAdapter {
@@ -54,12 +60,42 @@ function exactFeedAmount(value: unknown): string {
   }
 }
 
-async function asJson(res: Response): Promise<any> {
-  const text = await res.text();
+async function jsonResponse(res: Response): Promise<{ body: any; raw: Uint8Array }> {
+  const raw = new Uint8Array(await res.arrayBuffer());
+  const text = Buffer.from(raw).toString("utf8");
   if (!res.ok) {
     throw new FeedError(`provider responded ${res.status}: ${text.slice(0, 300)}`);
   }
-  return text ? JSON.parse(text) : {};
+  return { body: text ? JSON.parse(text) : {}, raw };
+}
+
+async function asJson(res: Response): Promise<any> {
+  return (await jsonResponse(res)).body;
+}
+
+/**
+ * Preserve one provider response byte-for-byte. Paginated responses are
+ * wrapped as strings in a versioned JSON envelope so every original response
+ * remains exactly recoverable without pretending the pages were one response.
+ */
+export function bankFeedSourceEvidence(
+  provider: BankFeedProvider,
+  rawResponses: readonly Uint8Array[],
+): StatementSourceEvidence {
+  if (rawResponses.length === 0) throw new FeedError("bank feed returned no response evidence");
+  const bundled = rawResponses.length !== 1 || rawResponses[0]!.byteLength === 0;
+  return {
+    content: bundled
+      ? JSON.stringify({
+          format: "openbooks.bank-feed-response-bundle.v1",
+          provider,
+          encoding: "base64",
+          responses: rawResponses.map((raw) => Buffer.from(raw).toString("base64")),
+        })
+      : rawResponses[0]!,
+    filename: `bank-feed-${provider}-${bundled ? "responses" : "response"}.json`,
+    contentType: "application/json",
+  };
 }
 
 // --------------------------------------------------------------------------
@@ -98,7 +134,7 @@ const gocardless: BankFeedAdapter = {
       `${GOCARDLESS_BASE}/accounts/${encodeURIComponent(externalAccountId)}/transactions/?date_from=${sinceIso}&date_to=${untilIso}`,
       { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } },
     );
-    const body = await asJson(res);
+    const { body, raw } = await jsonResponse(res);
     // Booked only: pendings change or vanish, so importing them would leave
     // statement evidence that can never reconcile at sign-off.
     const txns: any[] = body?.transactions?.booked ?? [];
@@ -120,7 +156,7 @@ const gocardless: BankFeedAdapter = {
         bankTransactionId: t.transactionId || t.internalTransactionId || null,
       };
     });
-    return { lines, currency };
+    return { lines, currency, sourceEvidence: bankFeedSourceEvidence("gocardless", [raw]) };
   },
 };
 
@@ -177,6 +213,7 @@ const plaid: BankFeedAdapter = {
     const env = creds.env || "production";
     const today = untilIso;
     const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
+    const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
       const res = await fetch(`https://${env}.plaid.com/transactions/get`, {
         method: "POST",
@@ -190,7 +227,9 @@ const plaid: BankFeedAdapter = {
           options: { ...accountOptions, count: PLAID_PAGE_SIZE, offset },
         }),
       });
-      return await asJson(res);
+      const { body, raw } = await jsonResponse(res);
+      rawResponses.push(raw);
+      return body;
     });
     let currency: string | null = null;
     const lines: ParsedStatementLine[] = transactions.map((t: any) => {
@@ -205,7 +244,7 @@ const plaid: BankFeedAdapter = {
         bankTransactionId: t.transaction_id || null,
       };
     });
-    return { lines, currency };
+    return { lines, currency, sourceEvidence: bankFeedSourceEvidence("plaid", rawResponses) };
   },
 };
 
@@ -234,7 +273,7 @@ const truelayer: BankFeedAdapter = {
       `https://api.truelayer.com/data/v1/accounts/${encodeURIComponent(externalAccountId)}/transactions?from=${sinceIso}T00:00:00Z&to=${today}T23:59:59Z`,
       { headers: { Authorization: `Bearer ${creds.accessToken}` } },
     );
-    const body = await asJson(res);
+    const { body, raw } = await jsonResponse(res);
     let currency: string | null = null;
     const lines: ParsedStatementLine[] = (body.results ?? []).map((t: any) => {
       currency ??= t.currency ?? null;
@@ -246,7 +285,7 @@ const truelayer: BankFeedAdapter = {
         bankTransactionId: t.transaction_id || t.normalised_provider_transaction_id || null,
       };
     });
-    return { lines, currency };
+    return { lines, currency, sourceEvidence: bankFeedSourceEvidence("truelayer", [raw]) };
   },
 };
 
@@ -321,14 +360,25 @@ async function syncOne(row: {
   const creds = unsealJson<Record<string, string>>(row.credentials) ?? {};
   const until = await businessToday(row.orgId);
   const since = sinceFor(row.lastSyncAt, until);
-  const { lines, currency } = await adapter.fetch(creds, row.externalAccountId ?? "", since, until);
+  const { lines, currency, sourceEvidence } = await adapter.fetch(
+    creds,
+    row.externalAccountId ?? "",
+    since,
+    until,
+  );
 
   let imported = 0;
   let duplicates = 0;
   if (lines.length) {
     const result = await withOrg(row.orgId, () =>
       importStatement(
-        { accountId: row.accountId, source: "feed_api", lines, currency: currency ?? undefined },
+        {
+          accountId: row.accountId,
+          source: "feed_api",
+          lines,
+          currency: currency ?? undefined,
+          sourceEvidence,
+        },
         { orgId: row.orgId, userId: "00000000-0000-0000-0000-000000000000" },
       ),
     );
