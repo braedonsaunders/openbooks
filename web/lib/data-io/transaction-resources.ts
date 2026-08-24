@@ -85,6 +85,29 @@ interface TxnLineInput {
   unitPrice?: unknown
 }
 
+// Kept in lockstep with parse.ts and the import route's reserved mapping keys.
+// Formula provenance starts under CELL_PROVENANCE_KEY on a parsed row; the
+// route preserves it inside UNMAPPED_COLUMNS_KEY and records the mapped source
+// header under SOURCE_COLUMNS_KEY.
+const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
+const SOURCE_COLUMNS_KEY = '__sourceColumns'
+const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function formulaDerivedField(src: Record<string, unknown>, field: string): boolean {
+  const sourceColumns = objectRecord(src[SOURCE_COLUMNS_KEY])
+  const source = typeof sourceColumns?.[field] === 'string' ? sourceColumns[field] : field
+  const direct = objectRecord(src[CELL_PROVENANCE_KEY])
+  const unmapped = objectRecord(src[UNMAPPED_COLUMNS_KEY])
+  const mapped = objectRecord(unmapped?.[CELL_PROVENANCE_KEY])
+  return direct?.[source] === 'formula' || mapped?.[source] === 'formula'
+}
+
 export function transactionResource(cfg: DocKindConfig, orgId: string): DataResource {
   const cols = transactionFields(cfg)
   return {
@@ -217,7 +240,13 @@ async function writeTransactions(
       }
 
       // Assemble lines (JSON `lines` wins; else the flat single-line columns).
-      const rawLines: TxnLineInput[] = parseLines(src)
+      const parsedLines = parseLines(src)
+      if (parsedLines.error) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: parsedLines.error })
+        continue
+      }
+      const rawLines = parsedLines.lines
       if (rawLines.length === 0) {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: 'at least one line (account + amount) is required' })
@@ -343,18 +372,33 @@ function exactLineAmount(value: unknown): string | null {
   }
 }
 
-function parseLines(src: Record<string, unknown>): TxnLineInput[] {
+function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; error: string | null } {
   const raw = src.lines
   if (raw !== undefined && raw !== null && raw !== '') {
+    if (formulaDerivedField(src, 'lines')) {
+      return {
+        lines: [],
+        error: 'lines cannot come from a spreadsheet formula; provide literal JSON text',
+      }
+    }
     try {
       const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
-      if (Array.isArray(arr)) return arr as TxnLineInput[]
+      if (Array.isArray(arr)) return { lines: arr as TxnLineInput[], error: null }
     } catch {
       /* fall through to single-line */
     }
   }
   if (src.account && src.amount !== undefined && src.amount !== '') {
-    return [{ account: src.account, amount: src.amount, description: src.description, taxCode: src.taxCode }]
+    if (formulaDerivedField(src, 'amount')) {
+      return {
+        lines: [],
+        error: 'line amount cannot come from a spreadsheet formula; provide a literal decimal string',
+      }
+    }
+    return {
+      lines: [{ account: src.account, amount: src.amount, description: src.description, taxCode: src.taxCode }],
+      error: null,
+    }
   }
-  return []
+  return { lines: [], error: null }
 }

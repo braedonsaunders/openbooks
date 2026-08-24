@@ -150,20 +150,29 @@ export async function reportResultToXlsx(
 
 /**
  * Read the first worksheet of an .xlsx workbook into a header row + typed
- * scalar cells. Row 1 is treated as the header. Numeric cells and numeric
- * formula results must remain numbers: converting them to strings would erase
- * their IEEE-754 provenance and let downstream exact-decimal validators mistake
- * rounded spreadsheet values for user-supplied text. ExcelJS stays isolated in
- * this package (never reaches the client bundle).
+ * cells. Row 1 is treated as the header. Literal numbers remain numbers, while
+ * formulas carry their cached scalar plus an explicit tag. Flattening either
+ * kind to an unmarked string would let downstream exact-decimal validators
+ * mistake rounded or formula-derived values for user-supplied text. ExcelJS
+ * stays isolated in this package (never reaches the client bundle).
  */
-export type SheetCellValue = string | number
+export interface SheetFormulaCellValue {
+  kind: 'formula'
+  value: string | number
+}
+
+export type SheetCellValue = string | number | SheetFormulaCellValue
+
+export function isSheetFormulaCellValue(value: SheetCellValue): value is SheetFormulaCellValue {
+  return typeof value === 'object' && value.kind === 'formula'
+}
 
 export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; rows: SheetCellValue[][] }> {
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer as unknown as ArrayBuffer)
   const ws = wb.worksheets[0]
   if (!ws) return { headers: [], rows: [] }
-  const scalar = (v: unknown): SheetCellValue => {
+  const scalar = (v: unknown): string | number => {
     if (v === null || v === undefined) return ''
     if (typeof v === 'number') return v
     if (v instanceof Date) return v.toISOString().slice(0, 10)
@@ -172,10 +181,18 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
   const cell = (v: ExcelJS.CellValue): SheetCellValue => {
     if (v === null || v === undefined) return ''
     if (typeof v === 'object') {
-      const o = v as { text?: string; result?: unknown; hyperlink?: string }
+      const o = v as {
+        text?: string
+        result?: unknown
+        hyperlink?: string
+        formula?: string
+        sharedFormula?: string
+      }
+      if (typeof o.formula === 'string' || typeof o.sharedFormula === 'string') {
+        return { kind: 'formula', value: scalar(o.result) }
+      }
       if (typeof o.text === 'string') return o.text
       if (v instanceof Date) return v.toISOString().slice(0, 10)
-      if (o.result !== undefined) return scalar(o.result)
       return ''
     }
     return scalar(v)
@@ -185,7 +202,9 @@ export async function readSheet(buffer: Buffer): Promise<{ headers: string[]; ro
     const values = row.values as ExcelJS.CellValue[] // 1-based; index 0 is null
     matrix.push(values.slice(1).map(cell))
   })
-  const headers = (matrix.shift() ?? []).map((h) => String(h).trim())
+  const headers = (matrix.shift() ?? []).map((h) =>
+    String(isSheetFormulaCellValue(h) ? h.value : h).trim(),
+  )
   return { headers, rows: matrix }
 }
 
