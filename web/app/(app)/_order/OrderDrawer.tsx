@@ -69,6 +69,57 @@ export interface OrderPayload {
   links: LinkRow[]
 }
 
+type DraftSaveResponse = Pick<Response, 'ok' | 'json'>
+
+export async function persistOrderDraft({
+  request,
+  setState,
+  onError,
+}: {
+  request: () => Promise<DraftSaveResponse>
+  setState: (state: 'saving' | 'saved' | 'error') => void
+  onError: (message?: string) => void
+}): Promise<OrderPayload | null> {
+  setState('saving')
+  try {
+    const response = await request()
+    if (!response.ok) {
+      const data: unknown = await response.json().catch(() => null)
+      const message =
+        typeof data === 'object' &&
+        data !== null &&
+        'error' in data &&
+        typeof data.error === 'string'
+          ? data.error
+          : undefined
+      setState('error')
+      onError(message)
+      return null
+    }
+
+    const order = (await response.json()) as OrderPayload
+    setState('saved')
+    return order
+  } catch {
+    setState('error')
+    onError()
+    return null
+  }
+}
+
+export async function issueSavedOrder({
+  persistDraft,
+  requestApproval,
+}: {
+  persistDraft: () => Promise<OrderPayload | null>
+  requestApproval: () => Promise<void>
+}): Promise<boolean> {
+  const saved = await persistDraft()
+  if (!saved) return false
+  await requestApproval()
+  return true
+}
+
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
   approved: 'success',
   pending_approval: 'warning',
@@ -348,26 +399,31 @@ export function OrderDrawer({
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   }
 
+  async function persistDraft() {
+    const saved = await persistOrderDraft({
+      request: () => fetch(`${apiBase}/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+      setState: setSaveState,
+      onError: (message) => toast.error(message ?? t('actionFailed')),
+    })
+    if (saved) setDirty(false)
+    return saved
+  }
+
   async function save() {
     setBusy(true)
-    setSaveState('saving')
-    const res = await fetch(`${apiBase}/${doc.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (res.ok) {
-      const data = (await res.json()) as OrderPayload
-      setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
-      setSaveState('saved')
-      setDirty(false)
+    try {
+      const saved = await persistDraft()
+      if (!saved) return
+      setTotals({ subtotal: saved.doc.subtotal, taxTotal: saved.doc.tax_total, total: saved.doc.total })
       setMode('view')
       router.refresh()
-    } else {
-      setSaveState('error')
-      toast.error((await res.json()).error ?? t('actionFailed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   function cancel() {
@@ -402,18 +458,10 @@ export function OrderDrawer({
     // Persist any pending edits first so the server sees the latest lines.
     setBusy(true)
     try {
-      const saveRes = await fetch(`${apiBase}/${doc.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      await issueSavedOrder({
+        persistDraft,
+        requestApproval: () => setStatus('approved'),
       })
-      if (!saveRes.ok) {
-        const data = await saveRes.json().catch(() => ({}))
-        setSaveState('error')
-        toast.error(data.error ?? t('actionFailed'))
-        return
-      }
-      await setStatus('approved')
     } catch {
       toast.error(t('actionFailed'))
     } finally {
