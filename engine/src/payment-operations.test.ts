@@ -350,7 +350,7 @@ async function removePaymentFileFixture(orgId: string, fileId: string): Promise<
 }
 
 test(
-  "payment run decisions reject the submitter and accept an independent approver",
+  "payment run decisions enforce maker-checker and record canonical decision events",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
@@ -362,6 +362,9 @@ test(
         createScratchUser(org.orgId, "Payment Run Approver", "payment_run_approver"),
       );
       const runId = await withOrgContext(org.orgId, () => seedPaymentRun(org, submitterId));
+      const rejectedRunId = await withOrgContext(org.orgId, () =>
+        seedPaymentRun(org, submitterId),
+      );
 
       await assert.rejects(
         withOrgContext(org.orgId, () =>
@@ -421,6 +424,64 @@ test(
         approval_events: 1,
         event_actor_id: approverId,
       });
+
+      const rejectionReason = "duplicate payment batch";
+      await withOrgContext(org.orgId, () =>
+        decidePaymentRun(rejectedRunId, org.orgId, approverId, "reject", rejectionReason),
+      );
+      const afterIndependentRejection = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          rejected_by: string | null;
+          rejected_at: boolean;
+          rejection_reason: string | null;
+          rejection_events: number;
+          malformed_rejection_events: number;
+          event_actor_id: string | null;
+          event_from_status: string | null;
+          event_to_status: string | null;
+          event_reason: string | null;
+        }>(sql`
+          select r.status, r.rejected_by, r.rejected_at is not null as rejected_at,
+                 r.rejection_reason,
+                 (select count(*)::int from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejected') as rejection_events,
+                 (select count(*)::int from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejectd') as malformed_rejection_events,
+                 (select e.actor_id from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejected'
+                   order by e.created_at desc limit 1) as event_actor_id,
+                 (select e.from_status from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejected'
+                   order by e.created_at desc limit 1) as event_from_status,
+                 (select e.to_status from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejected'
+                   order by e.created_at desc limit 1) as event_to_status,
+                 (select e.details ->> 'reason' from payment_events e
+                   where e.payment_run_id = r.id and e.org_id = r.org_id
+                     and e.event_type = 'run_rejected'
+                   order by e.created_at desc limit 1) as event_reason
+            from payment_runs r
+           where r.id = ${rejectedRunId} and r.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterIndependentRejection, {
+        status: "rejected",
+        rejected_by: approverId,
+        rejected_at: true,
+        rejection_reason: rejectionReason,
+        rejection_events: 1,
+        malformed_rejection_events: 0,
+        event_actor_id: approverId,
+        event_from_status: "pending_approval",
+        event_to_status: "rejected",
+        event_reason: rejectionReason,
+      });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -428,11 +489,11 @@ test(
 );
 
 test(
-  "payment file decisions reject the generator and accept an independent approver",
+  "payment file decisions enforce maker-checker and record canonical decision events",
   { skip: !DB },
   async () => {
     const org = await withBypass(() => createScratchOrg());
-    let fileId: string | null = null;
+    const fileIds: string[] = [];
     try {
       const generatorId = await withBypass(() =>
         createScratchUser(org.orgId, "Payment File Generator", "payment_file_generator"),
@@ -443,7 +504,11 @@ test(
       const seeded = await withOrgContext(org.orgId, () =>
         seedPendingPaymentFile(org, generatorId, approverId),
       );
-      fileId = seeded.fileId;
+      fileIds.push(seeded.fileId);
+      const rejected = await withOrgContext(org.orgId, () =>
+        seedPendingPaymentFile(org, generatorId, approverId),
+      );
+      fileIds.push(rejected.fileId);
 
       await assert.rejects(
         withOrgContext(org.orgId, () =>
@@ -509,10 +574,73 @@ test(
         event_actor_id: approverId,
         event_run_id: seeded.runId,
       });
+
+      const rejectionReason = "incorrect beneficiary details";
+      await withOrgContext(org.orgId, () =>
+        decidePaymentFile(rejected.fileId, org.orgId, approverId, "reject", rejectionReason),
+      );
+      const afterIndependentRejection = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          rejected_by: string | null;
+          rejected_at: boolean;
+          rejection_reason: string | null;
+          rejection_events: number;
+          malformed_rejection_events: number;
+          event_actor_id: string | null;
+          event_run_id: string | null;
+          event_from_status: string | null;
+          event_to_status: string | null;
+          event_reason: string | null;
+        }>(sql`
+          select pf.status, pf.rejected_by, pf.rejected_at is not null as rejected_at,
+                 pf.rejection_reason,
+                 (select count(*)::int from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected') as rejection_events,
+                 (select count(*)::int from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejectd') as malformed_rejection_events,
+                 (select e.actor_id from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected'
+                   order by e.created_at desc limit 1) as event_actor_id,
+                 (select e.payment_run_id from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected'
+                   order by e.created_at desc limit 1) as event_run_id,
+                 (select e.from_status from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected'
+                   order by e.created_at desc limit 1) as event_from_status,
+                 (select e.to_status from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected'
+                   order by e.created_at desc limit 1) as event_to_status,
+                 (select e.details ->> 'reason' from payment_events e
+                   where e.payment_file_id = pf.id and e.org_id = pf.org_id
+                     and e.event_type = 'file_rejected'
+                   order by e.created_at desc limit 1) as event_reason
+            from payment_files pf
+           where pf.id = ${rejected.fileId} and pf.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(afterIndependentRejection, {
+        status: "rejected",
+        rejected_by: approverId,
+        rejected_at: true,
+        rejection_reason: rejectionReason,
+        rejection_events: 1,
+        malformed_rejection_events: 0,
+        event_actor_id: approverId,
+        event_run_id: rejected.runId,
+        event_from_status: "pending_approval",
+        event_to_status: "rejected",
+        event_reason: rejectionReason,
+      });
     } finally {
-      const cleanupFileId = fileId;
-      if (cleanupFileId) {
-        await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
+      for (const fileId of fileIds) {
+        await withBypass(() => removePaymentFileFixture(org.orgId, fileId));
       }
       await withBypass(() => dropScratchOrg(org.orgId));
     }

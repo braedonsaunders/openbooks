@@ -318,6 +318,7 @@ export async function decidePaymentRun(
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const next = decision === "approve" ? "approved" : "rejected";
+  const eventType = decision === "approve" ? "run_approved" : "run_rejected";
   const result = (await db.execute<{ id: string }>(sql`
     update payment_runs set
       status = ${next},
@@ -345,7 +346,7 @@ export async function decidePaymentRun(
     }
     throw new PaymentError("only a run pending approval can be decided");
   }
-  await event({ orgId, runId, eventType: `run_${decision}d`, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
+  await event({ orgId, runId, eventType, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
 }
 
 interface FormatContext {
@@ -780,6 +781,7 @@ export async function decidePaymentFile(
   reason?: string | null,
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
+  const eventType = decision === "approve" ? "file_approved" : "file_rejected";
   const result = (await db.execute<{ payment_run_id: string }>(sql`
     update payment_files set
       status = ${decision === "approve" ? "approved" : "rejected"},
@@ -807,7 +809,7 @@ export async function decidePaymentFile(
     }
     throw new PaymentError("only a file pending approval can be decided");
   }
-  await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType: `file_${decision}d`, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
+  await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
 }
 
 export async function recordPaymentFileDownload(fileId: string, orgId: string, userId: string): Promise<void> {
