@@ -3,9 +3,11 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
+import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { controlDeps, nextDocumentNumber } from '../documents'
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
+import { canonicalDecimal } from '../exact-decimal'
 import {
   MAX_EXPORT_ROWS,
   orgFeatureEnabled,
@@ -229,9 +231,10 @@ async function writeTransactions(
           lineErr = `account "${String(l.account ?? '')}" not found`
           break
         }
-        const amt = Number(l.amount)
-        if (!Number.isFinite(amt)) {
-          lineErr = `line amount "${String(l.amount ?? '')}" is not a number`
+        const amount = exactLineAmount(l.amount)
+        if (amount === null) {
+          lineErr =
+            `line amount "${String(l.amount ?? '')}" must be an exact decimal with at most 4 decimal places`
           break
         }
         let taxCodeId: string | null = null
@@ -242,7 +245,7 @@ async function writeTransactions(
             break
           }
         }
-        built.push({ accountId: acctId, amount: String(amt), description: l.description ? String(l.description) : null, taxCodeId })
+        built.push({ accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId })
       }
       if (lineErr) {
         outcome.failed++
@@ -323,6 +326,22 @@ async function writeTransactions(
     }
   }
   return outcome
+}
+
+function exactLineAmount(value: unknown): string | null {
+  if (
+    typeof value !== 'string' &&
+    (typeof value !== 'number' || !Number.isSafeInteger(value))
+  ) {
+    return null
+  }
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) return null
+  try {
+    return normalizeMoney(exact)
+  } catch {
+    return null
+  }
 }
 
 function parseLines(src: Record<string, unknown>): TxnLineInput[] {
