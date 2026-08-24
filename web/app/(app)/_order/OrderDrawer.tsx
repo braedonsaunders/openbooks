@@ -400,12 +400,25 @@ export function OrderDrawer({
 
   async function issue() {
     // Persist any pending edits first so the server sees the latest lines.
-    await fetch(`${apiBase}/${doc.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    await setStatus('approved')
+    setBusy(true)
+    try {
+      const saveRes = await fetch(`${apiBase}/${doc.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!saveRes.ok) {
+        const data = await saveRes.json().catch(() => ({}))
+        setSaveState('error')
+        toast.error(data.error ?? t('actionFailed'))
+        return
+      }
+      await setStatus('approved')
+    } catch {
+      toast.error(t('actionFailed'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function voidOrder() {
