@@ -53,7 +53,7 @@
     "test:load-harness": "node --test scripts/load-smoke.test.mjs",
     "test:history-rewrite": "node --test scripts/history-rewrite/history-rewrite.test.mjs",
     "test:load": "node scripts/load-smoke.mjs",
-    "test": "npm run check:product-neutrality && NODE_ENV=test OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
+    "test": "npm run check:product-neutrality && NODE_ENV=test OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-concurrency=1 --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
     "verify:release": "npm run check:dependencies && npm run check:container-security && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
   }
 }
