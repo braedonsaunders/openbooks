@@ -562,11 +562,13 @@ test('issuing serializes a stale draft replacement and rejects it after approval
   await control.entered
 
   const staleEdit = patch({ memo: 'stale concurrent memo' })
+  let lockAttemptsWhileIssueWasPaused = 0
   try {
     await waitForConcurrentPath(
       () => harness.lockAttempts >= 2 || harness.headerWrites > 0,
       'the stale edit to reach the lifecycle boundary',
     )
+    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
   } finally {
     control.release()
   }
@@ -574,6 +576,7 @@ test('issuing serializes a stale draft replacement and rejects it after approval
   const [issueResult, editResult] = await Promise.allSettled([issue, staleEdit])
   const issueResponse = fulfilledResponse(issueResult, 'issue request')
   const editResponse = fulfilledResponse(editResult, 'stale edit request')
+  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
   assert.equal(issueResponse.status, 200)
   assert.equal(editResponse.status, 422)
   assert.deepEqual(await editResponse.json(), { error: 'only draft orders can be edited' })
@@ -590,12 +593,14 @@ test('issuing serializes draft discard and prevents deletion of the issued order
 
   const deleteRequest = discard()
   let deleteCallsWhileIssueHeldTheLock = 0
+  let lockAttemptsWhileIssueWasPaused = 0
   try {
     await waitForConcurrentPath(
       () => harness.lockAttempts >= 2 || harness.deleteCalls > 0,
       'draft discard to reach the lifecycle boundary',
     )
     deleteCallsWhileIssueHeldTheLock = harness.deleteCalls
+    lockAttemptsWhileIssueWasPaused = harness.lockAttempts
   } finally {
     control.release()
   }
@@ -603,6 +608,7 @@ test('issuing serializes draft discard and prevents deletion of the issued order
   const settled = await Promise.allSettled([issue, deleteRequest])
   const issueResponse = fulfilledResponse(settled[0], 'issue request')
   const deleteResponse = fulfilledResponse(settled[1], 'draft discard request')
+  assert.equal(lockAttemptsWhileIssueWasPaused, 2)
   assert.equal(deleteCallsWhileIssueHeldTheLock, 0)
   assert.deepEqual([issueResponse.status, deleteResponse.status], [200, 422])
   assert.deepEqual(await deleteResponse.json(), {
@@ -620,11 +626,13 @@ test('two concurrent issue requests perform one lifecycle transition', async () 
   await control.entered
 
   const second = patch({ status: 'approved' })
+  let lockAttemptsWhileTheFirstIssueWasPaused = 0
   try {
     await waitForConcurrentPath(
       () => harness.lockAttempts >= 2 || harness.submitCalls >= 2,
       'the duplicate issue request to reach the lifecycle boundary',
     )
+    lockAttemptsWhileTheFirstIssueWasPaused = harness.lockAttempts
   } finally {
     control.release()
   }
@@ -632,6 +640,7 @@ test('two concurrent issue requests perform one lifecycle transition', async () 
   const settled = await Promise.allSettled([first, second])
   const firstResponse = fulfilledResponse(settled[0], 'first issue request')
   const secondResponse = fulfilledResponse(settled[1], 'duplicate issue request')
+  assert.equal(lockAttemptsWhileTheFirstIssueWasPaused, 2)
   assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
   assert.deepEqual(await secondResponse.json(), { error: 'only a draft can be issued' })
   assert.equal(harness.submitCalls, 1)
@@ -646,12 +655,14 @@ test('two concurrent void requests serialize before the void command and reject 
 
   const second = patch({ status: 'voided', reason: 'duplicate request' })
   let callsWhileTheFirstLockWasHeld = 0
+  let lockAttemptsWhileTheFirstVoidWasPaused = 0
   try {
     await waitForConcurrentPath(
       () => harness.lockAttempts >= 2 || harness.voidCalls >= 2,
       'the duplicate void request to reach the lifecycle boundary',
     )
     callsWhileTheFirstLockWasHeld = harness.voidCalls
+    lockAttemptsWhileTheFirstVoidWasPaused = harness.lockAttempts
   } finally {
     control.release()
   }
@@ -659,6 +670,7 @@ test('two concurrent void requests serialize before the void command and reject 
   const settled = await Promise.allSettled([first, second])
   const firstResponse = fulfilledResponse(settled[0], 'first void request')
   const secondResponse = fulfilledResponse(settled[1], 'duplicate void request')
+  assert.equal(lockAttemptsWhileTheFirstVoidWasPaused, 2)
   assert.equal(callsWhileTheFirstLockWasHeld, 1)
   assert.deepEqual([firstResponse.status, secondResponse.status], [200, 422])
   assert.deepEqual(await secondResponse.json(), { error: 'already voided' })
