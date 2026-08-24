@@ -1288,8 +1288,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           employee: {
             partyId: emp.party_id!,
             name,
-            country: emp.country,
-            region: emp.province,
+            country: emp.country!,
+            region: emp.province!,
             subsidiaryId: emp.employee_subsidiary_id ?? null,
             subsidiaryCountry: emp.employee_subsidiary_country ?? null,
             filingAccountId: emp.effective_filing_account_id ?? null,
@@ -1457,7 +1457,7 @@ export async function statutoryHolidayLinesForStub(
   // exact substitution the attribute exists to prevent. The API validates it
   // with the same function (labourJurisdictionProblem), so reaching this is a
   // direct database write.
-  const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction);
+  const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction!);
   if (labourProblem) {
     throw new PayrollError(
       `${employeeName} has a labour jurisdiction this payroll cannot `
@@ -1780,7 +1780,7 @@ async function appendDerivedEarningLines(
 ): Promise<void> {
   const { orgId, documentId, run, employeePartyId, oneOffRun, lines } = args;
   if (!oneOffRun) {
-    const derivedRules = await loadActiveDerivedRules(tx, orgId, run.period_end);
+    const derivedRules = await loadActiveDerivedRules(tx, orgId, run.period_end!);
     if (derivedRules.length > 0) {
       // Salaried supervisors earn derived amounts too, and the hourly branch's
       // time query is scoped to wages, so read the period's facts explicitly.
@@ -1800,8 +1800,8 @@ async function appendDerivedEarningLines(
       const derived = await resolveDerivedEarnings(tx, {
         orgId,
         employeePartyId,
-        periodStart: run.period_start,
-        periodEnd: run.period_end,
+        periodStart: run.period_start!,
+        periodEnd: run.period_end!,
         rules: derivedRules,
         timeEntries: facts.rows.map((fact) => ({
           id: fact.id,
@@ -1875,8 +1875,8 @@ async function appendStatutoryHolidayEarningLines(
       emp,
       country,
       province,
-      periodStart: run.period_start,
-      periodEnd: run.period_end,
+      periodStart: run.period_start!,
+      periodEnd: run.period_end!,
       payRate,
       need,
     });
@@ -2484,7 +2484,7 @@ async function calculateStub(
   const entitlementWarnings: EntitlementWarning[] = [];
 
   const payRate = await resolvePayRate(
-    tx, orgId, employeePartyId, run.period_end, run.doc_currency ?? null,
+    tx, orgId, employeePartyId, run.period_end!, run.doc_currency ?? null,
   );
   const baseComponent = ctx.need("base_pay", "earning");
 
@@ -2534,7 +2534,7 @@ async function calculateStub(
   // pre-flight and the run cannot disagree — which they did, before the
   // predicate had one owner: a salaried employee holding only an hourly rate
   // passed readiness green and then threw here.
-  if (!oneOffRun && !payRateIsUsable(emp.pay_basis, payRate)) {
+  if (!oneOffRun && !payRateIsUsable(emp.pay_basis!, payRate)) {
     throw new PayrollError(payRate
       ? "salaried employee has no annual labor cost rate (employee scope)"
       : "no labor cost rate covers this employee for the period");
@@ -2633,7 +2633,7 @@ async function calculateStub(
   // service tier (5 years → 6%) overrides it. `pay_each_period` and a final pay
   // still settle in cash rather than banking, so the accrue-vs-pay decision is
   // unchanged from the operator's point of view.
-  const vacationPercent = emp.vacation_percent;
+  const vacationPercent = emp.vacation_percent!;
   let vacationAccrued = "0";
   const terminationRun = runType === "termination";
   const plans = await entitlementPlans(orgId, tx);
@@ -2642,7 +2642,7 @@ async function calculateStub(
   assertVacationPlanResolved(emp, vacationPlan, terminationRun);
 
   await settleTerminationBankPayouts(tx, {
-    orgId, documentId, payDate: run.pay_date, employeePartyId,
+    orgId, documentId, payDate: run.pay_date!, employeePartyId,
     terminationRun, plans, lines, entitlementMovements,
   });
 
@@ -2650,7 +2650,7 @@ async function calculateStub(
   await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines });
 
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
-    orgId, documentId, employeePartyId, payDate: run.pay_date,
+    orgId, documentId, employeePartyId, payDate: run.pay_date!,
     vacationPercent, payVacationInCash, vacationPlan, plans,
     lines, entitlementMovements, entitlementWarnings,
   });
@@ -2783,9 +2783,9 @@ async function calculateStub(
 
   const stubId = await insertPayStubRow(tx, {
     orgId, actorId, documentId, employeePartyId,
-    province, periodsPerYear: P, payDate: run.pay_date, taxYear,
+    province, periodsPerYear: P, payDate: run.pay_date!, taxYear,
     federalClaim: factors.TC ?? "0", provincialClaim: factors.TCP ?? "0",
-    currency: run.doc_currency, gross, pensionable, insurable, net,
+    currency: run.doc_currency!, gross, pensionable, insurable, net,
     employerCost, vacationAccrued, factors, paymentMethod,
   });
   await insertPayStubLineRows(tx, { orgId, stubId, actorId }, lines);
@@ -2897,7 +2897,7 @@ async function payRunGlLegs(
           });
         }
       } else if (line.kind === "deduction") {
-        const liability = line.liability_account_id ?? statutoryLiability(line.system_key);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null);
         if (!liability) {
           throw new PayrollError(
             `deduction "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
@@ -2905,7 +2905,7 @@ async function payRunGlLegs(
         }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
       } else {
-        const liability = line.liability_account_id ?? statutoryLiability(line.system_key);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null);
         if (!liability) {
           throw new PayrollError(
             `employer contribution "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,

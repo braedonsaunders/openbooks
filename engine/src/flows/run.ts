@@ -141,7 +141,7 @@ export async function runRecordFlows(
       }
       if (planIsEmpty(plan)) continue;
 
-      const [run] = await db
+      const run = (await db
         .insert(schema.flowRuns)
         .values({
           orgId: ctx.orgId,
@@ -154,7 +154,7 @@ export async function runRecordFlows(
           context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
           createdBy: ctx.userId ?? null,
         })
-        .returning({ id: schema.flowRuns.id });
+        .returning({ id: schema.flowRuns.id }))[0]!;
 
       let status: "completed" | "waiting" | "failed";
       let gatesCreated = 0;

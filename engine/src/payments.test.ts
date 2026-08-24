@@ -93,14 +93,14 @@ test("the CPA-005 item trace number carries its four mandated components", () =>
   // digit dropped (4) + originating direct clearer's data centre (5) + file
   // creation number (4) + item sequence (9). Zero-filling any component is a
   // rejected item, which is what this writer used to emit.
-  assert.equal(segments[0].slice(40, 62), "1234" + "54321" + "0007" + "000000001");
-  assert.equal(segments[1].slice(40, 62), "1234" + "54321" + "0007" + "000000002");
+  assert.equal(segments[0]!.slice(40, 62), "1234" + "54321" + "0007" + "000000001");
+  assert.equal(segments[1]!.slice(40, 62), "1234" + "54321" + "0007" + "000000002");
   // The sequence is per item within the file, so no two credits share a trace.
-  assert.notEqual(segments[0].slice(40, 62), segments[1].slice(40, 62));
+  assert.notEqual(segments[0]!.slice(40, 62), segments[1]!.slice(40, 62));
 });
 
 test("composing the item trace number leaves every other credit-segment offset alone", () => {
-  const [first] = creditSegments(buildCpa005File(cpa005Run()));
+  const first = creditSegments(buildCpa005File(cpa005Run()))[0]!;
 
   assert.equal(first.length, 240);
   assert.equal(first.slice(0, 3), "460"); // transaction type

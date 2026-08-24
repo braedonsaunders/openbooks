@@ -1265,6 +1265,7 @@ export async function postDocument(
     .select()
     .from(schema.orgs)
     .where(eq(schema.orgs.id, doc.orgId));
+  if (!org) throw new PostingError("organization not found");
   const scriptCtx: ScriptContext = {
     trigger: "before_post",
     document: doc as unknown as Record<string, unknown>,
@@ -1292,7 +1293,7 @@ export async function postDocument(
       .set(mutations)
       .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)))
       .returning();
-    effectiveDoc = updated;
+    effectiveDoc = updated!;
   }
 
   // -- flows: before_post (automation only, never a veto) ------------------
@@ -1467,7 +1468,7 @@ export async function postDocument(
     // caller must see "already posted", never a raw driver error.
     let entry: { id: string };
     try {
-      [entry] = await tx
+      entry = (await tx
         .insert(schema.journalEntries)
         .values({
           orgId: doc.orgId,
@@ -1481,7 +1482,7 @@ export async function postDocument(
           sourceDocumentId: doc.id,
           origin: subApplied.multi ? "intercompany" : "document",
         })
-        .returning({ id: schema.journalEntries.id });
+        .returning({ id: schema.journalEntries.id }))[0]!;
     } catch (error) {
       const code = (error as { code?: string }).code ??
         (error as { cause?: { code?: string } }).cause?.code;
@@ -2161,7 +2162,7 @@ export async function regenerateGlImpactTx(
         }
       : null,
   };
-  const [reversal] = await tx
+  const reversal = (await tx
     .insert(schema.journalEntries)
     .values({
       orgId: doc.orgId,
@@ -2179,7 +2180,7 @@ export async function regenerateGlImpactTx(
       createdBy: correction.actorId,
       updatedBy: correction.actorId,
     })
-    .returning({ id: schema.journalEntries.id });
+    .returning({ id: schema.journalEntries.id }))[0]!;
   await tx.insert(schema.journalLines).values(
     reversalJournalLines(existing, { entryId: reversal.id, orgId: doc.orgId }),
   );
@@ -2211,7 +2212,7 @@ export async function regenerateGlImpactTx(
        and reverses_entry_id is null
        and custom->>'mode' = 'append_only_source_correction'`));
   const correctionGen = (priorCorrections.rows[0]?.n ?? 0) + 1;
-  const [replacement] = await tx
+  const replacement = (await tx
     .insert(schema.journalEntries)
     .values({
       orgId: doc.orgId,
@@ -2234,7 +2235,7 @@ export async function regenerateGlImpactTx(
       createdBy: correction.actorId,
       updatedBy: correction.actorId,
     })
-    .returning({ id: schema.journalEntries.id });
+    .returning({ id: schema.journalEntries.id }))[0]!;
   const replacementLines = await tx
     .insert(schema.journalLines)
     .values(kernelLines.map((line, index) => ({
@@ -2351,7 +2352,7 @@ export async function regenerateGlImpactTx(
         `application ${application.id} changed during source correction`,
       );
     }
-    const [replacementApplication] = await tx
+    const replacementApplication = (await tx
       .insert(schema.applications)
       .values({
         orgId: application.orgId,
@@ -2372,7 +2373,7 @@ export async function regenerateGlImpactTx(
         createdBy: correction.actorId,
         updatedBy: correction.actorId,
       })
-      .returning({ id: schema.applications.id });
+      .returning({ id: schema.applications.id }))[0]!;
     transferredApplications.push({
       priorApplicationId: application.id,
       replacementApplicationId: replacementApplication.id,

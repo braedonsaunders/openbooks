@@ -360,7 +360,7 @@ export async function completeRequestedDocumentVoid(
             .select()
             .from(schema.journalLines)
             .where(and(eq(schema.journalLines.entryId, sourceEntryId), eq(schema.journalLines.orgId, orgId)));
-          const [reversal] = await tx
+          const reversal = (await tx
             .insert(schema.journalEntries)
             .values({
               orgId,
@@ -377,7 +377,7 @@ export async function completeRequestedDocumentVoid(
               createdBy: String(doc.void_requested_by),
               updatedBy: String(doc.void_requested_by),
             })
-            .returning({ id: schema.journalEntries.id });
+            .returning({ id: schema.journalEntries.id }))[0]!;
           await tx.insert(schema.journalLines).values(
             reversalJournalLines(lines, { entryId: reversal.id, orgId }),
           );

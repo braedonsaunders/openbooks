@@ -15,7 +15,7 @@ function loadEnv(): Record<string, string> {
   try {
     for (const line of readFileSync(join(repoRoot, ".env"), "utf8").split("\n")) {
       const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-      if (m) env[m[1]] = m[2];
+      if (m) env[m[1]!] = m[2]!;
     }
   } catch {
     // no .env — container/CI environment

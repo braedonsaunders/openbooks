@@ -1199,12 +1199,14 @@ export class NetSuiteSource implements MigrationSource {
 
     // Headers: changed-since (incremental) or full id-window sweep. A COUNT
     // first gives a real total so the UI shows "pulling X of Y transactions".
-    const [{ n: totalStr }] = await this.q<{ n: string }>(
-      effectiveSince
-        ? `SELECT COUNT(*) AS n FROM transaction t WHERE t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`
-        : "SELECT COUNT(*) AS n FROM transaction t",
-    );
-    const totalTxns = Number(totalStr ?? 0);
+    const totalRow = (
+      await this.q<{ n: string }>(
+        effectiveSince
+          ? `SELECT COUNT(*) AS n FROM transaction t WHERE t.lastmodifieddate >= ${this.ts(effectiveSince)} AND t.lastmodifieddate <= ${this.ts(syncedThrough)}`
+          : "SELECT COUNT(*) AS n FROM transaction t",
+      )
+    )[0]!;
+    const totalTxns = Number(totalRow.n ?? 0);
     const headers: NsHeader[] = [];
     let fullWindows: Array<[number, number]> = [];
     if (effectiveSince) {
@@ -1212,8 +1214,8 @@ export class NetSuiteSource implements MigrationSource {
       headers.push(...(await this.q<NsHeader>(`SELECT ${HEADER_COLS} FROM transaction t WHERE ${clause} ORDER BY t.id`)));
       ctx.onProgress?.({ phase: "pull", message: "Pulling transactions…", current: headers.length, total: totalTxns });
     } else {
-      const [{ m }] = await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t");
-      const maxId = Number(m ?? 0);
+      const maxRow = (await this.q<{ m: string }>("SELECT MAX(t.id) AS m FROM transaction t"))[0]!;
+      const maxId = Number(maxRow.m ?? 0);
       fullWindows = numericIdWindows(maxId);
       const partitions = fullWindows.map(([lo, hi], index) => ({
         id: `header-${String(index).padStart(4, "0")}`,

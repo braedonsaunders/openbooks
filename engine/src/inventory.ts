@@ -380,9 +380,9 @@ export async function postInventoryEntry(
     values (${p.orgId}, ${p.bookId}, ${p.subsidiaryId}, ${p.entryNumber}, ${p.date}, ${p.periodId}, ${p.memo},
             'draft', 'inventory', null, null)
     returning id`));
-  const eid = entryRes.rows[0].id;
+  const eid = entryRes.rows[0]!.id;
   for (let i = 0; i < p.lines.length; i++) {
-    const l = p.lines[i];
+    const l = p.lines[i]!;
     await tx.execute(sql`
       insert into journal_lines
         (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
@@ -646,7 +646,7 @@ export async function receiveInventory(
               ${input.documentLineId ?? null}, ${entryId}, ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
-    const movementId = mv.rows[0].id;
+    const movementId = mv.rows[0]!.id;
 
     for (const settlement of settlements) {
       await tx.execute(sql`
@@ -879,7 +879,7 @@ export async function issueInventory(
               ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
-    const movementId = mv.rows[0].id;
+    const movementId = mv.rows[0]!.id;
     await recordConsumptions(tx, orgId, consumptions, movementId, actorId);
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`
@@ -2094,8 +2094,8 @@ export async function buildAssembly(
 
     // Component consume movements + layer draw-downs.
     for (let i = 0; i < components.length; i++) {
-      const c = components[i];
-      const pc = perComponent[i];
+      const c = components[i]!;
+      const pc = perComponent[i]!;
       const mv = (await tx.execute<{ id: string }>(sql`
         insert into inventory_movements
           (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
@@ -2107,7 +2107,7 @@ export async function buildAssembly(
         tx,
         orgId,
         pc.consumptions,
-        mv.rows[0].id,
+        mv.rows[0]!.id,
         actorId,
       );
     }
@@ -2131,11 +2131,11 @@ export async function buildAssembly(
       input.quantity,
       unitCost,
       assembly.costingMethod,
-      buildMv.rows[0].id,
+      buildMv.rows[0]!.id,
       input.date,
     );
 
-    return { movementId: buildMv.rows[0].id, entryId, value: totalCost };
+    return { movementId: buildMv.rows[0]!.id, entryId, value: totalCost };
   });
 }
 
@@ -2492,7 +2492,7 @@ function apportionUnits(totalUnits: bigint, weights: string[]): bigint[] {
     .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
   let k = 0;
   while (remainder > 0n) {
-    base[order[k % order.length].i] += 1n;
+    base[order[k % order.length]!.i]! += 1n;
     remainder -= 1n;
     k++;
   }
@@ -2523,7 +2523,7 @@ async function defaultStockLocation(
 ): Promise<string | null> {
   const r = (await runner.execute<{ id: string }>(sql`
     select id from stock_locations where org_id = ${orgId} and is_active`));
-  return r.rows.length === 1 ? r.rows[0].id : null;
+  return r.rows.length === 1 ? r.rows[0]!.id : null;
 }
 
 /**
@@ -2919,7 +2919,7 @@ async function nextSequenceNumber(
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding`));
-  const s = seq.rows[0];
+  const s = seq.rows[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }
 
@@ -2982,9 +2982,9 @@ export async function createTransferOrder(
               ${input.transitStockLocationId ?? null}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
               ${input.orderedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
-    const id = order.rows[0].id;
+    const id = order.rows[0]!.id;
     for (let i = 0; i < input.lines.length; i++) {
-      const line = input.lines[i];
+      const line = input.lines[i]!;
       const lineQuantity = persistReceiptMoney(line.quantity, "transfer order line quantity");
       await tx.execute(sql`
         insert into transfer_order_lines
@@ -3391,13 +3391,13 @@ export async function postLandedCostVoucher(
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
-    const voucherId = voucher.rows[0].id;
+    const voucherId = voucher.rows[0]!.id;
 
     const entryLines: JournalLineInput[] = [];
     const allocationIds: string[] = [];
     for (let i = 0; i < resolved.length; i++) {
-      const r = resolved[i];
-      const share = shares[i];
+      const r = resolved[i]!;
+      const share = shares[i]!;
       const shareAmount = fromUnits(share);
       const manualAmount =
         r.manualAmount == null ? null : persistReceiptMoney(r.manualAmount, "landed cost target amount");
@@ -3427,7 +3427,7 @@ export async function postLandedCostVoucher(
         ),
       );
       for (let j = 0; j < r.layers.length; j++) {
-        const layerShare = subShares[j];
+        const layerShare = subShares[j]!;
         if (layerShare === 0n) continue;
         const fragments = await revalueLayerExactly(
           tx,

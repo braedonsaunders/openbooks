@@ -194,14 +194,14 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       reverseProjectLaborCost(
         org.orgId,
         actorId,
-        [timeEntryIds[0]],
+        [timeEntryIds[0]!],
         "Concurrent labor release test",
         org.date,
       ),
       reverseProjectLaborCost(
         org.orgId,
         actorId,
-        [timeEntryIds[1]],
+        [timeEntryIds[1]!],
         "Concurrent labor release test",
         org.date,
       ),
@@ -210,14 +210,14 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       reverseOverheadForTime(
         org.orgId,
         actorId,
-        [timeEntryIds[0]],
+        [timeEntryIds[0]!],
         "Concurrent overhead release test",
         org.date,
       ),
       reverseOverheadForTime(
         org.orgId,
         actorId,
-        [timeEntryIds[1]],
+        [timeEntryIds[1]!],
         "Concurrent overhead release test",
         org.date,
       ),

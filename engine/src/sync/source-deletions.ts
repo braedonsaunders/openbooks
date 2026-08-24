@@ -143,7 +143,7 @@ export async function mirrorSourceDeletion(input: {
            )
          )`);
 
-      const [reversal] = await tx
+      const reversal = (await tx
         .insert(schema.journalEntries)
         .values({
           orgId: input.orgId,
@@ -158,7 +158,7 @@ export async function mirrorSourceDeletion(input: {
           origin: "migration",
           reversesEntryId: entry.id,
         })
-        .returning({ id: schema.journalEntries.id });
+        .returning({ id: schema.journalEntries.id }))[0]!;
       await tx.insert(schema.journalLines).values(
         reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
       );
@@ -229,7 +229,7 @@ export async function resolveSourceDeletion(input: {
     const source = connection.rows[0]?.source;
     if (!source)
       throw new SourceDeletionResolutionError("connection not found");
-    if (!connection.rows[0].actor_valid) {
+    if (!connection.rows[0]!.actor_valid) {
       throw new SourceDeletionResolutionError(
         "resolution actor is not an active organization user",
       );
@@ -306,7 +306,7 @@ export async function resolveSourceDeletion(input: {
           throw new SourceDeletionResolutionError(
             "document disappeared while resolving deletion",
           );
-        const [reversal] = await db
+        const reversal = (await db
           .insert(schema.journalEntries)
           .values({
             orgId: input.orgId,
@@ -323,7 +323,7 @@ export async function resolveSourceDeletion(input: {
             createdBy: input.actorId,
             updatedBy: input.actorId,
           })
-          .returning({ id: schema.journalEntries.id });
+          .returning({ id: schema.journalEntries.id }))[0]!;
         await db.insert(schema.journalLines).values(
           reversalJournalLines(lines, { entryId: reversal.id, orgId: input.orgId }),
         );

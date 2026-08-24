@@ -175,7 +175,7 @@ export function allocateProportionally(total: string, weights: readonly string[]
   let cursor = 0;
   while (allocated < absTotal) {
     const target = remainders[cursor % remainders.length]!.i;
-    shares[target] += 1n;
+    shares[target] = shares[target]! + 1n;
     allocated += 1n;
     cursor += 1;
   }

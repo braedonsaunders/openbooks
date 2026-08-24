@@ -14,7 +14,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
-  return r.rows[0].bal;
+  return r.rows[0]!.bal;
 }
 
 /** Insert a draft document + one item line; return the document id. */
@@ -178,7 +178,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     const secondLocation = (await db.execute<{ location_id: string }>(sql`
       select location_id from stock_locations
        where id = ${org.stockLocationId2} and org_id = ${org.orgId}`));
-    const overrideLocationId = secondLocation.rows[0].location_id;
+    const overrideLocationId = secondLocation.rows[0]!.location_id;
     const overrideInvoiceId = await draftDoc(org, "customer_invoice", "INV-3", {
       itemId: org.items.service,
       quantity: "1",

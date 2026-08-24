@@ -447,7 +447,7 @@ export async function runAutoElimination(
       values (${orgId}, ${book.id}, ${elim.id}, ${elimEntryNumber}, ${period.ends_on},
               ${periodId}, ${`Auto-elimination ${period.name}`}, 'draft', 'intercompany', ${userId ?? null})
       returning id`));
-    const entryId = ins.rows[0].id;
+    const entryId = ins.rows[0]!.id;
 
     let n = 0;
     for (const row of translatedActivity) {
