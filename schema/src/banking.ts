@@ -36,9 +36,20 @@ export const bankStatements = pgTable(
      * `audit-log:<id>#sha256=<hash>` reference whose target is append-only.
      */
     rawFileRef: text("raw_file_ref").notNull(),
+    /** Exact-byte identity used to make retries idempotent per bank account. */
+    sourceFileSha256: text("source_file_sha256"),
     ...auditColumns,
   },
-  (t) => [index("statements_account_date").on(t.accountId, t.statementDate)],
+  (t) => [
+    index("statements_account_date").on(t.accountId, t.statementDate),
+    uniqueIndex("bank_statements_org_account_source_sha256")
+      .on(t.orgId, t.accountId, t.sourceFileSha256)
+      .where(sql`${t.sourceFileSha256} is not null`),
+    check(
+      "bank_statements_source_file_sha256",
+      sql`${t.sourceFileSha256} is null or ${t.sourceFileSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
 );
 
 export const bankStatementLines = pgTable(

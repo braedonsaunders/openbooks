@@ -570,15 +570,18 @@ async function loadReconcilableAccount(orgId: string, accountId: string): Promis
 }
 
 /**
- * Apply the only safe automatic statement-line dedupe rule: a non-empty ID
- * supplied by the bank may identify a transaction across imports. Content is
- * not identity — two real transactions can share every visible field — so an
- * ID-less line is always retained and remains ID-less in storage.
+ * Apply the safe automatic statement dedupe rules. An exact retry of source
+ * bytes is the same import, while a non-empty ID supplied by the bank may
+ * identify a transaction across different sources. Parsed line content is not
+ * identity — two real transactions can share every visible field — so an
+ * ID-less line from a different source is retained and remains ID-less.
  */
 export function filterDuplicateStatementLines(
   lines: ParsedStatementLine[],
   existingTransactionIds: ReadonlySet<string>,
+  exactSourceRetry = false,
 ): { lines: ParsedStatementLine[]; duplicates: number } {
+  if (exactSourceRetry) return { lines: [], duplicates: lines.length };
   const batchSeen = new Set<string>();
   const fresh: ParsedStatementLine[] = [];
   let duplicates = 0;
@@ -607,6 +610,12 @@ export interface ImportResult {
 
 const MAX_STATEMENT_EVIDENCE_BYTES = 25 * 1024 * 1024;
 
+/** Stable identity for exact statement source bytes (filename is metadata). */
+export function statementSourceSha256(content: string | Uint8Array): string {
+  const bytes = typeof content === "string" ? Buffer.from(content, "utf8") : Buffer.from(content);
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 function defaultStatementContentType(source: StatementSource): string {
   if (source === "ofx") return "application/x-ofx";
   if (source === "csv") return "text/csv";
@@ -633,6 +642,7 @@ function sourceEvidence(
 ): {
   auditId: string;
   ref: string;
+  sha256: string;
   changes: Record<string, unknown>;
 } {
   const supplied = opts.sourceEvidence;
@@ -657,7 +667,7 @@ function sourceEvidence(
   if (bytes.length > MAX_STATEMENT_EVIDENCE_BYTES) {
     throw new BankingError("Statement source evidence exceeds the 25 MB limit");
   }
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const sha256 = statementSourceSha256(bytes);
   const requestedContentType = supplied?.contentType?.trim().toLowerCase();
   const contentType =
     requestedContentType &&
@@ -674,6 +684,7 @@ function sourceEvidence(
   return {
     auditId,
     ref: `audit-log:${auditId}#sha256=${sha256}`,
+    sha256,
     changes: {
       operation: "statement_import",
       source: opts.source,
@@ -693,9 +704,10 @@ function sourceEvidence(
 /**
  * Import normalized statement lines for a reconcilable account. Lines whose
  * source-provided `bankTransactionId` already exists on the account are
- * skipped. Sources without transaction IDs cannot be safely content-deduped,
- * so their lines are retained on every import. With `dryRun` nothing is
- * written — used for preview.
+ * skipped. An exact retry of source bytes for the same account is skipped as
+ * one import even when its lines have no transaction IDs. Different source
+ * bytes without transaction IDs cannot be safely content-deduped, so their
+ * lines are retained. With `dryRun` nothing is written — used for preview.
  * Committed imports retain their exact source bytes in the append-only audit
  * log and point `rawFileRef` to that evidence. Engine callers without an
  * external file/feed payload retain a canonical copy of the import request.
@@ -762,13 +774,24 @@ export async function importStatement(
         hashtextextended(${`bank-statement-import:${ctx.orgId}:${account.id}`}, 0)
       )
     `);
-    const ids = [
-      ...new Set(
-        validated.flatMap((line) =>
-          line.bankTransactionId ? [line.bankTransactionId] : [],
-        ),
-      ),
-    ];
+    const sourceAlreadyImported = Boolean((await tx.execute<{ imported: boolean }>(sql`
+      select exists (
+        select 1
+          from bank_statements
+         where org_id = ${ctx.orgId}
+           and account_id = ${account.id}
+           and source_file_sha256 = ${evidence.sha256}
+      ) as imported
+    `)).rows[0]?.imported);
+    const ids = sourceAlreadyImported
+      ? []
+      : [
+          ...new Set(
+            validated.flatMap((line) =>
+              line.bankTransactionId ? [line.bankTransactionId] : [],
+            ),
+          ),
+        ];
     const existingIds = new Set<string>();
     if (ids.length > 0) {
       const existing = (await tx.execute<{ id: string }>(sql`
@@ -783,6 +806,7 @@ export async function importStatement(
     const { lines: fresh, duplicates } = filterDuplicateStatementLines(
       validated,
       existingIds,
+      sourceAlreadyImported,
     );
     if (opts.dryRun || fresh.length === 0) {
       return {
@@ -823,6 +847,7 @@ export async function importStatement(
         openingBalance,
         closingBalance,
         rawFileRef: evidence.ref,
+        sourceFileSha256: evidence.sha256,
         createdBy: ctx.userId,
       })
       .returning({ id: schema.bankStatements.id });
