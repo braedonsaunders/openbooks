@@ -38,8 +38,8 @@ export function findActiveNavHref(
 }
 
 function matchesNavPath(location: string, href: string, exact?: boolean): boolean {
-  const [pathname, query = ''] = location.split('?', 2)
-  const [hrefPath, hrefQuery = ''] = href.split('?', 2)
+  const [pathname = '', query = ''] = location.split('?', 2)
+  const [hrefPath = '', hrefQuery = ''] = href.split('?', 2)
 
   // Query-addressed modules share a physical page with another module. Match
   // their declared query keys without making unrelated drawer/filter params

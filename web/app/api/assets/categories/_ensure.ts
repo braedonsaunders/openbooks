@@ -48,5 +48,5 @@ export async function ensureDefaultCategory(orgId: string, actorId: string | nul
             ${assetAcct ?? anyAcct}, ${accumAcct ?? anyAcct}, ${expenseAcct ?? anyAcct},
             'straight_line', 60, ${actorId}, ${actorId})
     returning id`))
-  return ins.rows[0].id
+  return ins.rows[0]!.id
 }

@@ -167,7 +167,7 @@ export function ProjectTypesWorkspace({
   const [financialEffectiveFrom, setFinancialEffectiveFrom] = useState(today)
   const [financialChangeReason, setFinancialChangeReason] = useState('')
 
-  const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName'), t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0], [selId, list, t])
+  const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName'), t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0]!, [selId, list, t])
   const [draft, setDraft] = useState<ProjectTypeRow>(selected)
   // Re-sync draft when selection changes.
   const [lastSel, setLastSel] = useState(selId)
@@ -386,7 +386,7 @@ export function ProjectTypesWorkspace({
                 <div className="space-y-1.5">
                   {fp.layout.map((line, i) => {
                     const upd = (patch: Partial<typeof line>) => setFp({ layout: fp.layout.map((l, j) => (j === i ? { ...l, ...patch } : l)) })
-                    const move = (d: number) => { const next = [...fp.layout]; const [x] = next.splice(i, 1); next.splice(i + d, 0, x); setFp({ layout: next }) }
+                    const move = (d: number) => { const next = [...fp.layout]; const [x] = next.splice(i, 1); next.splice(i + d, 0, x!); setFp({ layout: next }) }
                     return (
                       <div key={i} className="flex items-center gap-2 rounded-md border border-slate-200 p-1.5 dark:border-slate-800">
                         <Select value={line.measure} onChange={(e) => upd({ measure: e.target.value as any })} className="flex-1">

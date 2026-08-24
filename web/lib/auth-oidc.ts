@@ -134,7 +134,8 @@ function decodeFlow(value: string | undefined): OidcFlow | null {
   if (!value || value.length > 4096) return null;
   const parts = value.split(".");
   if (parts.length !== 3 || parts[0] !== "o1") return null;
-  const [, payload, signature] = parts;
+  const payload = parts[1]!;
+  const signature = parts[2]!;
   const expected = flowSignature(payload);
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);

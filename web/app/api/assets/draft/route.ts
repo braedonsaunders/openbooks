@@ -38,5 +38,5 @@ export async function POST(_req: NextRequest) {
     values (${user.orgId}, ${root.rows[0].id}, ${categoryId}, ${assetNumber}, 'New asset', 'draft', '0', '0', ${user.id}, ${user.id})
     returning id`))
 
-  return NextResponse.json({ id: ins.rows[0].id })
+  return NextResponse.json({ id: ins.rows[0]!.id })
 }

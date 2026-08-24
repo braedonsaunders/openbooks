@@ -112,7 +112,7 @@ function OverviewTab({ data }: { data: CashflowData }) {
           <Chart option={bridgeOption} height={260} />
         </Panel>
         <Panel title="Cash Position Forecast" icon={AreaChart}>
-          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0])} area height={260} series={[{ name: 'Ending cash', data: data.weeks.map((w) => w.endingCash), color: '#0d9488' }]} />
+          <TrendChart labels={data.weeks.map((w) => w.label.split(' – ')[0]!)} area height={260} series={[{ name: 'Ending cash', data: data.weeks.map((w) => w.endingCash), color: '#0d9488' }]} />
         </Panel>
       </div>
 

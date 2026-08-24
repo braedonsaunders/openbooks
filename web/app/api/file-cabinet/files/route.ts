@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     orgId: gate.user.orgId,
     folderId,
     filename: file.name || 'file',
-    contentType: file.type.split(';')[0].trim().toLowerCase(),
+    contentType: file.type.split(';')[0]!.trim().toLowerCase(),
     bytes,
     createdBy: gate.user.id,
   })

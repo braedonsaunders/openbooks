@@ -39,8 +39,8 @@ function parsePasswordHash(stored: string): ParsedPasswordHash | null {
   const legacy = stored.match(/^([0-9a-f]{32}):([0-9a-f]{128})$/i);
   if (legacy) {
     return {
-      salt: Buffer.from(legacy[1], "hex"),
-      expected: Buffer.from(legacy[2], "hex"),
+      salt: Buffer.from(legacy[1]!, "hex"),
+      expected: Buffer.from(legacy[2]!, "hex"),
       N: RECOMMENDED_N,
       r: RECOMMENDED_R,
       p: RECOMMENDED_P,
@@ -67,8 +67,8 @@ function parsePasswordHash(stored: string): ParsedPasswordHash | null {
     || p > 4
   ) return null;
   return {
-    salt: Buffer.from(versioned[4], "hex"),
-    expected: Buffer.from(versioned[5], "hex"),
+    salt: Buffer.from(versioned[4]!, "hex"),
+    expected: Buffer.from(versioned[5]!, "hex"),
     N,
     r,
     p,

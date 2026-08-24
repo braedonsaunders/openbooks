@@ -45,7 +45,7 @@ export function accessAtLeast(level: AccessLevel, min: AccessLevel): boolean {
 }
 
 function maxAccess(...levels: AccessLevel[]): AccessLevel {
-  return ACCESS_BY_RANK[Math.max(0, ...levels.map((l) => ACCESS_RANK[l]))]
+  return ACCESS_BY_RANK[Math.max(0, ...levels.map((l) => ACCESS_RANK[l]))]!
 }
 
 /** SQL predicate: a grant row applies to this viewer (direct user grant, or a
@@ -351,7 +351,7 @@ export function titleizeKind(s: string): string {
   return s
     .split('_')
     .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
     .join(' ')
 }
 
@@ -376,13 +376,13 @@ export async function ensureAttachmentsRoot(orgId: string): Promise<string> {
     select id from folders
      where org_id = ${orgId} and system_kind = 'attachments'
   `))
-  if (existing.rows.length > 0) return existing.rows[0].id
+  if (existing.rows.length > 0) return existing.rows[0]!.id
   const ins = (await db.execute<{ id: string }>(sql`
     insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
     values (${orgId}, 'Attachments', true, 'attachments', now(), now())
     returning id
   `))
-  return ins.rows[0].id
+  return ins.rows[0]!.id
 }
 
 /** System intake folder for AP capture source packets. */
@@ -392,7 +392,7 @@ export async function ensureApCaptureRoot(orgId: string, createdBy: string): Pro
     const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
     `))
-    if (existing.rows[0]) return existing.rows[0].id
+    if (existing.rows[0]) return existing.rows[0]!.id
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, name, is_system, system_kind, is_private, owner_id,
                            created_by, updated_by, created_at, updated_at)
@@ -400,7 +400,7 @@ export async function ensureApCaptureRoot(orgId: string, createdBy: string): Pro
               ${createdBy}, ${createdBy}, now(), now())
       returning id
     `))
-    return inserted.rows[0].id
+    return inserted.rows[0]!.id
   })
 }
 
@@ -426,13 +426,13 @@ async function ensureGroupFolder(
        where org_id = ${orgId} and parent_folder_id = ${rootId}
          and record_id is null and name = ${label}
     `))
-    if (existing.rows[0]) return existing.rows[0].id
+    if (existing.rows[0]) return existing.rows[0]!.id
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
       values (${orgId}, ${rootId}, ${label}, true, ${recordTable}, now(), now())
       returning id
     `))
-    return ins.rows[0].id
+    return ins.rows[0]!.id
   })
 }
 
@@ -462,7 +462,7 @@ export async function ensureRecordFolder(
      where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
        and record_id is not null
   `))
-  if (existing.rows.length > 0) return existing.rows[0].id
+  if (existing.rows.length > 0) return existing.rows[0]!.id
   const rootId = await ensureAttachmentsRoot(orgId)
   const label = await groupLabelFor(orgId, recordTable, recordId)
   const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label)
@@ -472,7 +472,7 @@ export async function ensureRecordFolder(
     values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
     returning id
   `))
-  return ins.rows[0].id
+  return ins.rows[0]!.id
 }
 
 // --- folder CRUD ------------------------------------------------------------
@@ -576,7 +576,7 @@ export async function createFolder(input: {
             ${input.createdBy}, ${input.createdBy}, now(), now())
     returning id
   `))
-  return ins.rows[0].id
+  return ins.rows[0]!.id
 }
 
 export async function renameFolder(
@@ -1057,7 +1057,7 @@ export async function createFile(input: {
               now(), now())
       returning id
     `))
-    const fileId = fileIns.rows[0].id
+    const fileId = fileIns.rows[0]!.id
 
     const verIns = (await tx.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
@@ -1065,7 +1065,7 @@ export async function createFile(input: {
       values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash}, ${input.createdBy}, now())
       returning id
     `))
-    const versionId = verIns.rows[0].id
+    const versionId = verIns.rows[0]!.id
 
     await tx.execute(sql`
       update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}
@@ -1089,7 +1089,7 @@ export async function createFile(input: {
              fo.name as "folderName"
         from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
     `))
-    return meta.rows[0]
+    return meta.rows[0]!
   })
 }
 
@@ -1118,7 +1118,7 @@ export async function replaceFile(input: {
         for update
     `))
     if (current.rows.length === 0) return false
-    const nextVer = (current.rows[0].max_ver ?? 0) + 1
+    const nextVer = (current.rows[0]!.max_ver ?? 0) + 1
     const kind = activeStorageKind()
 
     const verIns = (await tx.execute<{ id: string }>(sql`
@@ -1128,7 +1128,7 @@ export async function replaceFile(input: {
               ${input.updatedBy}, now())
       returning id
     `))
-    const versionId = verIns.rows[0].id
+    const versionId = verIns.rows[0]!.id
 
     if (kind === 's3') await putS3Blob(versionId, input.bytes, input.contentType)
     else
@@ -1267,7 +1267,7 @@ export async function getFileBlob(
        and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
   `))
   if (r.rows.length === 0) return null
-  const row = r.rows[0]
+  const row = r.rows[0]!
   const bytes = row.storageKind === 's3' ? await getS3Blob(row.versionId) : row.bytes
   if (!bytes) return null
   // The resolved version id is an immutable validator: a file_versions row's
@@ -1346,7 +1346,7 @@ export async function uploadAndAttach(input: {
     sizeBytes: file.sizeBytes,
     createdAt: file.createdAt,
     createdBy: input.createdBy,
-    attachmentId: attIns.rows[0].id,
+    attachmentId: attIns.rows[0]!.id,
   }
 }
 

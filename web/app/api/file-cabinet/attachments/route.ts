@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       targetTable,
       targetId,
       filename: file.name || 'attachment',
-      contentType: file.type.split(';')[0].trim().toLowerCase(),
+      contentType: file.type.split(';')[0]!.trim().toLowerCase(),
       bytes,
       createdBy: gate.user.id,
     })

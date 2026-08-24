@@ -20,7 +20,10 @@ export function parseSessionTokenFormat(token: string | undefined): ParsedSessio
   if (!token || token.length > 512) return null;
   const parts = token.split(".");
   if (parts.length !== 5 || parts[0] !== "v2") return null;
-  const [, sessionId, userId, rawExpires, signature] = parts;
+  const sessionId = parts[1]!;
+  const userId = parts[2]!;
+  const rawExpires = parts[3]!;
+  const signature = parts[4]!;
   const expiresEpoch = Number(rawExpires);
   if (!UUID.test(sessionId) || !UUID.test(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
   return {
@@ -36,7 +39,10 @@ export function parseChallengeTokenFormat(token: string | undefined): ParsedChal
   if (!token || token.length > 512) return null;
   const parts = token.split(".");
   if (parts.length !== 5 || parts[0] !== "m1") return null;
-  const [, challengeId, userId, rawExpires, signature] = parts;
+  const challengeId = parts[1]!;
+  const userId = parts[2]!;
+  const rawExpires = parts[3]!;
+  const signature = parts[4]!;
   const expiresEpoch = Number(rawExpires);
   if (!UUID.test(challengeId) || !UUID.test(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
   return {

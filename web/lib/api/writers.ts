@@ -502,6 +502,7 @@ async function createDocument(
     return err(404, "not found");
   }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
+  const draftId = draft!.id;
   const current: DocumentEditCurrent = {
     kind: docKind,
     status: "draft",
@@ -512,15 +513,15 @@ async function createDocument(
     updatedAt: undefined,
   };
   try {
-    await applyDocumentEdit(draft.id, current, body, { orgId: user.orgId, userId: user.id, source });
+    await applyDocumentEdit(draftId, current, body, { orgId: user.orgId, userId: user.id, source });
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
     throw e;
   }
-  const life = await runDocumentLifecycle(user, draft.id, docKind, body.action, source);
+  const life = await runDocumentLifecycle(user, draftId, docKind, body.action, source);
   if (life) return life;
-  return { status: 201, body: await loadDocument(draft.id, user.orgId) };
+  return { status: 201, body: await loadDocument(draftId, user.orgId) };
 }
 
 async function updateDocument(

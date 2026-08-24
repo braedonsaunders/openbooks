@@ -121,12 +121,12 @@ const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other",
 
 function priorYear(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return `${y - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${y! - 1}-${String(m!).padStart(2, "0")}-${String(d!).padStart(2, "0")}`;
 }
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
+  const d = new Date(Date.UTC(y!, m! - 1, 1));
   return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
 }
 
@@ -470,16 +470,17 @@ export async function healthData(period: { from: string; to: string; label: stri
 
   // Per-org benchmark targets (percent-scale in the store → decimals here).
   const cfg = await analyticsConfig(orgId, "financialHealth");
+  // mergeConfig always materializes every default key for the dashboard.
   const benchmarks: HealthBenchmarks = {
-    grossMargin: cfg.grossMarginTarget / 100,
-    operatingMargin: cfg.operatingMarginTarget / 100,
-    ebitdaMargin: cfg.ebitdaMarginTarget / 100,
-    netMargin: cfg.netMarginTarget / 100,
-    roa: cfg.roaTarget / 100,
-    roe: cfg.roeTarget / 100,
-    roic: cfg.roicTarget / 100,
-    revenuePerEmployee: cfg.revenuePerEmployee,
-    gpPerEmployee: cfg.gpPerEmployee,
+    grossMargin: cfg.grossMarginTarget! / 100,
+    operatingMargin: cfg.operatingMarginTarget! / 100,
+    ebitdaMargin: cfg.ebitdaMarginTarget! / 100,
+    netMargin: cfg.netMarginTarget! / 100,
+    roa: cfg.roaTarget! / 100,
+    roe: cfg.roeTarget! / 100,
+    roic: cfg.roicTarget! / 100,
+    revenuePerEmployee: cfg.revenuePerEmployee!,
+    gpPerEmployee: cfg.gpPerEmployee!,
   };
 
   const emptyBudget = (): BudgetVariance => ({ scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } });

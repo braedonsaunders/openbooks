@@ -257,9 +257,9 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
           const stubId = String(row.stubId)
           const out: Record<string, CellValue> = { ...row }
           delete out.stubId
-          out[totalKeyBySlot.get('gross')!] = row.gross
-          out[totalKeyBySlot.get('net_pay')!] = row.net_pay
-          out[totalKeyBySlot.get('employer_cost')!] = row.employer_cost
+          out[totalKeyBySlot.get('gross')!] = row.gross!
+          out[totalKeyBySlot.get('net_pay')!] = row.net_pay!
+          out[totalKeyBySlot.get('employer_cost')!] = row.employer_cost!
           delete out.gross
           delete out.net_pay
           delete out.employer_cost

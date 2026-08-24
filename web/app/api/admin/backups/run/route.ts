@@ -44,7 +44,7 @@ export async function POST() {
     }
     throw error;
   }
-  const runId = run.rows[0].id;
+  const runId = run.rows[0]!.id;
 
   await enqueueBackupRun({ op: "run", runId, orgId }, { jobId: runId });
 

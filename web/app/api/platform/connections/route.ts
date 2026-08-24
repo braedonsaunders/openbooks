@@ -191,7 +191,7 @@ export async function POST(req: Request) {
         updatedBy: actorId,
       })
       .returning({ id: schema.connections.id });
-    return NextResponse.json({ id: row.id });
+    return NextResponse.json({ id: row!.id });
   } catch (e) {
     const msg = (e as { message?: string })?.message ?? "create failed";
     // Unique (org, displayName) collision → friendly message.

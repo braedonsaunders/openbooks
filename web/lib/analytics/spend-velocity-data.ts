@@ -175,12 +175,12 @@ function calculateCAGR(startValue: number, endValue: number, periods: number): n
 
 function velocityCAGR(monthlyAmounts: number[], minBase = CFG.minBaseAmount): number {
   if (!monthlyAmounts || monthlyAmounts.length < 2) return 0;
-  let start = monthlyAmounts[0];
+  let start = monthlyAmounts[0]!;
   let periods = monthlyAmounts.length - 1;
-  const end = monthlyAmounts[monthlyAmounts.length - 1];
+  const end = monthlyAmounts[monthlyAmounts.length - 1]!;
   if (start < minBase) {
     for (let i = 0; i < monthlyAmounts.length - 1; i++) {
-      if (monthlyAmounts[i] >= minBase) { start = monthlyAmounts[i]; periods = monthlyAmounts.length - 1 - i; break; }
+      if (monthlyAmounts[i]! >= minBase) { start = monthlyAmounts[i]!; periods = monthlyAmounts.length - 1 - i; break; }
     }
     if (start < minBase) return 0;
   }
@@ -389,7 +389,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       acceleration,
       trend,
       latestSpend: amounts[amounts.length - 1] ?? 0,
-      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2] : 0,
+      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2]! : 0,
       avgMonthlySpend: a.totalSpend / Math.max(1, a.months.length),
       monthlyAmounts: amounts,
       monthLabels: a.months.map((m) => m.month),
@@ -417,7 +417,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
       transactionCount: v.txns, monthCount: v.months.length,
       velocity, acceleration, trend,
       latestSpend: amounts[amounts.length - 1] ?? 0,
-      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2] : 0,
+      previousSpend: amounts.length > 1 ? amounts[amounts.length - 2]! : 0,
       avgMonthlySpend: v.totalSpend / Math.max(1, v.months.length),
       monthlyAmounts: amounts, monthLabels: v.months.map((m) => m.month),
     };
@@ -486,7 +486,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   for (const r of vendRows.rows as any[]) trendMap.get(r.month)?.vendors.add(r.vendor_id);
   const monthlyTrends = [...trendMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, t], i, arr) => {
     const py = pyByMonth.get(month.slice(5, 7));
-    const prev = i > 0 ? arr[i - 1][1].total : 0;
+    const prev = i > 0 ? arr[i - 1]![1].total : 0;
     return {
       month,
       totalAmount: t.total,
@@ -509,7 +509,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   const patterns = Array.from({ length: 12 }, (_, i) => {
     const total = seasonTotals.get(i + 1) ?? 0;
     const deviation = seasonAvg > 0 ? Math.round(((total - seasonAvg) / seasonAvg) * 100) : 0;
-    return { month: i + 1, monthName: monthNames[i], totalSpend: total, deviation, isHigh: deviation > 15, isLow: deviation < -15 };
+    return { month: i + 1, monthName: monthNames[i]!, totalSpend: total, deviation, isHigh: deviation > 15, isLow: deviation < -15 };
   });
   const seasonalInsights: { type: string; message: string }[] = [];
   const highMonths = patterns.filter((p) => p.isHigh);
@@ -523,7 +523,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     if (a.months.length < C.boilingFrogMonths) continue;
     let increases = 0, totalCreep = 0;
     for (let i = 1; i < a.months.length; i++) {
-      const prev = a.months[i - 1].amount, curr = a.months[i].amount;
+      const prev = a.months[i - 1]!.amount, curr = a.months[i]!.amount;
       if (prev > 0) {
         const pct = ((curr - prev) / prev) * 100;
         if (pct > 0 && pct <= 10) { increases++; totalCreep += pct; }
@@ -531,8 +531,8 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     }
     const monotonicRatio = (increases / (a.months.length - 1)) * 100;
     if (monotonicRatio >= 50 && totalCreep >= C.boilingFrogMinIncrease) {
-      const startAmount = a.months[0].amount;
-      const endAmount = a.months[a.months.length - 1].amount;
+      const startAmount = a.months[0]!.amount;
+      const endAmount = a.months[a.months.length - 1]!.amount;
       frogAccounts.push({
         accountId: a.id, accountName: a.name,
         monotonicRatio: Math.round(monotonicRatio),
@@ -576,7 +576,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   for (const v of vendMap.values()) {
     if (v.months.length < C.zombieMinMonths) continue;
     const amounts = v.months.map((m) => Math.round(m.amount * 100) / 100);
-    const first = amounts[0];
+    const first = amounts[0]!;
     let isZombie = amounts.every((x) => x === first);
     if (!isZombie) {
       const mean = amounts.reduce((s, x) => s + x, 0) / amounts.length;
@@ -586,7 +586,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     if (isZombie && first > 0) {
       zombieList.push({
         vendorId: v.id, vendorName: v.name, amount: first, monthCount: v.months.length,
-        annualCost: first * 12, firstMonth: v.months[0].month, lastMonth: v.months[v.months.length - 1].month,
+        annualCost: first * 12, firstMonth: v.months[0]!.month, lastMonth: v.months[v.months.length - 1]!.month,
         severity: v.months.length >= 12 ? "critical" : "warning",
       });
     }

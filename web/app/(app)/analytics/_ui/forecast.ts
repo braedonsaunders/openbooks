@@ -65,7 +65,7 @@ export function detectSeasonality(data: number[]): number {
   for (const period of [3, 4, 6, 12]) {
     if (n >= period * 2) {
       let sumCorr = 0
-      for (let i = period; i < n; i++) sumCorr += (data[i] - mean) * (data[i - period] - mean)
+      for (let i = period; i < n; i++) sumCorr += (data[i]! - mean) * (data[i - period]! - mean)
       const corr = variance > 0 ? sumCorr / ((n - period) * variance) : 0
       if (corr > bestCorr && corr > 0.3) {
         bestCorr = corr
@@ -88,15 +88,15 @@ export function forecastETS(data: number[], horizon: number, seasonalPeriod: num
   const alpha = 0.3
   const beta = 0.1
   const gamma = 0.2
-  let level = data[0]
-  let trend = n > 1 ? data[1] - data[0] : 0
+  let level = data[0]!
+  let trend = n > 1 ? data[1]! - data[0]! : 0
   const seasonal: number[] = []
   if (seasonalPeriod > 0 && n >= seasonalPeriod * 2) {
     for (let i = 0; i < seasonalPeriod; i++) {
       let s = 0
       let count = 0
       for (let j = i; j < n; j += seasonalPeriod) {
-        s += data[j]
+        s += data[j]!
         count++
       }
       seasonal.push(count > 0 ? s / count / (sum(data) / n) : 1)
@@ -104,17 +104,17 @@ export function forecastETS(data: number[], horizon: number, seasonalPeriod: num
   }
   const fitted: number[] = []
   for (let t = 0; t < n; t++) {
-    const seasonFactor = seasonal.length > 0 ? seasonal[t % seasonalPeriod] : 1
-    const newLevel = alpha * (data[t] / seasonFactor) + (1 - alpha) * (level + trend)
+    const seasonFactor = seasonal.length > 0 ? seasonal[t % seasonalPeriod]! : 1
+    const newLevel = alpha * (data[t]! / seasonFactor) + (1 - alpha) * (level + trend)
     const newTrend = beta * (newLevel - level) + (1 - beta) * trend
-    if (seasonal.length > 0) seasonal[t % seasonalPeriod] = gamma * (data[t] / newLevel) + (1 - gamma) * seasonal[t % seasonalPeriod]
+    if (seasonal.length > 0) seasonal[t % seasonalPeriod] = gamma * (data[t]! / newLevel) + (1 - gamma) * seasonal[t % seasonalPeriod]!
     level = newLevel
     trend = newTrend
     fitted.push(level * seasonFactor)
   }
   const values: number[] = []
   for (let h = 1; h <= horizon; h++) {
-    const seasonFactor = seasonal.length > 0 ? seasonal[(n + h - 1) % seasonalPeriod] : 1
+    const seasonFactor = seasonal.length > 0 ? seasonal[(n + h - 1) % seasonalPeriod]! : 1
     values.push((level + trend * h) * seasonFactor)
   }
   const sd = calculateStdDev(data)
@@ -137,12 +137,12 @@ export function forecastSeasonal(data: number[], horizon: number, period: number
   const seasonalIdx: number[] = []
   for (let i = 0; i < period; i++) {
     const vals: number[] = []
-    for (let j = i; j < n; j += period) vals.push(data[j] - (trend.intercept + trend.slope * j))
+    for (let j = i; j < n; j += period) vals.push(data[j]! - (trend.intercept + trend.slope * j))
     seasonalIdx.push(vals.length > 0 ? sum(vals) / vals.length : 0)
   }
-  const fitted = data.map((_, i) => trend.intercept + trend.slope * i + seasonalIdx[i % period])
+  const fitted = data.map((_, i) => trend.intercept + trend.slope * i + seasonalIdx[i % period]!)
   const values: number[] = []
-  for (let h = 0; h < horizon; h++) values.push(trend.intercept + trend.slope * (n + h) + seasonalIdx[(n + h) % period])
+  for (let h = 0; h < horizon; h++) values.push(trend.intercept + trend.slope * (n + h) + seasonalIdx[(n + h) % period]!)
   const sd = calculateStdDev(data)
   return { values, ...band(values, sd, z, 0.12), fitted, trend: trend.slope, seasonal: true, seasonalPeriod: period }
 }
@@ -157,7 +157,7 @@ export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): F
     ma.push(sum(slice) / slice.length)
   }
   const trend = calculateTrend(ma.slice(-windowSize))
-  const lastMA = ma[ma.length - 1]
+  const lastMA = ma[ma.length - 1]!
   const values: number[] = []
   for (let h = 0; h < horizon; h++) values.push(lastMA + trend.slope * h)
   const sd = calculateStdDev(data)
@@ -167,21 +167,21 @@ export function forecastMovingAvg(data: number[], horizon: number, z = 1.645): F
 export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: number, z = 1.645): ForecastResult {
   const n = data.length
   const diff: number[] = []
-  for (let i = 1; i < n; i++) diff.push(data[i] - data[i - 1])
+  for (let i = 1; i < n; i++) diff.push(data[i]! - data[i - 1]!)
   let ar1 = 0
   if (diff.length > 1) {
     let sumXY = 0
     let sumX2 = 0
     for (let i = 1; i < diff.length; i++) {
-      sumXY += diff[i] * diff[i - 1]
-      sumX2 += diff[i - 1] * diff[i - 1]
+      sumXY += diff[i]! * diff[i - 1]!
+      sumX2 += diff[i - 1]! * diff[i - 1]!
     }
     ar1 = sumX2 > 0 ? sumXY / sumX2 : 0
   }
   ar1 = Math.max(-0.9, Math.min(0.9, ar1))
   const ma1 = 0.3
   let lastDiff = diff[diff.length - 1] || 0
-  let lastValue = data[n - 1]
+  let lastValue = data[n - 1]!
   const values: number[] = []
   for (let h = 0; h < horizon; h++) {
     const nextDiff = ar1 * lastDiff + ma1 * (lastDiff - ar1 * (diff[diff.length - 2] || 0))
@@ -189,10 +189,10 @@ export function forecastARIMA(data: number[], horizon: number, seasonalPeriod: n
     values.push(lastValue)
     lastDiff = nextDiff
   }
-  const fitted = [data[0]]
+  const fitted = [data[0]!]
   lastDiff = 0
   for (let i = 1; i < n; i++) {
-    fitted.push(fitted[i - 1] + ar1 * lastDiff)
+    fitted.push(fitted[i - 1]! + ar1 * lastDiff)
     lastDiff = diff[i - 1] || 0
   }
   const sd = calculateStdDev(diff) || calculateStdDev(data)
@@ -244,7 +244,7 @@ export function applyForecastMethod(
   }
 
   if (growthOverride !== null && !Number.isNaN(growthOverride)) {
-    const baseValue = data[n - 1]
+    const baseValue = data[n - 1]!
     const monthlyGrowth = growthOverride / 100 / 12
     result.values = Array.from({ length: horizon }, (_, i) => baseValue * (1 + monthlyGrowth) ** (i + 1))
   }
@@ -261,7 +261,7 @@ export function calculateMAPE(actual: number[], predicted: number[]): number {
   const n = Math.min(actual.length, predicted.length)
   if (n === 0) return 0
   let s = 0
-  for (let i = 0; i < n; i++) if (actual[i] !== 0) s += Math.abs((actual[i] - predicted[i]) / actual[i])
+  for (let i = 0; i < n; i++) if (actual[i] !== 0) s += Math.abs((actual[i]! - predicted[i]!) / actual[i]!)
   return (s / n) * 100
 }
 
@@ -269,7 +269,7 @@ export function calculateRMSE(actual: number[], predicted: number[]): number {
   const n = Math.min(actual.length, predicted.length)
   if (n === 0) return 0
   let sumSq = 0
-  for (let i = 0; i < n; i++) sumSq += (actual[i] - predicted[i]) ** 2
+  for (let i = 0; i < n; i++) sumSq += (actual[i]! - predicted[i]!) ** 2
   return Math.sqrt(sumSq / n)
 }
 
@@ -280,8 +280,8 @@ export function calculateR2(actual: number[], predicted: number[]): number {
   let ssTot = 0
   let ssRes = 0
   for (let i = 0; i < n; i++) {
-    ssTot += (actual[i] - mean) ** 2
-    ssRes += (actual[i] - predicted[i]) ** 2
+    ssTot += (actual[i]! - mean) ** 2
+    ssRes += (actual[i]! - predicted[i]!) ** 2
   }
   return ssTot > 0 ? 1 - ssRes / ssTot : 0
 }

@@ -108,7 +108,7 @@ function propertyResource(orgId: string): DataResource {
       const fixedAssetsOn = await orgFeatureEnabled(ctx.orgId, 'fixedAssets')
       const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, 'multiCurrency')
       for (let index = 0; index < rows.length; index++) {
-        const src = rows[index]
+        const src = rows[index]!
         try {
           const code = String(src.code ?? '').trim()
           const name = String(src.name ?? '').trim()
@@ -188,17 +188,18 @@ function unitResource(orgId: string): DataResource {
     async write(rows, mode, ctx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       for (let index = 0; index < rows.length; index++) try {
-        const propertyId = await naturalId(ctx.orgId, 'managed_properties', 'code', rows[index].propertyCode)
-        const code = String(rows[index].code ?? '').trim()
+        const src = rows[index]!
+        const propertyId = await naturalId(ctx.orgId, 'managed_properties', 'code', src.propertyCode)
+        const code = String(src.code ?? '').trim()
         if (!propertyId || !code) throw new Error('valid propertyCode and code are required')
         const found = (await db.execute(sql`select * from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${code} limit 1`)) as { rows: any[] }
-        if (found.rows[0] && mode === 'insert') throw new Error(`already exists (${String(rows[index].propertyCode)} + ${code})`)
+        if (found.rows[0] && mode === 'insert') throw new Error(`already exists (${String(src.propertyCode)} + ${code})`)
         if (!ctx.dryRun) {
-          const values = { orgId: ctx.orgId, actorId: ctx.actorId, code, name: rows[index].name ? String(rows[index].name) : null, unitType: rows[index].unitType ? String(rows[index].unitType) : null, rentableArea: rows[index].rentableArea ? String(rows[index].rentableArea) : null, bedrooms: rows[index].bedrooms === '' || rows[index].bedrooms == null ? null : Number(rows[index].bedrooms) }
-          if (found.rows[0]) await updatePropertyUnit({ ...values, unitId: found.rows[0].id, status: String(rows[index].status ?? found.rows[0].status) })
+          const values = { orgId: ctx.orgId, actorId: ctx.actorId, code, name: src.name ? String(src.name) : null, unitType: src.unitType ? String(src.unitType) : null, rentableArea: src.rentableArea ? String(src.rentableArea) : null, bedrooms: src.bedrooms === '' || src.bedrooms == null ? null : Number(src.bedrooms) }
+          if (found.rows[0]) await updatePropertyUnit({ ...values, unitId: found.rows[0].id, status: String(src.status ?? found.rows[0].status) })
           else {
             const created = await createPropertyUnit({ ...values, propertyId })
-            if (rows[index].status === 'offline') await updatePropertyUnit({ ...values, unitId: created.id, status: 'offline' })
+            if (src.status === 'offline') await updatePropertyUnit({ ...values, unitId: created.id, status: 'offline' })
           }
         }
         found.rows[0] ? outcome.updated++ : outcome.created++
@@ -244,7 +245,7 @@ function leaseResource(orgId: string): DataResource {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const resolver = new RefResolver(ctx.orgId)
       for (let index = 0; index < rows.length; index++) try {
-        const src = rows[index]
+        const src = rows[index]!
         const leaseNumber = String(src.leaseNumber ?? '').trim()
         const propertyId = await naturalId(ctx.orgId, 'managed_properties', 'code', src.propertyCode)
         const tenantId = await resolver.resolveId({ resource: 'parties', by: 'short_code' }, src.tenant)
@@ -302,7 +303,7 @@ function leaseChargeResource(orgId: string): DataResource {
       const resolver = new RefResolver(ctx.orgId)
       const inventoryOn = await orgFeatureEnabled(ctx.orgId, 'inventory')
       for (let index = 0; index < rows.length; index++) try {
-        const src = rows[index]
+        const src = rows[index]!
         const leaseNumber = String(src.leaseNumber ?? '').trim()
         const chargeType = String(src.chargeType ?? '').trim()
         const description = String(src.description ?? '').trim()
@@ -364,7 +365,7 @@ function depositOpeningResource(orgId: string): DataResource {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const resolver = new RefResolver(ctx.orgId)
       for (let index = 0; index < rows.length; index++) try {
-        const src = rows[index]
+        const src = rows[index]!
         const externalKey = String(src.externalKey ?? '').trim()
         const leaseNumber = String(src.leaseNumber ?? '').trim()
         if (!externalKey || !leaseNumber || !src.occurredOn || !src.amount || !src.offsetAccount) throw new Error('externalKey, leaseNumber, occurredOn, amount, and offsetAccount are required')

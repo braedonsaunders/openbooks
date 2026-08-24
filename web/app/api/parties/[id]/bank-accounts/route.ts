@@ -147,7 +147,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (reason.length < 5 || reason.length > 500) {
     return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
   }
-  if (!body.expectedUpdatedAt || new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updatedAt).getTime()) {
+  if (!body.expectedUpdatedAt || new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0]!.updatedAt).getTime()) {
     return NextResponse.json(
       { error: 'these bank details changed after you opened them; reload and review the latest revision' },
       { status: 409 },
@@ -172,7 +172,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     where id = ${accountId}
       and party_id = ${partyId}
       and org_id = ${user.orgId}
-      and updated_at = ${existing.rows[0].updatedAt}
+      and updated_at = ${existing.rows[0]!.updatedAt}
       and retired_at is null
     returning id
   `))

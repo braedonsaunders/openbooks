@@ -115,9 +115,9 @@ export async function createDocumentDraft(
   // throws into the caller (failures land on the flow_runs row), and it is
   // awaited — not detached — so it runs inside this request's RLS org scope.
   if (options.runFlows !== false) {
-    await runRecordFlows({ kind: 'on_create', source: options.source ?? 'ui' }, kind, doc.id, { orgId, userId })
+    await runRecordFlows({ kind: 'on_create', source: options.source ?? 'ui' }, kind, doc!.id, { orgId, userId })
   }
-  return doc
+  return doc!
 }
 
 /**
@@ -147,7 +147,7 @@ export async function createPostedCorrectionDraft(
     source: ctx.source,
   })
   try {
-    const [current] = await db
+    const [row] = await db
       .select({
         kind: schema.documents.kind,
         status: schema.documents.status,
@@ -159,6 +159,7 @@ export async function createPostedCorrectionDraft(
       })
       .from(schema.documents)
       .where(sql`${schema.documents.id} = ${replacement.id} and ${schema.documents.orgId} = ${ctx.orgId}`)
+    const current = row!
     await applyDocumentEdit(replacement.id, {
       ...current,
       updatedAt: current.updatedAt?.toISOString(),

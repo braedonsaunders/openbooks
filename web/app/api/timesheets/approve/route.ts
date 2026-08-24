@@ -42,8 +42,8 @@ export async function POST(req: Request) {
       orgId,
       actorId: user.id,
       employeePartyId: ownedEmployee,
-      from: days[0],
-      to: days[6],
+      from: days[0]!,
+      to: days[6]!,
     })
     // The header follows the entries, never leads them: if the financial
     // effects above roll back, the week must not be left reading approved.

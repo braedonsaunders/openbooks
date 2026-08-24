@@ -396,12 +396,13 @@ export async function customerData(period: { from: string; to: string; label: st
 
   // Per-org tunable thresholds (defaults reproduce the standard scoring exactly).
   const cfg = await analyticsConfig(orgId, "customerIntelligence");
-  const churnCritical = cfg.churnCriticalScore;
-  const churnHigh = cfg.churnHighScore;
-  const churnMedium = cfg.churnMediumScore;
-  const hhiWarning = cfg.hhiWarning;
-  const hhiCritical = cfg.hhiCritical;
-  const clvYears = cfg.clvYears;
+  // mergeConfig always materializes every default key for the dashboard.
+  const churnCritical = cfg.churnCriticalScore!;
+  const churnHigh = cfg.churnHighScore!;
+  const churnMedium = cfg.churnMediumScore!;
+  const hhiWarning = cfg.hhiWarning!;
+  const hhiCritical = cfg.hhiCritical!;
+  const clvYears = cfg.clvYears!;
 
   const [baseRows, frictionRows, paymentRows, growthRows, cohortRows, profitData] = await Promise.all([
     // Base customer metrics — the header query over CustInvc(+CashSale):

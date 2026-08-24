@@ -97,7 +97,7 @@ export async function POST(req: Request) {
       `)
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${verified.orgId}, 'field_ticket_signatures', ${inserted.rows[0].id}, 'insert',
+        values (${verified.orgId}, 'field_ticket_signatures', ${inserted.rows[0]!.id}, 'insert',
                 ${JSON.stringify({
                   fieldTicketId: verified.ticketId,
                   role: 'customer',

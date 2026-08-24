@@ -190,7 +190,7 @@ export interface TrueCostData {
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
+  const d = new Date(Date.UTC(y!, m! - 1, 1));
   return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
 }
 
@@ -513,8 +513,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   for (const d of departmentsBase) timeExpenseByDept[d.id] = 0;
   for (const [dept, cost] of nonbillCostByDept) {
     if (cost === 0) continue;
-    if (dept !== "none" && billedShare.has(dept)) timeExpenseByDept[dept] += cost;
-    else for (const d of departmentsBase) timeExpenseByDept[d.id] += cost * (billedShare.get(d.id) ?? 0);
+    if (dept !== "none" && billedShare.has(dept)) timeExpenseByDept[dept]! += cost;
+    else for (const d of departmentsBase) timeExpenseByDept[d.id]! += cost * (billedShare.get(d.id) ?? 0);
   }
   for (const [month, cost] of nonbillCostByMonth) {
     if (cost === 0) continue;
@@ -663,11 +663,11 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   // median/MAD screen but still shown in the chart.
   const fitPoints = monthly
     .map((m, i) => ({ i, rate: m.rate }))
-    .filter((p) => monthly[p.i].billedHours > 0);
+    .filter((p) => monthly[p.i]!.billedHours > 0);
   const forecast: TrueCostData["forecast"] = [];
   if (fitPoints.length >= 3 && months.length > 0) {
     const sortedRates = fitPoints.map((p) => p.rate).sort((a, b) => a - b);
-    const median = sortedRates[Math.floor(sortedRates.length / 2)];
+    const median = sortedRates[Math.floor(sortedRates.length / 2)]!;
     const mad = fitPoints.map((p) => Math.abs(p.rate - median)).sort((a, b) => a - b)[Math.floor(fitPoints.length / 2)] || 1;
     const clean = fitPoints.filter((p) => Math.abs(p.rate - median) <= 3 * mad);
     const pts = clean.length >= 3 ? clean : fitPoints;
@@ -677,11 +677,11 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     const denom = n * sumXX - sumX * sumX;
     const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
     const intercept = (sumY - slope * sumX) / n;
-    const last = months[months.length - 1];
+    const last = months[months.length - 1]!;
     const lastIdx = monthly.length - 1;
     const [ly, lm] = last.split("-").map(Number);
     for (let i = 1; i <= 3; i++) {
-      const d = new Date(Date.UTC(ly, lm - 1 + i, 1));
+      const d = new Date(Date.UTC(ly!, lm! - 1 + i, 1));
       const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
       forecast.push({ month: ym, label: monthLabel(ym), rate: Math.max(0, intercept + slope * (lastIdx + i)) });
     }
