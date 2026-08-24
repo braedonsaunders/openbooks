@@ -4,6 +4,8 @@ import test from "node:test";
 
 const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
+const bankStatementSourceEvidenceMigrationPath =
+  "schema/migrations/generated/0010_bank_statement_source_evidence.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -22,6 +24,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0007_posting_effects_terminal_lifecycle.sql",
     "0008_durable_work_lease_fencing.sql",
     "0009_posting_effect_idempotency_keys.sql",
+    "0010_bank_statement_source_evidence.sql",
+    "0010_bank_statement_source_idempotency.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -31,6 +35,16 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("bank statement source evidence is mandatory after forward migrations", () => {
+  const migration = readFileSync(bankStatementSourceEvidenceMigrationPath, "utf8");
+  assert.match(migration, /WHERE raw_file_ref IS NULL/);
+  assert.match(migration, /RAISE EXCEPTION/);
+  assert.match(
+    migration,
+    /ALTER COLUMN raw_file_ref SET NOT NULL/,
+  );
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
