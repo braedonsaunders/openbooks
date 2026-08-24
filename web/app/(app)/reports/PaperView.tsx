@@ -4,8 +4,10 @@ import Link from 'next/link'
 import { useFormatter } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
 import { cn } from '@openbooks/ui'
+import type { ReportCellLink } from '@openbooks/reports'
 import { ReportPaper } from './ReportPaper'
 import { ReportDrillLink } from './ReportDrillLink'
+import { TxnLink } from './TxnLink'
 import type { ReportDrillTarget } from '../../../lib/report-drill'
 import {
   Table,
@@ -45,6 +47,8 @@ export type PaperGroup = {
   links?: (string | null | undefined)[][]
   /** Per-cell report drill target (parallel to `rows`). */
   drills?: (ReportDrillTarget | null | undefined)[][]
+  /** Per-cell native record navigation supplied by the report engine. */
+  cellLinks?: (ReportCellLink | null)[][]
   /** Group-level drill fallback for numeric cells (e.g. scoped to this
    *  section's rows); wins over the paper-wide defaultDrillTarget. */
   drillTarget?: ReportDrillTarget
@@ -153,6 +157,7 @@ export function PaperView({
                             const isMoney = !!group.money?.[ci]
                             const negative = typeof cell === 'number' && cell < 0
                             const href = group.links?.[ri]?.[ci]
+                            const cellLink = group.cellLinks?.[ri]?.[ci]
                             const drill = group.drills?.[ri]?.[ci]
                               ?? (isNumericCell(cell) ? group.drillTarget ?? data.defaultDrillTarget : undefined)
                             const text = fmt(cell, isMoney)
@@ -165,7 +170,11 @@ export function PaperView({
                                   negative && 'text-red-600 dark:text-red-400',
                                 )}
                               >
-                                {drill ? (
+                                {cellLink?.kind === 'transaction' ? (
+                                  <TxnLink target={cellLink} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
+                                    {text}
+                                  </TxnLink>
+                                ) : drill ? (
                                   <ReportDrillLink target={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
                                     {text}
                                   </ReportDrillLink>

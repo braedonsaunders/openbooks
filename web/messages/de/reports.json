@@ -486,6 +486,10 @@
         "label": "Artikel",
         "description": "Der Artikel- und Leistungskatalog – Leistungen, Lagerartikel, Arbeit, Gebühren und Rabatte mit Sätzen und Konten."
       },
+      "inventory_lot_movements": {
+        "label": "Chargenbewegungen im Lager",
+        "description": "Jede mit einer Charge verknüpfte Lagerbewegung – Artikel, Verfallsdatum, Menge, Standort, Quelldokument und Geschäftspartner für Rückrufe und Rückverfolgbarkeit."
+      },
       "projects": {
         "label": "Projekte",
         "description": "Projekte / Aufträge – Status, Kunde, Abrechnungsmethode, Zeitplan und Bestellnummer."
@@ -502,6 +506,30 @@
       "tax_codes": {
         "label": "Steuerkennzeichen",
         "description": "Steuerkennzeichen – Steuergebiet, Geltungsbereich und Erstattungsfähigkeit."
+      },
+      "pay_stubs": {
+        "label": "Lohnabrechnungen",
+        "description": "Eine Zeile pro Mitarbeiter und Lohnlauf – Brutto, gesetzliche Abzüge, Netto und Arbeitgeberkosten. Erfordert die Lohnabrechnungs-Berechtigung."
+      },
+      "pay_stub_lines": {
+        "label": "Lohnabrechnungszeilen",
+        "description": "Lohndetails auf Komponentenebene – eine Zeile pro Lohnart, Abzug oder Arbeitgeberbeitrag auf einer Abrechnung mit Stunden, Satz, Betrag und laufendem Jahresstand. Erfordert die Lohnabrechnungs-Berechtigung."
+      },
+      "payroll_parallel_findings": {
+        "label": "Parallellauf-Feststellungen",
+        "description": "Parallellauf mit dem vorherigen Anbieter, Zelle für Zelle: Was das alte Lohnsystem je Mitarbeiter und Komponente gezahlt hat, was dieses System berechnet und die Differenz. Erfordert die Lohnabrechnungs-Berechtigung."
+      },
+      "equipment": {
+        "label": "Ausrüstung",
+        "description": "Eigene und gemietete Einheiten – Identität, Kapazität, der verrechnete Artikel und das Tarifverzeichnis sowie was jede Einheit gekostet und wieder eingebracht hat."
+      },
+      "entitlement_balances": {
+        "label": "Anspruchssalden",
+        "description": "Eine Zeile pro Mitarbeiter und Zeitsparkonto – Urlaub, angesparte Zeit, Leistungsverrechnung – mit Saldo, geltendem Limit und verbleibendem Spielraum. Erfordert die Lohnabrechnungs-Berechtigung."
+      },
+      "entitlement_service_milestones": {
+        "label": "Dienstjubiläen",
+        "description": "Wann jeder Mitarbeiter eine dienstbezogene Anspruchsstufe erreicht und welche Stufe heute gilt. Erfordert die Lohnabrechnungs-Berechtigung."
       }
     },
     "columns": {
@@ -531,7 +559,8 @@
         "reconciled_at": "Abgestimmt am",
         "entry_id": "Buchung (ID)",
         "account_id": "Konto (ID)",
-        "party_id": "Geschäftspartner (ID)"
+        "party_id": "Geschäftspartner (ID)",
+        "equipment": "Ausrüstung"
       },
       "documents": {
         "kind": "Typ",
@@ -615,7 +644,12 @@
         "class": "Klasse",
         "created_at": "Erstellt am",
         "id": "Zeile (ID)",
-        "document_id": "Transaktion (ID)"
+        "document_id": "Transaktion (ID)",
+        "equipment": "Ausrüstung",
+        "cost_rate": "Kostensatz",
+        "bill_rate": "Verrechnungssatz",
+        "cost_amount": "Kostenbetrag",
+        "bill_amount": "Verrechnungsbetrag"
       },
       "journal_entries": {
         "entry_number": "Buchung Nr.",
@@ -639,7 +673,42 @@
         "show_on_timesheet": "Auf Zeiterfassungen",
         "is_active": "Aktiv",
         "created_at": "Erstellt am",
-        "id": "Artikel (ID)"
+        "id": "Artikel (ID)",
+        "default_cost": "Standardkosten",
+        "description": "Beschreibung",
+        "recovery_account": "Kostendeckungskonto"
+      },
+      "inventory_lot_movements": {
+        "lot_number": "Chargennummer",
+        "expires_on": "Verfallsdatum",
+        "item": "Artikel",
+        "item_code": "Artikelcode",
+        "item_name": "Artikelname",
+        "movement_kind": "Bewegungstyp",
+        "kind": "Bewegungstyp",
+        "moved_at": "Bewegungsdatum",
+        "quantity": "Menge",
+        "unit_cost": "Stückkosten",
+        "total_value": "Gesamtwert",
+        "location": "Standort",
+        "location_code": "Lagerort",
+        "status": "Buchungsstatus",
+        "document_number": "Belegnummer",
+        "party_name": "Geschäftspartner",
+        "document_date": "Belegdatum",
+        "memo": "Notiz",
+        "reversal_reason": "Stornogrund",
+        "movement_id": "Bewegung (ID)",
+        "lot_id": "Charge (ID)",
+        "item_id": "Artikel (ID)",
+        "document_id": "Transaktion (ID)",
+        "document_kind": "Belegart",
+        "stock_location_id": "Lagerort (ID)",
+        "document_line_id": "Transaktionszeile (ID)",
+        "journal_entry_id": "Buchung (ID)",
+        "transaction_entry_id": "Transaktionsbuchung (ID)",
+        "paired_movement_id": "Gekoppelte Bewegung (ID)",
+        "reverses_movement_id": "Stornierte Bewegung (ID)"
       },
       "projects": {
         "code": "Code",
@@ -653,7 +722,8 @@
         "ends_on": "Endet am",
         "is_active": "Aktiv",
         "created_at": "Erstellt am",
-        "id": "Projekt (ID)"
+        "id": "Projekt (ID)",
+        "project_type": "Projekttyp"
       },
       "timesheets": {
         "employee_name": "Mitarbeiter",
@@ -707,6 +777,141 @@
         "recoverable_percent": "Erstattungsfähig %",
         "is_active": "Aktiv",
         "id": "Steuerkennzeichen (ID)"
+      },
+      "pay_stubs": {
+        "employee": "Mitarbeiter",
+        "run_number": "Lohnlauf-Nr.",
+        "schedule": "Zeitplan",
+        "pay_date": "Zahlungsdatum",
+        "period_start": "Periodenbeginn",
+        "period_end": "Periodenende",
+        "tax_year": "Steuerjahr",
+        "province": "Provinz / Bundesstaat",
+        "run_status": "Laufstatus",
+        "paid": "Bezahlt",
+        "gross": "Bruttolohn",
+        "cpp_fica": "CPP / FICA (Anteil Arbeitnehmer)",
+        "ei": "EI (Anteil Arbeitnehmer)",
+        "income_tax": "Einkommensteuer",
+        "net_pay": "Nettolohn",
+        "employer_cost": "Arbeitgeberkosten",
+        "vacation_accrued": "Angefallener Urlaub",
+        "pensionable": "Rentenpflichtige Einnahmen",
+        "insurable": "Versicherungspflichtige Einnahmen"
+      },
+      "pay_stub_lines": {
+        "employee": "Mitarbeiter",
+        "run_number": "Lohnlauf-Nr.",
+        "schedule": "Zeitplan",
+        "pay_date": "Zahlungsdatum",
+        "period_start": "Periodenbeginn",
+        "period_end": "Periodenende",
+        "run_status": "Laufstatus",
+        "component": "Komponente",
+        "component_code": "Komponentencode",
+        "line_description": "Zeilenbeschreibung",
+        "line_kind": "Art",
+        "hours": "Stunden",
+        "rate": "Satz",
+        "amount": "Betrag",
+        "ytd_amount": "Jahres-YTD-Betrag",
+        "project": "Projekt",
+        "department": "Abteilung",
+        "tax_year": "Steuerjahr",
+        "province": "Provinz / Bundesstaat",
+        "stub_id": "Lohnzettel (ID)",
+        "component_id": "Komponente (ID)"
+      },
+      "payroll_parallel_findings": {
+        "employee": "Mitarbeiter",
+        "register": "Vorheriges Register",
+        "provider": "Vorheriger Anbieter",
+        "run_number": "Lohnlauf-Nr.",
+        "pay_date": "Zahlungsdatum",
+        "period_start": "Periodenbeginn",
+        "period_end": "Periodenende",
+        "component": "Komponente",
+        "slot": "Komponentenschlüssel",
+        "line_kind": "Art",
+        "classification": "Ergebnis",
+        "prior_amount": "Vorheriges System",
+        "our_amount": "Dieses System",
+        "difference": "Differenz",
+        "tolerance_applied": "Zugelassene Toleranz",
+        "source_column": "Quellspalte",
+        "comparison_status": "Vergleichsergebnis",
+        "employees_compared": "Verglichene Mitarbeiter",
+        "employees_prior": "Mitarbeiter im vorherigen Register",
+        "employees_ours": "Mitarbeiter in unserem Lauf",
+        "unmapped_column_count": "Nicht zugeordnete Quellspalten",
+        "blocked_reason": "Warum nichts verglichen wurde",
+        "compared_at": "Verglichen am",
+        "run_status": "Laufstatus",
+        "comparison_id": "Vergleich (ID)",
+        "employee_id": "Mitarbeiter (ID)"
+      },
+      "entitlement_balances": {
+        "employee": "Mitarbeiter",
+        "employee_id": "Mitarbeiter (ID)",
+        "plan": "Plan",
+        "plan_code": "Plan-Code",
+        "plan_id": "Plan (ID)",
+        "unit": "Einheit",
+        "direction": "Richtung",
+        "balance": "Saldo",
+        "owed_to_employer": "Geschuldet an den Arbeitgeber",
+        "max_balance": "Höchstsaldo",
+        "notify_balance": "Benachrichtigen bei",
+        "headroom": "Spielraum bis zum Limit",
+        "limit_scope": "Limit festgelegt auf",
+        "limit_state": "Limitstatus",
+        "liability_account": "Verbindlichkeitskonto",
+        "last_movement_date": "Letzte Bewegung",
+        "movement_count": "Bewegungen",
+        "job_title": "Position",
+        "trade": "Gewerk",
+        "department": "Abteilung"
+      },
+      "entitlement_service_milestones": {
+        "employee": "Mitarbeiter",
+        "employee_id": "Mitarbeiter (ID)",
+        "plan_id": "Plan (ID)",
+        "component_id": "Komponente (ID)",
+        "milestone": "Meilenstein",
+        "milestone_kind": "Meilensteinart",
+        "milestone_date": "Meilensteindatum",
+        "after_months": "Nach Dienstmonaten",
+        "after_years": "Nach Dienstjahren",
+        "accrual_value": "Anspruchswert",
+        "tier_active": "Aktuelle Stufe",
+        "eligible": "Berechtigt",
+        "hired_on": "Eingestellt am",
+        "terminated_on": "Beendet am",
+        "job_title": "Position",
+        "department": "Abteilung"
+      },
+      "equipment": {
+        "id": "Ausrüstung (ID)",
+        "name": "Name",
+        "description": "Beschreibung",
+        "unit_number": "Einheitennummer",
+        "serial_number": "Seriennummer",
+        "fixed_asset_number": "Anlagennummer",
+        "status": "Status",
+        "subsidiary": "Gesellschaft",
+        "capacity_quantity": "Kapazität",
+        "capacity_unit": "Kapazitätseinheit",
+        "charge_item": "Verrechnungsartikel",
+        "rate_book": "Tarifverzeichnis",
+        "acquired_on": "Angeschafft",
+        "in_service_on": "In Betrieb",
+        "purchase_price": "Anschaffungspreis",
+        "depreciation": "Abschreibung",
+        "usage": "Nutzung",
+        "cost_recovery": "Kostendeckung",
+        "billable_value": "Abrechenbarer Wert",
+        "billed_revenue": "Fakturierte Erlöse",
+        "created_at": "Erstellt am"
       }
     },
     "enumValues": {
@@ -851,6 +1056,10 @@
     "expense-detail-by-department-fy": {
       "name": "Aufwandsdetails nach Abteilung (dieses GJ)",
       "description": "Gebuchte Aufwands- und Umsatzkostenzeilen dieses Jahres, gegliedert nach Abteilung – Datum, Buchung, Konto, Geschäftspartner, Notiz und Betrag."
+    },
+    "lot-recall": {
+      "name": "Chargenrückruf",
+      "description": "Jede mit einer Charge verknüpfte Lagerbewegung mit Artikel, Verfallsdatum, Menge, Standort, Quelldokument und Geschäftspartner für Rückrufe und Rückverfolgbarkeit."
     }
   },
   "generalLedger": {

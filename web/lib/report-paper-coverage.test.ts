@@ -131,6 +131,25 @@ test('every direct report with numeric output exposes a drill target or native t
   assert.match(source('components/global-report-drawer-host.tsx'), /RelatedTransactionDrawerClient/)
 })
 
+test('engine-authored row links reach the native transaction drawer unchanged', () => {
+  const paperGroups = source('app/(app)/reports/custom/paper-groups.ts')
+  const resultView = source('app/(app)/reports/custom/ResultView.tsx')
+  const paper = source('app/(app)/reports/PaperView.tsx')
+  const txnLink = source('app/(app)/reports/TxnLink.tsx')
+  assert.match(paperGroups, /cellLinks: group\.cellLinks/)
+  assert.match(resultView, /resultGroupsForPaper\(result, drillTarget\)/)
+  assert.match(paper, /group\.cellLinks\?\.\[ri\]\?\.\[ci\]/)
+  assert.match(paper, /<TxnLink target=\{cellLink\}/)
+  assert.match(txnLink, /transactionDrawerHref\(/)
+})
+
+test('the lot recall compatibility route hands rendering to the shared report paper', () => {
+  const lotRecall = source('app/(app)/reports/lot-recall/page.tsx')
+  assert.match(lotRecall, /builtInReportDefinitionId/)
+  assert.match(lotRecall, /\/reports\/custom\/run\//)
+  assert.doesNotMatch(lotRecall, /<Table\b/)
+})
+
 test('report table primitives remain document-like rather than list-like', () => {
   const table = source('app/(app)/reports/ReportTable.tsx')
   assert.match(table, /border-slate-300/)

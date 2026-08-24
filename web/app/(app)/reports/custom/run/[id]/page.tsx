@@ -4,13 +4,19 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { getTranslations } from 'next-intl/server'
 import { Button, PageHeader } from '@openbooks/ui'
-import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
+import {
+  applyBuiltInUrlFilters,
+  BUILT_IN_REPORT_DEFINITION_MAP,
+  REPORT_ENTITY_MAP,
+  type ReportRunResult,
+} from '@openbooks/reports'
 import { ListPageLayout } from '../../../../../../components/page-layout'
+import { Pagination } from '../../../../../../components/pagination'
 import { requirePermission } from '../../../../../../lib/authz'
 import { canRunReportEntity } from '../../../../../../lib/report-authz'
-import { isUuid } from '../../../../../../lib/list-params'
+import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
 import {
-  applyPeriodOverride, executeReport, loadReportDefinition, reportPeriodField,
+  applyPeriodOverride, executeReport, executeReportPage, loadReportDefinition, reportPeriodField,
 } from '../../../../../../lib/custom-reports'
 import { statementPageHref } from '../../../../../../lib/report-run'
 import { orgBranding } from '../../../../../../lib/report-pdf'
@@ -55,6 +61,23 @@ export default async function ReportRunPage({
   const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
   if (!(await canRunReportEntity(authz, definition.query))) notFound()
 
+  const sp = await searchParams
+  const pagination = entity?.pagination
+  const page = pagination
+    ? clamp(
+        Number(pickString(sp.page) ?? '1'),
+        1,
+        Math.floor(Number.MAX_SAFE_INTEGER / pagination.maxPageSize),
+      )
+    : 1
+  const perPage = pagination
+    ? clamp(
+        Number(pickString(sp.perPage) ?? String(pagination.defaultPageSize)),
+        1,
+        pagination.maxPageSize,
+      )
+    : 0
+
   const t = await getTranslations('reports')
   const tk = await getTranslations('reports.custom')
   const tc = await getTranslations('common')
@@ -70,17 +93,30 @@ export default async function ReportRunPage({
   // The native period picker governs the report's date field exactly like the
   // statement pages: the URL period (default preset when untouched) replaces
   // the plan's stored window, so the bar always tells the truth.
-  const sp = await searchParams
+  // The persisted plan alone decides whether the generic period picker owns a
+  // field. URL bindings such as expiresOnOrBefore are independent controls;
+  // feeding those back into period detection would replace the user's cutoff
+  // with an implicit fiscal window.
   const periodField = reportPeriodField(definition.query)
   let query = definition.query
   let periodPhrase: string | undefined
   let periodLabel: string | undefined
-  if (periodField) {
-    const q = parseReportQuery(sp)
-    const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-    query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
-    periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
-    periodLabel = period.label
+  let queryError: Error | null = null
+  try {
+    if (definition.kind === 'built_in') {
+      const builtIn = BUILT_IN_REPORT_DEFINITION_MAP[definition.slug]
+      if (!builtIn) throw new Error(`Unknown built-in report: ${definition.slug}`)
+      query = applyBuiltInUrlFilters({ ...builtIn, query }, sp)
+    }
+    if (periodField) {
+      const q = parseReportQuery(sp)
+      const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+      query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
+      periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
+      periodLabel = period.label
+    }
+  } catch (err) {
+    queryError = err instanceof Error ? err : new Error('Invalid report filters')
   }
 
   // Payroll reports offer their real pay periods atop the fiscal presets —
@@ -106,12 +142,13 @@ export default async function ReportRunPage({
     }))
   }
 
-  // Exports mirror the screen: hand the resolved period to the export route.
+  // Exports mirror every effective URL-backed report filter while deliberately
+  // omitting viewer pagination. The export route re-applies the same filter
+  // bindings to the full result set.
   const exportParams = new URLSearchParams()
-  if (periodField) {
-    exportParams.set('period', parseReportQuery(sp).period)
-    if (sp.from) exportParams.set('from', sp.from)
-    if (sp.to) exportParams.set('to', sp.to)
+  for (const [key, value] of Object.entries(sp)) {
+    if (!value || key === 'page' || key === 'perPage' || key === 'format') continue
+    exportParams.set(key, value)
   }
   const exportQs = exportParams.size ? `?${exportParams}` : ''
 
@@ -121,7 +158,17 @@ export default async function ReportRunPage({
   let error: string | null = null
   const branding = await orgBranding(authz.user.orgId)
   try {
-    result = await executeReport(authz.user.orgId, query)
+    if (queryError) throw queryError
+    const executed = pagination
+      ? await executeReportPage(authz.user.orgId, query, {
+          offset: (page - 1) * perPage,
+          limit: perPage,
+        })
+      : await executeReport(authz.user.orgId, query)
+    if (pagination && !executed.pageInfo) {
+      throw new Error('Paged report result is missing page metadata')
+    }
+    result = executed
   } catch (err) {
     error = err instanceof Error ? err.message : 'report failed'
   }
@@ -170,6 +217,15 @@ export default async function ReportRunPage({
           <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
         </ReportPaper>
       )}
+      {result?.pageInfo ? (
+        <Pagination
+          basePath={`/reports/custom/run/${definition.id}`}
+          currentParams={sp}
+          total={result.pageInfo.totalRows}
+          page={page}
+          perPage={perPage}
+        />
+      ) : null}
     </ListPageLayout>
   )
 }

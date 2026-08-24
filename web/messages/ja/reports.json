@@ -486,6 +486,10 @@
         "label": "品目",
         "description": "品目・サービスカタログ — サービス、在庫、労務、課金、値引きを、レートと勘定付きで。"
       },
+      "inventory_lot_movements": {
+        "label": "ロット別在庫変動",
+        "description": "ロットに紐づくすべての在庫変動 — リコールとトレーサビリティに必要な品目、有効期限、数量、拠点、元書類、取引先。"
+      },
       "projects": {
         "label": "プロジェクト",
         "description": "プロジェクト／ジョブ — ステータス、得意先、請求方法、スケジュール、発注番号。"
@@ -502,6 +506,30 @@
       "tax_codes": {
         "label": "税コード",
         "description": "税コード — 管轄、適用範囲、控除可否。"
+      },
+      "pay_stubs": {
+        "label": "給与明細",
+        "description": "従業員×給与実行ごとに1行 — 支給総額、法定控除、差引支給額、事業主負担。給与権限が必要です。"
+      },
+      "pay_stub_lines": {
+        "label": "給与明細行",
+        "description": "明細ごとの給与構成内訳 — 支給・控除・事業主負担の各項目を行として、時間、レート、金額、年間累計とともに表示。給与権限が必要です。"
+      },
+      "payroll_parallel_findings": {
+        "label": "並行実行の検証結果",
+        "description": "移行元ベンダーとの並行実行をセル単位で比較：従業員と項目ごとに、旧給与システムの支払額、本システムの計算値、差異を表示。給与権限が必要です。"
+      },
+      "equipment": {
+        "label": "設備",
+        "description": "所有・リースの設備ユニット — 識別情報、能力、請求に使う課金品目と単価表、そして各ユニットのコストと回収額。"
+      },
+      "entitlement_balances": {
+        "label": "付与残高",
+        "description": "従業員×休暇バンクごとに1行 — 有給休暇、積立時間、福利厚生精算を残高、適用中の上限、残り余裕とともに表示。給与権限が必要です。"
+      },
+      "entitlement_service_milestones": {
+        "label": "勤続マイルストーン",
+        "description": "各従業員が勤続に基づく付与段階に到達する時期と、今日適用される段階。給与権限が必要です。"
       }
     },
     "columns": {
@@ -531,7 +559,8 @@
         "reconciled_at": "消込日時",
         "entry_id": "仕訳（ID）",
         "account_id": "勘定（ID）",
-        "party_id": "取引先（ID）"
+        "party_id": "取引先（ID）",
+        "equipment": "設備"
       },
       "documents": {
         "kind": "種類",
@@ -615,7 +644,12 @@
         "class": "クラス",
         "created_at": "作成日時",
         "id": "明細（ID）",
-        "document_id": "取引（ID）"
+        "document_id": "取引（ID）",
+        "equipment": "設備",
+        "cost_rate": "原価レート",
+        "bill_rate": "請求レート",
+        "cost_amount": "原価金額",
+        "bill_amount": "請求金額"
       },
       "journal_entries": {
         "entry_number": "仕訳番号",
@@ -639,7 +673,42 @@
         "show_on_timesheet": "タイムシートに表示",
         "is_active": "有効",
         "created_at": "作成日時",
-        "id": "品目（ID）"
+        "id": "品目（ID）",
+        "default_cost": "デフォルト原価",
+        "description": "説明",
+        "recovery_account": "原価回収勘定"
+      },
+      "inventory_lot_movements": {
+        "lot_number": "ロット番号",
+        "expires_on": "有効期限",
+        "item": "品目",
+        "item_code": "品目コード",
+        "item_name": "品目名",
+        "movement_kind": "変動種別",
+        "kind": "変動種別",
+        "moved_at": "変動日",
+        "quantity": "数量",
+        "unit_cost": "単位原価",
+        "total_value": "合計金額",
+        "location": "拠点",
+        "location_code": "在庫拠点",
+        "status": "記帳ステータス",
+        "document_number": "書類番号",
+        "party_name": "取引先",
+        "document_date": "取引日",
+        "memo": "摘要",
+        "reversal_reason": "取消理由",
+        "movement_id": "変動（ID）",
+        "lot_id": "ロット（ID）",
+        "item_id": "品目（ID）",
+        "document_id": "取引（ID）",
+        "document_kind": "書類種別",
+        "stock_location_id": "在庫拠点（ID）",
+        "document_line_id": "取引明細（ID）",
+        "journal_entry_id": "仕訳（ID）",
+        "transaction_entry_id": "取引仕訳（ID）",
+        "paired_movement_id": "対になる変動（ID）",
+        "reverses_movement_id": "取消対象変動（ID）"
       },
       "projects": {
         "code": "コード",
@@ -653,7 +722,8 @@
         "ends_on": "終了日",
         "is_active": "有効",
         "created_at": "作成日時",
-        "id": "プロジェクト（ID）"
+        "id": "プロジェクト（ID）",
+        "project_type": "プロジェクトタイプ"
       },
       "timesheets": {
         "employee_name": "従業員",
@@ -707,6 +777,141 @@
         "recoverable_percent": "控除可能％",
         "is_active": "有効",
         "id": "税コード（ID）"
+      },
+      "pay_stubs": {
+        "employee": "従業員",
+        "run_number": "給与実行番号",
+        "schedule": "スケジュール",
+        "pay_date": "支払日",
+        "period_start": "期間開始日",
+        "period_end": "期間終了日",
+        "tax_year": "課税年度",
+        "province": "州 / 省",
+        "run_status": "実行ステータス",
+        "paid": "支払済み",
+        "gross": "総支給額",
+        "cpp_fica": "CPP / FICA（従業員負担）",
+        "ei": "EI（従業員負担）",
+        "income_tax": "所得税",
+        "net_pay": "差引支給額",
+        "employer_cost": "事業主負担額",
+        "vacation_accrued": "付与済み有給休暇",
+        "pensionable": "年金対象報酬",
+        "insurable": "保険対象報酬"
+      },
+      "pay_stub_lines": {
+        "employee": "従業員",
+        "run_number": "給与実行番号",
+        "schedule": "スケジュール",
+        "pay_date": "支払日",
+        "period_start": "期間開始日",
+        "period_end": "期間終了日",
+        "run_status": "実行ステータス",
+        "component": "項目",
+        "component_code": "項目コード",
+        "line_description": "明細説明",
+        "line_kind": "種類",
+        "hours": "時間",
+        "rate": "レート",
+        "amount": "金額",
+        "ytd_amount": "年累計金額",
+        "project": "プロジェクト",
+        "department": "部門",
+        "tax_year": "課税年度",
+        "province": "州 / 省",
+        "stub_id": "給与明細（ID）",
+        "component_id": "項目（ID）"
+      },
+      "payroll_parallel_findings": {
+        "employee": "従業員",
+        "register": "移行元レジスター",
+        "provider": "移行元ベンダー",
+        "run_number": "給与実行番号",
+        "pay_date": "支払日",
+        "period_start": "期間開始日",
+        "period_end": "期間終了日",
+        "component": "項目",
+        "slot": "項目キー",
+        "line_kind": "種類",
+        "classification": "結果",
+        "prior_amount": "移行元システム",
+        "our_amount": "本システム",
+        "difference": "差異",
+        "tolerance_applied": "許容誤差",
+        "source_column": "移行元列",
+        "comparison_status": "比較結果",
+        "employees_compared": "比較対象従業員数",
+        "employees_prior": "移行元レジスターの従業員数",
+        "employees_ours": "本システムの従業員数",
+        "unmapped_column_count": "未対応の移行元列数",
+        "blocked_reason": "比較されなかった理由",
+        "compared_at": "比較日時",
+        "run_status": "実行ステータス",
+        "comparison_id": "比較（ID）",
+        "employee_id": "従業員（ID）"
+      },
+      "entitlement_balances": {
+        "employee": "従業員",
+        "employee_id": "従業員（ID）",
+        "plan": "プラン",
+        "plan_code": "プランコード",
+        "plan_id": "プラン（ID）",
+        "unit": "単位",
+        "direction": "方向",
+        "balance": "残高",
+        "owed_to_employer": "雇用主への返済額",
+        "max_balance": "最大残高",
+        "notify_balance": "通知残高",
+        "headroom": "上限までの余裕",
+        "limit_scope": "上限設定レベル",
+        "limit_state": "上限状態",
+        "liability_account": "負債勘定",
+        "last_movement_date": "最終変動",
+        "movement_count": "変動回数",
+        "job_title": "役職",
+        "trade": "工種",
+        "department": "部門"
+      },
+      "entitlement_service_milestones": {
+        "employee": "従業員",
+        "employee_id": "従業員（ID）",
+        "plan_id": "プラン（ID）",
+        "component_id": "項目（ID）",
+        "milestone": "マイルストーン",
+        "milestone_kind": "マイルストーン種別",
+        "milestone_date": "到達日",
+        "after_months": "勤続月数経過後",
+        "after_years": "勤続年数経過後",
+        "accrual_value": "付与値",
+        "tier_active": "適用中の段階",
+        "eligible": "対象",
+        "hired_on": "入社日",
+        "terminated_on": "退職日",
+        "job_title": "役職",
+        "department": "部門"
+      },
+      "equipment": {
+        "id": "設備（ID）",
+        "name": "名称",
+        "description": "説明",
+        "unit_number": "ユニット番号",
+        "serial_number": "シリアル番号",
+        "fixed_asset_number": "固定資産番号",
+        "status": "ステータス",
+        "subsidiary": "法人",
+        "capacity_quantity": "容量",
+        "capacity_unit": "容量単位",
+        "charge_item": "課金品目",
+        "rate_book": "単価表",
+        "acquired_on": "取得日",
+        "in_service_on": "運用開始日",
+        "purchase_price": "購入価格",
+        "depreciation": "減価償却",
+        "usage": "使用量",
+        "cost_recovery": "原価回収",
+        "billable_value": "請求可能額",
+        "billed_revenue": "請求済み収益",
+        "created_at": "作成日時"
       }
     },
     "enumValues": {
@@ -851,6 +1056,10 @@
     "expense-detail-by-department-fy": {
       "name": "部門別費用明細（今年度）",
       "description": "今年の記帳済み費用および売上原価明細を部門別に区分 — 日付、仕訳、勘定、取引先、摘要、金額。"
+    },
+    "lot-recall": {
+      "name": "ロットリコール",
+      "description": "リコールとトレーサビリティのため、ロットに紐づくすべての在庫変動を品目、有効期限、数量、拠点、元書類、取引先とともに表示します。"
     }
   },
   "generalLedger": {

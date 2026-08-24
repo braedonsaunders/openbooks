@@ -9,13 +9,34 @@
 // silently reading as the calendar year. Every definition run path (interactive,
 // export, drill, scheduled) funnels through that executor.
 
-import type { ReportCustomQuery } from './types'
+import { REPORT_ENTITY_MAP, entityColumn } from './entities'
+import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
+
+export type BuiltInReportUrlFilter = {
+  /** Stable URL/search-view parameter name. */
+  param: string
+  /** Catalog field receiving the effective filter. */
+  field: string
+  op: ReportFilterOperator
+  /** Input validation and activation semantics. */
+  valueKind: 'text' | 'uuid' | 'date' | 'flag'
+  /** Exact value that activates a no-value flag operator (for example `1`). */
+  activeValue?: string
+}
+
+export type BuiltInReportUrlValues =
+  | Readonly<Record<string, string | readonly string[] | null | undefined>>
+  | { get(name: string): string | null }
 
 export type BuiltInReportDefinition = {
   slug: string
   name: string
   description: string
   query: ReportCustomQuery
+  /** Built-in-only URL controls. Kept outside persisted query JSON so screen,
+   *  saved-view and export consumers can apply one authoritative filter set
+   *  without changing the ReportCustomQuery storage contract. */
+  urlFilters?: readonly BuiltInReportUrlFilter[]
 }
 
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
@@ -132,6 +153,43 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       groupBy: 'department',
       sorts: [{ column: 'posting_date', direction: 'asc' }],
       limit: 10000,
+    },
+  },
+  {
+    slug: 'lot-recall',
+    name: 'Lot recall',
+    description:
+      'Complete traceability for every movement that touched a tracked lot, including expiry, item, stock location, source transaction, party, quantity, and movement time.',
+    urlFilters: [
+      { param: 'lotNumber', field: 'lot_number', op: 'contains', valueKind: 'text' },
+      { param: 'itemId', field: 'item_id', op: 'eq', valueKind: 'uuid' },
+      { param: 'expiresOnOrBefore', field: 'expires_on', op: 'lte', valueKind: 'date' },
+      {
+        param: 'expiring',
+        field: 'expires_on',
+        op: 'is_not_null',
+        valueKind: 'flag',
+        activeValue: '1',
+      },
+    ],
+    query: {
+      entity: 'inventory_lot_movements',
+      mode: 'rows',
+      columns: [
+        'lot_number', 'expires_on', 'item_code', 'item_name', 'kind',
+        'moved_at', 'quantity', 'location_code', 'document_number', 'party_name',
+      ],
+      breakouts: [],
+      measures: [],
+      filters: null,
+      groupBy: null,
+      // The second level is the immutable unique tie-breaker that keeps page
+      // boundaries deterministic when several movements share a timestamp.
+      sorts: [
+        { column: 'moved_at', direction: 'desc' },
+        { column: 'movement_id', direction: 'desc' },
+      ],
+      limit: 100,
     },
   },
   {
@@ -386,3 +444,97 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   },
 
 ]
+
+/** O(1) catalog lookup shared by native routes, exports, and saved views. */
+export const BUILT_IN_REPORT_DEFINITION_MAP: Readonly<Record<string, BuiltInReportDefinition>> =
+  Object.fromEntries(BUILT_IN_REPORT_DEFINITIONS.map((definition) => [definition.slug, definition]))
+
+const VALUE_OPS: Record<BuiltInReportUrlFilter['valueKind'], readonly ReportFilterOperator[]> = {
+  text: ['eq', 'neq', 'contains'],
+  uuid: ['eq', 'neq'],
+  date: ['eq', 'neq', 'gte', 'lte'],
+  flag: ['is_null', 'is_not_null', 'is_true', 'is_false'],
+}
+
+function readUrlValue(values: BuiltInReportUrlValues, param: string): string | null {
+  if ('get' in values && typeof values.get === 'function') return values.get(param)
+  const raw = (values as Readonly<Record<string, string | readonly string[] | null | undefined>>)[param]
+  if (Array.isArray(raw)) return typeof raw[0] === 'string' ? raw[0] : null
+  return typeof raw === 'string' ? raw : null
+}
+
+function isIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+}
+
+/** Apply a built-in's catalog-authored URL controls to its query. Screen,
+ *  export, and saved-view paths call this same pure helper, so none can drift
+ *  onto a different effective filter set. Invalid active values fail closed;
+ *  absent/empty controls simply add no rule. */
+export function applyBuiltInUrlFilters(
+  definition: BuiltInReportDefinition,
+  values: BuiltInReportUrlValues,
+): ReportCustomQuery {
+  const bindings = definition.urlFilters ?? []
+  if (bindings.length > 12) throw new Error(`built-in ${definition.slug} has too many URL filters`)
+  const entity = REPORT_ENTITY_MAP[definition.query.entity]
+  if (!entity) throw new Error(`built-in ${definition.slug} has an unknown entity`)
+
+  const rules: ReportRule[] = []
+  const seen = new Set<string>()
+  for (const binding of bindings) {
+    if (!/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(binding.param) || seen.has(binding.param)) {
+      throw new Error(`built-in ${definition.slug} has an invalid URL parameter binding`)
+    }
+    seen.add(binding.param)
+    const column = entityColumn(entity, binding.field)
+    if (!column || !VALUE_OPS[binding.valueKind].includes(binding.op)) {
+      throw new Error(`built-in ${definition.slug} has an invalid URL filter binding`)
+    }
+    if (binding.valueKind === 'uuid' && column.kind !== 'uuid') {
+      throw new Error(`built-in ${definition.slug} binds a UUID to a non-UUID field`)
+    }
+    if (binding.valueKind === 'date' && column.kind !== 'date' && column.kind !== 'timestamp') {
+      throw new Error(`built-in ${definition.slug} binds a date to a non-date field`)
+    }
+    if (binding.valueKind === 'flag' && !binding.activeValue) {
+      throw new Error(`built-in ${definition.slug} has a flag without an activation value`)
+    }
+
+    const raw = readUrlValue(values, binding.param)
+    if (raw === null || raw.trim() === '') continue
+    const value = raw.trim()
+    if (value.length > 500) throw new Error(`Invalid report parameter: ${binding.param}`)
+    if (binding.valueKind === 'flag') {
+      if (value === binding.activeValue) rules.push({ field: binding.field, op: binding.op })
+      continue
+    }
+    if (binding.valueKind === 'uuid' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      throw new Error(`Invalid report parameter: ${binding.param}`)
+    }
+    if (binding.valueKind === 'date' && !isIsoDate(value)) {
+      throw new Error(`Invalid report parameter: ${binding.param}`)
+    }
+    rules.push({ field: binding.field, op: binding.op, value })
+  }
+
+  if (rules.length === 0) return definition.query
+  return {
+    ...definition.query,
+    filters: {
+      combinator: 'and',
+      rules: [
+        ...(definition.query.filters ? [definition.query.filters] : []),
+        ...rules,
+      ],
+    },
+  }
+}

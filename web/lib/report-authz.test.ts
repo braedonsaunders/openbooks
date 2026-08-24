@@ -46,6 +46,7 @@ test('optional-module report entities declare the Features switch they follow', 
     timesheet_weeks: 'timeTracking',
     fixed_assets: 'fixedAssets',
     equipment: 'equipment',
+    inventory_lot_movements: 'inventory',
     pay_stubs: 'payroll',
     pay_stub_lines: 'payroll',
     payroll_parallel_findings: 'payroll',
@@ -107,6 +108,16 @@ for (const { file, symbol, why } of EXECUTION_PATHS) {
     )
   })
 }
+
+test('lot recall cannot bypass the inventory feature gate through either entry point', () => {
+  const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
+  assert.match(legacy, /isFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
+  assert.match(legacy, /notFound\(\)/)
+
+  const runner = read('../app/(app)/reports/custom/run/[id]/page.tsx')
+  assert.match(runner, /canRunReportEntity\(authz, definition\.query\)/)
+  assert.equal(REPORT_ENTITY_MAP.inventory_lot_movements?.featureKey, 'inventory')
+})
 
 test('a refused drill is an authorization outcome, not a 500', () => {
   const route = read('../app/api/reports/drill/route.ts')

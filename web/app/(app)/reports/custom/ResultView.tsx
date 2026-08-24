@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 import type { ReportRunResult } from '@openbooks/reports'
 import { PaperView } from '../PaperView'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import { resultGroupsForPaper } from './paper-groups'
 
 /**
  * Render a ReportRunResult exactly as the engine shapes it: a summary band of
@@ -11,7 +12,6 @@ import type { ReportDrillTarget } from '../../../../lib/report-drill'
  * several; summarize/plain rows yield one). Shared by the studio live preview
  * and the run/view page.
  */
-const NUMERIC_CELL = /^-?[\d,]+(\.\d+)?$/
 
 export function ResultView({
   company,
@@ -38,27 +38,7 @@ export function ResultView({
         // Drills exist ONLY where a number decomposes into records: summarize
         // aggregates, scoped to their exact bucket. Rows-mode cells ARE the
         // record — nothing behind them, so no drill.
-        groups: result.groups.map((group) => ({
-          title: group.title,
-          subtitle: group.subtitle,
-          columns: group.columns,
-          rows: group.rows,
-          money: group.money,
-          align: group.align,
-          totalRows: group.totalRows,
-          drills: group.kind === 'summary' && group.rowKeys && drillTarget.kind === 'custom'
-            ? group.rows.map((row, ri) => {
-                const scope = group.rowKeys?.[ri]
-                if (!scope) return row.map(() => undefined)
-                return row.map((cell) =>
-                  (typeof cell === 'number' || (typeof cell === 'string' && NUMERIC_CELL.test(cell.trim())))
-                    ? { ...drillTarget, filter: scope }
-                    : undefined,
-                )
-              })
-            : undefined,
-          isEmpty: group.isEmpty,
-        })),
+        groups: resultGroupsForPaper(result, drillTarget),
       }}
     />
   )

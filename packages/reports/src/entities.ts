@@ -72,6 +72,17 @@ export type ReportEntityColumn = {
   options?: readonly string[]
 }
 
+/** One catalog-authored native link on a displayed rows-mode cell. Metadata
+ *  columns are selected invisibly by the compiler and never become table or
+ *  export columns unless the plan explicitly requests them. */
+export type ReportEntityCellLink = {
+  column: string
+  kind: 'transaction'
+  entryIdColumn: string
+  docIdColumn?: string
+  docKindColumn?: string
+}
+
 export type ReportEntity = {
   /** Entity key stored in query plans. */
   key: string
@@ -101,6 +112,20 @@ export type ReportEntity = {
    *  off the entity disappears from the catalog and every execution path
    *  refuses it — same contract as setup-registry `featureKey`. */
   featureKey?: string
+  /** Date field governed by the report viewer's implicit period picker.
+   *  undefined preserves the ordinary first-date-column fallback; null opts
+   *  out. Event-history sources such as lot recall must not acquire a fiscal
+   *  window merely because they expose an expiry date. */
+  defaultPeriodField?: string | null
+  /** Rows-mode page policy. Absence means this entity is intentionally run as
+   *  one bounded result; present means callers may request successive pages
+   *  without applying the saved query's legacy 10,000-row materialization cap. */
+  pagination?: {
+    defaultPageSize: number
+    maxPageSize: number
+  }
+  /** Native links for individual displayed cells. */
+  cellLinks?: readonly ReportEntityCellLink[]
   /** Chronological ordering (SQL ORDER BY body, server-defined constant) that
    *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
    *  measures are rejected at compile time. */
@@ -311,6 +336,73 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'id', label: 'Item (id)', kind: 'uuid', expr: 'it.id' },
     ],
     defaultSort: { column: 'name', direction: 'asc' },
+  },
+  {
+    key: 'inventory_lot_movements',
+    label: 'Inventory lot movements',
+    category: 'inventory',
+    description:
+      'Append-only movement history for tracked lots, including expiry, item, quantity, value, stock location, source transaction, party, and correction lineage. The traceability source for lot recalls.',
+    from: `inventory_movements im
+      JOIN lots lot ON lot.id = im.lot_id AND lot.org_id = im.org_id
+      JOIN items it ON it.id = im.item_id AND it.id = lot.item_id AND it.org_id = im.org_id
+      LEFT JOIN stock_locations sl ON sl.id = im.stock_location_id AND sl.org_id = im.org_id
+      LEFT JOIN document_lines dl ON dl.id = im.document_line_id AND dl.org_id = im.org_id
+      LEFT JOIN documents d ON d.id = dl.document_id AND d.org_id = im.org_id
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = im.org_id`,
+    orgColumn: 'im.org_id',
+    featureKey: 'inventory',
+    // A recall is event history, not a fiscal-period statement. In particular,
+    // expires_on being the first date column must never create an implicit
+    // fiscal filter on an otherwise unfiltered recall.
+    defaultPeriodField: null,
+    pagination: { defaultPageSize: 100, maxPageSize: 500 },
+    columns: [
+      { key: 'lot_number', label: 'Lot #', kind: 'text', expr: 'lot.lot_number' },
+      { key: 'expires_on', label: 'Expiry', kind: 'date', expr: 'lot.expires_on' },
+      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
+      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      {
+        key: 'kind', label: 'Movement type', kind: 'enum', expr: 'im.kind',
+        options: [
+          'receipt', 'issue', 'transfer_out', 'transfer_in', 'adjustment',
+          'count', 'assembly_build', 'assembly_consume', 'return',
+        ],
+      },
+      { key: 'moved_at', label: 'Moved at', kind: 'timestamp', expr: 'im.moved_at' },
+      { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'im.quantity' },
+      { key: 'unit_cost', label: 'Unit cost', kind: 'money', expr: 'im.unit_cost' },
+      { key: 'total_value', label: 'Total value', kind: 'money', expr: 'im.total_value' },
+      { key: 'location_code', label: 'Stock location', kind: 'text', expr: 'sl.code' },
+      { key: 'status', label: 'Posting status', kind: 'enum', expr: 'im.status', options: ['pending', 'posted'] },
+      { key: 'document_number', label: 'Transaction #', kind: 'text', expr: 'd.document_number' },
+      { key: 'document_kind', label: 'Transaction type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
+      { key: 'document_date', label: 'Transaction date', kind: 'date', expr: 'd.document_date' },
+      { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
+      { key: 'memo', label: 'Memo', kind: 'text', expr: 'im.memo' },
+      { key: 'reversal_reason', label: 'Reversal reason', kind: 'text', expr: 'im.reversal_reason' },
+      { key: 'movement_id', label: 'Movement (id)', kind: 'uuid', expr: 'im.id' },
+      { key: 'lot_id', label: 'Lot (id)', kind: 'uuid', expr: 'im.lot_id' },
+      { key: 'item_id', label: 'Item (id)', kind: 'uuid', expr: 'im.item_id' },
+      { key: 'stock_location_id', label: 'Stock location (id)', kind: 'uuid', expr: 'im.stock_location_id' },
+      { key: 'document_line_id', label: 'Transaction line (id)', kind: 'uuid', expr: 'im.document_line_id' },
+      { key: 'document_id', label: 'Transaction (id)', kind: 'uuid', expr: 'd.id' },
+      { key: 'journal_entry_id', label: 'Journal entry (id)', kind: 'uuid', expr: 'im.journal_entry_id' },
+      {
+        key: 'transaction_entry_id', label: 'Transaction entry (id)', kind: 'uuid',
+        expr: 'coalesce(im.journal_entry_id, d.posted_entry_id, d.id)',
+      },
+      { key: 'paired_movement_id', label: 'Paired movement (id)', kind: 'uuid', expr: 'im.paired_movement_id' },
+      { key: 'reverses_movement_id', label: 'Reversed movement (id)', kind: 'uuid', expr: 'im.reverses_movement_id' },
+    ],
+    cellLinks: [{
+      column: 'document_number',
+      kind: 'transaction',
+      entryIdColumn: 'transaction_entry_id',
+      docIdColumn: 'document_id',
+      docKindColumn: 'document_kind',
+    }],
+    defaultSort: { column: 'moved_at', direction: 'desc' },
   },
   {
     key: 'projects',

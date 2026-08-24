@@ -1,6 +1,10 @@
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { BUILT_IN_REPORT_DEFINITIONS } from './built-ins'
+import {
+  applyBuiltInUrlFilters,
+  BUILT_IN_REPORT_DEFINITION_MAP,
+  BUILT_IN_REPORT_DEFINITIONS,
+} from './built-ins'
 import { REPORT_ENTITY_MAP } from './entities'
 import { compileRule, SqlParams } from './filters'
 import { resolvePreset, PERIOD_PRESET_IDS } from './period-presets'
@@ -46,6 +50,90 @@ describe('built-in report definitions', () => {
     const clean = validateCustomQuery(def.query)
     const leaves = leafRules({ ...def, query: clean })
     assert.ok(leaves.some((l) => l.op === 'period_preset' && l.value === 'this_fiscal_year'))
+  })
+
+  it('keeps every catalog plan valid for seeding and execution', () => {
+    for (const def of BUILT_IN_REPORT_DEFINITIONS) {
+      assert.doesNotThrow(
+        () => validateCustomQuery(def.query),
+        `${def.slug} does not survive the report-query validator`,
+      )
+    }
+  })
+
+  it('defines lot recall as a valid, stably sorted inventory query without an implicit period', () => {
+    const def = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']
+    assert.ok(def)
+    const clean = validateCustomQuery(def.query)
+    assert.equal(clean.entity, 'inventory_lot_movements')
+    assert.equal(clean.filters, null)
+    assert.deepEqual(clean.sorts, [
+      { column: 'moved_at', direction: 'desc' },
+      { column: 'movement_id', direction: 'desc' },
+    ])
+    assert.equal(REPORT_ENTITY_MAP[clean.entity]?.featureKey, 'inventory')
+    assert.equal(REPORT_ENTITY_MAP[clean.entity]?.defaultPeriodField, null)
+  })
+
+  it('applies one authoritative lot-recall filter set without mutating the catalog query', () => {
+    const def = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']!
+    const itemId = '10000000-0000-4000-8000-000000000001'
+    const filtered = applyBuiltInUrlFilters(def, new URLSearchParams({
+      lotNumber: ' LOT-42 ',
+      itemId,
+      expiresOnOrBefore: '2027-02-28',
+      expiring: '1',
+    }))
+    assert.equal(def.query.filters, null, 'the static built-in query must remain unchanged')
+    assert.deepEqual(leafRules({ ...def, query: filtered }), [
+      { field: 'lot_number', op: 'contains', value: 'LOT-42' },
+      { field: 'item_id', op: 'eq', value: itemId },
+      { field: 'expires_on', op: 'lte', value: '2027-02-28' },
+      { field: 'expires_on', op: 'is_not_null' },
+    ])
+    assert.doesNotThrow(() => validateCustomQuery(filtered))
+  })
+
+  it('layers URL controls onto an organization-tuned built-in query', () => {
+    const catalog = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']!
+    const tunedQuery = validateCustomQuery({
+      ...catalog.query,
+      columns: ['lot_number', 'item_name', 'quantity'],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'status', op: 'eq', value: 'posted' }],
+      },
+    })
+    const effective = applyBuiltInUrlFilters(
+      { ...catalog, query: tunedQuery },
+      { lotNumber: 'TUNED' },
+    )
+    assert.deepEqual(effective.columns, ['lot_number', 'item_name', 'quantity'])
+    assert.deepEqual(leafRules({ ...catalog, query: effective }), [
+      { field: 'status', op: 'eq', value: 'posted' },
+      { field: 'lot_number', op: 'contains', value: 'TUNED' },
+    ])
+    assert.deepEqual(tunedQuery.filters, {
+      combinator: 'and',
+      rules: [{ field: 'status', op: 'eq', value: 'posted' }],
+    })
+  })
+
+  it('fails closed on malformed lot-recall UUID and date parameters', () => {
+    const def = BUILT_IN_REPORT_DEFINITION_MAP['lot-recall']!
+    assert.throws(
+      () => applyBuiltInUrlFilters(def, { itemId: 'not-a-uuid' }),
+      /Invalid report parameter: itemId/,
+    )
+    assert.throws(
+      () => applyBuiltInUrlFilters(def, { expiresOnOrBefore: '2027-02-30' }),
+      /Invalid report parameter: expiresOnOrBefore/,
+    )
+    assert.equal(
+      applyBuiltInUrlFilters(def, { expiring: '0' }),
+      def.query,
+      'a non-activating flag must not silently add a filter',
+    )
   })
 })
 

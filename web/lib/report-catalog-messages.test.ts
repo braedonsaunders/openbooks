@@ -18,30 +18,44 @@ import { REPORT_ENTITIES } from '@openbooks/reports'
  * says so at the point the second file is forgotten.
  */
 
-const catalog = JSON.parse(
-  readFileSync(join(import.meta.dirname, '..', 'messages', 'en', 'reports.json'), 'utf8'),
-) as {
+const LOCALES = ['de', 'en', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
+type ReportsCatalog = {
+  builtIns: Record<string, { name?: string; description?: string }>
   catalog: {
     entities: Record<string, unknown>
     columns: Record<string, Record<string, string>>
   }
 }
 
+const catalogs = Object.fromEntries(LOCALES.map((locale) => [
+  locale,
+  JSON.parse(
+    readFileSync(join(import.meta.dirname, '..', 'messages', locale, 'reports.json'), 'utf8'),
+  ) as ReportsCatalog,
+])) as Record<(typeof LOCALES)[number], ReportsCatalog>
+
 test('every report entity has a catalog label', () => {
   assert.ok(REPORT_ENTITIES.length > 0, 'no report entities were loaded — the import broke')
-  const missing = REPORT_ENTITIES
-    .filter((entity) => !catalog.catalog.entities[entity.key])
-    .map((entity) => `catalog.entities.${entity.key}`)
+  const missing: string[] = []
+  for (const locale of LOCALES) {
+    for (const entity of REPORT_ENTITIES) {
+      if (!catalogs[locale].catalog.entities[entity.key]) {
+        missing.push(`${locale}:catalog.entities.${entity.key}`)
+      }
+    }
+  }
   assert.deepEqual(missing, [], `entities with no label:\n${missing.join('\n')}`)
 })
 
 test('every report column has a heading, or the report renders its key path', () => {
   const missing: string[] = []
-  for (const entity of REPORT_ENTITIES) {
-    const headings = catalog.catalog.columns[entity.key] ?? {}
-    for (const column of entity.columns ?? []) {
-      if (typeof headings[column.key] !== 'string') {
-        missing.push(`catalog.columns.${entity.key}.${column.key}`)
+  for (const locale of LOCALES) {
+    for (const entity of REPORT_ENTITIES) {
+      const headings = catalogs[locale].catalog.columns[entity.key] ?? {}
+      for (const column of entity.columns ?? []) {
+        if (typeof headings[column.key] !== 'string' || !headings[column.key]!.trim()) {
+          missing.push(`${locale}:catalog.columns.${entity.key}.${column.key}`)
+        }
       }
     }
   }
@@ -50,4 +64,14 @@ test('every report column has a heading, or the report renders its key path', ()
     [],
     `these would render as raw key paths in the column header:\n${missing.join('\n')}`,
   )
+})
+
+test('every locale has complete lot-recall built-in copy', () => {
+  const missing: string[] = []
+  for (const locale of LOCALES) {
+    const copy = catalogs[locale].builtIns['lot-recall']
+    if (!copy?.name?.trim()) missing.push(`${locale}:builtIns.lot-recall.name`)
+    if (!copy?.description?.trim()) missing.push(`${locale}:builtIns.lot-recall.description`)
+  }
+  assert.deepEqual(missing, [], `lot recall copy missing:\n${missing.join('\n')}`)
 })

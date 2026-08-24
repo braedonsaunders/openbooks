@@ -491,6 +491,10 @@
         "label": "Items",
         "description": "The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts."
       },
+      "inventory_lot_movements": {
+        "label": "Inventory lot movements",
+        "description": "Every inventory movement tied to a lot — item, expiry, quantity, location, source document and party for recall and traceability."
+      },
       "projects": {
         "label": "Projects",
         "description": "Projects / jobs — status, customer, billing method, schedule and PO number."
@@ -678,6 +682,38 @@
         "default_cost": "Default cost",
         "description": "Description",
         "recovery_account": "Recovery account"
+      },
+      "inventory_lot_movements": {
+        "lot_number": "Lot number",
+        "expires_on": "Expires on",
+        "item": "Item",
+        "item_code": "Item code",
+        "item_name": "Item name",
+        "movement_kind": "Movement type",
+        "kind": "Movement type",
+        "moved_at": "Movement date",
+        "quantity": "Quantity",
+        "unit_cost": "Unit cost",
+        "total_value": "Total value",
+        "location": "Location",
+        "location_code": "Stock location",
+        "status": "Posting status",
+        "document_number": "Document #",
+        "party_name": "Party",
+        "document_date": "Transaction date",
+        "memo": "Memo",
+        "reversal_reason": "Reversal reason",
+        "movement_id": "Movement (id)",
+        "lot_id": "Lot (id)",
+        "item_id": "Item (id)",
+        "document_id": "Transaction (id)",
+        "document_kind": "Document type",
+        "stock_location_id": "Stock location (id)",
+        "document_line_id": "Transaction line (id)",
+        "journal_entry_id": "Journal entry (id)",
+        "transaction_entry_id": "Transaction entry (id)",
+        "paired_movement_id": "Paired movement (id)",
+        "reverses_movement_id": "Reversed movement (id)"
       },
       "projects": {
         "code": "Code",
@@ -1042,6 +1078,10 @@
     "expense-detail-by-department-fy": {
       "name": "Expense detail by department (this FY)",
       "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+    },
+    "lot-recall": {
+      "name": "Lot recall",
+      "description": "Every inventory movement tied to a lot, with item, expiry, quantity, location, source document and party for recall and traceability."
     },
     "payroll-journal": {
       "name": "Payroll journal",

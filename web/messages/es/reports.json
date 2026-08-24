@@ -486,6 +486,10 @@
         "label": "Artículos",
         "description": "El catálogo de artículos y servicios: servicios, inventario, mano de obra, cargos y descuentos con tarifas y cuentas."
       },
+      "inventory_lot_movements": {
+        "label": "Movimientos de lotes de inventario",
+        "description": "Cada movimiento de inventario vinculado a un lote: artículo, vencimiento, cantidad, ubicación, documento de origen y tercero para retiradas y trazabilidad."
+      },
       "projects": {
         "label": "Proyectos",
         "description": "Proyectos / obras: estado, cliente, método de facturación, calendario y n.º de OC."
@@ -502,6 +506,30 @@
       "tax_codes": {
         "label": "Códigos de impuesto",
         "description": "Códigos de impuesto: jurisdicción, alcance y recuperabilidad."
+      },
+      "pay_stubs": {
+        "label": "Recibos de nómina",
+        "description": "Una fila por empleado y corrida de pago: bruto, retenciones legales, neto y costo patronal. Requiere el permiso de nómina."
+      },
+      "pay_stub_lines": {
+        "label": "Líneas de recibo de nómina",
+        "description": "Detalle de nómina por componente: una fila por percepción, deducción o contribución patronal en un recibo, con horas, tarifa, importe y acumulado del año. Requiere el permiso de nómina."
+      },
+      "payroll_parallel_findings": {
+        "label": "Hallazgos de corrida paralela",
+        "description": "Corrida paralela con el proveedor anterior, celda por celda: para cada empleado y componente, qué pagaba la nómina anterior, qué calcula este sistema y la diferencia. Requiere el permiso de nómina."
+      },
+      "equipment": {
+        "label": "Equipo",
+        "description": "Unidades propias y alquiladas: identidad, capacidad, el artículo de cobro y el tarifario con los que se factura, y lo que cada unidad ha costado y recuperado."
+      },
+      "entitlement_balances": {
+        "label": "Saldos de derechos",
+        "description": "Una fila por empleado y banco de pago: vacaciones, tiempo acumulado, recuperación de beneficios, con el saldo, el límite vigente y el margen restante. Requiere el permiso de nómina."
+      },
+      "entitlement_service_milestones": {
+        "label": "Hitos de antigüedad",
+        "description": "Cuándo alcanza cada empleado un nivel de derechos por antigüedad y qué nivel rige hoy. Requiere el permiso de nómina."
       }
     },
     "columns": {
@@ -531,7 +559,8 @@
         "reconciled_at": "Fecha de conciliación",
         "entry_id": "Asiento (id)",
         "account_id": "Cuenta (id)",
-        "party_id": "Tercero (id)"
+        "party_id": "Tercero (id)",
+        "equipment": "Equipo"
       },
       "documents": {
         "kind": "Tipo",
@@ -615,7 +644,12 @@
         "class": "Clase",
         "created_at": "Creado el",
         "id": "Línea (id)",
-        "document_id": "Transacción (id)"
+        "document_id": "Transacción (id)",
+        "equipment": "Equipo",
+        "cost_rate": "Tarifa de costo",
+        "bill_rate": "Tarifa de facturación",
+        "cost_amount": "Importe de costo",
+        "bill_amount": "Importe facturado"
       },
       "journal_entries": {
         "entry_number": "N.º de asiento",
@@ -639,7 +673,42 @@
         "show_on_timesheet": "En hojas de horas",
         "is_active": "Activo",
         "created_at": "Creado el",
-        "id": "Artículo (id)"
+        "id": "Artículo (id)",
+        "default_cost": "Costo predeterminado",
+        "description": "Descripción",
+        "recovery_account": "Cuenta de recuperación"
+      },
+      "inventory_lot_movements": {
+        "lot_number": "Número de lote",
+        "expires_on": "Fecha de vencimiento",
+        "item": "Artículo",
+        "item_code": "Código del artículo",
+        "item_name": "Nombre del artículo",
+        "movement_kind": "Tipo de movimiento",
+        "kind": "Tipo de movimiento",
+        "moved_at": "Fecha del movimiento",
+        "quantity": "Cantidad",
+        "unit_cost": "Costo unitario",
+        "total_value": "Valor total",
+        "location": "Ubicación",
+        "location_code": "Ubicación de inventario",
+        "status": "Estado de contabilización",
+        "document_number": "N.º de documento",
+        "party_name": "Tercero",
+        "document_date": "Fecha de la transacción",
+        "memo": "Memo",
+        "reversal_reason": "Motivo de reversión",
+        "movement_id": "Movimiento (id)",
+        "lot_id": "Lote (id)",
+        "item_id": "Artículo (id)",
+        "document_id": "Transacción (id)",
+        "document_kind": "Tipo de documento",
+        "stock_location_id": "Ubicación de inventario (id)",
+        "document_line_id": "Línea de transacción (id)",
+        "journal_entry_id": "Asiento (id)",
+        "transaction_entry_id": "Asiento de transacción (id)",
+        "paired_movement_id": "Movimiento vinculado (id)",
+        "reverses_movement_id": "Movimiento revertido (id)"
       },
       "projects": {
         "code": "Código",
@@ -653,7 +722,8 @@
         "ends_on": "Termina el",
         "is_active": "Activo",
         "created_at": "Creado el",
-        "id": "Proyecto (id)"
+        "id": "Proyecto (id)",
+        "project_type": "Tipo de proyecto"
       },
       "timesheets": {
         "employee_name": "Empleado",
@@ -707,6 +777,141 @@
         "recoverable_percent": "% recuperable",
         "is_active": "Activo",
         "id": "Código de impuesto (id)"
+      },
+      "pay_stubs": {
+        "employee": "Empleado",
+        "run_number": "N.º de corrida de nómina",
+        "schedule": "Calendario",
+        "pay_date": "Fecha de pago",
+        "period_start": "Inicio del período",
+        "period_end": "Fin del período",
+        "tax_year": "Año tributario",
+        "province": "Provincia / estado",
+        "run_status": "Estado de la corrida",
+        "paid": "Pagado",
+        "gross": "Salario bruto",
+        "cpp_fica": "CPP / FICA (empleado)",
+        "ei": "EI (empleado)",
+        "income_tax": "Impuesto sobre la renta",
+        "net_pay": "Salario neto",
+        "employer_cost": "Costo patronal",
+        "vacation_accrued": "Vacaciones acumuladas",
+        "pensionable": "Ingresos pensionables",
+        "insurable": "Ingresos asegurables"
+      },
+      "pay_stub_lines": {
+        "employee": "Empleado",
+        "run_number": "N.º de corrida de nómina",
+        "schedule": "Calendario",
+        "pay_date": "Fecha de pago",
+        "period_start": "Inicio del período",
+        "period_end": "Fin del período",
+        "run_status": "Estado de la corrida",
+        "component": "Componente",
+        "component_code": "Código de componente",
+        "line_description": "Descripción de la línea",
+        "line_kind": "Tipo",
+        "hours": "Horas",
+        "rate": "Tarifa",
+        "amount": "Importe",
+        "ytd_amount": "Importe acumulado del año",
+        "project": "Proyecto",
+        "department": "Departamento",
+        "tax_year": "Año tributario",
+        "province": "Provincia / estado",
+        "stub_id": "Recibo (id)",
+        "component_id": "Componente (id)"
+      },
+      "payroll_parallel_findings": {
+        "employee": "Empleado",
+        "register": "Registro anterior",
+        "provider": "Proveedor anterior",
+        "run_number": "N.º de corrida de nómina",
+        "pay_date": "Fecha de pago",
+        "period_start": "Inicio del período",
+        "period_end": "Fin del período",
+        "component": "Componente",
+        "slot": "Clave de componente",
+        "line_kind": "Tipo",
+        "classification": "Resultado",
+        "prior_amount": "Sistema anterior",
+        "our_amount": "Este sistema",
+        "difference": "Diferencia",
+        "tolerance_applied": "Tolerancia permitida",
+        "source_column": "Columna de origen",
+        "comparison_status": "Resultado de la comparación",
+        "employees_compared": "Empleados comparados",
+        "employees_prior": "Empleados del registro anterior",
+        "employees_ours": "Empleados en nuestra corrida",
+        "unmapped_column_count": "Columnas de origen sin asignar",
+        "blocked_reason": "Por qué no se comparó nada",
+        "compared_at": "Comparado el",
+        "run_status": "Estado de la corrida",
+        "comparison_id": "Comparación (id)",
+        "employee_id": "Empleado (id)"
+      },
+      "entitlement_balances": {
+        "employee": "Empleado",
+        "employee_id": "Empleado (id)",
+        "plan": "Plan",
+        "plan_code": "Código de plan",
+        "plan_id": "Plan (id)",
+        "unit": "Unidad",
+        "direction": "Dirección",
+        "balance": "Saldo",
+        "owed_to_employer": "Adeudado al empleador",
+        "max_balance": "Saldo máximo",
+        "notify_balance": "Notificar en",
+        "headroom": "Margen hasta el límite",
+        "limit_scope": "Límite definido en",
+        "limit_state": "Estado del límite",
+        "liability_account": "Cuenta de pasivo",
+        "last_movement_date": "Último movimiento",
+        "movement_count": "Movimientos",
+        "job_title": "Puesto",
+        "trade": "Oficio",
+        "department": "Departamento"
+      },
+      "entitlement_service_milestones": {
+        "employee": "Empleado",
+        "employee_id": "Empleado (id)",
+        "plan_id": "Plan (id)",
+        "component_id": "Componente (id)",
+        "milestone": "Hito",
+        "milestone_kind": "Tipo de hito",
+        "milestone_date": "Fecha del hito",
+        "after_months": "Tras meses de servicio",
+        "after_years": "Tras años de servicio",
+        "accrual_value": "Valor devengado",
+        "tier_active": "Nivel vigente",
+        "eligible": "Elegible",
+        "hired_on": "Contratado",
+        "terminated_on": "Finalizado",
+        "job_title": "Puesto",
+        "department": "Departamento"
+      },
+      "equipment": {
+        "id": "Equipo (id)",
+        "name": "Nombre",
+        "description": "Descripción",
+        "unit_number": "N.º de unidad",
+        "serial_number": "Número de serie",
+        "fixed_asset_number": "Número de activo fijo",
+        "status": "Estado",
+        "subsidiary": "Entidad",
+        "capacity_quantity": "Capacidad",
+        "capacity_unit": "Unidad de capacidad",
+        "charge_item": "Artículo de cobro",
+        "rate_book": "Tarifario",
+        "acquired_on": "Adquirido",
+        "in_service_on": "En servicio",
+        "purchase_price": "Precio de compra",
+        "depreciation": "Depreciación",
+        "usage": "Uso",
+        "cost_recovery": "Recuperación de costos",
+        "billable_value": "Valor facturable",
+        "billed_revenue": "Ingresos facturados",
+        "created_at": "Fecha de creación"
       }
     },
     "enumValues": {
@@ -834,6 +1039,10 @@
     "expense-detail-by-department-fy": {
       "name": "Detalle de gastos por departamento (este ejercicio fiscal)",
       "description": "Líneas de gastos y costo de ventas contabilizadas este año, seccionadas por departamento — fecha, asiento, cuenta, tercero, memo e importe."
+    },
+    "lot-recall": {
+      "name": "Retirada de lote",
+      "description": "Cada movimiento de inventario vinculado a un lote, con artículo, vencimiento, cantidad, ubicación, documento de origen y tercero para retiradas y trazabilidad."
     }
   },
   "generalLedger": {
