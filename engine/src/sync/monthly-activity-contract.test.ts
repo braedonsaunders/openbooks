@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCalendarDays, addCalendarMonthsStart, businessToday } from "../business-date.ts";
+import { addCalendarDays, addCalendarMonthsStart } from "../business-date.ts";
+import { withSimClock } from "../clock.ts";
+import { db } from "../db.ts";
 import type { QboClient } from "../qbo.ts";
 import type { XeroClient } from "../xero.ts";
 import { ErpNextSource } from "./erpnext-source.ts";
@@ -109,12 +111,13 @@ test("ERPNext exposes uncancelled account-month home-currency activity", async (
   ]);
 });
 
-test("QuickBooks exposes transaction account-month home-currency activity", async () => {
+test("QuickBooks exposes transaction account-month home-currency activity", async (t) => {
+  t.mock.method(db, "execute", async () => ({ rows: [{ time_zone: "UTC" }] }));
   const client = {
     report: async (name: string, params: Record<string, string>) => {
       assert.equal(name, "GeneralLedger");
       assert.equal(params.accounting_method, "Accrual");
-      assert.equal(params.end_date, addCalendarDays(await businessToday("00000000-0000-0000-0000-000000000000"), 400));
+      assert.equal(params.end_date, addCalendarDays("2026-03-15", 400));
       return {
         Rows: {
           Row: [
@@ -131,13 +134,16 @@ test("QuickBooks exposes transaction account-month home-currency activity", asyn
   } as unknown as QboClient;
   const source = new QboSource(client, { orgId: "00000000-0000-0000-0000-000000000000" });
 
-  assert.deepEqual(await source.monthlyActivity(), [
-    { accountRef: "42", month: "2026-03", amount: "15.0000" },
-  ]);
+  await withSimClock("2026-03-15T12:00:00Z", async () => {
+    assert.deepEqual(await source.monthlyActivity(), [
+      { accountRef: "42", month: "2026-03", amount: "15.0000" },
+    ]);
+  });
 });
 
-test("Xero trial-balance month-ends follow the org calendar", async () => {
+test("Xero trial-balance month-ends follow the org calendar", async (t) => {
   const orgId = "00000000-0000-0000-0000-000000000000";
+  t.mock.method(db, "execute", async () => ({ rows: [{ time_zone: "Pacific/Auckland" }] }));
   const dates: string[] = [];
   const source = new XeroSource({
     get: async (path: string, params: Record<string, string> = {}) => {
@@ -147,6 +153,8 @@ test("Xero trial-balance month-ends follow the org calendar", async () => {
     },
   } as unknown as XeroClient, { orgId });
 
-  await source.monthlyActivity();
-  assert.equal(dates.at(-1), addCalendarDays(addCalendarMonthsStart(await businessToday(orgId), 1), -1));
+  await withSimClock("2026-06-30T13:00:00Z", async () => {
+    await source.monthlyActivity();
+  });
+  assert.equal(dates.at(-1), addCalendarDays(addCalendarMonthsStart("2026-07-01", 1), -1));
 });
