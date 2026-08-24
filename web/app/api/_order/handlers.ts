@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
@@ -102,62 +102,74 @@ export function makePATCH(cfg: OrderHandlerConfig) {
 
     // --- status transitions ------------------------------------------------
     if (body.status) {
-      if (body.status === 'approved') {
-        if (status !== 'draft') {
-          return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
-        }
-        const doc = (await db.execute<{ party_id: string | null; total: string }>(
-          sql`select party_id, total from documents where id = ${id} and org_id = ${user.orgId}`,
-        ))
-        const d = doc.rows[0]!
-        if (!d.party_id || cmp(d.total, '0') <= 0) {
-          return NextResponse.json(
-            { error: 'Add a party and at least one line before issuing' },
-            { status: 422 },
-          )
-        }
-        if (cfg.kind === 'sales_order') {
-          const hold = (await db.execute<{ hold_reason: string | null }>(sql`
-            select hold_reason
-              from customer_roles
-             where org_id = ${user.orgId} and party_id = ${d.party_id}
-               and is_active and is_on_hold
-             limit 1
-          `))
-          if (hold.rows[0]) {
+      return withOrgTransaction(user.orgId, async () => {
+        // Serialize issuing/voiding with draft replacement at the aggregate
+        // root. The status used to be checked before either command owned a
+        // row lock, allowing a late draft PATCH to rewrite an issued order.
+        const locked = (await db.execute<{
+          status: string
+          party_id: string | null
+          total: string
+        }>(sql`
+          select status, party_id, total
+            from documents
+           where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
+           for update
+        `))
+        const current = locked.rows[0]
+        if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+        if (body.status === 'approved') {
+          if (current.status !== 'draft') {
+            return NextResponse.json({ error: 'only a draft can be issued' }, { status: 422 })
+          }
+          if (!current.party_id || cmp(current.total, '0') <= 0) {
             return NextResponse.json(
-              {
-                error: `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ''}`,
-              },
+              { error: 'Add a party and at least one line before issuing' },
               { status: 422 },
             )
           }
-        }
-        const submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
-        if (submission.flowError) {
-          return NextResponse.json(
-            { error: `approval could not be routed: ${submission.flowError}` },
-            { status: 422 },
-          )
-        }
-        if (submission.gated) {
-          const order = await loadOrder(id, user.orgId, cfg.kind)
-          return NextResponse.json(
-            { ...order, approvalPending: true, requestId: submission.runId },
-            { status: 202 },
-          )
-        }
-      } else if (body.status === 'voided') {
-        if (status === 'voided') {
-          return NextResponse.json({ error: 'already voided' }, { status: 422 })
-        }
-        if (status !== 'approved') {
-          return NextResponse.json(
-            { error: 'only an issued order can be voided; discard a draft instead' },
-            { status: 422 },
-          )
-        }
-        try {
+          if (cfg.kind === 'sales_order') {
+            const hold = (await db.execute<{ hold_reason: string | null }>(sql`
+              select hold_reason
+                from customer_roles
+               where org_id = ${user.orgId} and party_id = ${current.party_id}
+                 and is_active and is_on_hold
+               limit 1
+            `))
+            if (hold.rows[0]) {
+              return NextResponse.json(
+                {
+                  error: `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ''}`,
+                },
+                { status: 422 },
+              )
+            }
+          }
+          const submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
+          if (submission.flowError) {
+            return NextResponse.json(
+              { error: `approval could not be routed: ${submission.flowError}` },
+              { status: 422 },
+            )
+          }
+          if (submission.gated) {
+            const order = await loadOrder(id, user.orgId, cfg.kind)
+            return NextResponse.json(
+              { ...order, approvalPending: true, requestId: submission.runId },
+              { status: 202 },
+            )
+          }
+        } else if (body.status === 'voided') {
+          if (current.status === 'voided') {
+            return NextResponse.json({ error: 'already voided' }, { status: 422 })
+          }
+          if (current.status !== 'approved') {
+            return NextResponse.json(
+              { error: 'only an issued order can be voided; discard a draft instead' },
+              { status: 422 },
+            )
+          }
           const result = await requestDocumentVoid({
             documentId: id,
             orgId: user.orgId,
@@ -173,15 +185,15 @@ export function makePATCH(cfg: OrderHandlerConfig) {
               { status: 202 },
             )
           }
-        } catch (error) {
-          if (error instanceof DocumentVoidError) {
-            return NextResponse.json({ error: error.message }, { status: 422 })
-          }
-          throw error
         }
-      }
-      const order = await loadOrder(id, user.orgId, cfg.kind)
-      return NextResponse.json(order)
+        const order = await loadOrder(id, user.orgId, cfg.kind)
+        return NextResponse.json(order)
+      }).catch((error: unknown) => {
+        if (error instanceof DocumentVoidError) {
+          return NextResponse.json({ error: error.message }, { status: 422 })
+        }
+        throw error
+      })
     }
 
     // --- draft autosave ----------------------------------------------------
@@ -283,7 +295,16 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       }
     }
 
-    await db.transaction(async (tx) => {
+    const mutation = await db.transaction(async (tx) => {
+      const locked = (await tx.execute<{ status: string }>(sql`
+        select status
+          from documents
+         where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
+         for update
+      `))
+      if (!locked.rows[0]) return 'not_found' as const
+      if (locked.rows[0].status !== 'draft') return 'not_editable' as const
+
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
         for (let i = 0; i < preparedLines.length; i++) {
@@ -335,7 +356,15 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           sourceId: id,
         })
       }
+      return 'saved' as const
     })
+
+    if (mutation === 'not_found') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    if (mutation === 'not_editable') {
+      return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
+    }
 
     const order = await loadOrder(id, user.orgId, cfg.kind)
     return NextResponse.json(order)
