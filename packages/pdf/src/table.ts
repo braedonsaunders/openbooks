@@ -29,7 +29,7 @@ export function computeColumnWidths(
   doc.font(theme.fontBold).fontSize(theme.table)
   const sampleRows = group.rows.slice(0, 200)
   for (let i = 0; i < n; i++) {
-    let w = doc.widthOfString(group.columns[i])
+    let w = doc.widthOfString(group.columns[i]!)
     for (const row of sampleRows) {
       const cell = row[i]
       if (cell === null || cell === undefined) continue
@@ -42,7 +42,7 @@ export function computeColumnWidths(
   if (total <= contentWidth) {
     // Fill the page width by distributing slack evenly.
     const extra = contentWidth - total
-    for (let i = 0; i < n; i++) natural[i] += extra / n
+    for (let i = 0; i < n; i++) natural[i] = natural[i]! + extra / n
     return natural.map((w) => Math.round(w))
   }
 
@@ -60,7 +60,7 @@ export function computeColumnWidths(
     const excess = sum - contentWidth
     const slackSum = shrinkable.reduce((a, b) => a + b.slack, 0)
     for (const s of shrinkable) {
-      widths[s.i] = Math.max(widths[s.i] - (excess * s.slack) / slackSum, MIN_COL_W)
+      widths[s.i] = Math.max(widths[s.i]! - (excess * s.slack) / slackSum, MIN_COL_W)
     }
   }
   return widths.map((w) => Math.round(Math.max(w, MIN_COL_W)))
@@ -101,9 +101,9 @@ export function drawTable(
     doc.rect(page.contentLeft, topY, page.contentWidth, headerHeight).fill(theme.headerFill)
     doc.font(theme.fontBold).fontSize(theme.table).fillColor(theme.headerText)
     for (let i = 0; i < group.columns.length; i++) {
-      const ax = colX[i] + theme.cellPadX
-      const aw = widths[i] - theme.cellPadX * 2
-      doc.text(group.columns[i], ax, topY + theme.cellPadY, {
+      const ax = colX[i]! + theme.cellPadX
+      const aw = widths[i]! - theme.cellPadX * 2
+      doc.text(group.columns[i]!, ax, topY + theme.cellPadY, {
         width: aw,
         align: 'left',
         lineBreak: true,
@@ -137,7 +137,7 @@ export function drawTable(
   const maxRowHeight = page.contentBottom - page.contentTop - headerHeight
 
   for (let r = 0; r < group.rows.length; r++) {
-    const row = group.rows[r]
+    const row = group.rows[r]!
     const rowHeight = Math.min(measureRowHeight(doc, row, widths, theme, theme.font), maxRowHeight)
     // Page break before a row that overflows.
     if (y + rowHeight > page.contentBottom) {
@@ -166,8 +166,8 @@ export function drawTable(
     // never drops its last line to rounding.
     const cellMaxH = rowHeight - theme.cellPadY * 2 + 0.5
     for (let i = 0; i < row.length && i < widths.length; i++) {
-      const ax = colX[i] + theme.cellPadX
-      const aw = widths[i] - theme.cellPadX * 2
+      const ax = colX[i]! + theme.cellPadX
+      const aw = widths[i]! - theme.cellPadX * 2
       const v = row[i]
       if (v === null || v === undefined) {
         doc.fillColor(theme.empty)
@@ -206,7 +206,7 @@ function measureRowHeight(
   for (let i = 0; i < cells.length; i++) {
     const v = cells[i]
     const text = v === null || v === undefined ? '' : String(v)
-    const w = Math.max(widths[i] - theme.cellPadX * 2, 1)
+    const w = Math.max(widths[i]! - theme.cellPadX * 2, 1)
     const h = doc.heightOfString(text, { width: w, align: 'left' })
     if (h > max) max = h
   }
