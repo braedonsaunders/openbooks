@@ -32,8 +32,10 @@ export const bankStatements = pgTable(
     closingBalance: money("closing_balance"),
     importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
     /**
-     * Stable pointer to the exact source bytes. Current imports use an
-     * `audit-log:<id>#sha256=<hash>` reference whose target is append-only.
+     * Stable pointer to append-only source evidence. Current imports use an
+     * `audit-log:<id>#sha256=<hash>` exact-byte reference. Statements imported
+     * before source retention use an explicit
+     * `audit-log:<id>#evidence=legacy-source-unavailable` attestation instead.
      */
     rawFileRef: text("raw_file_ref").notNull(),
     /** Exact-byte identity used to make retries idempotent per bank account. */
