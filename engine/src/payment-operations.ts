@@ -280,21 +280,23 @@ async function event(opts: {
 }
 
 export async function submitPaymentRun(runId: string, orgId: string, userId: string): Promise<void> {
-  const result = (await db.execute<{ status: string }>(sql`
-    update payment_runs r set
-      status = case when p.require_run_approval then 'pending_approval' else 'approved' end,
-      submitted_at = now(), submitted_by = ${userId},
-      approved_at = case when p.require_run_approval then null else now() end,
-      approved_by = case when p.require_run_approval then null else ${userId}::uuid end,
-      updated_at = now(), updated_by = ${userId}
-    from payment_bank_profiles p
-    where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
-      and p.id = r.payment_bank_profile_id and p.is_active and r.payment_count > 0 and r.total_amount > 0
-    returning r.status
-  `));
-  const row = result.rows[0];
-  if (!row) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
-  await event({ orgId, runId, eventType: "run_submitted", actorId: userId, fromStatus: "draft", toStatus: row.status });
+  await withOrgTransaction(orgId, async () => {
+    const result = (await db.execute<{ status: string }>(sql`
+      update payment_runs r set
+        status = case when p.require_run_approval then 'pending_approval' else 'approved' end,
+        submitted_at = now(), submitted_by = ${userId},
+        approved_at = case when p.require_run_approval then null else now() end,
+        approved_by = case when p.require_run_approval then null else ${userId}::uuid end,
+        updated_at = now(), updated_by = ${userId}
+      from payment_bank_profiles p
+      where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
+        and p.id = r.payment_bank_profile_id and p.is_active and r.payment_count > 0 and r.total_amount > 0
+      returning r.status
+    `));
+    const row = result.rows[0];
+    if (!row) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
+    await event({ orgId, runId, eventType: "run_submitted", actorId: userId, fromStatus: "draft", toStatus: row.status });
+  });
 }
 
 /** The maker of a controlled payment artifact can never be its checker. */
@@ -319,34 +321,36 @@ export async function decidePaymentRun(
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const next = decision === "approve" ? "approved" : "rejected";
   const eventType = decision === "approve" ? "run_approved" : "run_rejected";
-  const result = (await db.execute<{ id: string }>(sql`
-    update payment_runs set
-      status = ${next},
-      approved_at = case when ${decision} = 'approve' then now() else null end,
-      approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
-      rejected_at = case when ${decision} = 'reject' then now() else null end,
-      rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
-      rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
-      updated_at = now(), updated_by = ${userId}
-    where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
-      and (
-        ${decision} = 'reject'
-        or (submitted_by is not null and submitted_by <> ${userId})
-      )
-    returning id
-  `));
-  if (!result.rows[0]) {
-    if (decision === "approve") {
-      const pending = (await db.execute<{ submitted_by: string | null }>(sql`
-        select submitted_by
-          from payment_runs
-         where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
-      `)).rows[0];
-      if (pending) assertIndependentPaymentApprover("run", pending.submitted_by, userId);
+  await withOrgTransaction(orgId, async () => {
+    const result = (await db.execute<{ id: string }>(sql`
+      update payment_runs set
+        status = ${next},
+        approved_at = case when ${decision} = 'approve' then now() else null end,
+        approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
+        rejected_at = case when ${decision} = 'reject' then now() else null end,
+        rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
+        rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
+        updated_at = now(), updated_by = ${userId}
+      where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
+        and (
+          ${decision} = 'reject'
+          or (submitted_by is not null and submitted_by <> ${userId})
+        )
+      returning id
+    `));
+    if (!result.rows[0]) {
+      if (decision === "approve") {
+        const pending = (await db.execute<{ submitted_by: string | null }>(sql`
+          select submitted_by
+            from payment_runs
+           where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
+        `)).rows[0];
+        if (pending) assertIndependentPaymentApprover("run", pending.submitted_by, userId);
+      }
+      throw new PaymentError("only a run pending approval can be decided");
     }
-    throw new PaymentError("only a run pending approval can be decided");
-  }
-  await event({ orgId, runId, eventType, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
+    await event({ orgId, runId, eventType, actorId: userId, fromStatus: "pending_approval", toStatus: next, details: reason ? { reason } : {} });
+  });
 }
 
 interface FormatContext {
@@ -733,44 +737,46 @@ export async function generatePaymentFileArtifact(
   const rendered = await renderPaymentFile(ctx, orgId, now);
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
-  const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
-  const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
-  const parentId = opts?.reprocessFileId ?? null;
-  const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
-    select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id} and org_id = ${orgId}
-  `));
-  const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
-  const total = sum(ctx.payments.map((p) => p.amount));
-  const artifact = (await db.insert(schema.paymentFiles).values({
-    orgId,
-    paymentRunId: runId,
-    paymentBankProfileId: ctx.profile.id,
-    paymentFormatId: ctx.format.id,
-    parentPaymentFileId: parentId,
-    sequenceNumber: Number(seq.rows[0]?.n ?? 1),
-    filename: rendered.filename,
-    contentType: rendered.contentType,
-    contentHash: hash,
-    fileId: stored.fileId,
-    fileVersionId: stored.versionId,
-    paymentCount: ctx.payments.length,
-    totalAmount: total,
-    currency: String(ctx.run.currency),
-    status: fileStatus,
-    generatedBy: userId,
-    approvedAt: fileStatus === "approved" ? now : null,
-    approvedBy: fileStatus === "approved" ? userId : null,
-    createdBy: userId,
-    updatedBy: userId,
-  }).returning({ id: schema.paymentFiles.id }))[0]!;
-  if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}`);
-  await db.execute(sql`
-    update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),
-      exported_file_ref = ${rendered.filename}, updated_at = now(), updated_by = ${userId}
-    where id = ${runId} and org_id = ${orgId}
-  `);
-  await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: status, toStatus: "generated", details: { hash, filename: rendered.filename } });
-  return { id: artifact.id, filename: rendered.filename, contentType: rendered.contentType, content };
+  return withOrgTransaction(orgId, async () => {
+    const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
+    const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
+    const parentId = opts?.reprocessFileId ?? null;
+    const profile = (await db.execute<{ require_file_approval: boolean }>(sql`
+      select require_file_approval from payment_bank_profiles where id = ${ctx.profile.id} and org_id = ${orgId}
+    `));
+    const fileStatus = profile.rows[0]?.require_file_approval ? "pending_approval" : "approved";
+    const total = sum(ctx.payments.map((p) => p.amount));
+    const artifact = (await db.insert(schema.paymentFiles).values({
+      orgId,
+      paymentRunId: runId,
+      paymentBankProfileId: ctx.profile.id,
+      paymentFormatId: ctx.format.id,
+      parentPaymentFileId: parentId,
+      sequenceNumber: Number(seq.rows[0]?.n ?? 1),
+      filename: rendered.filename,
+      contentType: rendered.contentType,
+      contentHash: hash,
+      fileId: stored.fileId,
+      fileVersionId: stored.versionId,
+      paymentCount: ctx.payments.length,
+      totalAmount: total,
+      currency: String(ctx.run.currency),
+      status: fileStatus,
+      generatedBy: userId,
+      approvedAt: fileStatus === "approved" ? now : null,
+      approvedBy: fileStatus === "approved" ? userId : null,
+      createdBy: userId,
+      updatedBy: userId,
+    }).returning({ id: schema.paymentFiles.id }))[0]!;
+    if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}`);
+    await db.execute(sql`
+      update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),
+        exported_file_ref = ${rendered.filename}, updated_at = now(), updated_by = ${userId}
+      where id = ${runId} and org_id = ${orgId}
+    `);
+    await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: status, toStatus: "generated", details: { hash, filename: rendered.filename } });
+    return { id: artifact.id, filename: rendered.filename, contentType: rendered.contentType, content };
+  });
 }
 
 export async function decidePaymentFile(
@@ -782,56 +788,60 @@ export async function decidePaymentFile(
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const eventType = decision === "approve" ? "file_approved" : "file_rejected";
-  const result = (await db.execute<{ payment_run_id: string }>(sql`
-    update payment_files set
-      status = ${decision === "approve" ? "approved" : "rejected"},
-      approved_at = case when ${decision} = 'approve' then now() else null end,
-      approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
-      rejected_at = case when ${decision} = 'reject' then now() else null end,
-      rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
-      rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
-      updated_at = now(), updated_by = ${userId}
-    where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
-      and (
-        ${decision} = 'reject'
-        or (generated_by is not null and generated_by <> ${userId})
-      )
-    returning payment_run_id
-  `));
-  if (!result.rows[0]) {
-    if (decision === "approve") {
-      const pending = (await db.execute<{ generated_by: string | null }>(sql`
-        select generated_by
-          from payment_files
-         where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
-      `)).rows[0];
-      if (pending) assertIndependentPaymentApprover("file", pending.generated_by, userId);
+  await withOrgTransaction(orgId, async () => {
+    const result = (await db.execute<{ payment_run_id: string }>(sql`
+      update payment_files set
+        status = ${decision === "approve" ? "approved" : "rejected"},
+        approved_at = case when ${decision} = 'approve' then now() else null end,
+        approved_by = case when ${decision} = 'approve' then ${userId}::uuid else null end,
+        rejected_at = case when ${decision} = 'reject' then now() else null end,
+        rejected_by = case when ${decision} = 'reject' then ${userId}::uuid else null end,
+        rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
+        updated_at = now(), updated_by = ${userId}
+      where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+        and (
+          ${decision} = 'reject'
+          or (generated_by is not null and generated_by <> ${userId})
+        )
+      returning payment_run_id
+    `));
+    if (!result.rows[0]) {
+      if (decision === "approve") {
+        const pending = (await db.execute<{ generated_by: string | null }>(sql`
+          select generated_by
+            from payment_files
+           where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+        `)).rows[0];
+        if (pending) assertIndependentPaymentApprover("file", pending.generated_by, userId);
+      }
+      throw new PaymentError("only a file pending approval can be decided");
     }
-    throw new PaymentError("only a file pending approval can be decided");
-  }
-  await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
+    await event({ orgId, runId: result.rows[0].payment_run_id, fileId, actorId: userId, eventType, fromStatus: "pending_approval", toStatus: decision === "approve" ? "approved" : "rejected", details: reason ? { reason } : {} });
+  });
 }
 
 export async function recordPaymentFileDownload(fileId: string, orgId: string, userId: string): Promise<void> {
-  const file = (await db.execute<{ payment_run_id: string }>(sql`
-    select payment_run_id from payment_files where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
-  `));
-  if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
-  await db.insert(schema.paymentFileDeliveries).values({
-    orgId,
-    paymentFileId: fileId,
-    channel: "download",
-    targetRef: userId,
-    status: "delivered",
-    attemptCount: 1,
-    lastAttemptAt: new Date(),
-    deliveredAt: new Date(),
-    createdBy: userId,
-    updatedBy: userId,
+  await withOrgTransaction(orgId, async () => {
+    const file = (await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id from payment_files where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
+    `));
+    if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
+    await db.insert(schema.paymentFileDeliveries).values({
+      orgId,
+      paymentFileId: fileId,
+      channel: "download",
+      targetRef: userId,
+      status: "delivered",
+      attemptCount: 1,
+      lastAttemptAt: new Date(),
+      deliveredAt: new Date(),
+      createdBy: userId,
+      updatedBy: userId,
+    });
+    await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${fileId} and org_id = ${orgId}`);
+    await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'`);
+    await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
   });
-  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${fileId} and org_id = ${orgId}`);
-  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'`);
-  await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
 }
 
 export async function recordPaymentFileSftpDelivery(opts: {
@@ -841,27 +851,29 @@ export async function recordPaymentFileSftpDelivery(opts: {
   targetRef: string;
   response?: Record<string, unknown>;
 }): Promise<void> {
-  const file = (await db.execute<{ payment_run_id: string }>(sql`
-    select payment_run_id from payment_files
-     where id = ${opts.fileId} and org_id = ${opts.orgId} and status in ('approved', 'delivered')
-  `));
-  if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
-  await db.insert(schema.paymentFileDeliveries).values({
-    orgId: opts.orgId,
-    paymentFileId: opts.fileId,
-    channel: "sftp",
-    targetRef: opts.targetRef,
-    status: "delivered",
-    attemptCount: 1,
-    lastAttemptAt: new Date(),
-    deliveredAt: new Date(),
-    response: opts.response ?? {},
-    createdBy: opts.userId,
-    updatedBy: opts.userId,
+  await withOrgTransaction(opts.orgId, async () => {
+    const file = (await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id from payment_files
+       where id = ${opts.fileId} and org_id = ${opts.orgId} and status in ('approved', 'delivered')
+    `));
+    if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
+    await db.insert(schema.paymentFileDeliveries).values({
+      orgId: opts.orgId,
+      paymentFileId: opts.fileId,
+      channel: "sftp",
+      targetRef: opts.targetRef,
+      status: "delivered",
+      attemptCount: 1,
+      lastAttemptAt: new Date(),
+      deliveredAt: new Date(),
+      response: opts.response ?? {},
+      createdBy: opts.userId,
+      updatedBy: opts.userId,
+    });
+    await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${opts.fileId} and org_id = ${opts.orgId}`);
+    await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'`);
+    await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
   });
-  await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${opts.fileId} and org_id = ${opts.orgId}`);
-  await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'`);
-  await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
 }
 
 export async function recordPaymentFileDeliveryFailure(opts: {
@@ -872,23 +884,27 @@ export async function recordPaymentFileDeliveryFailure(opts: {
   targetRef: string;
   error: string;
 }): Promise<void> {
-  const file = (await db.execute<{ payment_run_id: string }>(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`));
-  if (!file.rows[0]) throw new PaymentError("payment file not found");
-  await db.insert(schema.paymentFileDeliveries).values({ orgId: opts.orgId, paymentFileId: opts.fileId, channel: opts.channel, targetRef: opts.targetRef, status: "failed", attemptCount: 1, lastAttemptAt: new Date(), error: opts.error, createdBy: opts.userId, updatedBy: opts.userId });
-  await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
+  await withOrgTransaction(opts.orgId, async () => {
+    const file = (await db.execute<{ payment_run_id: string }>(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`));
+    if (!file.rows[0]) throw new PaymentError("payment file not found");
+    await db.insert(schema.paymentFileDeliveries).values({ orgId: opts.orgId, paymentFileId: opts.fileId, channel: opts.channel, targetRef: opts.targetRef, status: "failed", attemptCount: 1, lastAttemptAt: new Date(), error: opts.error, createdBy: opts.userId, updatedBy: opts.userId });
+    await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
+  });
 }
 
 export async function rollbackPaymentRun(runId: string, orgId: string, userId: string, reason: string): Promise<void> {
   if (!reason.trim()) throw new PaymentError("a rollback reason is required");
-  const result = (await db.execute<{ status: string }>(sql`
-    update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
-     where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
-       and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('sent', 'settled', 'returned', 'reversed'))
-     returning r.status
-  `));
-  if (!result.rows[0]) throw new PaymentError("a run can only be rolled back before any payment is posted or settled");
-  await db.execute(sql`update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId} where payment_run_id = ${runId} and org_id = ${orgId} and status not in ('superseded', 'voided')`);
-  await event({ orgId, runId, actorId: userId, eventType: "run_rolled_back", toStatus: "rolled_back", details: { reason } });
+  await withOrgTransaction(orgId, async () => {
+    const result = (await db.execute<{ status: string }>(sql`
+      update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
+       where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
+         and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('sent', 'settled', 'returned', 'reversed'))
+       returning r.status
+    `));
+    if (!result.rows[0]) throw new PaymentError("a run can only be rolled back before any payment is posted or settled");
+    await db.execute(sql`update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId} where payment_run_id = ${runId} and org_id = ${orgId} and status not in ('superseded', 'voided')`);
+    await event({ orgId, runId, actorId: userId, eventType: "run_rolled_back", toStatus: "rolled_back", details: { reason } });
+  });
 }
 
 export async function recordPaymentSettlement(opts: {
