@@ -1,7 +1,26 @@
 import { NextResponse } from "next/server";
-import { handleProviderWebhook, type AcceptanceProvider } from "@openbooks/engine/src/payment-acceptance.ts";
+import {
+  handleProviderWebhook,
+  PaymentWebhookBatchError,
+  type AcceptanceProvider,
+  type ProviderWebhookResult,
+} from "@openbooks/engine/src/payment-acceptance.ts";
 
 export const runtime = "nodejs";
+
+function webhookResponse(result: ProviderWebhookResult, status = 200) {
+  return NextResponse.json(
+    {
+      received: true,
+      status: result.status,
+      events: result.eventResults.map(({ externalRef, status: eventStatus }) => ({
+        externalRef,
+        status: eventStatus,
+      })),
+    },
+    { status },
+  );
+}
 
 /**
  * Provider payment webhooks. Signature verification happens inside the engine
@@ -18,16 +37,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
   req.headers.forEach((value, key) => {
     headers[key.toLowerCase()] = value;
   });
-  const result = await handleProviderWebhook(provider as AcceptanceProvider, headers, rawBody);
+  let result: ProviderWebhookResult | null;
+  try {
+    result = await handleProviderWebhook(provider as AcceptanceProvider, headers, rawBody);
+  } catch (error) {
+    if (error instanceof PaymentWebhookBatchError) {
+      // Every event was attempted independently before this response. A 5xx
+      // asks the provider to retry failed members; committed members safely
+      // dedupe on replay instead of being rolled back or processed twice.
+      return webhookResponse(error.result, 500);
+    }
+    throw error;
+  }
   if (!result) {
     return NextResponse.json({ error: "signature verification failed" }, { status: 401 });
   }
-  // Always 200 once authenticated, including recognized deliveries containing
-  // no actionable event types. Provider retries on 4xx/5xx would otherwise
-  // redeliver forever; idempotency makes retries safe anyway.
-  return NextResponse.json({
-    received: true,
-    status: result.status,
-    events: result.eventResults.map(({ externalRef, status }) => ({ externalRef, status })),
-  });
+  // Authenticated deliveries with no actionable events are acknowledged; a
+  // processing failure instead takes the explicit retry path above.
+  return webhookResponse(result);
 }

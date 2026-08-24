@@ -929,6 +929,24 @@ export interface ProviderWebhookResult {
   }[];
 }
 
+/**
+ * One or more authenticated events failed after every event in the delivery
+ * was attempted. The HTTP boundary uses the completed result for a stable
+ * retry response while the original failure remains the error cause.
+ */
+export class PaymentWebhookBatchError extends PaymentAcceptanceError {
+  constructor(
+    readonly result: ProviderWebhookResult,
+    cause: unknown,
+  ) {
+    super(
+      cause instanceof Error ? cause.message : "payment webhook event processing failed",
+      { cause },
+    );
+    this.name = "PaymentWebhookBatchError";
+  }
+}
+
 interface SettlementDiscrepancyEvidence {
   reason: "missing_settlement_evidence" | "amount_currency_mismatch";
   provider: AcceptanceProvider;
@@ -962,31 +980,74 @@ export async function handleProviderWebhook(
   if (verified.length === 0) return null;
   const events = verified[0]?.events ?? [];
   const eventResults: ProviderWebhookResult["eventResults"] = [];
+  let firstFailure: Error | null = null;
   for (const event of events) {
     let unresolved: ProviderWebhookResult["eventResults"][number] | null = null;
+    let handled: ProviderWebhookResult["eventResults"][number] | null = null;
+    let failure: ProviderWebhookResult["eventResults"][number] | null = null;
     for (const candidate of verified) {
-      const outcome = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+      let outcome: WebhookEventOutcome;
+      try {
+        outcome = await withOrg(candidate.orgId, () => processWebhookEvent(candidate.orgId, provider, event));
+      } catch (error) {
+        // A tenant transaction failure rolls back only this event. Keep going
+        // so a poison event cannot starve later collections in the delivery;
+        // the aggregate error below still makes the provider retry honestly.
+        firstFailure ??=
+          error instanceof Error
+            ? error
+            : new PaymentAcceptanceError("payment webhook event processing failed");
+        failure ??= {
+          externalRef: event.externalRef,
+          orgId: candidate.orgId,
+          status: "processing_failed",
+        };
+        // A lookup can fail before this tenant resolves an attempt. Give later
+        // verifying tenants their normal chance to claim the event; the saved
+        // failure still forces a retry because this tenant was indeterminate.
+        continue;
+      }
       // A discrepancy is returned, rather than thrown inside withOrg, so its
-      // attempt marker and audit row commit before the webhook fails closed.
-      if (typeof outcome !== "string") throw outcome.discrepancy;
+      // attempt marker and audit row commit before this event is reported as
+      // failed. Later events still run in independent tenant transactions.
+      if (typeof outcome !== "string") {
+        firstFailure ??= outcome.discrepancy;
+        failure ??= {
+          externalRef: event.externalRef,
+          orgId: candidate.orgId,
+          status: "processing_failed",
+        };
+        unresolved = null;
+        break;
+      }
       const status = outcome;
       const result = { externalRef: event.externalRef, orgId: candidate.orgId, status };
       if (status !== "unknown_attempt") {
-        eventResults.push(result);
+        handled = result;
         unresolved = null;
         break;
       }
       unresolved ??= result;
     }
-    if (unresolved) eventResults.push(unresolved);
+    const eventResult = failure ?? handled ?? unresolved;
+    if (eventResult) eventResults.push(eventResult);
   }
   const primary = eventResults.find((result) => result.status !== "unknown_attempt") ?? eventResults[0];
-  return {
+  const result: ProviderWebhookResult = {
     signatureValid: true,
     orgId: primary?.orgId ?? verified[0]!.orgId,
-    status: eventResults.length === 0 ? "unhandled" : eventResults.length === 1 ? primary!.status : "processed",
+    status:
+      firstFailure !== null
+        ? "processing_failed"
+        : eventResults.length === 0
+          ? "unhandled"
+          : eventResults.length === 1
+            ? primary!.status
+            : "processed",
     eventResults,
   };
+  if (firstFailure !== null) throw new PaymentWebhookBatchError(result, firstFailure);
+  return result;
 }
 
 /**
