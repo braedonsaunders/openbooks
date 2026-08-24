@@ -10,6 +10,9 @@ on:
         description: Image tag for a manual build
         required: true
         default: edge
+      commit_sha:
+        description: Full commit SHA to verify and publish
+        required: true
 
 permissions:
   contents: read
@@ -19,6 +22,7 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  SOURCE_COMMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_sha || (github.event_name == 'push' && github.sha) }}
 
 jobs:
   verify:
@@ -57,12 +61,22 @@ jobs:
       ORG_CURRENCY: USD
       PGPASSWORD: openbooks-owner-release-test-password
     steps:
+      - name: Validate the pinned source commit
+        run: |
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "SOURCE_COMMIT must be a full lowercase SHA-1." >&2
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify deployment workflow contracts
+        run: node --test scripts/deploy-edge-workflow.test.mjs
       - name: Bootstrap a clean release database
         env:
           NODE_ENV: production
@@ -86,6 +100,8 @@ jobs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -103,6 +119,7 @@ jobs:
             org.opencontainers.image.description=Open-source accounting-first ERP
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.revision=${{ env.SOURCE_COMMIT }}
       - name: Build and push the exact multi-platform candidate
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -153,6 +170,8 @@ jobs:
       digest: ${{ needs.container-security.outputs.digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -173,6 +192,7 @@ jobs:
             org.opencontainers.image.description=Open-source accounting-first ERP
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
+            org.opencontainers.image.revision=${{ env.SOURCE_COMMIT }}
       - name: Publish tags for the exact scanned digest
         env:
           OPENBOOKS_RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
