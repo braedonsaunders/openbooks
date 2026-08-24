@@ -373,7 +373,7 @@ function clampLimit(raw: number | null | undefined): number {
 /** English fallback for an aggregated measure's column label. */
 function defaultMeasureLabel(m: QueryMeasure, field: AnalyticsField | null): string {
   if (m.agg === 'count') return 'Count'
-  const verb = m.agg === 'sum' ? 'Total' : m.agg[0].toUpperCase() + m.agg.slice(1)
+  const verb = m.agg === 'sum' ? 'Total' : m.agg[0]!.toUpperCase() + m.agg.slice(1)
   return `${verb} ${field?.label ?? ''}`.trim()
 }
 

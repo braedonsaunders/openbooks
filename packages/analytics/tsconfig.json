@@ -5,7 +5,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "strict": true,
+    "strict": true, "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "esModuleInterop": true,
     "isolatedModules": true,
