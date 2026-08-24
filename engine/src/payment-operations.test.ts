@@ -7,8 +7,11 @@ import { db, withBypass, withOrgContext } from "./db.ts";
 import {
   decidePaymentFile,
   decidePaymentRun,
+  generatePaymentFileArtifact,
   nachaOriginator,
+  recordPaymentFileDownload,
   recordPaymentSettlement,
+  rollbackPaymentRun,
   sepaOriginator,
 } from "./payment-operations.ts";
 import {
@@ -251,6 +254,33 @@ test("payment approval fails closed when the maker is not identified", () => {
   );
 });
 
+test("artifact generation re-judges the run lifecycle under a row lock inside the tenant transaction", () => {
+  // loadFormatContext reads outside any transaction, so the pre-render status
+  // check is advisory only. The committed state must be re-judged under the
+  // run's row lock before any artifact row is written.
+  const gate = paymentOperationsSource.match(
+    /select status from payment_runs[\s\S]*?status in \('approved', 'generated', 'delivered', 'partially_failed'\)[\s\S]*?for update/,
+  );
+  assert.ok(gate, "generation must gate on select ... for update over generable statuses");
+});
+
+test("the generated-file transition cannot resurrect a run that left the generable states", () => {
+  assert.match(
+    paymentOperationsSource,
+    /update payment_runs set status = 'generated'[\s\S]*?and status in \('approved', 'generated', 'delivered', 'partially_failed'\)\s*returning status/,
+  );
+});
+
+test("delivery recording refuses a file that is no longer approved at write time", () => {
+  const statements = paymentOperationsSource.match(
+    /update payment_files set status = 'delivered'[\s\S]*?returning id/g,
+  ) ?? [];
+  assert.equal(statements.length, 2, "download and sftp delivery must both use guarded updates");
+  for (const statement of statements) {
+    assert.match(statement, /status in \('approved', 'delivered'\)/);
+  }
+});
+
 async function seedPaymentRun(
   org: ScratchOrg,
   submitterId: string,
@@ -365,6 +395,65 @@ async function removePaymentFileFixture(orgId: string, fileId: string): Promise<
        where org_id = ${orgId} and id = ${fileId}
     `);
   });
+}
+
+/**
+ * Seed an approved run on an active wire-format profile with no instructions:
+ * the minimal shape `generatePaymentFileArtifact` accepts (the generic
+ * register renders fine with zero payments).
+ */
+async function seedGeneratableRun(org: ScratchOrg, actorId: string): Promise<string> {
+  const formatId = randomUUID();
+  const profileId = randomUUID();
+  await db.execute(sql`
+    insert into payment_formats
+      (id, org_id, code, name, rail, direction, file_extension, content_type,
+       created_by, updated_by)
+    values
+      (${formatId}, ${org.orgId}, ${`GEN-${formatId.slice(0, 8)}`}, 'Generation test wire',
+       'wire', 'credit', 'txt', 'text/plain', ${actorId}, ${actorId})
+  `);
+  await db.execute(sql`
+    insert into payment_bank_profiles
+      (id, org_id, name, bank_account_id, payment_format_id, currency,
+       require_run_approval, require_file_approval, created_by, updated_by)
+    values
+      (${profileId}, ${org.orgId}, ${`Generation test profile ${profileId}`}, ${org.accounts.bank},
+       ${formatId}, 'CAD', false, false, ${actorId}, ${actorId})
+  `);
+  const runId = randomUUID();
+  await db.execute(sql`
+    insert into payment_runs
+      (id, org_id, run_number, bank_account_id, payment_bank_profile_id, method,
+       currency, status, payment_count, total_amount, created_by, updated_by)
+    values
+      (${runId}, ${org.orgId}, ${`GEN-${runId.slice(0, 8)}`}, ${org.accounts.bank},
+       ${profileId}, 'wire', 'CAD', 'approved', 1, '25', ${actorId}, ${actorId})
+  `);
+  return runId;
+}
+
+interface GenerationOutcomeSnapshot {
+  [key: string]: unknown;
+  live_files: number;
+  generated_events: number;
+  run_status: string;
+}
+
+async function generationOutcomeSnapshot(
+  orgId: string,
+  runId: string,
+): Promise<GenerationOutcomeSnapshot | undefined> {
+  return (await db.execute<GenerationOutcomeSnapshot>(sql`
+    select (select count(*)::int from payment_files pf
+             where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
+               and pf.status not in ('superseded', 'voided', 'rejected')) as live_files,
+           (select count(*)::int from payment_events e
+              where e.payment_run_id = ${runId} and e.org_id = ${orgId}
+                and e.event_type = 'file_generated') as generated_events,
+           (select status from payment_runs r
+             where r.id = ${runId} and r.org_id = ${orgId}) as run_status
+  `)).rows[0];
 }
 
 interface PaymentDecisionAuditSnapshot {
@@ -827,6 +916,36 @@ test(
 );
 
 test(
+  "a rolled-back run cannot gain a bank-file artifact",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Generation Operator", "admin"),
+      );
+      const runId = await withOrgContext(org.orgId, () => seedGeneratableRun(org, actorId));
+      await withOrgContext(org.orgId, () =>
+        rollbackPaymentRun(runId, org.orgId, actorId, "duplicate submission"),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () => generatePaymentFileArtifact(runId, org.orgId, actorId)),
+        (error: Error) =>
+          error instanceof PaymentError
+          && error.message === "approve the payment run before generating its file",
+      );
+      assert.deepEqual(await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)), {
+        live_files: 0,
+        generated_events: 0,
+        run_status: "rolled_back",
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
   "a payment file decision whose evidence write fails rolls the whole decision back",
   { skip: !DB },
   async () => {
@@ -1056,6 +1175,98 @@ test(
     } finally {
       for (const fileId of fileIds) {
         await withBypass(() => removePaymentFileFixture(org.orgId, fileId));
+      }
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "concurrent generation of one run yields exactly one live artifact",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let artifactId: string | undefined;
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Concurrent Operator", "admin"),
+      );
+      const runId = await withOrgContext(org.orgId, () => seedGeneratableRun(org, actorId));
+      const [first, second] = await withOrgContext(org.orgId, () =>
+        Promise.all([
+          generatePaymentFileArtifact(runId, org.orgId, actorId),
+          generatePaymentFileArtifact(runId, org.orgId, actorId),
+        ]),
+      );
+      assert.equal(first.id, second.id);
+      artifactId = first.id;
+      assert.equal(first.filename, second.filename);
+      assert.deepEqual(await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)), {
+        live_files: 1,
+        generated_events: 1,
+        run_status: "generated",
+      });
+    } finally {
+      if (artifactId) {
+        const cleanupArtifactId = artifactId;
+        await withBypass(() => removePaymentFileFixture(org.orgId, cleanupArtifactId));
+      }
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "delivery recording fails closed when a rollback voided the file",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    let seeded: { fileId: string; runId: string } | undefined;
+    try {
+      const generatorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Voided Delivery Generator", "payment_file_generator"),
+      );
+      const approverId = await withBypass(() =>
+        createScratchUser(org.orgId, "Voided Delivery Approver", "payment_file_approver"),
+      );
+      seeded = await withOrgContext(org.orgId, () =>
+        seedPendingPaymentFile(org, generatorId, approverId),
+      );
+      const seededFileId = seeded.fileId;
+      const seededRunId = seeded.runId;
+      await withOrgContext(org.orgId, () =>
+        decidePaymentFile(seededFileId, org.orgId, approverId, "approve"),
+      );
+      await withOrgContext(org.orgId, () =>
+        rollbackPaymentRun(seededRunId, org.orgId, approverId, "run recalled before dispatch"),
+      );
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          recordPaymentFileDownload(seededFileId, org.orgId, approverId),
+        ),
+        (error: Error) =>
+          error instanceof PaymentError
+          && error.message === "payment file is not approved for delivery",
+      );
+      const state = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          file_status: string;
+          deliveries: number;
+          run_status: string;
+        }>(sql`
+          select pf.status as file_status,
+                 (select count(*)::int from payment_file_deliveries d
+                   where d.payment_file_id = pf.id and d.org_id = pf.org_id) as deliveries,
+                 (select r.status from payment_runs r where r.id = pf.payment_run_id) as run_status
+            from payment_files pf
+           where pf.id = ${seededFileId} and pf.org_id = ${org.orgId}
+        `)).rows[0]
+      );
+      assert.deepEqual(state, { file_status: "voided", deliveries: 0, run_status: "rolled_back" });
+    } finally {
+      if (seeded) {
+        const cleanupFileId = seeded.fileId;
+        await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
       }
       await withBypass(() => dropScratchOrg(org.orgId));
     }

@@ -710,6 +710,25 @@ async function storeArtifactFile(
   });
 }
 
+const GENERATABLE_RUN_STATUSES = ["approved", "generated", "delivered", "partially_failed"];
+
+async function findLiveRunArtifact(
+  runId: string,
+  orgId: string,
+): Promise<{ id: string; filename: string; contentType: string; content: Buffer } | null> {
+  const existing = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
+    select pf.id, pf.filename, pf.content_type, fb.bytes
+      from payment_files pf
+      join files fi on fi.id = pf.file_id and fi.org_id = ${orgId}
+      join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
+      join file_blobs fb on fb.version_id = fv.id
+     where pf.payment_run_id = ${runId} and pf.org_id = ${orgId} and pf.status not in ('superseded', 'voided', 'rejected')
+     order by pf.sequence_number desc limit 1
+  `));
+  const row = existing.rows[0];
+  return row ? { id: row.id, filename: row.filename, contentType: row.content_type, content: row.bytes } : null;
+}
+
 export async function generatePaymentFileArtifact(
   runId: string,
   orgId: string,
@@ -718,26 +737,41 @@ export async function generatePaymentFileArtifact(
 ): Promise<{ id: string; filename: string; contentType: string; content: Buffer }> {
   const ctx = await loadFormatContext(runId, orgId);
   const status = String(ctx.run.status);
-  if (!["approved", "generated", "delivered", "partially_failed"].includes(status)) {
+  // Fast-path refusal only — the authoritative lifecycle gate is re-judged
+  // inside the tenant transaction below against committed state.
+  if (!GENERATABLE_RUN_STATUSES.includes(status)) {
     throw new PaymentError("approve the payment run before generating its file");
   }
+  // Fast-path dedupe probe. Concurrent generators can both see no live
+  // artifact here; the transaction below re-checks under the run's row lock.
   if (!opts?.reprocessFileId) {
-    const existing = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
-      select pf.id, pf.filename, pf.content_type, fb.bytes
-        from payment_files pf
-        join files fi on fi.id = pf.file_id and fi.org_id = ${orgId}
-        join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
-        join file_blobs fb on fb.version_id = fv.id
-       where pf.payment_run_id = ${runId} and pf.org_id = ${orgId} and pf.status not in ('superseded', 'voided', 'rejected')
-       order by pf.sequence_number desc limit 1
-    `));
-    if (existing.rows[0]) return { id: existing.rows[0].id, filename: existing.rows[0].filename, contentType: existing.rows[0].content_type, content: existing.rows[0].bytes };
+    const live = await findLiveRunArtifact(runId, orgId);
+    if (live) return live;
   }
   const now = opts?.now ?? new Date();
   const rendered = await renderPaymentFile(ctx, orgId, now);
   const content = Buffer.from(rendered.content, "utf8");
   const hash = createHash("sha256").update(content).digest("hex");
   return withOrgTransaction(orgId, async () => {
+    // Everything above this line read a snapshot taken outside any
+    // transaction: a rollback can commit while the bank file renders, and two
+    // generators can pass the same empty dedupe probe. Locking the run row
+    // here (1) fails closed when the committed status has left the generable
+    // set — a rolled-back run can never gain an artifact — and (2) serializes
+    // concurrent generations of one run, so only the first sees no live
+    // artifact and the rest idempotently return it.
+    const gate = (await db.execute<{ status: string }>(sql`
+      select status from payment_runs
+       where id = ${runId} and org_id = ${orgId}
+         and status in ('approved', 'generated', 'delivered', 'partially_failed')
+       for update
+    `));
+    const liveStatus = gate.rows[0]?.status;
+    if (!liveStatus) throw new PaymentError("approve the payment run before generating its file");
+    if (!opts?.reprocessFileId) {
+      const live = await findLiveRunArtifact(runId, orgId);
+      if (live) return live;
+    }
     const stored = await storeArtifactFile(orgId, userId, rendered.filename, rendered.contentType, content, hash);
     const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
     const parentId = opts?.reprocessFileId ?? null;
@@ -769,12 +803,19 @@ export async function generatePaymentFileArtifact(
       updatedBy: userId,
     }).returning({ id: schema.paymentFiles.id }))[0]!;
     if (parentId) await db.execute(sql`update payment_files set status = 'superseded', updated_at = now(), updated_by = ${userId} where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}`);
-    await db.execute(sql`
+    // Predicated on the same generable statuses judged under the lock above
+    // (belt and braces — the row is already locked): a run rolled back before
+    // this write lands cannot be flipped back to 'generated', and the
+    // returning row proves the predicate held at write time.
+    const transitioned = (await db.execute<{ status: string }>(sql`
       update payment_runs set status = 'generated', exported_at = coalesce(exported_at, now()),
         exported_file_ref = ${rendered.filename}, updated_at = now(), updated_by = ${userId}
       where id = ${runId} and org_id = ${orgId}
-    `);
-    await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: status, toStatus: "generated", details: { hash, filename: rendered.filename } });
+        and status in ('approved', 'generated', 'delivered', 'partially_failed')
+      returning status
+    `));
+    if (!transitioned.rows[0]) throw new PaymentError("approve the payment run before generating its file");
+    await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: liveStatus, toStatus: "generated", details: { hash, filename: rendered.filename } });
     return { id: artifact.id, filename: rendered.filename, contentType: rendered.contentType, content };
   });
 }
@@ -838,7 +879,15 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
       createdBy: userId,
       updatedBy: userId,
     });
-    await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${fileId} and org_id = ${orgId}`);
+    // The approving select above is a snapshot: a rollback can commit before
+    // this write does, so the predicate keeps a voided file from becoming
+    // 'delivered' and the missing returning row fails the whole transaction.
+    const delivered = (await db.execute<{ id: string }>(sql`
+      update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId}
+       where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
+       returning id
+    `));
+    if (!delivered.rows[0]) throw new PaymentError("payment file is not approved for delivery");
     await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId} where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'`);
     await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
   });
@@ -870,7 +919,14 @@ export async function recordPaymentFileSftpDelivery(opts: {
       createdBy: opts.userId,
       updatedBy: opts.userId,
     });
-    await db.execute(sql`update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${opts.fileId} and org_id = ${opts.orgId}`);
+    // Same stale-read guard as the download path: only a still-approved file
+    // transitions to 'delivered'.
+    const delivered = (await db.execute<{ id: string }>(sql`
+      update payment_files set status = 'delivered', updated_at = now(), updated_by = ${opts.userId}
+       where id = ${opts.fileId} and org_id = ${opts.orgId} and status in ('approved', 'delivered')
+       returning id
+    `));
+    if (!delivered.rows[0]) throw new PaymentError("payment file is not approved for delivery");
     await db.execute(sql`update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${opts.userId} where id = ${file.rows[0].payment_run_id} and org_id = ${opts.orgId} and status = 'generated'`);
     await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "approved", toStatus: "delivered", details: { targetRef: opts.targetRef } });
   });
