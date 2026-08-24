@@ -168,6 +168,20 @@ const PLAID_PAGE_SIZE = 500;
 // 20 pages × 500 = 10,000 transactions per sync; past that we abort loudly
 // rather than silently truncating a 90-day cold start on a busy account.
 const PLAID_MAX_PAGES = 20;
+const PLAID_API_BASES = {
+  production: "https://production.plaid.com",
+  sandbox: "https://sandbox.plaid.com",
+} as const;
+
+/** Resolve only Plaid's published API environments. Credential data must never
+ * become part of an outbound hostname: besides misconfiguration, values with a
+ * slash can turn string interpolation into a request to an arbitrary host. */
+export function plaidApiBase(environment?: string): string {
+  const normalized = environment?.trim().toLowerCase() || "production";
+  const base = PLAID_API_BASES[normalized as keyof typeof PLAID_API_BASES];
+  if (!base) throw new FeedError("Plaid environment must be production or sandbox");
+  return base;
+}
 
 /**
  * Accumulate every transactions/get page until Plaid reports has_more=false.
@@ -197,8 +211,8 @@ const plaid: BankFeedAdapter = {
       return { ok: false, detail: "Plaid client_id, secret and access_token required" };
     }
     try {
-      const env = creds.env || "production";
-      const res = await fetch(`https://${env}.plaid.com/accounts/get`, {
+      const base = plaidApiBase(creds.env);
+      const res = await fetch(`${base}/accounts/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: creds.clientId, secret: creds.secret, access_token: creds.accessToken }),
@@ -210,12 +224,12 @@ const plaid: BankFeedAdapter = {
     }
   },
   async fetch(creds, externalAccountId, sinceIso, untilIso) {
-    const env = creds.env || "production";
+    const base = plaidApiBase(creds.env);
     const today = untilIso;
     const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
     const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
-      const res = await fetch(`https://${env}.plaid.com/transactions/get`, {
+      const res = await fetch(`${base}/transactions/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
