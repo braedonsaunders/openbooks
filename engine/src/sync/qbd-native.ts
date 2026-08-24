@@ -67,7 +67,7 @@ export function buildQbdLedgerDocuments(input: {
       partyId: null,
       currency: input.baseCurrency,
       fxRate: "1",
-      documentDate: first.columns.Date,
+      documentDate: first.columns.Date!,
       dueDate: null,
       memo: first.columns.Memo || first.columns.TxnType || null,
       referenceNumber: first.columns.RefNumber || null,

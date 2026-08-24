@@ -14,6 +14,7 @@ import { ensureReadRole, runUserSql } from "./sqlapi.ts";
 
 async function main() {
   const [org] = await db.select().from(schema.orgs);
+  if (!org) throw new Error("no organizations exist; run the bootstrap first");
   const orgId = org.id;
 
   const acct = async (like: string) => {
@@ -66,7 +67,7 @@ async function main() {
 
   // -- 2. a big bill with no memo ------------------------------------------
   const demoNumber = `OB-DEMO-${Date.now()}`;
-  const [doc] = await db.insert(schema.documents).values({
+  const doc = (await db.insert(schema.documents).values({
     orgId,
     kind: "vendor_bill",
     documentNumber: demoNumber,
@@ -77,7 +78,7 @@ async function main() {
     subtotal: "25000.00",
     taxTotal: "0",
     total: "25000.00",
-  }).returning();
+  }).returning())[0]!;
   await db.insert(schema.documentLines).values({
     orgId, documentId: doc.id, lineNumber: 1,
     accountId: expense.id, description: "Demo: shop consumables bulk buy",
@@ -99,6 +100,7 @@ async function main() {
   console.log("== attempt 2: post with memo");
   const entryId = await postDocument(doc.id, deps);
   const [posted] = await db.select().from(schema.documents).where(eq(schema.documents.id, doc.id));
+  if (!posted) throw new Error("document vanished before post-back");
   console.log(`  POSTED -> journal entry ${entryId}`);
   console.log(`  script mutation applied: expectedPayDate=${posted.expectedPayDate} (due ${posted.dueDate})`);
 

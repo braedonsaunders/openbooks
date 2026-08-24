@@ -81,7 +81,7 @@ async function ensureProjectPocRule(orgId: string, actorId: string | null): Prom
     on conflict (org_id, code) do update set updated_at = now()
     where recognition_rules.org_id = ${orgId}
     returning id`));
-  return ins.rows[0].id;
+  return ins.rows[0]!.id;
 }
 
 /**
@@ -192,7 +192,7 @@ export async function syncProjectRevenueContracts(
           (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
         values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${p.functional_currency}, ${p.contract_value}, ${actorId}, ${actorId})
         returning id`));
-      contractId = ins.rows[0].id;
+      contractId = ins.rows[0]!.id;
       created = true;
     }
 
@@ -219,7 +219,7 @@ export async function syncProjectRevenueContracts(
                 ${p.contract_value}, ${p.contract_value}, ${p.contract_value}, ${percent},
                 ${startsOn}, ${accts.unbilledReceivable}, ${accts.projectRevenue}, 'open', ${actorId}, ${actorId})
         returning id`));
-      obligationId = ins.rows[0].id;
+      obligationId = ins.rows[0]!.id;
     }
 
     await buildAllRecognitionSchedules(obligationId, orgId, actorId, asOfDate);

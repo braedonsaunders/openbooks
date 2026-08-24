@@ -47,7 +47,7 @@ function classify(file: PreviewFile): Kind {
 /** Text files can round-trip through the /replace endpoint only when the stored
  *  MIME type is on the upload allowlist; otherwise preview stays read-only. */
 function isEditableType(ct: string): boolean {
-  const t = ct.split(';')[0].trim().toLowerCase()
+  const t = ct.split(';')[0]!.trim().toLowerCase()
   return (
     t === 'text/plain' ||
     t === 'text/csv' ||
@@ -114,7 +114,7 @@ export function FilePreview({ file, canManage }: { file: PreviewFile; canManage:
     if (text == null) return
     setSaving(true)
     try {
-      const ct = file.contentType.split(';')[0].trim().toLowerCase()
+      const ct = file.contentType.split(';')[0]!.trim().toLowerCase()
       const blob = new File([text], file.name, { type: ct })
       const form = new FormData()
       form.append('file', blob)

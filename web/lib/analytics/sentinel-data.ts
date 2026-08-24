@@ -497,7 +497,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   for (let d = 1; d <= 9; d++) {
     const row = b1Map.get(String(d));
     const observed = row && total1D > 0 ? row.count / total1D : 0;
-    const expected = BENFORD_1D[d];
+    const expected = BENFORD_1D[d]!;
     const deviation = observed - expected;
     sumAbsDev1 += Math.abs(deviation);
     digits1D.push({
@@ -726,7 +726,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   if (conformity1D(mad1D) === "Non-Conforming") topRiskAreas.push({ area: "Benford Deviation", severity: "medium", count: total1D, message: "First-digit distribution deviates significantly" });
   topRiskAreas.sort((a, b) => ({ critical: 0, high: 1, medium: 2 }[a.severity] - { critical: 0, high: 1, medium: 2 }[b.severity]));
 
-  const meta = metaRows.rows[0] ?? {};
+  const meta = metaRows.rows[0] ?? { docs: 0, amount: 0 };
   const days = Math.round((end.getTime() - new Date(from + "T00:00:00Z").getTime()) / 86_400_000) + 1;
 
   return {

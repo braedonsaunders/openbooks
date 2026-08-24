@@ -20,7 +20,7 @@ function futureLabels(lastMonth: string, horizon: number): string[] {
   const [y, m] = lastMonth.split('-').map(Number)
   const out: string[] = []
   for (let i = 1; i <= horizon; i++) {
-    const d = new Date(Date.UTC(y, m - 1 + i, 1))
+    const d = new Date(Date.UTC(y!, m! - 1 + i, 1))
     out.push(`${d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })} '${String(d.getUTCFullYear()).slice(2)}`)
   }
   return out
@@ -53,7 +53,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
 
   const diag = diagnostics(series, result)
   const histLabels = hist.map((p) => p.label)
-  const futLabels = futureLabels(hist[hist.length - 1].month, horizon)
+  const futLabels = futureLabels(hist[hist.length - 1]!.month, horizon)
   const labels = [...histLabels, ...futLabels]
   const N = series.length
   const history = [...series, ...Array(horizon).fill(null)]
@@ -62,8 +62,9 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const high = [...Array(N).fill(null), ...result.high]
 
   const totalForecast = result.values.reduce((a, b) => a + b, 0)
-  const endValue = result.values[horizon - 1]
-  const growth = series[N - 1] !== 0 ? (endValue - series[N - 1]) / Math.abs(series[N - 1]) : 0
+  const endValue = result.values[horizon - 1]!
+  const lastActual = series[N - 1]!
+  const growth = lastActual !== 0 ? (endValue - lastActual) / Math.abs(lastActual) : 0
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
@@ -108,8 +109,8 @@ export function ForecastTab({ data }: { data: HealthData }) {
                   <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                     <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{futLabels[i]}</td>
                     <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(v)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i])}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i])}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</td>
                   </tr>
                 ))}

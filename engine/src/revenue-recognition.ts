@@ -51,7 +51,7 @@ function monthStart(date: string): string {
 /** Add n months to a YYYY-MM-01 string, returning YYYY-MM-01. */
 function addMonths(monthStartDate: string, n: number): string {
   const [y, m] = monthStartDate.split("-").map(Number);
-  const total = y * 12 + (m - 1) + n;
+  const total = y! * 12 + (m! - 1) + n;
   const ny = Math.floor(total / 12);
   const nm = (total % 12) + 1;
   return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
@@ -60,7 +60,7 @@ function addMonths(monthStartDate: string, n: number): string {
 /** Days in the calendar month containing a YYYY-MM-DD date. */
 function daysInMonth(date: string): number {
   const [y, m] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return new Date(Date.UTC(y!, m!, 0)).getUTCDate();
 }
 
 /** Last day of the month for a YYYY-MM-DD date, as YYYY-MM-DD. */
@@ -72,7 +72,7 @@ function monthEnd(date: string): string {
 /** Parse YYYY-MM-DD to a UTC epoch-day integer. */
 function epochDay(date: string): number {
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
-  return Math.floor(Date.UTC(y, m - 1, d) / 86_400_000);
+  return Math.floor(Date.UTC(y!, m! - 1, d) / 86_400_000);
 }
 
 /** Inclusive day count between two YYYY-MM-DD dates (end − start + 1). */
@@ -120,7 +120,7 @@ export function apportion(totalUnits: bigint, weights: readonly (number | string
     .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
   let k = 0;
   while (remainder > 0n) {
-    base[order[k % order.length].i] += 1n;
+    base[order[k % order.length]!.i]! += 1n;
     remainder -= 1n;
     k++;
   }
@@ -481,7 +481,7 @@ function resolveEnd(startOn: string, input: RecognitionInput): string {
 function monthSpan(startOn: string, endOn: string): number {
   const [sy, sm] = monthStart(startOn).split("-").map(Number);
   const [ey, em] = monthStart(endOn).split("-").map(Number);
-  return ey * 12 + (em - 1) - (sy * 12 + (sm - 1)) + 1;
+  return ey! * 12 + (em! - 1) - (sy! * 12 + (sm! - 1)) + 1;
 }
 
 /**
@@ -493,7 +493,7 @@ function spreadWithInitial(input: RecognitionInput, start: string, weights: numb
   const totalUnits = toUnits(input.total);
   const initialUnits = pctOf(totalUnits, input.initialAmountPercent ?? "0");
   const parts = apportion(totalUnits - initialUnits, weights);
-  if (weights.length > 0) parts[0] += initialUnits;
+  if (weights.length > 0) parts[0]! += initialUnits;
   return parts.map((units, i) => ({ month: addMonths(start, i), units }));
 }
 
@@ -685,7 +685,7 @@ export async function buildRecognitionSchedule(
         insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
         values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
         returning id`));
-      scheduleId = ins.rows[0].id;
+      scheduleId = ins.rows[0]!.id;
     }
 
     const posted = (await tx.execute<{ period_id: string; planned_amount: string; sequence: number }>(sql`
@@ -846,7 +846,7 @@ export async function createObligationsFromInvoice(
     included.map((l) => ({ ssp: l.item_ssp ?? l.fair_value, booked: l.amount })),
   );
   const allocByLine = new Map<string, string>();
-  included.forEach((l, i) => allocByLine.set(l.line_id, alloc[i]));
+  included.forEach((l, i) => allocByLine.set(l.line_id, alloc[i]!));
   for (const l of lines) if (l.revenue_allocation === "exclude") allocByLine.set(l.line_id, l.amount);
 
   const obligationIds: string[] = [];
@@ -1085,10 +1085,10 @@ export async function runRevenueRecognition(
                   ${`Revenue recognition — ${row.obligation_desc} (${row.period_name})`},
                   'draft', 'revenue_recognition', ${actorId}, ${actorId})
           returning id`));
-        const eid = entryRes.rows[0].id;
+        const eid = entryRes.rows[0]!.id;
 
         for (let i = 0; i < lines.length; i++) {
-          const l = lines[i];
+          const l = lines[i]!;
           await tx.execute(sql`
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,

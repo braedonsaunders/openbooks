@@ -345,7 +345,9 @@ export function renderT4Xml(input: {
     const slipXml: string[] = [];
     for (const slip of ret.slips) {
       const sin = slip.sin;
-      const [surname, ...given] = splitName(slip.employeeName);
+      const names = splitName(slip.employeeName);
+      const surname = names[0]!;
+      const given = names.slice(1);
       // Quebec files the SAME contribution in a DIFFERENT box. Box 16 is CPP
       // and box 17 is QPP, and they are mutually exclusive on a slip: a QC
       // employee contributes to the Québec Pension Plan, so reporting their

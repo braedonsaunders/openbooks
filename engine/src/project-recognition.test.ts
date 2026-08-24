@@ -18,9 +18,10 @@ test("labor postings never mix subsidiaries and remain balanced by group", () =>
     projectCosts: [{ projectId: "p1", amount: "160.0000" }],
     total: "160.0000",
   });
-  assert.equal(groups[1].subsidiaryId, "us");
-  assert.equal(groups[1].total, "90.0000");
-  assert.equal(groups[1].projectCosts.reduce((sum, row) => sum + Number(row.amount), 0), Number(groups[1].total));
+  const usGroup = groups[1]!;
+  assert.equal(usGroup.subsidiaryId, "us");
+  assert.equal(usGroup.total, "90.0000");
+  assert.equal(usGroup.projectCosts.reduce((sum, row) => sum + Number(row.amount), 0), Number(usGroup.total));
 });
 
 test("zero labor is omitted without creating an empty journal group", () => {
@@ -52,8 +53,10 @@ test("a time entry with no wage rate is skipped, not fatal", () => {
   const groups = groupLaborPostings(rows);
   assert.equal(groups.length, 1);
   // Only the costed entry posts, and it posts its full value.
-  assert.deepEqual(groups[0].timeEntryIds, ["real"]);
-  assert.equal(groups[0].total, "100.0000");
+  const group = groups[0]!;
+  // Only the costed entry posts, and it posts its full value.
+  assert.deepEqual(group.timeEntryIds, ["real"]);
+  assert.equal(group.total, "100.0000");
 });
 
 test("a week with no costed entries at all produces no postings", () => {

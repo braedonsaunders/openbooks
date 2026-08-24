@@ -182,7 +182,7 @@ export async function createPaymentDocument(opts: {
       createdBy: opts.createdBy,
     })
     .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber });
-  return doc;
+  return doc!;
 }
 
 export function sameCurrencyAllocation(
@@ -894,7 +894,7 @@ export async function postPaymentWithApplications(
           createdBy: userId ?? doc.createdBy,
         })
         .returning({ id: schema.journalEntries.id });
-      fxEntryId = fxEntry.id;
+      fxEntryId = fxEntry!.id;
       await db.insert(schema.journalLines).values([
         {
           orgId: doc.orgId, entryId: fxEntryId!, lineNumber: 1, accountId: source.account_id,
@@ -1254,7 +1254,7 @@ export async function createPaymentRun(opts: {
 
   const runNumber = await nextNumber(opts.orgId, "payment_run", "RUN-");
 
-  const [run] = await db
+  const run = (await db
     .insert(schema.paymentRuns)
     .values({
       orgId: opts.orgId,
@@ -1272,7 +1272,7 @@ export async function createPaymentRun(opts: {
       scheduledFor: opts.scheduledFor ?? null,
       createdBy: opts.createdBy,
     })
-    .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber });
+    .returning({ id: schema.paymentRuns.id, runNumber: schema.paymentRuns.runNumber }))[0]!;
 
   const criteria = opts.selectionCriteria ?? {};
   const captureDiscounts = criteria.captureDiscounts !== false;
@@ -1391,7 +1391,7 @@ export async function createPaymentRun(opts: {
        order by approved_at desc, created_at desc limit 1
     `));
 
-    const [instruction] = await db.insert(schema.paymentInstructions).values({
+    const instruction = (await db.insert(schema.paymentInstructions).values({
       orgId: opts.orgId,
       paymentRunId: run.id,
       payeePartyId: partyId,
@@ -1401,7 +1401,7 @@ export async function createPaymentRun(opts: {
       paymentDocumentId: payment.id,
       status: "pending",
       createdBy: opts.createdBy,
-    }).returning({ id: schema.paymentInstructions.id });
+    }).returning({ id: schema.paymentInstructions.id }))[0]!;
 
     await db.insert(schema.paymentRunItems).values(billComposition.map(({ bill, creditAmount, discountAmount, paymentAmount }) => ({
       orgId: opts.orgId,
@@ -1832,7 +1832,7 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
   `));
   if (already.rows[0]) return;
   const recipients = instruction.email ? [instruction.email] : [];
-  const [remittance] = await db.insert(schema.paymentRemittances).values({
+  const remittance = (await db.insert(schema.paymentRemittances).values({
     orgId,
     paymentInstructionId: instructionId,
     recipients,
@@ -1841,7 +1841,7 @@ async function queueAutomaticRemittance(instructionId: string, orgId: string, us
     error: recipients.length ? null : "counterparty has no remittance email address",
     createdBy: userId,
     updatedBy: userId,
-  }).returning({ id: schema.paymentRemittances.id });
+  }).returning({ id: schema.paymentRemittances.id }))[0]!;
   if (!recipients.length) return;
   const documents = (await db.execute<{ number: string; amount: string; discount: string; credit: string }>(sql`
     select d.document_number as number, ri.payment_amount as amount,
@@ -2133,8 +2133,8 @@ export async function loadCpa005RunFile(
     return {
       amountCents: units / 100n,
       fundsDate,
-      institution: r.routing.institution,
-      transit: r.routing.transit,
+      institution: r.routing.institution!,
+      transit: r.routing.transit!,
       accountNumber: decryptAccountNumber(r.account_number_encrypted),
       payeeName: r.payee,
       crossReference: r.document_number ?? r.id.slice(0, 19),
@@ -2287,7 +2287,7 @@ export function buildNachaFile(opts: {
 /** ABA routing check digit (mod-10 weighted 3-7-1) from the first 8 digits. */
 function nachaCheckDigit(rt8: string): string {
   const w = [3, 7, 1, 3, 7, 1, 3, 7];
-  const sum = rt8.split("").reduce((a, d, i) => a + Number(d) * w[i], 0);
+  const sum = rt8.split("").reduce((a, d, i) => a + Number(d) * w[i]!, 0);
   return String((10 - (sum % 10)) % 10);
 }
 

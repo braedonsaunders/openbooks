@@ -30,16 +30,16 @@ export function netsuiteCredsFromEnvFile(): NetSuiteCreds | null {
   const env: Record<string, string> = {};
   for (const line of readFileSync(path, "utf8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) env[m[1]] = m[2];
+    if (m) env[m[1]!] = m[2]!;
   }
   if (!env.NETSUITE_CONSUMER_KEY || !env.NETSUITE_TOKEN_KEY) return null;
   return {
-    account: env.NETSUITE_ACCOUNT,
-    host: env.NETSUITE_HOST,
-    consumerKey: env.NETSUITE_CONSUMER_KEY,
-    consumerSecret: env.NETSUITE_CONSUMER_SECRET,
-    tokenKey: env.NETSUITE_TOKEN_KEY,
-    tokenSecret: env.NETSUITE_TOKEN_SECRET,
+    account: env.NETSUITE_ACCOUNT!,
+    host: env.NETSUITE_HOST!,
+    consumerKey: env.NETSUITE_CONSUMER_KEY!,
+    consumerSecret: env.NETSUITE_CONSUMER_SECRET!,
+    tokenKey: env.NETSUITE_TOKEN_KEY!,
+    tokenSecret: env.NETSUITE_TOKEN_SECRET!,
   };
 }
 

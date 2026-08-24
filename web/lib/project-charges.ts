@@ -267,7 +267,7 @@ export async function createProjectCharge(
         await tx.execute(sql`
           insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
                                                quantity, rate, amount, sequence, created_by)
-          values (${orgId}, ${insertedLine.id}, ${c.role}, ${c.rateLineId}, ${c.unitCode}, ${c.unitName},
+          values (${orgId}, ${insertedLine!.id}, ${c.role}, ${c.rateLineId}, ${c.unitCode}, ${c.unitName},
                   ${exactQuantity(c.quantity, 'Component quantity')}, ${exactMoney(c.rate, 'Component rate')},
                   ${exactMoney(c.amount, 'Component amount')}, ${componentSequence++}, ${userId})
         `)

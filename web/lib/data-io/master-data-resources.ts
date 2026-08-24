@@ -204,7 +204,7 @@ export function masterResource(m: MasterEntity, orgId: string): DataResource {
         select ${sql.join(coreCols, sql`, `)}, custom
           from ${sql.raw(m.table)}
          where org_id = ${orgId}
-         order by ${sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0].column)}
+         order by ${sql.raw(m.naturalKey === 'shortCode' ? 'display_name' : m.cols[0]!.column)}
          limit ${MAX_EXPORT_ROWS}`)) as { rows: Record<string, unknown>[] }
       const customDefs = fields.filter((f) => f.custom)
       const out: Record<string, CellValue>[] = []
@@ -243,7 +243,7 @@ async function writeMaster(
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
-    const src = rows[i]
+    const src = rows[i]!
     try {
       // Coerce core columns.
       const setCols: { column: string; value: unknown }[] = []

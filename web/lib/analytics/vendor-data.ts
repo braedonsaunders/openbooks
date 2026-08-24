@@ -82,14 +82,14 @@ export interface VendorData {
 
 function priorYear(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return `${y - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return `${y! - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 function daysBetween(a: string, b: string): number {
   return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
 }
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  const d = new Date(Date.UTC(y, m - 1, 1));
+  const d = new Date(Date.UTC(y!, m! - 1, 1));
   return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
 }
 function clamp(n: number, lo = 0, hi = 100): number {
@@ -212,7 +212,7 @@ export async function vendorData(
   const totalSpend = base.reduce((a, r) => a + r.spend, 0) || 1;
   const sortedSpends = base.map((r) => r.spend).sort((a, b) => a - b);
   // High-spend threshold = 80th percentile ().
-  const highSpendThreshold = sortedSpends.length ? sortedSpends[Math.floor(sortedSpends.length * 0.8)] : 0;
+  const highSpendThreshold = sortedSpends.length ? sortedSpends[Math.floor(sortedSpends.length * 0.8)]! : 0;
   const n = base.length;
   const TIER_SIGNIFICANCE: Record<SpendTier, number> = { strategic: 40, core: 30, tactical: 20, tail: 10 };
 

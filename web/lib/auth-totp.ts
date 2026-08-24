@@ -54,11 +54,11 @@ export function totpCode(
   const counter = Buffer.alloc(8);
   counter.writeBigUInt64BE(BigInt(step));
   const digest = createHmac("sha1", key).update(counter).digest();
-  const offset = digest[digest.length - 1] & 15;
-  const binary = ((digest[offset] & 127) << 24)
-    | (digest[offset + 1] << 16)
-    | (digest[offset + 2] << 8)
-    | digest[offset + 3];
+  const offset = digest[digest.length - 1]! & 15;
+  const binary = ((digest[offset]! & 127) << 24)
+    | (digest[offset + 1]! << 16)
+    | (digest[offset + 2]! << 8)
+    | digest[offset + 3]!;
   return { code: String(binary % (10 ** digits)).padStart(digits, "0"), step };
 }
 
@@ -135,8 +135,8 @@ export function verifyRecoveryCodeHash(
 ): boolean {
   const match = storedHash.match(/^s1:([0-9a-f]{32}):([0-9a-f]{64})$/i);
   if (!match) return false;
-  const salt = Buffer.from(match[1], "hex");
-  const expected = Buffer.from(match[2], "hex");
+  const salt = Buffer.from(match[1]!, "hex");
+  const expected = Buffer.from(match[2]!, "hex");
   const actual = createHash("sha256")
     .update("openbooks:mfa-recovery:s1\0")
     .update(userId)

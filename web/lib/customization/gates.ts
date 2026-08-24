@@ -37,7 +37,7 @@ export function customFieldTargetFeatureKey(table: string, kind?: string | null)
   )
   if (keys.size === 1) {
     const [only] = keys
-    return only
+    return only!
   }
   if (table === 'crm_account_profiles') return 'crm'
   return null

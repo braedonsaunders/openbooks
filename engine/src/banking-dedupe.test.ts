@@ -15,7 +15,7 @@ const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine
 test("content-identical ID-less transactions in separate imports both remain fresh", () => {
   const first = filterDuplicateStatementLines([line()], new Set());
   assert.equal(first.lines.length, 1);
-  assert.equal(first.lines[0].bankTransactionId, null);
+  assert.equal(first.lines[0]!.bankTransactionId, null);
 
   // The first import persisted no source ID, so there is no sound identity to
   // suppress a second real transaction with the same visible content.
@@ -61,7 +61,7 @@ test("plaid pagination accumulates every page until has_more is false", async ()
   const offsetsSeen: number[] = [];
   const all = await plaidFetchAllTransactions(async (offset) => {
     offsetsSeen.push(offset);
-    return pages[offsetsSeen.length - 1];
+    return pages[offsetsSeen.length - 1]!;
   });
   assert.deepEqual(offsetsSeen, [0, 500, 1000]);
   assert.deepEqual(all, pages.flatMap((p) => p.transactions));

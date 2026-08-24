@@ -200,13 +200,14 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         (select count(*)::int from user_org_access
           where org_id = ${source.orgId} and acting_user_id = ${authUserId}) access_count
     `));
-    assert.equal(restoredAuth.rows[0].mfa_count, 1);
-    assert.equal(unsealSecret(restoredAuth.rows[0].mfa_ciphertext), mfaSecret);
-    assert.equal(restoredAuth.rows[0].oidc_count, 1);
-    assert.equal(restoredAuth.rows[0].session_count, 0);
-    assert.equal(restoredAuth.rows[0].login_state_count, 0);
-    assert.equal(restoredAuth.rows[0].challenge_count, 0);
-    assert.equal(restoredAuth.rows[0].access_count, 0);
+    const authRow = restoredAuth.rows[0]!;
+    assert.equal(authRow.mfa_count, 1);
+    assert.equal(unsealSecret(authRow.mfa_ciphertext), mfaSecret);
+    assert.equal(authRow.oidc_count, 1);
+    assert.equal(authRow.session_count, 0);
+    assert.equal(authRow.login_state_count, 0);
+    assert.equal(authRow.challenge_count, 0);
+    assert.equal(authRow.access_count, 0);
 
     // Prove the explicit lost-key recovery path keeps the OIDC identity but
     // drops MFA factors for supervised user re-enrollment.
@@ -226,8 +227,9 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         (select count(*)::int from auth_mfa_factors where user_id = ${authUserId}) mfa_count,
         (select count(*)::int from auth_oidc_identities where user_id = ${authUserId}) oidc_count
     `));
-    assert.equal(resetAuth.rows[0].mfa_count, 0);
-    assert.equal(resetAuth.rows[0].oidc_count, 1);
+    const resetAuthRow = resetAuth.rows[0]!;
+    assert.equal(resetAuthRow.mfa_count, 0);
+    assert.equal(resetAuthRow.oidc_count, 1);
   } finally {
     await dropScratchOrgReporting(source.orgId);
     await dropScratchOrgReporting(external.orgId);

@@ -225,7 +225,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
     )`);
 
-  const [sb] = await db
+  const sb = (await db
     .insert(schema.sandboxes)
     .values({
       orgId: sandboxOrgId,
@@ -237,7 +237,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       status: "provisioning",
       createdBy: input.createdBy ?? null,
     })
-    .returning({ id: schema.sandboxes.id });
+    .returning({ id: schema.sandboxes.id }))[0]!;
 
   try {
     if (masked) await seedDefaultMaskingPolicies(input.productionOrgId);

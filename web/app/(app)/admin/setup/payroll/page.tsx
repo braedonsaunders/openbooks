@@ -123,7 +123,7 @@ export default async function PayrollSetupPage({
       ? 'accounts'
       : requested
   const tab: Tab = aliased && (available as readonly string[]).includes(aliased) ? (aliased as Tab) : 'packs'
-  const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]
+  const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]!
   const t = await getTranslations('payroll.settingsPage')
   const canManageEntities = can(authz, 'admin.setup.manage')
 

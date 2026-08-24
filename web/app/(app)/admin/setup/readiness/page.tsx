@@ -72,14 +72,14 @@ export default async function SetupReadinessPage() {
     {
       title: 'Invoices, bills, and payment terms',
       description: org?.payment_terms > 0
-        ? `${org.payment_terms} active payment term${org.payment_terms === 1 ? '' : 's'} available. Review numbering and document defaults.`
+        ? `${org!.payment_terms} active payment term${org!.payment_terms === 1 ? '' : 's'} available. Review numbering and document defaults.`
         : 'Choose at least one payment term so due dates do not have to be calculated by hand.',
       href: '/admin/setup/invoicing', action: 'Review invoicing', state: org?.payment_terms > 0 ? 'complete' : 'review',
     },
     {
       title: 'Tax treatment',
       description: org?.tax_codes > 0
-        ? `${org.tax_codes} active tax code${org.tax_codes === 1 ? '' : 's'} configured. Confirm registrations and filing obligations.`
+        ? `${org!.tax_codes} active tax code${org!.tax_codes === 1 ? '' : 's'} configured. Confirm registrations and filing obligations.`
         : taxPosition === 'not_registered'
           ? 'You confirmed this company is not currently required to collect sales tax, GST/HST, or VAT. Revisit this before obligations change.'
           : taxPosition === 'registered'
@@ -91,7 +91,7 @@ export default async function SetupReadinessPage() {
     {
       title: 'Bank and card accounts',
       description: org?.bank_accounts > 0
-        ? `${org.bank_accounts} reconcilable account${org.bank_accounts === 1 ? '' : 's'} will appear in Banking. Keep only real accounts reconcilable.`
+        ? `${org!.bank_accounts} reconcilable account${org!.bank_accounts === 1 ? '' : 's'} will appear in Banking. Keep only real accounts reconcilable.`
         : 'Mark each real bank or card GL account as reconcilable before importing statements.',
       href: '/admin/setup/accounts', action: 'Review bank accounts', state: org?.bank_accounts > 0 ? 'complete' : 'review',
     },
@@ -99,10 +99,10 @@ export default async function SetupReadinessPage() {
       title: 'Opening balances and cutover',
       description: bookStart === 'fresh'
         ? org?.posted_entries > 0
-          ? `Books began from zero; ${org.posted_entries} posted entr${org.posted_entries === 1 ? 'y records' : 'ies record'} live activity rather than a migrated opening balance.`
+          ? `Books began from zero; ${org!.posted_entries} posted entr${org!.posted_entries === 1 ? 'y records' : 'ies record'} live activity rather than a migrated opening balance.`
           : 'You confirmed the books start from zero, so no migration journal is expected.'
         : org?.posted_entries > 0
-          ? `${org.posted_entries} posted entr${org.posted_entries === 1 ? 'y exists' : 'ies exist'}. Reconcile the opening journal to the source trial balance and open-item detail before declaring cutover complete.`
+          ? `${org!.posted_entries} posted entr${org!.posted_entries === 1 ? 'y exists' : 'ies exist'}. Reconcile the opening journal to the source trial balance and open-item detail before declaring cutover complete.`
           : 'You are moving existing books. Enter a balanced opening journal and verify customer, vendor, bank, tax, and retained-earnings detail.',
       href: '/journal',
       action: bookStart === 'fresh' ? 'Review ledger' : org?.posted_entries > 0 ? 'Review journal' : 'Enter opening balances',
@@ -111,7 +111,7 @@ export default async function SetupReadinessPage() {
     {
       title: `First ${closeLabel} close`,
       description: org?.completed_closes > 0
-        ? `${org.completed_closes} period close${org.completed_closes === 1 ? '' : 's'} completed with a preserved checklist, sign-off, locks, and close package.`
+        ? `${org!.completed_closes} period close${org!.completed_closes === 1 ? '' : 's'} completed with a preserved checklist, sign-off, locks, and close package.`
         : org?.posted_entries > 0
           ? `Live activity exists. Reconcile the period, review financial statements, complete the ${closeLabel} checklist, attest or approve, lock, and publish.`
           : `After live activity begins, OpenBooks will guide the first ${closeLabel} close from reconciliation through locked books and a preserved close package.`,

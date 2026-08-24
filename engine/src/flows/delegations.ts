@@ -160,7 +160,7 @@ export async function createDelegation(args: {
     .limit(1);
 
   const delegation = await db.transaction(async (tx) => {
-    const [row] = await tx
+    const row = (await tx
       .insert(t)
       .values({
         orgId,
@@ -171,7 +171,7 @@ export async function createDelegation(args: {
         reason: args.reason?.trim() || null,
         createdBy: fromUserId,
       })
-      .returning();
+      .returning())[0]!;
     // Append-only audit trail for the grant of approval authority: who
     // delegated to whom, over which window (the row carries no amount limit —
     // delegation never raises authority, so there is none to record).

@@ -74,7 +74,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                   ${JSON.stringify({ phase: "attachments" })}::jsonb)
           returning id
         `));
-        const runId = started.rows[0].id;
+        const runId = started.rows[0]!.id;
         try {
           const summary = await importNetSuiteAttachments({
             org: orgId,

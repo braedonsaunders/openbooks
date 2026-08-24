@@ -93,10 +93,10 @@ function treemapColor(pct: number): string {
   ]
   const p = Math.max(0, Math.min(100, pct))
   for (let i = 1; i < stops.length; i++) {
-    if (p <= stops[i][0]) {
-      const [p0, c0] = stops[i - 1], [p1, c1] = stops[i]
+    if (p <= stops[i]![0]) {
+      const [p0, c0] = stops[i - 1]!, [p1, c1] = stops[i]!
       const t = (p - p0) / (p1 - p0)
-      const c = c0.map((v, j) => Math.round(v + (c1[j] - v) * t))
+      const c = c0.map((v: number, j: number) => Math.round(v + (c1[j]! - v) * t))
       return `rgb(${c[0]},${c[1]},${c[2]})`
     }
   }
@@ -475,7 +475,7 @@ function useForecasts(data: UtilizationData) {
       if (s.length < 2) return { projected: s[s.length - 1] || 0, trend: 0 }
       const n = s.length
       let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
-      for (let i = 0; i < n; i++) { sumX += i; sumY += s[i]; sumXY += i * s[i]; sumXX += i * i }
+      for (let i = 0; i < n; i++) { sumX += i; sumY += s[i]!; sumXY += i * s[i]!; sumXX += i * i }
       const denom = n * sumXX - sumX * sumX
       if (denom === 0) return { projected: s[s.length - 1] || 0, trend: 0 }
       const slope = (n * sumXY - sumX * sumY) / denom

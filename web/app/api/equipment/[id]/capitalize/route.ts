@@ -71,11 +71,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       insert into fixed_assets
         (org_id, subsidiary_id, category_id, asset_number, name, description, status,
          acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
-      values (${orgId}, ${ownedSub.rows[0].id}, ${categoryId}, ${assetNumber}, ${unit.name},
+      values (${orgId}, ${ownedSub.rows[0]!.id}, ${categoryId}, ${assetNumber}, ${unit.name},
               ${unit.description}, ${status}, ${unit.acquired_on}, ${unit.in_service_on},
               ${acquisitionCost}, '0', ${unit.serial_number}, ${userId}, ${userId})
       returning id`))
-    const newId = ins.rows[0].id
+    const newId = ins.rows[0]!.id
     await tx.execute(sql`
       update equipment_units set fixed_asset_id = ${newId}, updated_at = now(), updated_by = ${userId}
        where id = ${id} and org_id = ${orgId}`)

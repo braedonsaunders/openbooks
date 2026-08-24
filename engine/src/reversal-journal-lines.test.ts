@@ -65,7 +65,7 @@ test("reversalJournalLines negates amounts and quantity and preserves unit and c
 });
 
 test("reversalJournalLines keeps null quantity", () => {
-  const [reversal] = reversalJournalLines(
+  const reversal = reversalJournalLines(
     [
       {
         lineNumber: 1,
@@ -91,7 +91,7 @@ test("reversalJournalLines keeps null quantity", () => {
       },
     ],
     { entryId: ENTRY_ID, orgId: ORG_ID },
-  );
+  )[0]!;
 
   assert.equal(reversal.quantity, null);
   assert.equal(reversal.unit, null);

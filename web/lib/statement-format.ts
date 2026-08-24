@@ -37,7 +37,7 @@ export function toDecimalUnits(value: string | number): bigint {
     exp = parseInt(em[1]!, 10)
     str = str.slice(0, em.index)
   }
-  let [intPart, fracPart = ''] = str.split('.')
+  let [intPart = '', fracPart = ''] = str.split('.')
   if (exp > 0) {
     fracPart = fracPart.padEnd(exp, '0')
     intPart = intPart + fracPart.slice(0, exp)

@@ -478,7 +478,7 @@ test("bill release combines insurance and lien-waiver control", () => {
     asOf: ASOF,
   });
   assert.equal(lapsed.decision, "blocked");
-  assert.ok(lapsed.reasons[0].includes("General Liability"));
+  assert.ok(lapsed.reasons[0]!.includes("General Liability"));
 });
 
 test("a non-blocking failure warns instead of blocking, and advisory stays silent", () => {

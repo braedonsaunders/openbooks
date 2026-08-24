@@ -403,7 +403,7 @@ async function postRevaluationEntry(
         values (${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${postingDate}, ${periodIdForEntry},
                 ${memo}, 'draft', 'fx_revaluation', ${reversesEntryId}, ${actorId}, ${actorId})
         returning id`));
-      const eid = entryRes.rows[0].id;
+      const eid = entryRes.rows[0]!.id;
       for (let i = 0; i < entryLines.length; i++) {
         const l = entryLines[i]!;
         await tx.execute(sql`

@@ -85,7 +85,7 @@ function decodeDataUrl(url: string): Buffer | null {
   const m = /^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/.exec(url)
   if (!m) return null
   try {
-    return Buffer.from(m[1], 'base64')
+    return Buffer.from(m[1]!, 'base64')
   } catch {
     return null
   }

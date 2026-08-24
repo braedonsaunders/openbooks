@@ -165,7 +165,7 @@ export function PayrollOnboardingWizard(props: {
     () => STEP_ORDER.filter((step) => step !== 'vendors' || vendorKeys.length > 0),
     [vendorKeys],
   )
-  const step = steps[stepIdx]
+  const step = steps[stepIdx]!
 
   const hasSchedule = props.schedules.length > 0 || createdSchedule !== null
     || (data?.setup.checks.some((c) => c.code === 'setup.schedule' && c.ok) ?? false)

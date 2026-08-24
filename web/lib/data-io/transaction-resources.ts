@@ -183,7 +183,7 @@ async function writeTransactions(
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
-    const src = rows[i]
+    const src = rows[i]!
     try {
       if (src.currency !== undefined && !multiCurrencyOn) {
         outcome.failed++
@@ -291,7 +291,7 @@ async function writeTransactions(
       await db.insert(schema.documentLines).values(
         built.map((l, idx) => ({
           orgId: ctx.orgId,
-          documentId: doc.id,
+          documentId: doc!.id,
           lineNumber: idx + 1,
           accountId: l.accountId,
           description: l.description,
@@ -303,7 +303,7 @@ async function writeTransactions(
 
       if (ctx.post && deps) {
         try {
-          await postDocument(doc.id, deps)
+          await postDocument(doc!.id, deps)
         } catch (e) {
           // Draft persists for review; report why posting failed.
           outcome.created++

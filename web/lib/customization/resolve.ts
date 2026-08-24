@@ -243,7 +243,7 @@ function mergeCustomFieldsIntoView(
   const actionsIdx = view.columns.findIndex((c) => c.key === "_actions");
   if (actionsIdx !== -1 && actionsIdx !== view.columns.length - 1) {
     const [actions] = view.columns.splice(actionsIdx, 1);
-    view.columns.push(actions);
+    view.columns.push(actions!);
   }
   return view;
 }

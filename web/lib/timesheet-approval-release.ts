@@ -27,7 +27,7 @@ export async function releaseTimesheetWeekApproval(
   if (!parsed) throw new Error(`unknown timesheet week: ${subjectId}`)
   const from = parsed.weekStart
   const to = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`))
-  const through = to.rows[0].d
+  const through = to.rows[0]!.d
 
   if (outcome === 'approved') {
     await approveSubmittedTimeEntries({

@@ -66,12 +66,12 @@ test("a mid-period registration reports the straddling quarter, but only its reg
     ["2026-04-01", "2026-07-01", "2026-10-01"],
   );
   // Q2's return covers only 1 May onwards — April predates the registration.
-  assert.equal(calendar[0].periodStart, "2026-04-01");
-  assert.equal(calendar[0].reportableFrom, "2026-05-01");
-  assert.equal(calendar[0].reportableTo, "2026-06-30");
+  assert.equal(calendar[0]!.periodStart, "2026-04-01");
+  assert.equal(calendar[0]!.reportableFrom, "2026-05-01");
+  assert.equal(calendar[0]!.reportableTo, "2026-06-30");
   // A fully-covered period reports its whole span.
-  assert.equal(calendar[1].reportableFrom, "2026-07-01");
-  assert.equal(calendar[1].reportableTo, "2026-09-30");
+  assert.equal(calendar[1]!.reportableFrom, "2026-07-01");
+  assert.equal(calendar[1]!.reportableTo, "2026-09-30");
 });
 
 test("a mid-period de-registration stops reporting on the day it ends", () => {
@@ -95,8 +95,8 @@ test("a mid-period de-registration stops reporting on the day it ends", () => {
   );
   // The final return covers 1–15 April only; activity after de-registration
   // must not be swept into it.
-  assert.equal(calendar[1].reportableFrom, "2026-04-01");
-  assert.equal(calendar[1].reportableTo, "2026-04-15");
+  assert.equal(calendar[1]!.reportableFrom, "2026-04-01");
+  assert.equal(calendar[1]!.reportableTo, "2026-04-15");
 });
 
 test("empty/invalid ranges yield no periods", () => {
@@ -133,8 +133,8 @@ test("filing calendar expands registrations and honors effective windows", () =>
   const calendar = buildFilingCalendar(regs, "2026-01-01", "2026-12-31");
   // CA: 4 quarters. GB: 2 quarters (Q3, Q4). Total 6, sorted by period end.
   assert.equal(calendar.length, 6);
-  assert.equal(calendar[0].returnFormCode, "CA_GST34"); // Q1 ends first
+  assert.equal(calendar[0]!.returnFormCode, "CA_GST34"); // Q1 ends first
   const gb = calendar.filter((o) => o.country === "GB");
   assert.equal(gb.length, 2);
-  assert.equal(gb[0].periodStart, "2026-07-01");
+  assert.equal(gb[0]!.periodStart, "2026-07-01");
 });

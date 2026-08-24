@@ -148,7 +148,7 @@ test("Xero trial-balance month-ends follow the org calendar", async (t) => {
   const source = new XeroSource({
     get: async (path: string, params: Record<string, string> = {}) => {
       assert.equal(path, "Reports/TrialBalance");
-      dates.push(params.date);
+      dates.push(params.date!);
       return { Reports: [{ Rows: [] }] };
     },
   } as unknown as XeroClient, { orgId });

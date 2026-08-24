@@ -154,7 +154,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       orgId,
       actorId,
       origin: "overhead_applied",
-      entryNumber: `OVH-${postingDate}-${carried[0].slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+      entryNumber: `OVH-${postingDate}-${carried[0]!.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
       postingDate,
       memo: "Overhead applied with approved hours (net-zero pair)",
       lines,

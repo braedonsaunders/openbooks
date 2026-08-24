@@ -371,7 +371,12 @@ test("NACHA record layout — every field at its published offset", () => {
   assert.equal(records.length, 10, "blocked to a multiple of ten");
   for (const record of records) assert.equal(record.length, 94);
 
-  const [header, batch, first, second, batchControl, fileControl] = records as string[];
+  const header = records[0]!;
+  const batch = records[1]!;
+  const first = records[2]!;
+  const second = records[3]!;
+  const batchControl = records[4]!;
+  const fileControl = records[5]!;
 
   // File header (1).
   assert.equal(header.slice(0, 1), "1");

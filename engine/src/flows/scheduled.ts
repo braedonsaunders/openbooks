@@ -172,7 +172,7 @@ async function executeScheduledRun(
   warnings: string[],
   submitterUserId?: string | null,
 ): Promise<string | null> {
-  const [run] = await db
+  const run = (await db
     .insert(schema.flowRuns)
     .values({
       orgId: flow.orgId,
@@ -186,7 +186,7 @@ async function executeScheduledRun(
           ? {}
           : (JSON.parse(JSON.stringify(evalCtx.values)) as Record<string, unknown>),
     })
-    .returning({ id: schema.flowRuns.id });
+    .returning({ id: schema.flowRuns.id }))[0]!;
 
   const adapter = getFlowAdapter(flow.subjectKind);
   let failedText: string | null = null;

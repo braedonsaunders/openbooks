@@ -61,7 +61,7 @@ export async function POST(request: Request) {
                   ${upload.hash}, ${gate.user.id}, ${gate.user.id})
           returning id
         `))
-        const id = inserted.rows[0].id
+        const id = inserted.rows[0]!.id
         await tx.execute(sql`
           insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
           values (${gate.user.orgId}, ${id}, 'uploaded',

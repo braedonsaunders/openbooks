@@ -64,7 +64,7 @@ async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise
          and regexp_replace(lower(tax_id.value), '[^a-z0-9]', '', 'g') = ${taxKey}
        limit 2
     `));
-    if (tax.rows.length === 1) return tax.rows[0].id;
+    if (tax.rows.length === 1) return tax.rows[0]!.id;
   }
   if (!capture.vendorName) return null;
   const alias = normalizedKey(capture.vendorName);
@@ -74,7 +74,7 @@ async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise
        and match->>'alias' = ${alias}
      order by confirmation_count desc limit 2
   `));
-  if (learned.rows.length === 1 && learned.rows[0].id) return learned.rows[0].id;
+  if (learned.rows.length === 1 && learned.rows[0]!.id) return learned.rows[0]!.id;
   const exact = (await db.execute<{ id: string }>(sql`
     select p.id from parties p
     join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
@@ -85,7 +85,7 @@ async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise
       )
     limit 2
   `));
-  return exact.rows.length === 1 ? exact.rows[0].id : null;
+  return exact.rows.length === 1 ? exact.rows[0]!.id : null;
 }
 
 async function resolvePurchaseOrder(
@@ -102,7 +102,7 @@ async function resolvePurchaseOrder(
        and (${capture.currency}::text is null or currency = ${capture.currency})
      limit 2
   `));
-  return result.rows.length === 1 ? result.rows[0].id : null;
+  return result.rows.length === 1 ? result.rows[0]!.id : null;
 }
 
 type PoLine = {
@@ -144,7 +144,7 @@ async function mapLines(
         issues.push(issue("po_line_unmatched", "blocking", { lineIndex }));
         return line;
       }
-      const po = candidates[0];
+      const po = candidates[0]!;
       used.add(po.id);
       for (const quantityIssue of validatePurchaseOrderQuantities({
         invoiceQuantity: line.quantity,
@@ -204,7 +204,7 @@ async function mapLines(
   const validAccounts = new Set(accountResult.rows.map((row) => row.id));
   const lines: CaptureLine[] = [];
   for (let lineIndex = 0; lineIndex < capture.lines.length; lineIndex += 1) {
-    const line = capture.lines[lineIndex];
+    const line = capture.lines[lineIndex]!;
     const itemId = line.itemId && itemAccounts.has(line.itemId) ? line.itemId : null;
     const candidates = [
       line.accountId,
@@ -301,7 +301,7 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
             ${settings?.model ?? "prebuilt-invoice"}, '2024-11-30', ${input.actorId ?? item.created_by})
     returning id
   `));
-  const runId = run.rows[0].id;
+  const runId = run.rows[0]!.id;
   try {
     if (!settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
     const blob = await loadCaptureBlob(input.orgId, item.file_id);
@@ -393,7 +393,7 @@ async function nextDocumentNumber(tx: SqlExecutor, orgId: string, kind: string, 
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
   `));
-  const row = result.rows[0];
+  const row = result.rows[0]!;
   return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
 }
 
@@ -528,9 +528,9 @@ export async function materializeCapture(input: {
               ${capture.total}, ${input.actorId}, ${input.actorId})
       returning id
     `));
-    const documentId = inserted.rows[0].id;
+    const documentId = inserted.rows[0]!.id;
     for (let index = 0; index < capture.lines.length; index += 1) {
-      const line = capture.lines[index];
+      const line = capture.lines[index]!;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                     quantity, unit, unit_price, amount, tax_amount, tax_overridden,

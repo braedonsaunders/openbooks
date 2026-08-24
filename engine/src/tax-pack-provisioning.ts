@@ -247,7 +247,7 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
       returning id`));
     await args.tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${args.orgId}, 'tax_rates', ${insertedRate.rows[0].id}, 'insert',
+      values (${args.orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
               ${JSON.stringify({ source: "tax_setup", pack: args.packCode, taxCode: args.definition.code, refreshed: true, after: rate })}::jsonb,
               ${args.actorId})`);
   }
@@ -331,7 +331,7 @@ async function recordCountryPackInstallations(
       `));
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'tax_country_pack_installations', ${installed.rows[0].id}, 'insert',
+        values (${orgId}, 'tax_country_pack_installations', ${installed.rows[0]!.id}, 'insert',
                 ${JSON.stringify({ source: "tax_setup", after: { packCode: pack.code, country: pack.country, version: pack.version, contentHash: hash, status: "active", completeness: pack.completeness } })}::jsonb,
                 ${actorId})`);
     }
@@ -540,7 +540,7 @@ async function provisionTaxPacksInTenant(
             returning id`));
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_rates', ${insertedRate.rows[0].id}, 'insert',
+            values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
                     ${JSON.stringify({ source: "tax_setup", pack: pack.code, taxCode: def.code, after: rate })}::jsonb,
                     ${actorId})`);
         }
@@ -671,7 +671,7 @@ async function provisionTaxPacksInTenant(
           taxCodesCreated++;
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_codes', ${code.rows[0].id}, 'insert',
+            values (${orgId}, 'tax_codes', ${code.rows[0]!.id}, 'insert',
                     ${JSON.stringify({ source: "tax_setup", after: { code: def.code, name: def.name, jurisdictionCode, country: subdivision.country, region: subdivision.region, appliesTo: "both", isActive: true } })}::jsonb,
                     ${actorId})`);
           for (const rate of def.rates) {
@@ -682,7 +682,7 @@ async function provisionTaxPacksInTenant(
               returning id`));
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'tax_rates', ${insertedRate.rows[0].id}, 'insert',
+              values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
                       ${JSON.stringify({ source: "tax_setup", taxCode: def.code, after: rate })}::jsonb,
                       ${actorId})`);
           }

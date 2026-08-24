@@ -51,10 +51,10 @@ export async function buildChangeSet(
   const seedRes = (await db.execute(sql`select sandbox_seed from orgs where id = ${row.org_id}`)) as any;
   const seed = assertUuid(seedRes.rows[0].sandbox_seed);
 
-  const [cs] = await db
+  const cs = (await db
     .insert(schema.changeSets)
     .values({ orgId: prod, sandboxOrgId: sbx, name, status: "draft", createdBy: createdBy ?? null })
-    .returning({ id: schema.changeSets.id });
+    .returning({ id: schema.changeSets.id }))[0]!;
 
   // Which promotable tables actually exist and carry org_id + id.
   const present = (await db.execute(sql`

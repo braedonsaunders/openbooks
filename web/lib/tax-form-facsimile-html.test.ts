@@ -33,7 +33,7 @@ test('amounts format with separators, 2 decimals, and parentheses for negatives'
 })
 
 test('facsimile renders every box with its line number, label and amount', () => {
-  const html = renderTaxFormFacsimileHtml(result(), TAX_FORM_LAYOUTS.CA_GST34, { orgName: 'Example Organization' })
+  const html = renderTaxFormFacsimileHtml(result(), TAX_FORM_LAYOUTS.CA_GST34!, { orgName: 'Example Organization' })
   assert.match(html, /Canada Revenue Agency/)
   assert.match(html, /NET TAX CALCULATION/)
   assert.match(html, /1,837,186\.50/)
