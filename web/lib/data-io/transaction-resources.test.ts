@@ -441,6 +441,81 @@ test('transaction import preserves an exact decimal string inside JSON lines', a
   assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
 })
 
+test('transaction import line amounts hold exact decimal values at the boundary', async (t) => {
+  const rejectAmount = async (amount: unknown) => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      account: '5000',
+      amount,
+    })
+
+    assert.equal(outcome.created, 0)
+    assert.equal(outcome.failed, 1)
+    assert.deepEqual(outcome.errors, [
+      {
+        row: 1,
+        message:
+          'line amount "' +
+          String(amount) +
+          '" must be an exact decimal string with at most 4 decimal places',
+      },
+    ])
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+    assert.deepEqual(importState.lines, [])
+  }
+
+  await t.test('rejects a fifth decimal place instead of rounding it away', async () => {
+    await rejectAmount('999999999999998.99001')
+  })
+
+  await t.test('rejects scientific-notation text', async () => {
+    await rejectAmount('1e3')
+  })
+
+  await t.test('rejects non-numeric text', async () => {
+    await rejectAmount('NaN')
+  })
+
+  await t.test('preserves a negative amount exactly', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      lines: '[{"account":"5000","amount":"-100.5"}]',
+    })
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.lines[0]?.amount, '-100.5000')
+  })
+
+  await t.test('stores zero as the canonical four-decimal zero', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      lines: '[{"account":"5000","amount":"-0"}]',
+    })
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.lines[0]?.amount, '0.0000')
+  })
+
+  await t.test('canonicalizes an explicit plus sign and leading zeros', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      lines: '[{"account":"5000","amount":"+0007.25"}]',
+    })
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.lines[0]?.amount, '7.2500')
+  })
+})
+
 test('transaction import preserves XLSX cell provenance at the write boundary', async (t) => {
   const [numericRow, numericFormulaRow, textRow, textFormulaRow, debitCreditFormulaRow, nestedFormulaRow, sharedNestedFormulaRow] =
     await xlsxTransactionRows()
