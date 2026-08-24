@@ -108,35 +108,87 @@ function sha256(s: string): string {
 }
 
 /**
- * A published migration is immutable, but a baseline can be REBASELINED:
- * regenerated from a schema-only dump of the database it builds, so its bytes
- * change while the schema it produces does not. An install that already ran
- * the old bytes needs its recorded digest restamped, or bootstrap would refuse
- * to start forever.
+ * Published migrations are immutable except for an exact, reviewed digest
+ * transition. A restamp is limited to a schema-equivalent rebaseline whose
+ * before/after dumps match. A reapply is limited to a corrective revision that
+ * is deliberately idempotent against the old migration's successful state.
  *
- * This is deliberately a fixed table of digest pairs rather than a bypass
- * flag. Adding a transition is a reviewable diff that names both digests, and
- * a rebaseline only earns an entry once both files have been applied to the
- * pinned PostgreSQL image and their dumps compared byte for byte. Any other
+ * This is a fixed table of digest pairs rather than a bypass flag. Each entry
+ * names both byte identities and its one permitted strategy; every other
  * mismatch still fails closed.
  */
-const REBASELINED: ReadonlyArray<{
+const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   filename: string;
   from: string;
   to: string;
+  strategy: "restamp" | "reapply";
   reason: string;
 }> = [
   {
     filename: "generated/0001_baseline.sql",
     from: "74a3b21e956f2f02334f5245f54b37fe235af732a8eb3345d86a9ea9611df007",
     to: "780dfaf134f8d98a40c5e9d143291c161194fec196151aca30d1d4f6f4fbade6",
+    strategy: "restamp",
     reason:
       "regenerated from a dump of the database it builds: twelve payroll views "
       + "gained the tenant filter the refresh function already applied, "
       + "entitlement_plans regained base-table column order, and hand-appended "
       + "objects returned to pg_dump order. Verified: dumps identical.",
   },
+  {
+    filename: "generated/0010_bank_statement_source_evidence.sql",
+    from: "577f345ac58b2b585fce5802f2895234c2a0494e2835677ad223d735280e2ec6",
+    to: "0f36b431a4574d340da65f401fdac15f2e5a92339118d2a2d041529c495be631",
+    strategy: "reapply",
+    reason:
+      "the original migration could only be recorded after every statement "
+      + "already had source evidence and raw_file_ref was NOT NULL. Reapplying "
+      + "the corrective revision therefore creates no legacy-gap attestations "
+      + "on that database and safely refreshes the evidence catalog comment.",
+  },
 ];
+
+async function executeTrackedMigration(
+  filename: string,
+  content: string,
+  digest: string,
+  recordedDigest?: string,
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query(content);
+    // pg_dump-style baselines intentionally clear search_path while creating
+    // fully qualified objects. Restore the application default before this
+    // pooled session is returned to callers that execute reviewed SQL files.
+    await client.query("set search_path = public, pg_catalog");
+    await client.query("set row_security = on");
+    if (recordedDigest) {
+      const updated = await client.query(
+        `update public._applied_migrations
+            set sha256 = $1, applied_at = now()
+          where filename = $2 and sha256 = $3`,
+        [digest, filename, recordedDigest],
+      );
+      if (updated.rowCount !== 1) {
+        throw new Error("migration digest changed during approved revision");
+      }
+    } else {
+      await client.query(
+        "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
+        [filename, digest],
+      );
+    }
+    await client.query("commit");
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw new Error(
+      `[bootstrap] ${filename} failed: ${(err as Error).message}`,
+    );
+  } finally {
+    client.release();
+  }
+}
 
 async function applyTracked(
   label: string,
@@ -150,22 +202,26 @@ async function applyTracked(
   if (seen.rows.length > 0) {
     const recorded = seen.rows[0].sha256;
     if (recorded !== digest) {
-      const rebaseline = REBASELINED.find(
+      const transition = APPROVED_MIGRATION_TRANSITIONS.find(
         (entry) =>
           entry.filename === filename
           && entry.from === recorded
           && entry.to === digest,
       );
-      if (!rebaseline) {
+      if (!transition) {
         throw new Error(
           `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
         );
       }
       console.log(
-        `[bootstrap] ${filename} was rebaselined (${recorded.slice(0, 12)} -> `
-        + `${digest.slice(0, 12)}); the schema it builds is unchanged, restamping`,
+        `[bootstrap] ${filename} has an approved ${transition.strategy} transition (`
+        + `${recorded.slice(0, 12)} -> ${digest.slice(0, 12)})`,
       );
-      console.log(`[bootstrap]   ${rebaseline.reason}`);
+      console.log(`[bootstrap]   ${transition.reason}`);
+      if (transition.strategy === "reapply") {
+        await executeTrackedMigration(filename, content, digest, recorded);
+        return;
+      }
       await db.execute(sql`
         update public._applied_migrations
            set sha256 = ${digest}
@@ -176,28 +232,7 @@ async function applyTracked(
     return;
   }
   console.log(`[bootstrap] applying ${label}: ${filename}`);
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query(content);
-    // pg_dump-style baselines intentionally clear search_path while creating
-    // fully qualified objects. Restore the application default before this
-    // pooled session is returned to callers that execute reviewed SQL files.
-    await client.query("set search_path = public, pg_catalog");
-    await client.query("set row_security = on");
-    await client.query(
-      "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
-      [filename, digest],
-    );
-    await client.query("commit");
-  } catch (err) {
-    await client.query("rollback").catch(() => {});
-    throw new Error(
-      `[bootstrap] ${filename} failed: ${(err as Error).message}`,
-    );
-  } finally {
-    client.release();
-  }
+  await executeTrackedMigration(filename, content, digest);
 }
 
 async function migrate(): Promise<void> {
