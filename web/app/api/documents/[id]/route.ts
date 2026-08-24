@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
-import { getAuthz, can } from '../../../../lib/authz'
+import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import {
@@ -29,11 +29,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
 
   // Org-scoped existence + kind lookup BEFORE anything is disclosed.
-  const owned = (await db.execute<{ kind: string }>(
-    sql`select kind from documents where id = ${id} and org_id = ${authz.user.orgId}`,
+  const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
+    sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Subsidiary scope before anything else about the record is disclosed —
+  // an out-of-scope document reads exactly like a nonexistent one.
+  const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
@@ -66,13 +70,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = authz.user
   const { id } = await params
 
-  const owned = (await db.execute<(DocumentEditCurrent)>(
+  const owned = (await db.execute<(DocumentEditCurrent & { subsidiaryId: string | null })>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-               document_date as "documentDate", updated_at as "updatedAt"
+               document_date as "documentDate", updated_at as "updatedAt",
+               subsidiary_id as "subsidiaryId"
           from documents where id = ${id} and org_id = ${user.orgId}`,
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, row.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
@@ -107,6 +114,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as DocumentEditInput
+  // A restricted caller may not re-home a record into a subsidiary they
+  // cannot see — even one that exists and is active.
+  if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
+    return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+  }
   // Stored inventory / assembly / kit lines stay. Turning Inventory off must
   // 404 a write that would persist a new one of those kinds.
   if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
@@ -160,11 +172,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
-  const owned = (await db.execute<{ kind: string }>(
-    sql`select kind from documents where id = ${id} and org_id = ${authz.user.orgId}`,
+  const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
+    sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
   ))
   const row = owned.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }

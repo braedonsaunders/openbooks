@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadRelatedTransactionDrawerData } from '../../../../../components/related-transaction-drawer'
 
@@ -17,6 +19,15 @@ export async function GET(
   if (!isUuid(partyId) || !transactionId || !isUuid(transactionId) || !kind) {
     return NextResponse.json({ error: 'invalid transaction selection' }, { status: 400 })
   }
+
+  // The party is the record boundary (the loader separately enforces the
+  // transaction's own subsidiary + org scope).
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${authz.user.orgId}`,
+  ))
+  if (!scope.rows[0]) return NextResponse.json({ error: 'transaction not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (denied) return denied
 
   const data = await loadRelatedTransactionDrawerData({
     id: transactionId,

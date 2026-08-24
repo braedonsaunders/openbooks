@@ -5,7 +5,7 @@ import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
-import { getAuthz, can } from '../../../../lib/authz'
+import { getAuthz, can, guardSubsidiaryScope } from '../../../../lib/authz'
 import { controlDeps, DOC_KINDS, createPermission, isDocKindEnabled, postPermission } from '../../../../lib/documents'
 
 export const runtime = 'nodejs'
@@ -57,6 +57,8 @@ export async function POST(req: Request) {
     .from(schema.documents)
     .where(and(eq(schema.documents.id, body.documentId), eq(schema.documents.orgId, user.orgId)))
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, doc.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, doc.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }

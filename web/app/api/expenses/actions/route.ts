@@ -8,7 +8,7 @@ import {
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/control-accounts.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
-import { can, getAuthz } from '../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
@@ -20,12 +20,18 @@ export const runtime = 'nodejs'
  * and the record flyout → /api/flows/gates/decide), not this route.
  */
 
-/** The document must be an expense report in the caller's org. */
-async function expenseReport(id: string, orgId: string) {
-  const r = (await db.execute<{ id: string; status: string }>(
-    sql`select id, status from documents where id = ${id} and kind = 'expense_report' and org_id = ${orgId}`,
+/**
+ * The document must be an expense report in the caller's org AND inside the
+ * caller's subsidiary scope — submit and post both resolve through here, so a
+ * restricted caller can never route an out-of-scope report to the GL.
+ */
+async function expenseReport(id: string, authz: Authz) {
+  const r = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(
+    sql`select id, status, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`,
   ))
-  return r.rows[0] ?? null
+  const row = r.rows[0]
+  if (!row) return null
+  return guardSubsidiaryScope(authz, row.subsidiaryId) ? null : row
 }
 
 export async function POST(req: Request) {
@@ -52,7 +58,7 @@ export async function POST(req: Request) {
         if (!can(authz, 'expenses.create')) {
           return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
         }
-        if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
+        if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
         const { gated, runId, flowError, autoApproved } =
@@ -72,7 +78,7 @@ export async function POST(req: Request) {
         if (!body.documentId) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const expense = await expenseReport(body.documentId, user.orgId)
+        const expense = await expenseReport(body.documentId, authz)
         if (!expense) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         if (expense.status !== 'approved') {
           return NextResponse.json(

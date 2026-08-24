@@ -6,7 +6,7 @@ import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
-import { can, getAuthz } from '../../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { createPermission, isDocKindEnabled, postPermission } from '../../../../../lib/documents'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -38,13 +38,15 @@ export async function POST(
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const found = (await db.execute<{ kind: string }>(sql`
-    select kind
+  const found = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
+    select kind, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
   const doc = found.rows[0]
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(authz, doc.subsidiaryId)
+  if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, doc.kind))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }

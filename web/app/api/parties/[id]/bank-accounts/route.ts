@@ -5,7 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { encryptAccountNumber } from '@openbooks/engine/src/payments.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
@@ -53,6 +53,15 @@ function validateBody(body: Body, creating: boolean): string | null {
   return null
 }
 
+/** Party record boundary shared by every verb here (null-subsidiary parties are org-wide). */
+async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {
+  const row = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${gate.user.orgId}`,
+  ))
+  if (!row.rows[0]) return NextResponse.json({ error: 'party not found' }, { status: 404 })
+  return guardSubsidiaryScope(gate, row.rows[0].subsidiaryId, { orgWideNull: true })
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('parties.manage')
   if (gate instanceof NextResponse) return gate
@@ -60,10 +69,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: partyId } = await params
   if (!isUuid(partyId)) return NextResponse.json({ error: 'bad party id' }, { status: 400 })
 
-  const owned = (await db.execute(
-    sql`select 1 from parties where id = ${partyId} and org_id = ${user.orgId}`,
-  ))
-  if (owned.rows.length === 0) return NextResponse.json({ error: 'party not found' }, { status: 404 })
+  const scopeDenied = await denyOutsidePartyScope(gate, partyId)
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -118,6 +125,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
+  const partyDenied = await denyOutsidePartyScope(gate, partyId)
+  if (partyDenied) return partyDenied
   const existing = (await db.execute<{ approvalStatus: string; updatedAt: Date }>(sql`
     select approval_status as "approvalStatus", updated_at as "updatedAt"
       from party_bank_accounts
@@ -237,6 +246,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
+  const partyDenied = await denyOutsidePartyScope(gate, partyId)
+  if (partyDenied) return partyDenied
   const parsedBody3 = await parseJsonBody(req, jsonObject);
   if (!parsedBody3.ok) return parsedBody3.response;
   const body = (parsedBody3.data) as Body

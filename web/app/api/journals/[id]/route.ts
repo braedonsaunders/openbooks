@@ -5,7 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { loadJournalDoc } from '../../../../lib/journals'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
@@ -17,6 +17,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
+  ))
+  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+  if (denied) return denied
   const journal = await loadJournalDoc(id, gate.user.orgId)
   if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(journal)
@@ -60,10 +66,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute<{ status: string }>(
-    sql`select status from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
+  const existing = (await db.execute<{ status: string; subsidiaryId: string | null }>(
+    sql`select status, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
   ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+  if (denied) return denied
   if (existing.rows[0].status !== 'draft') {
     return NextResponse.json(
       { error: `a ${existing.rows[0].status} journal cannot be edited — create a correcting journal instead` },
@@ -77,6 +85,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     ...(body.subsidiaryId ? [body.subsidiaryId] : []),
     ...(body.lines ?? []).flatMap((line) => line.subsidiaryId ? [line.subsidiaryId] : []),
   ])]
+  // A restricted caller may not move a journal (header or any leg) to a
+  // subsidiary they cannot see — even one that exists and is active.
+  if (requestedSubsidiaries.length && !subsidiariesInScope(gate, requestedSubsidiaries)) {
+    return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
+  }
   if (requestedSubsidiaries.length) {
     const subsidiaries = ((await db.execute(sql`
       select id from subsidiaries
@@ -194,10 +207,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const owned = (await db.execute(
-    sql`select 1 from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
   ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+  if (denied) return denied
   try {
     await deleteDocument(id, gate.user.id, gate.user.orgId)
     return NextResponse.json({ ok: true })

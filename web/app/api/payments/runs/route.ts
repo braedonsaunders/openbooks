@@ -24,6 +24,24 @@ export async function GET() {
   const gate = await guardPermission('ap.pay')
   if (gate instanceof NextResponse) return gate
 
+  // A run is visible only when every bill it pays is inside the caller's
+  // subsidiary scope — the same boundary guardPaymentRunPermission enforces
+  // per run. Null-subsidiary sources fail closed.
+  let scopeFilter = sql``
+  if (gate.allowedSubsidiaryIds) {
+    const ids = [...gate.allowedSubsidiaryIds]
+    scopeFilter = ids.length === 0
+      ? sql` and not exists (
+              select 1 from payment_run_items ri0
+               where ri0.payment_run_id = r.id and ri0.org_id = r.org_id and ri0.status <> 'cancelled')`
+      : sql` and not exists (
+              select 1
+                from payment_run_items ri0
+                join documents d0 on d0.id = ri0.source_document_id and d0.org_id = ri0.org_id
+               where ri0.payment_run_id = r.id and ri0.org_id = r.org_id and ri0.status <> 'cancelled'
+                 and (d0.subsidiary_id is null or not (d0.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))))`
+  }
+
   const runs = (await db.execute<Record<string, unknown>>(sql`
     select r.id, r.run_number, r.status, r.method, r.scheduled_for, r.exported_at, r.created_at,
            a.number as bank_number, a.name as bank_name,
@@ -32,7 +50,7 @@ export async function GET() {
       from payment_runs r
       left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
       left join payment_instructions i on i.payment_run_id = r.id and i.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId}
+     where r.org_id = ${gate.user.orgId}${scopeFilter}
      group by r.id, a.number, a.name
      order by r.created_at desc
      limit 200
@@ -49,6 +67,23 @@ export async function POST(req: Request) {
   const parsed = await parseJsonBody(req, createRunBody)
   if (!parsed.ok) return parsed.response
   const body = parsed.data
+
+  // Every selected bill is a record being read into the run: restricted
+  // callers may only select bills inside their subsidiary scope. Bills that
+  // do not resolve in this org fail closed identically.
+  if (gate.allowedSubsidiaryIds) {
+    const selected = [...new Set(body.billDocumentIds)]
+    const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      select id, subsidiary_id as "subsidiaryId" from documents
+       where org_id = ${user.orgId} and id = any(${`{${selected.join(',')}}`}::uuid[])
+    `))
+    const inScope = rows.rows.filter(
+      (row) => row.subsidiaryId !== null && gate.allowedSubsidiaryIds!.has(row.subsidiaryId),
+    )
+    if (inScope.length !== selected.length) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+  }
 
   try {
     const run = await createPaymentRun({

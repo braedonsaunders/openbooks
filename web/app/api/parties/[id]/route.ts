@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
@@ -150,6 +150,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Parties are org-wide when their primary subsidiary is null (mirrors the
+  // party lists' `is null or = any(...)` predicate).
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+  ))
+  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (denied) return denied
   const payload = await loadParty(id, gate.user.orgId)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(payload)
@@ -176,9 +184,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     customer_hold_reason: string | null
     vendor_hold: boolean
     vendor_hold_reason: string | null
+    subsidiaryId: string | null
     before: Record<string, unknown>
   }>(sql`
     select p.display_name, p.is_active, p.updated_at,
+           p.subsidiary_id as "subsidiaryId",
            coalesce(cr.is_on_hold, false) as customer_hold,
            cr.hold_reason as customer_hold_reason,
            coalesce(vr.is_on_hold, false) as vendor_hold,
@@ -194,6 +204,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      where p.id = ${id} and p.org_id = ${user.orgId}
   `))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -318,6 +330,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
        where org_id = ${user.orgId} and is_active and not is_elimination
          and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`))
     if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
+    // A restricted caller may only assign parties to subsidiaries they can see.
+    if (!subsidiariesInScope(gate, requestedSubsidiaries)) return bad('Invalid subsidiary')
   }
 
   // Native customer-level invoicing override (a real column, not custom jsonb).

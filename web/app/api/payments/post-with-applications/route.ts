@@ -8,7 +8,7 @@ import {
 } from '@openbooks/engine/src/payments.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
-import { can, getAuthz } from '../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
@@ -48,12 +48,33 @@ export async function POST(req: Request) {
   if (!parsed.ok) return parsed.response
   const { documentId, allocations } = parsed.data
 
-  const r = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
-    select kind, status from documents
+  const r = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
+    select kind, status, subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
   `))
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
+  if (scopeDenied) return scopeDenied
+  // Applied open items are record boundaries of their own — every referenced
+  // line must resolve to a document inside the caller's subsidiary scope.
+  {
+    const openLineIds = (allocations ?? []).map((a) => a.openLineId)
+    if (authz.allowedSubsidiaryIds && openLineIds.length) {
+      const targets = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        select dl.id, d.subsidiary_id as "subsidiaryId"
+          from document_lines dl
+          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+         where dl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and dl.org_id = ${authz.user.orgId}
+      `))
+      const byId = new Map(targets.rows.map((row) => [row.id, row.subsidiaryId]))
+      for (const lineId of openLineIds) {
+        if (!byId.has(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        const denied = guardSubsidiaryScope(authz, byId.get(lineId))
+        if (denied) return denied
+      }
+    }
+  }
   const perm = paymentPermission(r.rows[0].kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })

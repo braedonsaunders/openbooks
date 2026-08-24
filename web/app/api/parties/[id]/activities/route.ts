@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -17,9 +18,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({}, { status: 404 })
 
-  const party = (await db.execute(sql`
-    select 1 from parties where id=${id} and org_id=${gate.user.orgId} limit 1`))
+  // Party record boundary (null-subsidiary parties are org-wide).
+  const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`))
   if (!party.rows[0]) return NextResponse.json({}, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
 
   const url = new URL(request.url)
   const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? ''

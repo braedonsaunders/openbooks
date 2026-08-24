@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { suggestApplications } from '@openbooks/engine/src/payments.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { exactMoney, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'
 
@@ -26,6 +28,15 @@ export async function POST(req: Request) {
   const body = parsed.data
   const gate = await guardPermission(body.side === 'ap' ? 'ap.pay' : 'ar.pay')
   if (gate instanceof NextResponse) return gate
+  // The suggestion discloses a party's open items — the party is the record
+  // boundary. Null-subsidiary parties are org-wide (mirrors the party lists).
+  const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties
+     where id = ${body.partyId} and org_id = ${gate.user.orgId}
+  `))
+  if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
   try {
     const suggestion = await suggestApplications(body.partyId, body.amount, body.side, {
       reference: body.reference ?? null,

@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { subsidiaryFeatureEnabled } from "./features";
@@ -90,6 +90,21 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
     }
   }
   return out;
+}
+
+/**
+ * WHERE fragment narrowing a documents-table `column` to the caller's visible
+ * subsidiaries — the fail-closed predicate shared by every ad-hoc query that
+ * fans out over documents outside the canonical list builders (global search,
+ * party sublists, payment-run lists). Unrestricted callers get an empty
+ * fragment; an empty set denies everything (`and false`).
+ */
+export function subsidiaryVisibleFilter(column: SQL, allowed: ReadonlySet<string> | null): SQL {
+  if (!allowed) return sql``;
+  const ids = [...allowed];
+  return ids.length
+    ? sql` and ${column} = any(${`{${ids.join(',')}}`}::uuid[])`
+    : sql` and false`;
 }
 
 /**

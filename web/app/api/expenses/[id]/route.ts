@@ -6,6 +6,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
 import { DocumentEditError, validateEditableDocumentLines } from '../../../../lib/documents'
 import { loadExpenseReport } from '../../../../lib/expenses'
@@ -30,6 +31,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('expenses.read', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
+  // Subsidiary scope before anything about the report is disclosed — an
+  // out-of-scope report reads exactly like a nonexistent one.
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
+  ))
+  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId)
+  if (denied) return denied
   const report = await loadExpenseReport(id, gate.user.orgId)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(report)
@@ -45,10 +54,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = gate.user
   const { id } = await params
 
-  const existing = (await db.execute<{ status: string; document_date: string }>(
-    sql`select status, document_date from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
+  const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null }>(
+    sql`select status, document_date, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
   ))
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+  if (denied) return denied
   if (existing.rows[0].status !== 'draft') {
     return NextResponse.json(
       { error: `a ${existing.rows[0].status} expense report cannot be edited — create a correcting report instead` },
@@ -252,10 +263,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const owned = (await db.execute(
-    sql`select 1 from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
+  const owned = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
   ))
   if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+  if (denied) return denied
   try {
     await deleteDocument(id, gate.user.id, gate.user.orgId)
     return NextResponse.json({ ok: true })

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { openItemsForParty } from '@openbooks/engine/src/payments.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 
@@ -17,6 +19,15 @@ export async function GET(req: Request) {
   const gate = await guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
   if (gate instanceof NextResponse) return gate
   if (!isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+  // The party is the record boundary; null-subsidiary parties are org-wide
+  // (mirrors the party lists).
+  const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties
+     where id = ${partyId} and org_id = ${gate.user.orgId}
+  `))
+  if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
 
   try {
     const items = await openItemsForParty(partyId, side, gate.user.orgId)

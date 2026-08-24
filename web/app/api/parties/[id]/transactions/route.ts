@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
 import { isDocKindEnabled } from '../../../../../lib/documents'
 import { isUuid } from '../../../../../lib/list-params'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  // The party is the record boundary (null-subsidiary parties are org-wide);
+  // its transaction rows are additionally narrowed to the caller's visible
+  // subsidiaries, mirroring the documents lists.
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+  ))
+  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (scopeDenied) return scopeDenied
+  const documentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)
 
   const url = new URL(request.url)
   const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? ''
@@ -39,7 +51,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ${q ? sql`and (d.document_number ilike ${`%${q}%`} or coalesce(d.reference_number, '') ilike ${`%${q}%`} or coalesce(d.memo, '') ilike ${`%${q}%`})` : sql``}
     ${kind ? sql`and d.kind = ${kind}` : sql``}
     ${status ? sql`and d.status = ${status}` : sql``}
-    ${hiddenKindFilter}`
+    ${hiddenKindFilter}
+    ${documentScope}`
 
   const [rows, total, filters] = (await Promise.all([
     db.execute<Record<string, unknown>>(sql`
