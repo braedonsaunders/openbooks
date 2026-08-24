@@ -73,6 +73,13 @@ async function asJson(res: Response): Promise<any> {
   return (await jsonResponse(res)).body;
 }
 
+/** Provider credentials must never cross an HTTP redirect boundary. Even a
+ *  trusted API origin can otherwise redirect a POST (including its body and
+ *  authorization headers) to a host that was never allowlisted. */
+function providerFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 /**
  * Preserve one provider response byte-for-byte. Paginated responses are
  * wrapped as strings in a versioned JSON envelope so every original response
@@ -107,7 +114,7 @@ const GOCARDLESS_BASE = "https://bankaccountdata.gocardless.com/api/v2";
 
 async function gocardlessToken(creds: Record<string, string>): Promise<string> {
   if (!creds.secretId || !creds.secretKey) throw new FeedError("GoCardless secret_id / secret_key required");
-  const res = await fetch(`${GOCARDLESS_BASE}/token/new/`, {
+  const res = await providerFetch(`${GOCARDLESS_BASE}/token/new/`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ secret_id: creds.secretId, secret_key: creds.secretKey }),
@@ -130,7 +137,7 @@ const gocardless: BankFeedAdapter = {
   async fetch(creds, externalAccountId, sinceIso, untilIso) {
     if (!externalAccountId) throw new FeedError("GoCardless account id required");
     const token = await gocardlessToken(creds);
-    const res = await fetch(
+    const res = await providerFetch(
       `${GOCARDLESS_BASE}/accounts/${encodeURIComponent(externalAccountId)}/transactions/?date_from=${sinceIso}&date_to=${untilIso}`,
       { headers: { Authorization: `Bearer ${token}`, accept: "application/json" } },
     );
@@ -178,9 +185,10 @@ const PLAID_API_BASES = {
  * slash can turn string interpolation into a request to an arbitrary host. */
 export function plaidApiBase(environment?: string): string {
   const normalized = environment?.trim().toLowerCase() || "production";
-  const base = PLAID_API_BASES[normalized as keyof typeof PLAID_API_BASES];
-  if (!base) throw new FeedError("Plaid environment must be production or sandbox");
-  return base;
+  if (normalized !== "production" && normalized !== "sandbox") {
+    throw new FeedError("Plaid environment must be production or sandbox");
+  }
+  return PLAID_API_BASES[normalized];
 }
 
 /**
@@ -212,7 +220,7 @@ const plaid: BankFeedAdapter = {
     }
     try {
       const base = plaidApiBase(creds.env);
-      const res = await fetch(`${base}/accounts/get`, {
+      const res = await providerFetch(`${base}/accounts/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client_id: creds.clientId, secret: creds.secret, access_token: creds.accessToken }),
@@ -229,7 +237,7 @@ const plaid: BankFeedAdapter = {
     const accountOptions = externalAccountId ? { account_ids: [externalAccountId] } : {};
     const rawResponses: Uint8Array[] = [];
     const transactions = await plaidFetchAllTransactions(async (offset) => {
-      const res = await fetch(`${base}/transactions/get`, {
+      const res = await providerFetch(`${base}/transactions/get`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -271,7 +279,7 @@ const truelayer: BankFeedAdapter = {
   async test(creds) {
     if (!creds.accessToken) return { ok: false, detail: "TrueLayer access_token required" };
     try {
-      const res = await fetch("https://api.truelayer.com/data/v1/accounts", {
+      const res = await providerFetch("https://api.truelayer.com/data/v1/accounts", {
         headers: { Authorization: `Bearer ${creds.accessToken}` },
       });
       await asJson(res);
@@ -283,7 +291,7 @@ const truelayer: BankFeedAdapter = {
   async fetch(creds, externalAccountId, sinceIso, untilIso) {
     if (!externalAccountId) throw new FeedError("TrueLayer account id required");
     const today = untilIso;
-    const res = await fetch(
+    const res = await providerFetch(
       `https://api.truelayer.com/data/v1/accounts/${encodeURIComponent(externalAccountId)}/transactions?from=${sinceIso}T00:00:00Z&to=${today}T23:59:59Z`,
       { headers: { Authorization: `Bearer ${creds.accessToken}` } },
     );
