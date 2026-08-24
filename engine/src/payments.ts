@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, inDbTransaction, schema, withOrg } from "./db.ts";
+import { db, orgContext, schema, withOrg, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, normalizeDecimal, sum, toUnits } from "./money.ts";
@@ -1115,13 +1115,7 @@ export function decryptAccountNumber(stored: string): string {
 // Payment runs
 // ---------------------------------------------------------------------------
 
-/**
- * Create an EFT payment run from selected posted vendor bills: one draft
- * vendor_payment per vendor (allocating each bill's current open balance) and
- * one payment_instruction per vendor. Nothing posts until the explicit
- * post step; the CPA-005 file is generated from the instructions.
- */
-export async function createPaymentRun(opts: {
+interface CreatePaymentRunOptions {
   orgId: string;
   createdBy: string;
   paymentBankProfileId: string;
@@ -1129,7 +1123,81 @@ export async function createPaymentRun(opts: {
   scheduledFor?: string | null;
   sourceScheduleId?: string | null;
   selectionCriteria?: Record<string, unknown>;
-}): Promise<{ id: string; runNumber: string }> {
+}
+
+function postgresConstraintFailure(error: unknown): { code?: string; constraint?: string } | null {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (candidate.code || candidate.constraint) return candidate;
+    current = candidate.cause;
+  }
+  return null;
+}
+
+async function recordPaymentRunCreationChecks(
+  opts: CreatePaymentRunOptions,
+  decisions: BillReleaseDecision[],
+): Promise<void> {
+  for (const decision of decisions) {
+    if (!decision.compliance.tracked && decision.reasons.length === 0) continue;
+    await recordReleaseCheck({
+      orgId: opts.orgId,
+      partyId: decision.partyId,
+      documentId: decision.documentId,
+      stage: "run_created",
+      decision: decision.decision,
+      snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+      checkedBy: opts.createdBy,
+    });
+  }
+}
+
+/**
+ * Create an EFT payment run from selected posted vendor bills: one draft
+ * vendor_payment per vendor (allocating each bill's current open balance) and
+ * one payment_instruction per vendor. Nothing posts until the explicit
+ * post step; the CPA-005 file is generated from the instructions.
+ */
+export async function createPaymentRun(opts: CreatePaymentRunOptions): Promise<{ id: string; runNumber: string }> {
+  // This command deliberately owns its transaction: on a rejected selection,
+  // the draft artifacts roll back before compliance evidence is committed in
+  // a separate transaction. Nesting would either erase that evidence with the
+  // caller or try to write it through an already-aborted transaction.
+  if (orgContext.getStore()?.txDb) {
+    throw new PaymentError("payment run creation cannot be nested in another database transaction");
+  }
+  let releaseEvaluationCompleted = false;
+  let evaluatedReleaseDecisions: BillReleaseDecision[] = [];
+  try {
+    return await withOrgTransaction(opts.orgId, () =>
+      createPaymentRunWithinTransaction(opts, (decisions) => {
+        releaseEvaluationCompleted = true;
+        evaluatedReleaseDecisions = decisions;
+      }));
+  } catch (error) {
+    // Compliance checks are evidence that the control ran, including when the
+    // selection is blocked or a concurrent run wins the reservation. The run
+    // transaction must roll back its draft artifacts, so freeze that evidence
+    // in a fresh tenant transaction before returning the creation failure.
+    if (releaseEvaluationCompleted) {
+      await withOrgTransaction(opts.orgId, () =>
+        recordPaymentRunCreationChecks(opts, evaluatedReleaseDecisions));
+    }
+    const failure = postgresConstraintFailure(error);
+    if (failure?.code === "23505" && failure.constraint === "payment_run_items_live_source") {
+      throw new PaymentError(
+        "a selected bill or credit is already reserved by another live payment run",
+      );
+    }
+    throw error;
+  }
+}
+
+async function createPaymentRunWithinTransaction(
+  opts: CreatePaymentRunOptions,
+  onReleaseEvaluated: (decisions: BillReleaseDecision[]) => void,
+): Promise<{ id: string; runNumber: string }> {
   if (opts.billDocumentIds.length === 0) throw new PaymentError("select at least one bill to pay");
 
   const profiles = (await db.execute<{
@@ -1186,12 +1254,21 @@ export async function createPaymentRun(opts: {
        and d.payment_hold_reason is null
        and d.currency = ${profile.currency}
        and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
+       and not exists (
+         select 1
+           from payment_run_items selected
+          where selected.org_id = d.org_id
+            and selected.source_open_line_id = jl.id
+            and selected.status = 'selected'
+       )
   `));
 
   const found = new Set(bills.rows.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
-    throw new PaymentError("some selected bills are held, closed, or do not match the profile currency and subsidiary");
+    throw new PaymentError(
+      "some selected bills are held, closed, already selected in another live payment run, or do not match the profile currency and subsidiary",
+    );
   }
   const payable = bills.rows.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
@@ -1223,18 +1300,8 @@ export async function createPaymentRun(opts: {
       currency: b.currency,
     })),
   });
-  for (const decision of releaseDecisions) {
-    if (!decision.compliance.tracked && decision.reasons.length === 0) continue;
-    await recordReleaseCheck({
-      orgId: opts.orgId,
-      partyId: decision.partyId,
-      documentId: decision.documentId,
-      stage: "run_created",
-      decision: decision.decision,
-      snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
-      checkedBy: opts.createdBy,
-    });
-  }
+  onReleaseEvaluated(releaseDecisions);
+  await recordPaymentRunCreationChecks(opts, releaseDecisions);
   const blockedBills = releaseDecisions.filter((d) => d.decision === "blocked");
   if (blockedBills.length > 0) {
     throw new PaymentError(
@@ -1300,6 +1367,13 @@ export async function createPaymentRun(opts: {
          and d.currency = ${profile.currency} and jl.account_id = ${first.control_account_id}
          and d.subsidiary_id is not distinct from ${first.subsidiary_id}::uuid
          and abs(jl.amount) - coalesce(ap.applied, 0) > 0
+         and not exists (
+           select 1
+             from payment_run_items selected
+            where selected.org_id = d.org_id
+              and selected.source_open_line_id = jl.id
+              and selected.status = 'selected'
+         )
        order by d.document_date, d.document_number
     `)) : { rows: [] };
     const groupBase = vendorBills.reduce((n, b) => n + toUnits(b.open_base), 0n);
