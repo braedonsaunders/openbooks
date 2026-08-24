@@ -8,6 +8,8 @@ import { guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
 import {
   CELL_PROVENANCE_KEY,
   IMPORT_FORMATS,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
   type CellProvenance,
   type ImportFormat,
   type ImportMode,
@@ -134,8 +136,6 @@ export async function POST(req: Request) {
  * they mean. Every existing adapter reads its own declared keys and is
  * unaffected; the prior-payroll-register resource reports them.
  */
-export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
-
 /**
  * Reserved key carrying field key → the source column it came from.
  *
@@ -145,8 +145,6 @@ export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
  * reconciliation finding must be able to say "this came out of your Fed Income
  * Tax column", not repeat our own label back at them.
  */
-export const SOURCE_COLUMNS_KEY = '__sourceColumns'
-
 function duplicateMappingTarget(
   mapping: Record<string, string>,
 ): { field: string; sources: [string, string] } | null {

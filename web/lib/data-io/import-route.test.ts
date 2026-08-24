@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { DOC_KINDS } from '../document-kinds.ts'
 import type { DataResource } from './resource-core.ts'
-import { CELL_PROVENANCE_KEY } from './types.ts'
+import {
+  CELL_PROVENANCE_KEY,
+  SOURCE_COLUMNS_KEY,
+  UNMAPPED_COLUMNS_KEY,
+} from './types.ts'
 
 interface ImportRouteState {
   resource: DataResource | null
   resourceWriteCalls: number
   rootInsertCalls: number
   transactionCalls: number
+  mappedRows: Record<string, unknown>[] | null
 }
 
 const stateKey = Symbol.for('openbooks.data-import-route-test')
@@ -20,6 +26,7 @@ const importState: ImportRouteState = {
   resourceWriteCalls: 0,
   rootInsertCalls: 0,
   transactionCalls: 0,
+  mappedRows: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
@@ -176,6 +183,7 @@ importState.resource = {
   ...actualResource,
   async write(rows, mode, ctx) {
     importState.resourceWriteCalls++
+    importState.mappedRows = structuredClone(rows)
     return actualResource.write(rows, mode, ctx)
   },
 }
@@ -189,7 +197,30 @@ function resetImportState(): void {
   importState.resourceWriteCalls = 0
   importState.rootInsertCalls = 0
   importState.transactionCalls = 0
+  importState.mappedRows = null
 }
+
+test('reserved import metadata wire keys have one shared definition', async () => {
+  const files = [
+    './types.ts',
+    './parse.ts',
+    './transaction-resources.ts',
+    './prior-payroll-register-resource.ts',
+    '../../app/api/data/import/route.ts',
+  ]
+  const sources = await Promise.all(
+    files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
+  )
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  for (const key of [CELL_PROVENANCE_KEY, SOURCE_COLUMNS_KEY, UNMAPPED_COLUMNS_KEY]) {
+    const definition = new RegExp(`=\\s*(['"])${escapeRegExp(key)}\\1`, 'g')
+    const count = sources.reduce(
+      (total, source) => total + Array.from(source.matchAll(definition)).length,
+      0,
+    )
+    assert.equal(count, 1, `${key} must have exactly one production definition`)
+  }
+})
 
 async function parsedFormulaRow(kind: 'amount' | 'lines'): Promise<Record<string, unknown>> {
   const workbook = new ExcelJS.Workbook()
@@ -364,6 +395,16 @@ test('route carries renamed amount provenance into transaction validation before
   assert.equal(importState.resourceWriteCalls, 1)
   assert.equal(importState.rootInsertCalls, 0)
   assert.equal(importState.transactionCalls, 0)
+  const mappedRow = importState.mappedRows?.[0]
+  assert.ok(mappedRow)
+  assert.deepEqual(mappedRow[SOURCE_COLUMNS_KEY], {
+    documentDate: 'documentDate',
+    account: 'account',
+    amount: 'formula_amount',
+  })
+  assert.deepEqual(mappedRow[UNMAPPED_COLUMNS_KEY], {
+    literal_amount: '999999999999998.9900',
+  })
 })
 
 test('route binds provenance to the selected amount source', async () => {
@@ -384,6 +425,16 @@ test('route binds provenance to the selected amount source', async () => {
   assert.equal(importState.resourceWriteCalls, 1)
   assert.equal(importState.rootInsertCalls, 0)
   assert.equal(importState.transactionCalls, 0)
+  const mappedRow = importState.mappedRows?.[0]
+  assert.ok(mappedRow)
+  assert.deepEqual(mappedRow[SOURCE_COLUMNS_KEY], {
+    documentDate: 'documentDate',
+    account: 'account',
+    amount: 'literal_amount',
+  })
+  assert.deepEqual(mappedRow[UNMAPPED_COLUMNS_KEY], {
+    formula_amount: '999999999999999.0000',
+  })
 })
 
 test('route carries renamed nested-lines provenance into transaction validation before writes', async () => {
