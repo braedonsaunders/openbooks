@@ -2889,8 +2889,7 @@ export async function queryLotRecall(
        and (${filter.lotNumber ?? null}::text is null or l.lot_number ilike '%' || ${filter.lotNumber ?? ""} || '%')
        and (${filter.expiresOnOrBefore ?? null}::date is null or l.expires_on <= ${filter.expiresOnOrBefore ?? null}::date)
        and (${filter.includeExpiryOnly !== true} or l.expires_on is not null)
-     order by im.moved_at desc
-     limit 500`));
+     order by im.moved_at desc`));
   return r.rows;
 }
 
