@@ -12,10 +12,31 @@ import { PromptRoot } from '../lib/prompt'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('shell')
+  const description = t('meta.description')
+  const socialImage = {
+    url: '/socialmedia.png',
+    width: 1774,
+    height: 887,
+    alt: description,
+  }
   return {
+    metadataBase: new URL(process.env.OPENBOOKS_APP_URL ?? 'http://localhost:4780'),
     title: { default: 'openbooks', template: '%s · openbooks' },
-    description: t('meta.description'),
+    description,
     applicationName: 'openbooks',
+    openGraph: {
+      type: 'website',
+      siteName: 'openbooks',
+      title: 'openbooks',
+      description,
+      images: [socialImage],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'openbooks',
+      description,
+      images: [socialImage],
+    },
   }
 }
 

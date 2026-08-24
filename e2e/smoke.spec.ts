@@ -26,7 +26,7 @@ test("login succeeds and lands on the app shell", async ({ page }) => {
 });
 
 test("reports hub links to the financial statements", async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     await page.goto("/reports");
     await expect(page.locator('a[href="/reports/balance-sheet"]').first()).toBeVisible();
@@ -37,7 +37,7 @@ test("reports hub links to the financial statements", async ({ browser, baseURL 
 });
 
 test("balance sheet renders a statement table", async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     await page.goto("/reports/balance-sheet");
     await expect(page.locator("table").first()).toBeVisible();
@@ -47,7 +47,7 @@ test("balance sheet renders a statement table", async ({ browser, baseURL }) => 
 });
 
 test("AR workspace renders", async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     const res = await page.goto("/ar");
     expect(res?.status()).toBe(200);
@@ -58,7 +58,7 @@ test("AR workspace renders", async ({ browser, baseURL }) => {
 });
 
 test("indirect cash flow page renders", async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     const res = await page.goto("/reports/cash-flow-indirect");
     expect(res?.status()).toBe(200);
@@ -69,7 +69,7 @@ test("indirect cash flow page renders", async ({ browser, baseURL }) => {
 });
 
 test("income tax provisions page renders", async ({ browser, baseURL }) => {
-  const { context, page } = await authedContext(browser, baseURL!);
+  const { context, page } = await authedContext(browser, baseURL);
   try {
     const res = await page.goto("/tax/provisions");
     expect(res?.status()).toBe(200);
