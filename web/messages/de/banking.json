@@ -519,7 +519,43 @@
     }
   },
   "pspSettlements": {
-    "acceptanceNote": "Abrechnungen gleichen Auszahlungen nachträglich ab. Gehostete Zahlungslinks werden separat konfiguriert unter",
-    "acceptanceLink": "Einstellungen → Zahlungsanbieter"
+    "acceptanceNote": "Abrechnungen stimmen Auszahlungen nachträglich ab. Gehostete Zahlungslinks für die Rechnungszahlung werden separat konfiguriert unter",
+    "acceptanceLink": "Unternehmenseinstellungen → Zahlungsanbieter",
+    "title": "Zahlungsanbieter-Abrechnungen",
+    "description": "Importieren Sie Auszahlungsabrechnungen von Zahlungsanbietern. Gebühren, Streitfälle und Wechselkursanpassungen werden im Hauptbuch gebucht.",
+    "invalidJson": "Die Nutzdaten müssen gültiges JSON enthalten.",
+    "importFailed": "Die Abrechnung konnte nicht importiert werden.",
+    "postFailed": "Die Abrechnung konnte nicht gebucht werden.",
+    "reversalFailed": "Die Abrechnung konnte nicht storniert werden.",
+    "reasonTooShort": "Geben Sie einen Stornogrund mit mindestens 5 Zeichen ein.",
+    "importedToast": "Stapel {id} wurde importiert.",
+    "postedToast": "Journal {id} wurde gebucht.",
+    "reversedToast": "Kontrolliertes Stornojournal {id} wurde gebucht.",
+    "importTitle": "Abrechnung importieren",
+    "providerLabel": "Anbieter",
+    "providers": {
+      "stripe": "Stripe",
+      "adyen": "Adyen",
+      "gocardless": "GoCardless",
+      "recurly": "Recurly",
+      "chargebee": "Chargebee"
+    },
+    "externalRef": "Externe Referenz / Auszahlungs-ID",
+    "settlementDate": "Abrechnungsdatum",
+    "bankAccountId": "Bankkonto-ID",
+    "feeAccountId": "Gebührenkonto-ID",
+    "clearingAccountId": "Verrechnungskonto-ID",
+    "uuidPlaceholder": "UUID",
+    "stripePayloadLabel": "JSON-Array der Saldenbuchungen",
+    "genericPayloadLabel": "JSON-Objekt der Abrechnung",
+    "importDraft": "Entwurf importieren",
+    "recentBatches": "Letzte Stapel",
+    "reversalDate": "Stornodatum",
+    "reversalReason": "Stornogrund",
+    "reversalPlaceholder": "Erforderlicher Nachweis für eine kontrollierte Korrektur",
+    "colProvider": "Anbieter",
+    "colNet": "Netto",
+    "reverse": "Stornieren",
+    "empty": "Noch keine Abrechnungen importiert."
   }
 }
