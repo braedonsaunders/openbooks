@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withBypassContext, withOrgContext } from "./db.ts";
+import {
+  db,
+  schema,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "./db.ts";
 import { fromUnits, sum, toUnits } from "./money.ts";
 import { businessToday } from "./business-date.ts";
 import {
@@ -189,7 +195,15 @@ export async function updatePaymentBankProfile(
   input: Partial<PaymentBankProfileInput>,
 ): Promise<void> {
   await db.transaction(async (tx) => {
-    const existing = (await tx.execute<Record<string, any>>(sql`
+    const existing = (await tx.execute<Record<string, unknown> & {
+      bank_account_id: string;
+      subsidiary_id: string | null;
+      payment_format_id: string;
+      currency: string;
+      settings: Record<string, unknown>;
+      sftp_server_id: string | null;
+      originator_secrets_encrypted: string | null;
+    }>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
     `));
     if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
@@ -598,7 +612,7 @@ export function sepaOriginator(secrets: Record<string, unknown>): SepaSettings &
   };
 }
 
-function sepaDebit(ctx: FormatContext, _now: Date): { filename: string; content: string; contentType: string } {
+function sepaDebit(ctx: FormatContext): { filename: string; content: string; contentType: string } {
   const s = sepaOriginator(ctx.profile.secrets);
   const esc = (v: unknown) => String(v ?? "").replace(/[<>&'\"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '\"': "&quot;" }[c]!));
   const total = fromUnits(ctx.payments.reduce((n, p) => n + toUnits(p.amount), 0n));
@@ -622,7 +636,7 @@ async function renderPaymentFile(ctx: FormatContext, orgId: string, now: Date) {
     return loadRunFile(String(scoped.run.id), orgId, now);
   }
   if (scoped.format.rail === "nacha_debit") return { ...nachaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
-  if (scoped.format.rail === "sepa_debit") return { ...sepaDebit(scoped, now), runNumber: String(scoped.run.run_number) };
+  if (scoped.format.rail === "sepa_debit") return { ...sepaDebit(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "cheque") return { ...chequeRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail === "positive_pay") return { ...positivePayRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail !== "custom") return { ...genericRegister(scoped), runNumber: String(scoped.run.run_number) };
@@ -886,27 +900,39 @@ export async function recordPaymentSettlement(opts: {
   returnCode?: string | null;
   returnReason?: string | null;
 }): Promise<void> {
-  const row = (await db.execute<{ payment_run_id: string; payment_document_id: string | null; amount: string; currency: string; status: string }>(sql`
-    select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
-      from payment_instructions i join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
-     where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
-  `));
-  const instruction = row.rows[0];
-  if (!instruction) throw new PaymentError("payment instruction not found");
-  if (!["sent", "settled", "returned"].includes(instruction.status)) throw new PaymentError("only a sent payment can be settled or returned");
-  let reversalEntryId: string | null = null;
-  if ((opts.status === "returned" || opts.status === "rejected") && instruction.status !== "returned") {
-    if (!instruction.payment_document_id) throw new PaymentError("returned instruction has no payment document");
-    reversalEntryId = await reversePaymentForReturn(
-      instruction.payment_document_id,
-      opts.orgId,
-      opts.returnReason ?? opts.returnCode ?? "payment returned by bank",
-      opts.userId,
-      opts.effectiveOn,
-    );
-  }
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`
+  // The document-void helper participates in this tenant transaction, so its
+  // journal reversal cannot commit unless the settlement projection does too.
+  await withOrgTransaction(opts.orgId, async () => {
+    const row = (await db.execute<{
+      payment_run_id: string;
+      payment_document_id: string | null;
+      amount: string;
+      currency: string;
+      status: string;
+    }>(sql`
+      select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
+        from payment_instructions i
+        join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
+       where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
+       for update of i, r
+    `));
+    const instruction = row.rows[0];
+    if (!instruction) throw new PaymentError("payment instruction not found");
+    if (!["sent", "settled", "returned"].includes(instruction.status)) {
+      throw new PaymentError("only a sent payment can be settled or returned");
+    }
+    let reversalEntryId: string | null = null;
+    if ((opts.status === "returned" || opts.status === "rejected") && instruction.status !== "returned") {
+      if (!instruction.payment_document_id) throw new PaymentError("returned instruction has no payment document");
+      reversalEntryId = await reversePaymentForReturn(
+        instruction.payment_document_id,
+        opts.orgId,
+        opts.returnReason ?? opts.returnCode ?? "payment returned by bank",
+        opts.userId,
+        opts.effectiveOn,
+      );
+    }
+    await db.execute(sql`
       insert into payment_settlements
         (org_id, payment_instruction_id, bank_statement_line_id, status, amount, currency,
          effective_on, bank_reference, return_code, return_reason, reversal_entry_id, created_by, updated_by)
@@ -921,11 +947,11 @@ export async function recordPaymentSettlement(opts: {
         updated_at = now(), updated_by = excluded.updated_by
       where payment_settlements.org_id = ${opts.orgId}
     `);
-    await tx.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`);
+    await db.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`);
     if (opts.status === "returned") {
-      await tx.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId} and org_id = ${opts.orgId}`);
+      await db.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId} and org_id = ${opts.orgId}`);
     }
-    await tx.execute(sql`
+    await db.execute(sql`
       update payment_runs r set
         status = case
           when exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('returned', 'rejected')) then 'returned'
@@ -935,8 +961,21 @@ export async function recordPaymentSettlement(opts: {
         updated_at = now(), updated_by = ${opts.userId}
       where r.id = ${instruction.payment_run_id} and r.org_id = ${opts.orgId}
     `);
+    await event({
+      orgId: opts.orgId,
+      runId: instruction.payment_run_id,
+      instructionId: opts.instructionId,
+      actorId: opts.userId,
+      eventType: `instruction_${opts.status}`,
+      fromStatus: instruction.status,
+      toStatus: opts.status,
+      details: {
+        bankReference: opts.bankReference,
+        returnCode: opts.returnCode,
+        returnReason: opts.returnReason,
+      },
+    });
   });
-  await event({ orgId: opts.orgId, runId: instruction.payment_run_id, instructionId: opts.instructionId, actorId: opts.userId, eventType: `instruction_${opts.status}`, fromStatus: instruction.status, toStatus: opts.status, details: { bankReference: opts.bankReference, returnCode: opts.returnCode, returnReason: opts.returnReason } });
 }
 
 export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ scheduleId: string; runId?: string; selected: number; error?: string }>> {
