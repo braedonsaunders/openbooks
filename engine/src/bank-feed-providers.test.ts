@@ -95,3 +95,84 @@ test("Plaid requests refuse 307 redirects without forwarding credentials", async
     await close(attacker);
   }
 });
+
+const plaidCredentials = {
+  clientId: "client-id",
+  secret: "provider-secret",
+  accessToken: "access-token",
+  env: "sandbox",
+};
+
+test("Plaid refuses a blank account mapping before contacting the provider", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let requests = 0;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async () => {
+    requests += 1;
+    throw new Error("Plaid must not be contacted without an account mapping");
+  };
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  for (const accountId of ["", " \t "]) {
+    await assert.rejects(
+      plaid.fetch(plaidCredentials, accountId, "2026-08-01", "2026-08-23"),
+      /Plaid account id required/,
+    );
+  }
+  assert.equal(requests, 0);
+});
+
+test("Plaid scopes every transaction page to the configured account mapping", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requestBodies: Array<{
+    start_date: string;
+    end_date: string;
+    options: { account_ids?: string[]; count: number; offset: number };
+  }> = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as (typeof requestBodies)[number];
+    requestBodies.push(body);
+    return new Response(JSON.stringify({
+      transactions: [],
+      has_more: requestBodies.length === 1,
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const plaid = getBankFeedAdapter("plaid");
+  assert.ok(plaid);
+  await plaid.fetch(
+    plaidCredentials,
+    "  plaid-account-42  ",
+    "2026-08-01",
+    "2026-08-23",
+  );
+
+  assert.deepEqual(
+    requestBodies.map(({ start_date, end_date, options }) => ({
+      start_date,
+      end_date,
+      options,
+    })),
+    [
+      {
+        start_date: "2026-08-01",
+        end_date: "2026-08-23",
+        options: { account_ids: ["plaid-account-42"], count: 500, offset: 0 },
+      },
+      {
+        start_date: "2026-08-01",
+        end_date: "2026-08-23",
+        options: { account_ids: ["plaid-account-42"], count: 500, offset: 500 },
+      },
+    ],
+  );
+});
