@@ -269,6 +269,10 @@ export function parseChargebeeSettlement(payload: {
   // taxes/fees may appear as special entity types
 }, fallbackDate?: string): ParsedSettlement {
   const currency = (payload.currency_code ?? "USD").toUpperCase();
+  const total =
+    payload.total == null
+      ? null
+      : fromPspMinorUnits(payload.total, "Chargebee total");
   if (payload.amount_paid != null) {
     fromPspMinorUnits(payload.amount_paid, "Chargebee amount paid");
   }
@@ -299,10 +303,10 @@ export function parseChargebeeSettlement(payload: {
         currency,
       });
     }
-  } else if (payload.total != null) {
+  } else if (total != null) {
     lines.push({
       kind: "charge",
-      amount: fromPspMinorUnits(payload.total, "Chargebee total"),
+      amount: total,
       currency,
     });
   }

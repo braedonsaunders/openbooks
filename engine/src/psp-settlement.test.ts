@@ -73,7 +73,6 @@ const invalidChargebeeAmounts: [
   string,
   Parameters<typeof parseChargebeeSettlement>[0],
 ][] = [
-  ["Chargebee total", { id: "cb_total", total: 1_250.5 }],
   [
     "Chargebee line-item amount",
     {
@@ -102,6 +101,31 @@ for (const [field, payload] of invalidChargebeeAmounts) {
       (error) =>
         error instanceof PspSettlementError &&
         error.message === `${field} must be a safe integer in provider minor units`,
+    );
+  });
+}
+
+for (const total of [
+  1_250.5,
+  Number.MAX_SAFE_INTEGER + 1,
+  Number.POSITIVE_INFINITY,
+  Number.NaN,
+]) {
+  test(`Chargebee total rejects non-exact numeric input ${String(total)} when line items are present`, () => {
+    assert.throws(
+      () =>
+        parseChargebeeSettlement(
+          {
+            id: "cb_total_with_lines",
+            total,
+            line_items: [{ id: "line_1", amount: 1_250 }],
+          },
+          "2026-07-01",
+        ),
+      (error) =>
+        error instanceof PspSettlementError &&
+        error.message ===
+          "Chargebee total must be a safe integer in provider minor units",
     );
   });
 }
