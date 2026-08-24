@@ -87,11 +87,17 @@ async function seedAcceptance(org: Awaited<ReturnType<typeof createScratchOrg>>,
   return { userId, invoiceId, link };
 }
 
-function signedStripeBody(secret: string, sessionId: string, linkToken: string): { body: string; headers: Record<string, string> } {
+function signedStripeBody(
+  secret: string,
+  sessionId: string,
+  linkToken: string,
+  amountTotal = 10_300,
+  currency = "cad",
+): { body: string; headers: Record<string, string> } {
   const body = JSON.stringify({
     id: `evt_${sessionId}`,
     type: "checkout.session.completed",
-    data: { object: { id: sessionId, client_reference_id: linkToken, amount_total: 10300 } },
+    data: { object: { id: sessionId, client_reference_id: linkToken, amount_total: amountTotal, currency } },
   });
   const t = Math.floor(Date.now() / 1000);
   const v1 = createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
@@ -176,7 +182,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     const body = JSON.stringify({
       id: "evt_cs_1",
       type: "checkout.session.completed",
-      data: { object: { id: "cs_test_123", client_reference_id: link.token, amount_total: 10300 } },
+      data: { object: { id: "cs_test_123", client_reference_id: link.token, amount_total: 10300, currency: "cad" } },
     });
     const t = Math.floor(Date.now() / 1000);
     const v1 = createHmac("sha256", webhookSecret).update(`${t}.${body}`, "utf8").digest("hex");
@@ -238,6 +244,86 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     // A forged signature never resolves an org.
     const forged = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body);
     assert.equal(forged, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("webhook settles only the provider-confirmed quoted amount and currency", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const fx = await seedAcceptance(org, "INV-PAY-EVIDENCE");
+    await createCheckoutSession(fx.link.token, "https://app.test/pay/" + fx.link.token, async () => ({
+      status: 200,
+      json: async () => ({ id: "cs_evidence_1", url: "https://checkout.stripe.test/cs_evidence_1" }),
+    }));
+
+    const underpaid = signedStripeBody(
+      "whsec_INV-PAY-EVIDENCE",
+      "cs_evidence_1",
+      fx.link.token,
+      10_000,
+    );
+    await assert.rejects(
+      handleProviderWebhook("stripe", underpaid.headers, underpaid.body),
+      /reported 100\.0000 CAD, but checkout expected 103\.0000 CAD/,
+    );
+
+    const wrongCurrency = signedStripeBody(
+      "whsec_INV-PAY-EVIDENCE",
+      "cs_evidence_1",
+      fx.link.token,
+      10_300,
+      "usd",
+    );
+    await assert.rejects(
+      handleProviderWebhook("stripe", wrongCurrency.headers, wrongCurrency.body),
+      /reported 103\.0000 USD, but checkout expected 103\.0000 CAD/,
+    );
+
+    const unchanged = (await db.execute<{
+      attempt_status: string;
+      invoice_balance: string;
+      payment_count: number;
+    }>(sql`
+      select
+        (select status from payment_attempts
+          where org_id = ${org.orgId} and external_ref = 'cs_evidence_1') as attempt_status,
+        (select open_balance from documents where id = ${fx.invoiceId}) as invoice_balance,
+        (select count(*)::int from documents
+          where org_id = ${org.orgId} and kind = 'customer_payment') as payment_count
+    `));
+    assert.equal(unchanged.rows[0]!.attempt_status, "initiated");
+    assert.equal(unchanged.rows[0]!.invoice_balance, "100.0000");
+    assert.equal(unchanged.rows[0]!.payment_count, 0);
+
+    const paid = signedStripeBody(
+      "whsec_INV-PAY-EVIDENCE",
+      "cs_evidence_1",
+      fx.link.token,
+    );
+    const result = await handleProviderWebhook("stripe", paid.headers, paid.body);
+    assert.equal(result?.status, "settled");
+
+    const settled = (await db.execute<{
+      payment_total: string;
+      payment_currency: string;
+      paid_amount: string;
+      paid_currency: string;
+    }>(sql`
+      select payment.total as payment_total,
+             payment.currency as payment_currency,
+             attempt.event_payload->>'paidAmount' as paid_amount,
+             attempt.event_payload->>'paidCurrency' as paid_currency
+        from payment_attempts attempt
+        join documents payment on payment.id = attempt.payment_document_id
+       where attempt.org_id = ${org.orgId}
+         and attempt.external_ref = 'cs_evidence_1'
+    `));
+    assert.equal(settled.rows[0]!.payment_total, "103.0000");
+    assert.equal(settled.rows[0]!.payment_currency, "CAD");
+    assert.equal(settled.rows[0]!.paid_amount, "103.0000");
+    assert.equal(settled.rows[0]!.paid_currency, "CAD");
   } finally {
     await dropScratchOrg(org.orgId);
   }

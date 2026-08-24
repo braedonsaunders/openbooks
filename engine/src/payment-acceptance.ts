@@ -79,7 +79,9 @@ export interface WebhookEvent {
   /** In-flight states never settle: "processing" means the provider reports
    *  the collection still pending (async ACH/SEPA). */
   status: "succeeded" | "processing" | "failed" | "cancelled" | "refunded";
+  /** Gross amount and ISO currency the provider confirms it collected. */
   paidAmount?: string | null;
+  paidCurrency?: string | null;
   raw: Record<string, unknown>;
 }
 
@@ -206,6 +208,7 @@ function verifyStripeWebhookDelivery(
       linkToken: obj.client_reference_id ?? obj.metadata?.link_token ?? null,
       status: settled ? "succeeded" : "processing",
       paidAmount: settled && obj.amount_total != null ? fromUnits(BigInt(obj.amount_total) * 100n) : null,
+      paidCurrency: settled && typeof obj.currency === "string" ? obj.currency.toUpperCase() : null,
       raw: event,
     }]);
   }
@@ -314,6 +317,10 @@ function verifyAdyenWebhookDelivery(
         paidAmount:
           item.amount?.value != null && item.amount?.currency
             ? fromAdyenMinorUnits(BigInt(item.amount.value), String(item.amount.currency))
+            : null,
+        paidCurrency:
+          typeof item.amount?.currency === "string"
+            ? item.amount.currency.toUpperCase()
             : null,
         raw: payload,
       });
@@ -921,19 +928,36 @@ async function processWebhookEvent(
   // would tear the SQL apart.
   const alternateRef = event.alternateExternalRef ?? null;
   const intentRef = event.intentRef ?? null;
-  let attempt = (await db.execute<{ id: string; link_id: string; status: string }>(sql`
-    select id, link_id, status from payment_attempts
-     where org_id = ${orgId} and provider = ${provider}
-       and (external_ref = ${event.externalRef}
+  type ResolvedAttempt = {
+    id: string;
+    link_id: string;
+    status: string;
+    amount: string;
+    surcharge_amount: string;
+    currency: string;
+  };
+  let attempt = (await db.execute<ResolvedAttempt>(sql`
+    select a.id, a.link_id, a.status,
+           coalesce(a.amount, l.amount) as amount,
+           coalesce(a.surcharge_amount, l.surcharge_amount, 0) as surcharge_amount,
+           l.currency
+      from payment_attempts a
+      join payment_links l on l.id = a.link_id and l.org_id = a.org_id
+     where a.org_id = ${orgId} and a.provider = ${provider}
+       and (a.external_ref = ${event.externalRef}
             or (${alternateRef}::text is not null
-                and external_ref = ${alternateRef})
+                and a.external_ref = ${alternateRef})
             or (${intentRef}::text is not null
-                and event_payload->>'paymentIntent' = ${intentRef}))
-     order by created_at desc limit 1
+                and a.event_payload->>'paymentIntent' = ${intentRef}))
+     order by a.created_at desc limit 1
   `));
   if (!attempt.rows[0] && event.linkToken) {
-    attempt = (await db.execute<{ id: string; link_id: string; status: string }>(sql`
-      select a.id, a.link_id, a.status from payment_attempts a
+    attempt = (await db.execute<ResolvedAttempt>(sql`
+      select a.id, a.link_id, a.status,
+             coalesce(a.amount, l.amount) as amount,
+             coalesce(a.surcharge_amount, l.surcharge_amount, 0) as surcharge_amount,
+             l.currency
+        from payment_attempts a
         join payment_links l on l.id = a.link_id and l.org_id = a.org_id
        where a.org_id = ${orgId} and a.provider = ${provider} and l.token = ${event.linkToken}
          and a.status = 'initiated'
@@ -943,10 +967,40 @@ async function processWebhookEvent(
   const found = attempt.rows[0];
   if (!found) return "unknown_attempt";
 
+  if (event.status === "succeeded") {
+    const hasPaidAmount = event.paidAmount != null;
+    const hasPaidCurrency = event.paidCurrency != null;
+    // Stripe and Adyen success payloads always carry both values. GoCardless
+    // payment lifecycle webhooks carry neither, but must still be checked if a
+    // future/provider-expanded payload supplies either value.
+    if (
+      hasPaidAmount !== hasPaidCurrency ||
+      (provider !== "gocardless" && (!hasPaidAmount || !hasPaidCurrency))
+    ) {
+      throw new PaymentAcceptanceError(
+        `${provider} settlement did not report both paid amount and currency`,
+      );
+    }
+    if (hasPaidAmount && hasPaidCurrency) {
+      const expectedAmount = add(found.amount, found.surcharge_amount);
+      const paidCurrency = event.paidCurrency!.toUpperCase();
+      if (
+        cmp(event.paidAmount!, expectedAmount) !== 0 ||
+        paidCurrency !== found.currency.toUpperCase()
+      ) {
+        throw new PaymentAcceptanceError(
+          `${provider} reported ${event.paidAmount} ${paidCurrency}, but checkout expected ${expectedAmount} ${found.currency.toUpperCase()}`,
+        );
+      }
+    }
+  }
+
   // Evidence merged into every claim: the intent id lets later refund/dispute
   // events match this attempt even though checkout stored the session id.
   const merge: Record<string, unknown> = { webhook: true, status: event.status };
   if (event.intentRef) merge.paymentIntent = event.intentRef;
+  if (event.paidAmount != null) merge.paidAmount = event.paidAmount;
+  if (event.paidCurrency != null) merge.paidCurrency = event.paidCurrency.toUpperCase();
   // 'processing' has no column value (see CLAIMABLE_FROM): the row stays
   // initiated and the payload marker records the in-flight provider state.
   const rowStatus = event.status === "processing" ? "initiated" : event.status;
