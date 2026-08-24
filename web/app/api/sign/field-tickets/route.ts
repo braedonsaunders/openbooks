@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrg, withOrgContext } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { uploadAndAttach } from '../../../../lib/file-cabinet'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
 
@@ -12,6 +12,15 @@ export const runtime = 'nodejs'
  * Stores the drawn signature as an immutable, versioned File Cabinet object
  * and records first-class signature evidence. Each persisted request is
  * independently revocable and can be consumed only once.
+ *
+ * Signing is one atomic unit (`withOrgTransaction`): advisory lock → request
+ * re-validation → ticket status + double-sign checks → cabinet upload →
+ * signature row → request response stamp → audit log, all on one pinned
+ * connection that commits or rolls back together. The cabinet helpers join the
+ * pinned transaction automatically (nested db.transaction participates), so a
+ * loser of the race or any mid-flight failure leaves NO artifacts behind —
+ * never an uploaded signature image without its evidence row, and never two
+ * evidence rows for one request.
  */
 export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -40,7 +49,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'The signature image is invalid' }, { status: 422 })
   }
 
-  return withOrgContext(verified.orgId, async () => {
+  return withOrgTransaction(verified.orgId, async () => {
+    // Serialize signers of this request BEFORE any check or write; the lock is
+    // transaction-scoped on the pinned connection, so it holds until commit.
+    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`field-ticket-sign:${verified.requestId}`}))`)
     if (!(await validateSigningRequest(String(body.token ?? ''), verified))) {
       return NextResponse.json({ error: 'This signing request is no longer available' }, { status: 422 })
     }
@@ -62,6 +74,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'This ticket is already signed' }, { status: 422 })
     }
 
+    // Runs inside this same transaction: file + version + blob + attachment
+    // rows commit only when the signature evidence does (an S3 put failure or
+    // a later-step error rolls the whole unit back).
     const file = await uploadAndAttach({
       orgId: verified.orgId,
       targetTable: 'documents',
@@ -72,46 +87,32 @@ export async function POST(req: Request) {
       createdBy: null,
     })
     const acceptedAt = new Date().toISOString()
-    const accepted = await withOrg(verified.orgId, async () => {
-      await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`field-ticket-sign:${verified.requestId}`}))`)
-      if (!(await validateSigningRequest(String(body.token ?? ''), verified))) return false
-      const current = await db.execute(sql`
-        select id from field_ticket_signatures
-         where org_id = ${verified.orgId} and field_ticket_id = ${verified.ticketId}
-           and role = 'customer'
-      `)
-      if (current.rows.length) return false
-      const inserted = (await db.execute<{ id: string }>(sql`
-        insert into field_ticket_signatures
-          (org_id, field_ticket_id, role, signer_name, comment,
-           signature_file_id, signed_at, created_by)
-        values (${verified.orgId}, ${verified.ticketId}, 'customer', ${name},
-                ${comment}, ${file.id}, ${acceptedAt}, null)
-        returning id
-      `))
-      await db.execute(sql`
-        update field_ticket_signature_requests
-           set responded_at = ${acceptedAt}
-         where id = ${verified.requestId} and org_id = ${verified.orgId}
-           and responded_at is null and revoked_at is null
-      `)
-      await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${verified.orgId}, 'field_ticket_signatures', ${inserted.rows[0]!.id}, 'insert',
-                ${JSON.stringify({
-                  fieldTicketId: verified.ticketId,
-                  role: 'customer',
-                  signerName: name,
-                  signedAt: acceptedAt,
-                  signatureFileId: file.id,
-                  signatureRequestId: verified.requestId,
-                })}::jsonb, null)
-      `)
-      return true
-    })
-    if (!accepted) {
-      return NextResponse.json({ error: 'This ticket is already signed' }, { status: 422 })
-    }
+    const inserted = (await db.execute<{ id: string }>(sql`
+      insert into field_ticket_signatures
+        (org_id, field_ticket_id, role, signer_name, comment,
+         signature_file_id, signed_at, created_by)
+      values (${verified.orgId}, ${verified.ticketId}, 'customer', ${name},
+              ${comment}, ${file.id}, ${acceptedAt}, null)
+      returning id
+    `))
+    await db.execute(sql`
+      update field_ticket_signature_requests
+         set responded_at = ${acceptedAt}
+       where id = ${verified.requestId} and org_id = ${verified.orgId}
+         and responded_at is null and revoked_at is null
+    `)
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${verified.orgId}, 'field_ticket_signatures', ${inserted.rows[0]!.id}, 'insert',
+              ${JSON.stringify({
+                fieldTicketId: verified.ticketId,
+                role: 'customer',
+                signerName: name,
+                signedAt: acceptedAt,
+                signatureFileId: file.id,
+                signatureRequestId: verified.requestId,
+              })}::jsonb, null)
+    `)
     return NextResponse.json({ ok: true })
   })
 }
