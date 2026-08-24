@@ -9,6 +9,11 @@ import {
 import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { nextDocumentNumber } from './bills'
+import {
+  assertDocumentEditRevision,
+  documentRevisionSql,
+  runDocumentVersionedTransaction,
+} from './documents'
 import { canonicalDecimal } from './exact-decimal'
 import { isFeatureEnabled } from './features'
 import { createProjectCharge } from './project-charges'
@@ -149,10 +154,16 @@ export async function createFieldTicket(
   })
 }
 
+type TicketTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 /**
  * Header updates from the standard flyout form. Changing the project
  * re-derives customer/subsidiary/PO and (unless hours exist) the period
  * window; changing the period or anchor date re-windows a still-empty ticket.
+ *
+ * `expectedRevision` is the exact `documents.updated_at` token the caller
+ * loaded; the write only lands while that revision still holds the row lock,
+ * so two concurrent saves can never silently overwrite one another.
  */
 export async function updateTicketHeader(
   orgId: string,
@@ -166,71 +177,94 @@ export async function updateTicketHeader(
     period?: TicketPeriod
     foremanPartyId?: string | null
   },
+  expectedRevision: string,
 ): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-  const ft = { ...doc.fieldTicket }
+  await runDocumentVersionedTransaction<
+    TicketTransaction,
+    { status: string; updatedAt: string },
+    void
+  >({
+    expectedRevision,
+    transaction: (work) => db.transaction(work),
+    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+      select d.status,
+             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+        from documents d
+        join field_tickets ft
+          on ft.document_id = d.id and ft.org_id = d.org_id
+       where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
+       for update of d, ft
+    `)).rows[0] ?? null,
+    mutate: async (tx) => {
+      const doc = await loadHeader(orgId, ticketId)
+      if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+      const ft = { ...doc.fieldTicket }
 
-  // Resolve every column ONCE in JS (a column may only be assigned once).
-  let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
-  if (patch.projectId !== undefined && patch.projectId !== doc.project_id) {
-    if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
-    const proj = (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
-      select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-        from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId}`))
-    if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-    projChange = proj.rows[0]
-    // Re-resolve the period for the new job unless the caller pinned one.
-    if (patch.period === undefined) {
-      const resolved = await resolveTicketPeriod(orgId, projChange.id, patch.documentDate ?? doc.document_date)
-      if (resolved !== ft.period) patch.period = resolved
-    }
-  }
+      // Resolve every column ONCE in JS (a column may only be assigned once).
+      let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
+      if (patch.projectId !== undefined && patch.projectId !== doc.project_id) {
+        if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
+        const proj = (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
+          select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
+            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId}`))
+        if (!proj.rows[0]) throw new FieldTicketError('Project not found')
+        projChange = proj.rows[0]
+        // Re-resolve the period for the new job unless the caller pinned one.
+        if (patch.period === undefined) {
+          const resolved = await resolveTicketPeriod(orgId, projChange.id, patch.documentDate ?? doc.document_date)
+          if (resolved !== ft.period) patch.period = resolved
+        }
+      }
 
-  const hourCount = (
-    (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
-  ).rows[0]!.n
-  if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
-    const period = patch.period ?? ft.period
-    const anchor = patch.documentDate ?? doc.document_date
-    const window = ticketWindow(period, anchor)
-    ft.period = period
-    ft.periodStart = window.start
-    ft.periodEnd = window.end
-  }
-  if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
+      const hourCount = (
+        (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
+      ).rows[0]!.n
+      if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
+        const period = patch.period ?? ft.period
+        const anchor = patch.documentDate ?? doc.document_date
+        const window = ticketWindow(period, anchor)
+        ft.period = period
+        ft.periodStart = window.start
+        ft.periodEnd = window.end
+      }
+      if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
 
-  const nextRef =
-    patch.referenceNumber !== undefined
-      ? patch.referenceNumber
-      : projChange && !doc.reference_number
-        ? projChange.po
-        : doc.reference_number
-  const nextMemo = patch.memo !== undefined ? patch.memo : doc.memo
-  const nextDate = patch.documentDate ?? doc.document_date
+      const nextRef =
+        patch.referenceNumber !== undefined
+          ? patch.referenceNumber
+          : projChange && !doc.reference_number
+            ? projChange.po
+            : doc.reference_number
+      const nextMemo = patch.memo !== undefined ? patch.memo : doc.memo
+      const nextDate = patch.documentDate ?? doc.document_date
 
-  await db.execute(sql`
-    update documents set
-      project_id = ${projChange ? projChange.id : doc.project_id},
-      party_id = ${projChange ? projChange.customer_id : sql`party_id`},
-      subsidiary_id = ${projChange ? projChange.subsidiary_id : sql`subsidiary_id`},
-      document_date = ${nextDate},
-      reference_number = ${nextRef},
-      memo = ${nextMemo},
-      updated_at = now(), updated_by = ${userId}
-     where id = ${ticketId} and org_id = ${orgId}`)
-  await db.execute(sql`
-    update field_tickets
-       set period = ${ft.period}, period_start = ${ft.periodStart},
-           period_end = ${ft.periodEnd}, foreman_party_id = ${ft.foremanPartyId},
-           updated_at = now(), updated_by = ${userId}
-     where document_id = ${ticketId} and org_id = ${orgId}
-  `)
-  // Re-home any existing draft hours/lines onto the new project.
-  if (projChange) {
-    await db.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
-    await db.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
-  }
+      await tx.execute(sql`
+        update documents set
+          project_id = ${projChange ? projChange.id : doc.project_id},
+          party_id = ${projChange ? projChange.customer_id : sql`party_id`},
+          subsidiary_id = ${projChange ? projChange.subsidiary_id : sql`subsidiary_id`},
+          document_date = ${nextDate},
+          reference_number = ${nextRef},
+          memo = ${nextMemo},
+          updated_at = greatest(
+            clock_timestamp(),
+            updated_at + interval '1 microsecond'
+          ), updated_by = ${userId}
+         where id = ${ticketId} and org_id = ${orgId}`)
+      await tx.execute(sql`
+        update field_tickets
+           set period = ${ft.period}, period_start = ${ft.periodStart},
+               period_end = ${ft.periodEnd}, foreman_party_id = ${ft.foremanPartyId},
+               updated_at = now(), updated_by = ${userId}
+         where document_id = ${ticketId} and org_id = ${orgId}
+      `)
+      // Re-home any existing draft hours/lines onto the new project.
+      if (projChange) {
+        await tx.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
+        await tx.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
+      }
+    },
+  })
 }
 
 export interface CrewRowInput {
@@ -277,79 +311,108 @@ function exactTicketQuantity(value: unknown): string {
 /**
  * Sync the crew grid onto time_entries: one row per employee × item × time
  * type × day. Upserts changed hours, deletes cleared cells. Draft tickets only.
+ *
+ * `expectedRevision` is the exact `documents.updated_at` token the caller
+ * loaded; the grid replacement only lands while that revision still holds the
+ * row lock, so two concurrent grid saves can never silently drop cells.
  */
-export async function saveCrewGrid(orgId: string, userId: string, ticketId: string, rows: CrewRowInput[]): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-  const ft = doc.fieldTicket
+export async function saveCrewGrid(
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  rows: CrewRowInput[],
+  expectedRevision: string,
+): Promise<void> {
+  await runDocumentVersionedTransaction<
+    TicketTransaction,
+    { status: string; updatedAt: string },
+    void
+  >({
+    expectedRevision,
+    transaction: (work) => db.transaction(work),
+    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+      select d.status,
+             ${documentRevisionSql(sql.raw('d.updated_at'))} as "updatedAt"
+        from documents d
+        join field_tickets ft
+          on ft.document_id = d.id and ft.org_id = d.org_id
+       where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
+       for update of d, ft
+    `)).rows[0] ?? null,
+    mutate: async (tx) => {
+      const doc = await loadHeader(orgId, ticketId)
+      if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+      const ft = doc.fieldTicket
 
-  const existing = (await db.execute<{ id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }>(sql`
-    select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
-      from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
-  const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
-    `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}|${e.time_type_id}|${e.worked_on}`
-  const byKey = new Map(existing.rows.map((e) => [key(e), e]))
-  const seen = new Set<string>()
+      const existing = (await db.execute<{ id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }>(sql`
+        select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
+          from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
+      const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
+        `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}|${e.time_type_id}|${e.worked_on}`
+      const byKey = new Map(existing.rows.map((e) => [key(e), e]))
+      const seen = new Set<string>()
 
-  // The field-ticket switch is independent of whether a type is usable in
-  // ordinary timesheets. Existing ticket types remain legal so changing setup
-  // never makes an older draft impossible to save.
-  const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
-  if (requestedTypeIds.length) {
-    if (requestedTypeIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
-      throw new FieldTicketError('Choose a valid time type')
-    }
-    const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
-    const selectable = (await db.execute<{ id: string }>(sql`
-      select id from time_types
-       where org_id = ${orgId} and is_active and show_on_field_ticket
-         and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`))
-    const allowed = new Set([...existingTypeIds, ...selectable.rows.map((type) => type.id)])
-    if (requestedTypeIds.some((id) => !allowed.has(id))) {
-      throw new FieldTicketError('Choose a time type enabled for field tickets')
-    }
-  }
-  const requestedTaskIds = [...new Set(rows.map((row) => row.projectTaskId).filter((id): id is string => Boolean(id)))]
-  if (requestedTaskIds.length) {
-    if (requestedTaskIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
-      throw new FieldTicketError('Choose a valid project task')
-    }
-    const validTasks = (await db.execute<{ id: string }>(sql`
-      select id from project_tasks where org_id = ${orgId} and project_id = ${doc.project_id}
-        and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`))
-    if (validTasks.rows.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
-  }
-
-  for (const row of rows) {
-    for (const [day, hours] of Object.entries(row.hours)) {
-      if (day < ft.periodStart || day > ft.periodEnd) continue
-      const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
-      const h = exactTicketHours(hours)
-      if (h == null) continue
-      seen.add(k)
-      const cur = byKey.get(k)
-      if (cur) {
-        if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
-          await db.execute(sql`
-            update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
-             where id = ${cur.id} and org_id = ${orgId} and status = 'draft'`)
+      // The field-ticket switch is independent of whether a type is usable in
+      // ordinary timesheets. Existing ticket types remain legal so changing setup
+      // never makes an older draft impossible to save.
+      const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
+      if (requestedTypeIds.length) {
+        if (requestedTypeIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+          throw new FieldTicketError('Choose a valid time type')
         }
-      } else {
-        await db.execute(sql`
-          insert into time_entries (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-                                    project_id, project_task_id, is_billable, status, field_ticket_id, created_by, updated_by)
-          values (${orgId}, ${row.employeePartyId}, ${day}, ${h}, ${row.timeTypeId}, ${row.itemId},
-                  ${doc.project_id}, ${row.projectTaskId ?? null}, true, 'draft', ${ticketId}, ${userId}, ${userId})`)
+        const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
+        const selectable = (await db.execute<{ id: string }>(sql`
+          select id from time_types
+           where org_id = ${orgId} and is_active and show_on_field_ticket
+             and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`))
+        const allowed = new Set([...existingTypeIds, ...selectable.rows.map((type) => type.id)])
+        if (requestedTypeIds.some((id) => !allowed.has(id))) {
+          throw new FieldTicketError('Choose a time type enabled for field tickets')
+        }
       }
-    }
-  }
-  // Remove cleared cells (draft entries only — approved history is immutable).
-  for (const e of existing.rows) {
-    if (!seen.has(key(e))) {
-      await db.execute(sql`
-        delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}`)
-    }
-  }
+      const requestedTaskIds = [...new Set(rows.map((row) => row.projectTaskId).filter((id): id is string => Boolean(id)))]
+      if (requestedTaskIds.length) {
+        if (requestedTaskIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+          throw new FieldTicketError('Choose a valid project task')
+        }
+        const validTasks = (await db.execute<{ id: string }>(sql`
+          select id from project_tasks where org_id = ${orgId} and project_id = ${doc.project_id}
+            and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`))
+        if (validTasks.rows.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
+      }
+
+      for (const row of rows) {
+        for (const [day, hours] of Object.entries(row.hours)) {
+          if (day < ft.periodStart || day > ft.periodEnd) continue
+          const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
+          const h = exactTicketHours(hours)
+          if (h == null) continue
+          seen.add(k)
+          const cur = byKey.get(k)
+          if (cur) {
+            if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
+              await tx.execute(sql`
+                update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
+                 where id = ${cur.id} and org_id = ${orgId} and status = 'draft'`)
+            }
+          } else {
+            await tx.execute(sql`
+              insert into time_entries (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
+                                        project_id, project_task_id, is_billable, status, field_ticket_id, created_by, updated_by)
+              values (${orgId}, ${row.employeePartyId}, ${day}, ${h}, ${row.timeTypeId}, ${row.itemId},
+                      ${doc.project_id}, ${row.projectTaskId ?? null}, true, 'draft', ${ticketId}, ${userId}, ${userId})`)
+          }
+        }
+      }
+      // Remove cleared cells (draft entries only — approved history is immutable).
+      for (const e of existing.rows) {
+        if (!seen.has(key(e))) {
+          await tx.execute(sql`
+            delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}`)
+        }
+      }
+    },
+  })
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -498,6 +561,8 @@ type HeaderRow = {
   currency: string
   reference_number: string | null
   memo: string | null
+  /** Exact canonical OCC token for documents.updated_at (microsecond text). */
+  revision: string
   period: TicketPeriod
   period_start: string
   period_end: string
@@ -517,6 +582,7 @@ async function loadHeader(
   const r = (await db.execute<HeaderRow>(sql`
     select d.id, d.document_number, d.status, d.party_id, d.project_id, d.currency,
            d.document_date::text as document_date, d.reference_number, d.memo,
+           ${documentRevisionSql(sql.raw('d.updated_at'))} as revision,
            ft.period, ft.period_start::text as period_start,
            ft.period_end::text as period_end,
            ft.foreman_party_id, ft.charge_document_id, ft.submitted_by,
@@ -1111,6 +1177,8 @@ export async function loadFieldTicket(
     id: doc.id,
     documentNumber: doc.document_number,
     status: doc.status,
+    /** Exact optimistic-concurrency token — echo it back as expectedRevision. */
+    revision: doc.revision,
     documentDate: doc.document_date,
     referenceNumber: doc.reference_number,
     memo: doc.memo,

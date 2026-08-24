@@ -8,6 +8,7 @@ interface OpenApiSchema {
 interface OpenApiOperation {
   parameters?: Array<Record<string, unknown>>;
   requestBody?: { content: { "application/json": { schema: OpenApiSchema } }; required?: boolean };
+  responses?: Record<string, Record<string, unknown>>;
   [key: string]: unknown;
 }
 interface OpenApiPathItem {
@@ -82,13 +83,15 @@ export function buildOpenApiSpec(
     const capName = rt.key.replace(/-/g, "_");
     const modelKey = capName.charAt(0).toUpperCase() + capName.slice(1);
 
-    // Build the JSON schema for this record type's fields. The READ model
-    // (`modelKey`) exposes every field; the WRITE model (`modelKey`Write) is
-    // the request body — only writable fields (identity/audit/computed excluded).
+    // Build separate read, create, and update representations. Document OCC is
+    // update-only: advertising its token on create would ask a caller to supply
+    // a revision for a row that does not exist yet.
     const properties: Record<string, OpenApiSchema> = {};
-    const writeProps: Record<string, OpenApiSchema> = {};
+    const createProps: Record<string, OpenApiSchema> = {};
+    const updateProps: Record<string, OpenApiSchema> = {};
     const required: string[] = [];
-    const writeRequired: string[] = [];
+    const createRequired: string[] = [];
+    const updateRequired: string[] = [];
     for (const f of rt.fields) {
       const [rawType, format] = f.type.split(" (");
       const prop = {
@@ -96,12 +99,20 @@ export function buildOpenApiSpec(
         ...(format ? { format: format.replace(")", "") } : {}),
         ...(f.description ? { description: f.description } : {}),
         ...(f.enum ? { enum: f.enum } : {}),
+        ...(f.pattern ? { pattern: f.pattern } : {}),
+        ...(f.writeOnly ? { writeOnly: true } : {}),
       };
-      properties[f.name] = prop;
-      if (f.required) required.push(f.name);
+      if (!f.writeOnly) {
+        properties[f.name] = prop;
+        if (f.requiredOnRead ?? f.required) required.push(f.name);
+      }
       if (f.writable) {
-        writeProps[f.name] = prop;
-        if (f.required) writeRequired.push(f.name);
+        if (f.writableOnCreate !== false) {
+          createProps[f.name] = prop;
+          if (f.required) createRequired.push(f.name);
+        }
+        updateProps[f.name] = prop;
+        if (f.requiredOnUpdate) updateRequired.push(f.name);
       }
     }
     schemas[modelKey] = {
@@ -114,8 +125,15 @@ export function buildOpenApiSpec(
     schemas[writeModelKey] = {
       type: "object",
       description: `Writable fields for ${rt.label}.`,
-      properties: writeProps,
-      ...(writeRequired.length > 0 ? { required: writeRequired } : {}),
+      properties: createProps,
+      ...(createRequired.length > 0 ? { required: createRequired } : {}),
+    };
+    const updateModelKey = `${modelKey}Update`;
+    schemas[updateModelKey] = {
+      type: "object",
+      description: `Fields accepted when updating ${rt.label}.`,
+      properties: updateProps,
+      ...(updateRequired.length > 0 ? { required: updateRequired } : {}),
     };
 
     // List endpoint
@@ -220,7 +238,7 @@ export function buildOpenApiSpec(
           ],
           requestBody: {
             required: true,
-            content: { "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } } },
+            content: { "application/json": { schema: { $ref: `#/components/schemas/${updateModelKey}` } } },
           },
           responses: {
             "200": {
@@ -228,6 +246,7 @@ export function buildOpenApiSpec(
               content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
             },
             "404": { description: "Not found" },
+            "409": { description: "Conflict — the record changed after it was read", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },

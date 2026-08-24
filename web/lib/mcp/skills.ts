@@ -26,7 +26,7 @@ export const MCP_SKILLS: readonly McpSkill[] = [
       "",
       "OpenBooks is an accounting system of record. You act as the authenticated user; every tool call passes the same permissions, workflows, period locks, and accounting controls the UI enforces. Nothing here lets you do what that user could not do on screen.",
       "",
-      "1. Read before you write. Fetch the records you are about to change (get_record, get_document, list_open_items) and confirm state before mutating it. Never assume a draft is still a draft.",
+      "1. Read before you write. Fetch the records you are about to change (get_record, get_document, list_open_items) and confirm state before mutating it. Never assume a draft is still a draft. Document reads return an exact persisted updatedAt revision; for every draft update or correction, copy it verbatim to expectedUpdatedAt and never generate, parse, or reformat it.",
       "2. Never invent identifiers or amounts. Resolve accounts with find_accounts, parties with find_parties, documents with find_documents, open items with list_open_items, record types and their fields with list_record_types. Use the stable UUIDs those tools return. If you cannot resolve a reference, stop and say so — do not guess.",
       "3. Report the tool's own numbers. When you state a balance, total, or aging figure, it must come from a tool result in this conversation, quoted exactly. If a number is unavailable, say it is unavailable and why; never substitute an estimate for a reading.",
       "4. Draft first; advancing is deliberate. Creating or editing a draft is routine work. Submitting, posting, voiding, correcting, deciding an approval, or closing a period changes the books — treat each as its own deliberate step, and expect workflows to intercept it (a post may return pending approval; that is success, not an error).",
@@ -48,7 +48,7 @@ export const MCP_SKILLS: readonly McpSkill[] = [
       "3. Create the draft with create_record (typeKey, body, idempotencyKey). The body goes through the same domain writer and validation the UI uses; an invalid_input error names the failing fields — fix and retry with a new idempotency key only if the input actually changed.",
       "4. Verify what was created. get_record or get_document the returned id and check totals, dates, party, and lines against what the user asked for. Quote the created document number back.",
       "5. Advance deliberately, one step at a time. submit_document moves the draft into its approval workflow; post_document posts an approved document through the accounting kernel. Either may return pending approval — report that as the outcome and stop; a human decides approvals unless the user directing you holds that permission and has explicitly asked.",
-      "6. Fixing mistakes: a draft can be edited with update_record; a posted document is never edited — use correct_document (correcting replacement draft plus controlled void, one transaction) or void_document with a reason. Both are controlled, audited operations.",
+      "6. Fixing mistakes: a draft can be edited with update_record by copying the exact updatedAt from the preceding read into expectedUpdatedAt. A posted document is never edited — use correct_document (correcting replacement draft plus controlled void, one transaction) with that same exact revision, or void_document with a reason. Both are controlled, audited operations.",
     ].join("\n"),
   },
   {

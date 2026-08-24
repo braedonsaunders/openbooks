@@ -12,6 +12,7 @@ import {
   controlDeps,
   createPermission,
   createPostedCorrectionDraft,
+  runPostedCorrectionDraftFlows,
   DOC_KINDS,
   DocumentEditError,
   isDocKindEnabled,
@@ -88,7 +89,7 @@ function voidPermission(kind: string): string {
   }
 }
 
-function domainFailure(error: unknown): never {
+export function domainFailure(error: unknown): never {
   if (
     error instanceof DocumentVoidError
     || error instanceof DocumentEditError
@@ -96,7 +97,7 @@ function domainFailure(error: unknown): never {
     || error instanceof ControlAccountsIncompleteError
   ) {
     throw new ApplicationError(
-      "invalid_input",
+      error instanceof DocumentEditError && error.status === 409 ? "conflict" : "invalid_input",
       error.message,
       error instanceof DocumentEditError ? error.status : 422,
     );
@@ -256,6 +257,7 @@ export async function correctPostedDocument(
             userId: context.authz.user.id,
             source: context.source,
           },
+          { deferFlows: true },
         );
         const voidResult = await requestDocumentVoid({
           documentId: input.documentId,
@@ -281,5 +283,13 @@ export async function correctPostedDocument(
       }
     },
   });
+  if (!outcome.replayed) {
+    const result = outcome.value as { correctionId: string };
+    await runPostedCorrectionDraftFlows(result.correctionId, header.kind, {
+      orgId: context.authz.user.orgId,
+      userId: context.authz.user.id,
+      source: context.source,
+    });
+  }
   return { replayed: outcome.replayed, result: outcome.value };
 }

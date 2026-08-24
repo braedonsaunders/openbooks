@@ -5,6 +5,7 @@ import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
 import {
   API_RECORD_TYPES,
+  DOCUMENT_REVISION_READ_METADATA,
   RECORD_TYPE_BY_KEY,
   ITEM_EQUIPMENT_KINDS,
   ITEM_INVENTORY_KINDS,
@@ -16,6 +17,7 @@ import {
   fieldTypeToApi,
   pgTypeToOpenApi,
   toResolved,
+  withDocumentRevisionWriteField,
   type ApiField,
   type ApiRecordType,
   type ApiRecordTypeSchema,
@@ -139,14 +141,19 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
         required: c.is_nullable === "NO" && !c.column_default && !READONLY_COLUMNS.has(c.column_name),
         writable: !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom"
           && (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
-        description: null,
         custom: false,
+        ...(t.table === "documents" && c.column_name === "updated_at"
+          ? DOCUMENT_REVISION_READ_METADATA
+          : { description: null }),
         ...(t.key === "items" && c.column_name === "kind" ? { enum: itemKinds } : {}),
       }));
     return {
       ...t,
       path: `/api/v1/records/${t.key}`,
-      fields: [...physical, ...customFieldsFor(t.table!, docKind)],
+      fields: withDocumentRevisionWriteField(
+        t.writer,
+        [...physical, ...customFieldsFor(t.table!, docKind)],
+      ),
     };
   });
 
@@ -216,5 +223,6 @@ export async function resolveApiType(
     operations: RW,
     writer: { kind: "custom_record" },
     dynamic: true,
+    documentKinds: null,
   };
 }

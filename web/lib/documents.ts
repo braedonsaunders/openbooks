@@ -1,6 +1,6 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { sql, type SQL } from 'drizzle-orm'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
@@ -14,6 +14,7 @@ import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { loadRequiredControlAccounts } from '@openbooks/engine/src/control-accounts.ts'
+import { isDocumentRevisionToken } from './api/registry-data'
 
 /**
  * Unified line-based posting-document machinery.
@@ -67,6 +68,44 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 // Draft creation + loading
 // ---------------------------------------------------------------------------
 
+/** Lossless wire representation for PostgreSQL's six-digit timestamptz. */
+export function documentRevisionSql(column: SQL): SQL<string> {
+  return sql<string>`to_char(
+    ${column} at time zone 'UTC',
+    'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+  )`
+}
+
+const DOCUMENT_REVISION_ALIAS = '__documentRevision'
+
+/** Add the exact revision sidecar only to reads backed by the documents table. */
+export function documentRevisionProjection(table: string): SQL {
+  return table === 'documents'
+    ? sql`, ${documentRevisionSql(sql.raw('updated_at'))} as "__documentRevision"`
+    : sql``
+}
+
+/**
+ * Replace the driver's noncanonical timestamp value with the exact persisted
+ * wire revision, preserving the established updated_at response field.
+ * Non-document records pass through untouched.
+ */
+export function normalizeDocumentRecordRevisions(
+  table: string,
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  if (table !== 'documents') return rows
+  return rows.map((row) => {
+    const revision = row[DOCUMENT_REVISION_ALIAS]
+    if (!isDocumentRevisionToken(revision)) {
+      throw new Error('document read did not return an exact persisted revision')
+    }
+    const record = { ...row }
+    delete record[DOCUMENT_REVISION_ALIAS]
+    return { ...record, updated_at: revision }
+  })
+}
+
 /** Resolve the org's base currency (used when minting a draft). */
 async function orgBaseCurrency(orgId: string): Promise<string> {
   const r = (await db.execute<{ base_currency: string }>(
@@ -111,9 +150,10 @@ export async function createDocumentDraft(
       createdBy: userId,
     })
     .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber })
-  // on_create flows fire AFTER the insert commits. runRecordFlows never
-  // throws into the caller (failures land on the flow_runs row), and it is
-  // awaited — not detached — so it runs inside this request's RLS org scope.
+  // Settle on_create flows before returning. Internal create writers reload
+  // the resulting row (including its exact revision) before applying caller
+  // input; a flow mutation can therefore never turn initialization into a
+  // tokenless update or leave the writer holding the insert-time snapshot.
   if (options.runFlows !== false) {
     await runRecordFlows({ kind: 'on_create', source: options.source ?? 'ui' }, kind, doc!.id, { orgId, userId })
   }
@@ -186,55 +226,82 @@ export async function createPostedCorrectionDraft(
   sourceId: string,
   body: DocumentEditInput,
   ctx: DocumentEditContext,
+  options: { deferFlows?: boolean } = {},
 ): Promise<{ id: string; documentNumber: string }> {
-  const [source] = await db
-    .select()
-    .from(schema.documents)
-    .where(sql`${schema.documents.id} = ${sourceId} and ${schema.documents.orgId} = ${ctx.orgId}`)
-  if (!source || source.status !== 'posted') {
-    throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
+  const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+  const reason = body.amendmentReason?.trim() ?? ''
+  if (reason.length < 8 || reason.length > 500) {
+    throw new DocumentEditError(422, 'A correction reason between 8 and 500 characters is required')
   }
-  const reason = validateCorrectionReason(body.amendmentReason)
 
-  const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
-    runFlows: false,
-    source: ctx.source,
-  })
-  try {
-    const [row] = await db
-      .select({
-        kind: schema.documents.kind,
-        status: schema.documents.status,
-        total: schema.documents.total,
-        taxTotal: schema.documents.taxTotal,
-        partyId: schema.documents.partyId,
-        documentDate: schema.documents.documentDate,
-        updatedAt: schema.documents.updatedAt,
+  const created = await withOrgTransaction(ctx.orgId, async () => runDocumentVersionedTransaction<
+    DocumentTransaction,
+    { kind: string; status: string; updatedAt: string },
+    { id: string; documentNumber: string; kind: string }
+  >({
+    expectedRevision,
+    transaction: (work) => db.transaction(work),
+    // The source revision is authoritative only while this lock is held. The
+    // caller's outer command transaction (when present) is reused, so the lock
+    // spans every dependent replacement write.
+    lock: async (tx) => (await tx.execute<{
+      kind: string
+      status: string
+      updatedAt: string
+    }>(sql`
+      select kind, status,
+             ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+       from documents
+       where id = ${sourceId} and org_id = ${ctx.orgId}
+       for update
+    `)).rows[0] ?? null,
+    mutate: async (tx, source) => {
+      const existingCorrection = (await tx.execute<{ documentNumber: string }>(sql`
+        select replacement.document_number as "documentNumber"
+          from document_links link
+          join documents replacement
+            on replacement.id = link.from_document_id
+           and replacement.org_id = link.org_id
+         where link.org_id = ${ctx.orgId}
+           and link.to_document_id = ${sourceId}
+           and link.link_type = 'reverses'
+         limit 1
+      `)).rows[0]
+      assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
+      if (source.status !== 'posted') {
+        throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
+      }
+      const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
+        runFlows: false,
+        source: ctx.source,
       })
-      .from(schema.documents)
-      .where(sql`${schema.documents.id} = ${replacement.id} and ${schema.documents.orgId} = ${ctx.orgId}`)
-    const current = row!
-    await applyDocumentEdit(replacement.id, {
-      ...current,
-      updatedAt: current.updatedAt?.toISOString(),
-    }, body, {
-      ...ctx,
-      source: 'posted_correction',
-      runFlows: false,
-    })
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
+      const row = await loadDocumentEditCurrent(replacement.id, ctx.orgId)
+      if (!row) throw new Error(`replacement document ${replacement.id} disappeared during initialization`)
+      await applyDocumentEdit(
+        replacement.id,
+        row,
+        { ...body, expectedUpdatedAt: row.updatedAt },
+        {
+          ...ctx,
+          source: 'posted_correction',
+          runFlows: false,
+        },
+      )
+      await db.execute(sql`
         update documents
            set custom = coalesce(custom, '{}'::jsonb) ||
              ${JSON.stringify({
                correctionOf: sourceId,
                correctionReason: reason,
              })}::jsonb,
-               updated_at = now(),
+               updated_at = greatest(
+                 clock_timestamp(),
+                 updated_at + interval '1 microsecond'
+               ),
                updated_by = ${ctx.userId}
          where id = ${replacement.id} and org_id = ${ctx.orgId}
       `)
-      await tx.insert(schema.documentLinks).values({
+      await db.insert(schema.documentLinks).values({
         orgId: ctx.orgId,
         ...buildReversalLinkEvidence({
           fromDocumentId: replacement.id,
@@ -243,8 +310,9 @@ export async function createPostedCorrectionDraft(
           requestedBy: ctx.userId,
         }),
         createdBy: ctx.userId,
+        updatedBy: ctx.userId,
       })
-      await tx.execute(sql`
+      await db.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (
@@ -257,31 +325,29 @@ export async function createPostedCorrectionDraft(
           ${ctx.userId}, 'posted_correction'
         )
       `)
-    })
-    await runRecordFlows(
-      { kind: 'on_create', source: ctx.source },
-      source.kind,
-      replacement.id,
-      { orgId: ctx.orgId, userId: ctx.userId },
-    )
-    return replacement
-  } catch (error) {
-    await db.execute(sql`
-      delete from document_links
-       where org_id = ${ctx.orgId}
-         and (from_document_id = ${replacement.id} or to_document_id = ${replacement.id})
-    `)
-    await db.execute(sql`
-      delete from document_line_tax_components
-       where org_id = ${ctx.orgId}
-         and document_line_id in (
-         select id from document_lines where document_id = ${replacement.id} and org_id = ${ctx.orgId}
-       )
-    `)
-    await db.execute(sql`delete from document_lines where document_id = ${replacement.id} and org_id = ${ctx.orgId}`)
-    await db.execute(sql`delete from documents where id = ${replacement.id} and org_id = ${ctx.orgId}`)
-    throw error
+      return { ...replacement, kind: source.kind }
+    },
+  }))
+  // Flow plans may enqueue email or other externally visible work. Dispatch
+  // only after the transaction that made the correction visible commits. A
+  // caller that owns a wider transaction defers this until its own commit.
+  if (!options.deferFlows) {
+    await runPostedCorrectionDraftFlows(created.id, created.kind, ctx)
   }
+  return { id: created.id, documentNumber: created.documentNumber }
+}
+
+export async function runPostedCorrectionDraftFlows(
+  correctionId: string,
+  kind: string,
+  ctx: DocumentEditContext,
+): Promise<void> {
+  await runRecordFlows(
+    { kind: 'on_create', source: ctx.source },
+    kind,
+    correctionId,
+    { orgId: ctx.orgId, userId: ctx.userId },
+  )
 }
 
 /**
@@ -300,8 +366,9 @@ export async function createPostedCorrectionDraft(
  */
 export async function loadDocument(id: string, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const doc = (await db.execute<Record<string, unknown>>(sql`
+  const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
+           ${documentRevisionSql(sql.raw('d.updated_at'))} as "documentRevision",
            ${sql`case when d.status = 'posted' then ap.applied end`} as applied,
            ${sql`case when d.status = 'posted' then d.total - ap.applied end`} as balance_due
       from documents d
@@ -315,7 +382,16 @@ export async function loadDocument(id: string, orgId?: string) {
       ) ap on true
      where d.id = ${id} and d.org_id = ${resolvedOrgId}
   `))
-  if (!doc.rows[0]) return null
+  const loaded = doc.rows[0]
+  if (!loaded) return null
+  // node-postgres maps timestamptz to JavaScript Date, which discards the
+  // microseconds PostgreSQL retains. Keep the public `updated_at` shape, but
+  // replace its lossy Date with the exact canonical token used by OCC.
+  const { documentRevision, ...document } = loaded
+  const exactDocument: Record<string, unknown> = {
+    ...document,
+    updated_at: documentRevision,
+  }
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
@@ -326,7 +402,7 @@ export async function loadDocument(id: string, orgId?: string) {
      where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
      order by l.line_number
   `))
-  return { doc: doc.rows[0], lines: lines.rows }
+  return { doc: exactDocument, lines: lines.rows }
 }
 
 // ---------------------------------------------------------------------------
@@ -360,8 +436,9 @@ export interface DocumentEditInput {
   /** Required evidence for every posted-document amendment. Not persisted on
    * the document; stored only in the immutable before/after audit envelope. */
   amendmentReason?: string
-  /** Optimistic concurrency token from documents.updated_at. Required for
-   * posted amendments so a stale editor cannot overwrite a newer revision. */
+  /** Optimistic concurrency token from documents.updated_at. Required when
+   * editing any existing document. A newly minted, still-private draft is the
+   * sole initialization path that may omit it. */
   expectedUpdatedAt?: string
   partyId?: string | null
   paymentCardId?: string | null
@@ -394,8 +471,23 @@ export type DocumentEditCurrent = {
   taxTotal: string
   partyId: string | null
   documentDate: string
-  updatedAt?: string
+  updatedAt: string
 };
+
+/** Exact edit snapshot used by every internal and external document writer. */
+export async function loadDocumentEditCurrent(
+  id: string,
+  orgId: string,
+): Promise<DocumentEditCurrent | null> {
+  const result = await db.execute<DocumentEditCurrent>(sql`
+    select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
+           document_date as "documentDate",
+           ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+      from documents
+     where id = ${id} and org_id = ${orgId}
+  `)
+  return result.rows[0] ?? null
+}
 
 export interface DocumentEditContext {
   orgId: string
@@ -428,6 +520,62 @@ export class DocumentEditError extends Error {
     this.fieldErrors = fieldErrors
   }
 }
+
+export const DOCUMENT_EDIT_VERSION_REQUIRED =
+  'the document revision is required; reload and review the latest revision'
+
+const DOCUMENT_EDIT_REVISION_CONFLICT =
+  'this document changed after you opened it; reload and review the latest revision'
+
+const DOCUMENT_CORRECTION_CONFLICT =
+  'this document already has a correction; continue that retained correction instead of creating a competing version'
+
+/** Require the opaque revision token returned by loadDocument. */
+export function requireDocumentEditRevision(value: unknown): string {
+  if (!isDocumentRevisionToken(value)) {
+    throw new DocumentEditError(409, DOCUMENT_EDIT_VERSION_REQUIRED)
+  }
+  return value
+}
+
+/** Compare exact PostgreSQL revision text without lossy JavaScript Date parsing. */
+export function assertDocumentEditRevision(expected: unknown, actual: unknown): void {
+  if (typeof expected !== 'string' || typeof actual !== 'string' || expected !== actual) {
+    throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)
+  }
+}
+
+export function assertNoExistingDocumentCorrection(existingDocumentNumber: string | null): void {
+  if (existingDocumentNumber !== null) {
+    throw new DocumentEditError(409, DOCUMENT_CORRECTION_CONFLICT)
+  }
+}
+
+/**
+ * Keep the authoritative revision read and every dependent mutation inside one
+ * transaction callback. The injected shape is intentionally tiny; production
+ * supplies Drizzle's transaction + `select … for update`, and PostgreSQL-backed
+ * regressions exercise this exact orchestration under competing connections.
+ */
+export async function runDocumentVersionedTransaction<
+  Transaction,
+  Locked extends { updatedAt: unknown },
+  Result,
+>(args: {
+  expectedRevision: string
+  transaction: (work: (tx: Transaction) => Promise<Result>) => Promise<Result>
+  lock: (tx: Transaction) => Promise<Locked | null>
+  mutate: (tx: Transaction, locked: Locked) => Promise<Result>
+}): Promise<Result> {
+  return args.transaction(async (tx) => {
+    const locked = await args.lock(tx)
+    if (!locked) throw new DocumentEditError(404, 'not found')
+    assertDocumentEditRevision(args.expectedRevision, locked.updatedAt)
+    return args.mutate(tx, locked)
+  })
+}
+
+type DocumentTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Draft-line validation for the generic editor. The save path used to FILTER
@@ -492,28 +640,10 @@ export async function applyDocumentEdit(
   }
   const { orgId, userId } = ctx
 
-  // Optimistic concurrency. The drawer sends documents.updated_at with every
-  // save; enforcing it here — in the shared service rather than one route —
-  // means the UI, the REST API, MCP and the assistant all inherit the check.
-  //
-  // The token was declared on DocumentEditInput and read by nobody, so two
-  // editors on the same draft silently overwrote each other's lines: the second
-  // save replaced the whole line set from a grid rendered before the first save
-  // existed. `parties/[id]` has compared this for its own records all along.
-  //
-  // Enforced only when supplied. Making it mandatory would break API clients
-  // that never had to send it; a caller that omits it keeps last-write-wins,
-  // which is the behaviour it already had.
-  if (body.expectedUpdatedAt !== undefined && current.updatedAt !== undefined) {
-    const expected = new Date(body.expectedUpdatedAt).getTime()
-    const actual = new Date(current.updatedAt).getTime()
-    if (!Number.isFinite(expected) || expected !== actual) {
-      throw new DocumentEditError(
-        409,
-        'this document changed after you opened it; reload and review the latest revision',
-      )
-    }
-  }
+  // Every call edits a row that already exists. Internal create/correction
+  // paths read its exact persisted token first; no row shape may authorize a
+  // missing revision.
+  const expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
 
   // Kinds with a party role (vendor/customer) must keep a party — an explicit
   // null would strand the document without the entity its posting depends on.
@@ -540,11 +670,13 @@ export async function applyDocumentEdit(
   }
 
   // custom-field validation (header + line) against the live definitions
-  const [headerDefs, lineDefs, segments] = await Promise.all([
-    loadFieldDefs('documents', current.kind),
-    loadFieldDefs('document_lines', current.kind),
-    segmentRegistry(orgId),
-  ])
+  // applyDocumentEdit can participate in a caller-owned transaction (posted
+  // correction initialization). Do not overlap queries on that one pinned
+  // node-postgres client; concurrent client.query calls are unsupported and
+  // can reorder protocol messages under load.
+  const headerDefs = await loadFieldDefs('documents', current.kind)
+  const lineDefs = await loadFieldDefs('document_lines', current.kind)
+  const segments = await segmentRegistry(orgId)
   const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
   if (headerDims && !headerDims.ok) throw new DocumentEditError(422, headerDims.error!)
   let headerCustom: Record<string, unknown> | null = null
@@ -646,19 +778,61 @@ export async function applyDocumentEdit(
     }
   }
 
-  // Pre-edit line snapshot for line-level change detection (the on_update
-  // "re-approval on material edit" pattern).
-  const oldLines = ((await db.execute<{ lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }>(sql`
-    select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
-           project_id as "projectId", amount
-      from document_lines where document_id = ${id} and org_id = ${ctx.orgId} order by line_number
-  `))).rows
+  // Filled under the document lock for line-level flow change detection.
+  let oldLines: {
+    lineNumber: number
+    accountId: string | null
+    departmentId: string | null
+    projectId: string | null
+    amount: string
+  }[] = []
 
   // All writes + the GL-Impact re-materialization happen in one transaction, so
   // a GL edit into a closed period rolls the whole edit back (nothing partial).
-  try {
-    await db.transaction(async (tx) => {
+  // The row lock and exact revision comparison are the first operations in that same
+  // transaction: a concurrent writer cannot slip between the check and the
+  // header/line replacement.
+  await runDocumentVersionedTransaction<
+    DocumentTransaction,
+    { kind: string; status: string; updatedAt: string },
+    void
+  >({
+    expectedRevision,
+    transaction: (work) => db.transaction(work),
+    lock: async (tx) => (await tx.execute<{
+        kind: string
+        status: string
+        updatedAt: string
+      }>(sql`
+        select kind, status,
+               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+          from documents
+         where id = ${id} and org_id = ${orgId}
+         for update
+      `)).rows[0] ?? null,
+    mutate: async (tx, locked) => {
+      if (locked.kind !== current.kind) throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)
+      if (locked.status !== 'draft') {
+        throw new DocumentEditError(
+          422,
+          `a ${locked.status} document cannot be edited — return it to draft or create a controlled correction`,
+        )
+      }
+
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
+      oldLines = ((await tx.execute<{
+        lineNumber: number
+        accountId: string | null
+        departmentId: string | null
+        projectId: string | null
+        amount: string
+      }>(sql`
+        select line_number as "lineNumber", account_id as "accountId", department_id as "departmentId",
+               project_id as "projectId", amount
+          from document_lines
+         where document_id = ${id} and org_id = ${ctx.orgId}
+         order by line_number
+      `))).rows
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
@@ -710,7 +884,11 @@ export async function applyDocumentEdit(
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
           total = coalesce(${totals?.total ?? null}, total),
-          updated_at = now(), updated_by = ${userId}
+          updated_at = greatest(
+            clock_timestamp(),
+            updated_at + interval '1 microsecond'
+          ),
+          updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}
       `)
 
@@ -740,10 +918,8 @@ export async function applyDocumentEdit(
           after: auditAfter,
         })
       }
-    })
-  } catch (e) {
-    throw e
-  }
+    },
+  })
 
   // on_update flows fire AFTER the edit commits (unless the caller opts out).
   // The edit-shape data rides on the EVENT (previousTotal / totalChanged /

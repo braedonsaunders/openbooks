@@ -6,6 +6,10 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
 import {
+  DocumentEditError,
+  requireDocumentEditRevision,
+} from '../../../../lib/documents'
+import {
   addTicketLine,
   FieldTicketError,
   loadFieldTicket,
@@ -21,8 +25,24 @@ export const runtime = 'nodejs'
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function fail(e: unknown) {
-  const status = e instanceof FieldTicketError ? 422 : 500
+  const status = e instanceof DocumentEditError ? e.status : e instanceof FieldTicketError ? 422 : 500
   return NextResponse.json({ error: (e as Error).message }, { status })
+}
+
+/**
+ * Full-state ticket mutations are fenced by the ticket's exact revision: the
+ * caller echoes the `revision` token it loaded, and a stale or missing token
+ * is rejected with 409 instead of silently overwriting a competing save.
+ */
+function requireRevision(value: unknown): string | NextResponse {
+  try {
+    return requireDocumentEditRevision(value)
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    throw e
+  }
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +68,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  const expectedRevision = requireRevision(body.expectedRevision)
+  if (expectedRevision instanceof NextResponse) return expectedRevision
   try {
     await updateTicketHeader(gate.user.orgId, gate.user.id, id, {
       ...(('projectId' in body) ? { projectId: isUuid(body.projectId) ? body.projectId : null } : {}),
@@ -56,7 +78,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ...(('memo' in body) ? { memo: body.memo ? String(body.memo).slice(0, 2000) : null } : {}),
       ...(['shift', 'daily', 'weekly'].includes(body.period) ? { period: body.period } : {}),
       ...(('foremanPartyId' in body) ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null } : {}),
-    })
+    }, expectedRevision)
     return NextResponse.json(await loadFieldTicket(gate.user.orgId, id))
   } catch (e) {
     return fail(e)
@@ -80,8 +102,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     if (action === 'save-grid') {
-      await saveCrewGrid(orgId, userId, id, Array.isArray(body.rows) ? body.rows : [])
+      const expectedRevision = requireRevision(body.expectedRevision)
+      if (expectedRevision instanceof NextResponse) return expectedRevision
+      await saveCrewGrid(orgId, userId, id, Array.isArray(body.rows) ? body.rows : [], expectedRevision)
     } else if (action === 'patch') {
+      const expectedRevision = requireRevision(body.expectedRevision)
+      if (expectedRevision instanceof NextResponse) return expectedRevision
       await updateTicketHeader(orgId, userId, id, {
         ...(('workDescription' in body)
           ? { memo: body.workDescription ? String(body.workDescription).slice(0, 2000) : null }
@@ -92,7 +118,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         ...(('foremanPartyId' in body)
           ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null }
           : {}),
-      })
+      }, expectedRevision)
     } else if (action === 'add-line') {
       const equipmentUnitId = isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {

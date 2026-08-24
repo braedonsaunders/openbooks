@@ -8,7 +8,15 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { computeBillTotals, persistLineTaxComponents, taxProfileMap, type BillLineInput } from '../../../../lib/bills'
-import { DocumentEditError, validateEditableDocumentLines } from '../../../../lib/documents'
+import {
+  assertDocumentEditRevision,
+  DocumentEditError,
+  documentRevisionSql,
+  DOCUMENT_EDIT_VERSION_REQUIRED,
+  requireDocumentEditRevision,
+  runDocumentVersionedTransaction,
+  validateEditableDocumentLines,
+} from '../../../../lib/documents'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
@@ -23,6 +31,27 @@ function exactMoney(v: unknown): string | 'invalid' {
   } catch {
     return 'invalid'
   }
+}
+
+type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Replace the lossy JavaScript Date `updated_at` with the exact canonical OCC
+ * token, mirroring loadDocument: node-postgres maps timestamptz to Date, which
+ * discards the microseconds PostgreSQL retains, so a caller that echoes the
+ * raw value back as its expected revision could never match under lock.
+ */
+async function withExactDocumentRevision<T extends { doc: Record<string, unknown> }>(
+  payload: T,
+  id: string,
+  orgId: string,
+): Promise<T> {
+  const row = (await db.execute<{ updatedAt: string }>(sql`
+    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+      from documents where id = ${id} and org_id = ${orgId}
+  `))
+  if (row.rows[0]) payload.doc = { ...payload.doc, updated_at: row.rows[0].updatedAt }
+  return payload
 }
 
 export const runtime = 'nodejs'
@@ -41,12 +70,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (denied) return denied
   const report = await loadExpenseReport(id, gate.user.orgId)
   if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json(report)
+  return NextResponse.json(await withExactDocumentRevision(report, id, gate.user.orgId))
 }
 
 /**
  * Autosave an expense-report draft. Approval and posted states preserve the
  * submitted evidence; corrections are represented by a separate report.
+ *
+ * Saves are fenced by the document's exact revision: the caller echoes the
+ * `updated_at` token it loaded, and the write happens only when that token
+ * still matches the row locked FOR UPDATE inside the same transaction — so
+ * two concurrent saves can never silently overwrite one another.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('expenses.create', 'expenses')
@@ -69,6 +103,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
+    expectedUpdatedAt?: string
     partyId?: string | null
     documentDate?: string
     memo?: string | null
@@ -80,6 +115,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       extraDims?: Record<string, string | null>
       custom?: Record<string, unknown>
     })[]
+  }
+  // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
+  let expectedRevision: string
+  try {
+    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    throw e
   }
 
   // custom-field validation (header + line) against the live definitions
@@ -199,63 +244,103 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await db.transaction(async (tx) => {
-      const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
-      if (!auditBefore) throw new Error(`expense report ${id} disappeared before update`)
-
-      if (preparedLines) {
-        await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
-        for (let i = 0; i < preparedLines.length; i++) {
-          const l = preparedLines[i]!
-          const inserted = (await tx.execute<{ id: string }>(sql`
-            insert into document_lines (org_id, document_id, line_number, account_id, description,
-                                        quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
-                                        tax_amount, tax_overridden,
-                                        department_id, project_id, extra_dims, custom)
-            values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
-                    '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
-                    ${l.taxAmount}, ${l.taxOverridden},
-                    ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
-            returning id
-          `))
-          await persistLineTaxComponents(tx, {
-            orgId: user.orgId,
-            documentLineId: inserted.rows[0]!.id,
-            components: l.taxComponents,
-            actorId: user.id,
-          })
+  try {
+    await runDocumentVersionedTransaction<
+      RouteTransaction,
+      { status: string; updatedAt: string },
+      void
+    >({
+      expectedRevision,
+      transaction: (work) => db.transaction(work),
+      // The row lock and exact revision comparison are the first operations in
+      // the write transaction: a concurrent writer cannot slip between the
+      // check and the header/line replacement.
+      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+        select status,
+               ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+          from documents
+         where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
+         for update
+      `)).rows[0] ?? null,
+      mutate: async (tx, locked) => {
+        if (locked.status !== 'draft') {
+          throw new DocumentEditError(
+            422,
+            `a ${locked.status} expense report cannot be edited — create a correcting report instead`,
+          )
         }
-      }
 
-      await tx.execute(sql`
-        update documents set
-          party_id = coalesce(${body.partyId ?? null}, party_id),
-          document_date = coalesce(${body.documentDate ?? null}, document_date),
-          memo = ${body.memo !== undefined ? body.memo : sql`memo`},
-          extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
-          custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
-          subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
-          tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
-          total = coalesce(${totals?.total ?? null}, total),
-          updated_at = now(), updated_by = ${user.id}
-        where id = ${id} and org_id = ${user.orgId}
-      `)
+        const auditBefore = await captureTransactionAuditSnapshot(tx, id, user.orgId)
+        if (!auditBefore) throw new Error(`expense report ${id} disappeared before update`)
 
-      const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
-      if (!auditAfter) throw new Error(`expense report ${id} disappeared during update`)
-      await recordTransactionAudit(tx, {
-        orgId: user.orgId,
-        documentId: id,
-        action: 'update',
-        actorId: user.id,
-        source: 'ui',
-        before: auditBefore,
-        after: auditAfter,
-      })
-  })
+        if (preparedLines) {
+          await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
+          for (let i = 0; i < preparedLines.length; i++) {
+            const l = preparedLines[i]!
+            const inserted = (await tx.execute<{ id: string }>(sql`
+              insert into document_lines (org_id, document_id, line_number, account_id, description,
+                                          quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
+                                          tax_amount, tax_overridden,
+                                          department_id, project_id, extra_dims, custom)
+              values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
+                      '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
+                      ${l.taxAmount}, ${l.taxOverridden},
+                      ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)})
+              returning id
+            `))
+            await persistLineTaxComponents(tx, {
+              orgId: user.orgId,
+              documentLineId: inserted.rows[0]!.id,
+              components: l.taxComponents,
+              actorId: user.id,
+            })
+          }
+        }
+
+        await tx.execute(sql`
+          update documents set
+            party_id = coalesce(${body.partyId ?? null}, party_id),
+            document_date = coalesce(${body.documentDate ?? null}, document_date),
+            memo = ${body.memo !== undefined ? body.memo : sql`memo`},
+            extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
+            custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
+            subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
+            tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),
+            total = coalesce(${totals?.total ?? null}, total),
+            updated_at = greatest(
+              clock_timestamp(),
+              updated_at + interval '1 microsecond'
+            ),
+            updated_by = ${user.id}
+          where id = ${id} and org_id = ${user.orgId}
+        `)
+
+        const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
+        if (!auditAfter) throw new Error(`expense report ${id} disappeared during update`)
+        await recordTransactionAudit(tx, {
+          orgId: user.orgId,
+          documentId: id,
+          action: 'update',
+          actorId: user.id,
+          source: 'ui',
+          before: auditBefore,
+          after: auditAfter,
+        })
+      },
+    })
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json(
+        { error: e.message, ...(e.fieldErrors ? { fieldErrors: e.fieldErrors } : {}) },
+        { status: e.status },
+      )
+    }
+    throw e
+  }
 
   const report = await loadExpenseReport(id, user.orgId)
-  return NextResponse.json(report)
+  if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return NextResponse.json(await withExactDocumentRevision(report, id, user.orgId))
 }
 
 /** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */

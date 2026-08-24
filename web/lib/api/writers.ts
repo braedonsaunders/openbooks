@@ -29,9 +29,11 @@ import {
   applyDocumentEdit,
   controlDeps,
   createDocumentDraft,
+  documentRevisionSql,
   DocumentEditError,
   isDocKindEnabled,
   loadDocument,
+  loadDocumentEditCurrent,
   type DocumentEditCurrent,
   type DocumentEditInput,
 } from "../documents";
@@ -503,17 +505,18 @@ async function createDocument(
   }
   const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
   const draftId = draft!.id;
-  const current: DocumentEditCurrent = {
-    kind: docKind,
-    status: "draft",
-    total: "0",
-    taxTotal: "0",
-    partyId: null,
-    documentDate: body.documentDate ?? await businessToday(user.orgId),
-    updatedAt: undefined,
-  };
+  // on_create flows run before createDocumentDraft returns and may mutate the
+  // row. Initialize from the settled persisted snapshot, including its exact
+  // revision, instead of treating creation as a tokenless update.
+  const current = await loadDocumentEditCurrent(draftId, user.orgId);
+  if (!current) throw new Error(`draft document ${draftId} disappeared during initialization`);
   try {
-    await applyDocumentEdit(draftId, current, body, { orgId: user.orgId, userId: user.id, source });
+    await applyDocumentEdit(
+      draftId,
+      current,
+      { ...body, expectedUpdatedAt: current.updatedAt },
+      { orgId: user.orgId, userId: user.id, source },
+    );
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
@@ -533,7 +536,8 @@ async function updateDocument(
 ): Promise<WriteResult> {
   const owned = (await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-           document_date as "documentDate", updated_at as "updatedAt"
+           document_date as "documentDate",
+           ${documentRevisionSql(sql.raw("updated_at"))} as "updatedAt"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`));
   const row = owned.rows[0];
   if (!row) return err(404, "not found");
