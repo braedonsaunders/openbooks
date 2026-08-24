@@ -121,7 +121,7 @@ export async function convertOrder(
     const target = (CONVERSION_TARGETS[doc.kind as OrderKind] || []).find((t) => t.kind === targetKind)
     if (!target) throw new ConversionError(`Cannot convert a ${doc.kind} into ${targetKind}`)
 
-    const lines = (await tx.execute<any>(sql`
+    const lines = (await tx.execute(sql`
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
              amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
              is_billable, quantity_billed
@@ -190,7 +190,7 @@ export async function convertOrder(
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
               '0', '0', '0', ${userId})
       returning id
-    `)).rows as any[]
+    `)).rows as unknown as [any]
     const newId = created.id
 
     let lineNo = 1

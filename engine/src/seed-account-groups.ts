@@ -34,7 +34,7 @@ const BURDEN_CATEGORIES = [
 ];
 
 async function main() {
-  const org: any = await db.execute(sql`select id from orgs order by created_at limit 1`);
+  const org = await db.execute(sql`select id from orgs order by created_at limit 1`);
   const orgId = org.rows[0]?.id;
   if (!orgId) throw new Error("no org found");
   for (const [dimension, groups] of [["cost_pool", COST_POOLS], ["burden", BURDEN_CATEGORIES]] as const) {

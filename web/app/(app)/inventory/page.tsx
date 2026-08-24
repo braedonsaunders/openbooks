@@ -34,7 +34,7 @@ export default async function Inventory({
   const sectionValues = ['onhand', 'movements', 'locations', 'bom'] as const
   const explicitSection = pickString(sp.inventoryView)
   const legacySection = pickString(sp.view)
-  const rawView = explicitSection ?? (sectionValues.includes(legacySection as any) ? legacySection : undefined)
+  const rawView = explicitSection ?? (sectionValues.includes(legacySection as unknown as "locations" | "onhand" | "movements" | "bom") ? legacySection : undefined)
   const view = rawView && ['onhand', 'movements', 'locations', 'bom'].includes(rawView) ? rawView : 'onhand'
   // Configuration tabs render the shared registry section instead of ledger data.
   const setupEntityKey = view === 'locations' ? 'stock-locations' : view === 'bom' ? 'bom-components' : null

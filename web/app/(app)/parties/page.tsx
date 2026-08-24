@@ -27,6 +27,19 @@ const SORT_COLUMNS = {
   name: sql`p.display_name`,
   code: sql`p.short_code`,
 } as const
+type PartyDrawerProps = Parameters<typeof PartyDrawer>[0]
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+type PartyListRow = {
+  id: string; display_name: string; short_code: string | null; email: string | null;
+  phone: string | null; is_active: boolean; is_customer: boolean; is_vendor: boolean; is_employee: boolean;
+}
+type PartyCounts = { total: string | number; customers: string | number; vendors: string | number; employees: string | number; active: string | number; inactive: string | number }
+
+async function loadWorkerCompGroups(orgId: string): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
+  if (!(await isFeatureEnabled(orgId, 'payroll'))) return { rows: [] }
+  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`)
+  return { rows: result.rows }
+}
 
 // A party is classified only by its active canonical role row.
 const ROLE_CONDITIONS = {
@@ -75,7 +88,7 @@ export default async function Parties({
     ${showInactive ? sql`` : sql` and p.is_active`}`
 
   const [parties, counts] = await Promise.all([
-    db.execute(sql`
+    db.execute<PartyListRow>(sql`
       select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active,
              ${ROLE_CONDITIONS.customer} as is_customer,
              ${ROLE_CONDITIONS.vendor} as is_vendor,
@@ -84,8 +97,8 @@ export default async function Parties({
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`
+    `),
+    db.execute<PartyCounts>(sql`
       select count(*) as total,
              count(*) filter (where ${ROLE_CONDITIONS.customer}) as customers,
              count(*) filter (where ${ROLE_CONDITIONS.vendor}) as vendors,
@@ -94,30 +107,28 @@ export default async function Parties({
              count(*) filter (where not p.is_active) as inactive
         from parties p
        where p.org_id = ${orgId} ${showInactive ? sql`` : sql`and p.is_active`}
-    `) as any,
+    `),
   ])
-  const c = counts.rows[0]
+  const c = counts.rows[0] ?? { total: 0, customers: 0, vendors: 0, employees: 0, active: 0, inactive: 0 }
   const total = Number(c.total)
   const filteredTotal =
     params.q || role
-      ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
+      ? Number((await db.execute<{ n: string | number }>(sql`select count(*) as n from parties p where ${where}`)).rows[0]?.n ?? 0)
       : total
 
   const [openParty, pickers, payrollEnabled, multiCurrency, crmEnabled] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
     partyId
       ? Promise.all([
-          db.execute(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`) as any,
-          db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`) as any,
-          db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`) as any,
+          db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
+          db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
+          db.execute<ElementOf<PartyDrawerProps['trades']>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
           loadFieldDefs('parties'),
           subsidiaryUiOptions(orgId),
-          db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`) as any,
-          db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`) as any,
-          db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`) as any,
-          isFeatureEnabled(orgId, 'payroll').then((enabled) => enabled
-            ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`) as any
-            : Promise.resolve({ rows: [] })),
+          db.execute<ElementOf<PartyDrawerProps['accounts']>>(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
+          db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`),
+          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+          loadWorkerCompGroups(orgId),
         ])
       : null,
     isFeatureEnabled(orgId, 'payroll'),
@@ -130,7 +141,7 @@ export default async function Parties({
         userId: authz.user.id,
         recordType: role,
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[3] as any,
+        headerDefs: (pickers[3]),
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),
       })
@@ -178,10 +189,10 @@ export default async function Parties({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {parties.rows.map((p: any) => (
+              {parties.rows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-semibold">
-                    <Link href={buildListDrawerHref('/parties', sp, 'party', String(p.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={(buildListDrawerHref('/parties', sp, 'party', String(p.id)))} className="text-teal-700 hover:underline dark:text-teal-300">
                       {p.display_name}
                     </Link>
                   </TableCell>
@@ -211,12 +222,12 @@ export default async function Parties({
       {openParty && pickers ? (
         <PartyDrawer
           key={String(openParty.party.id)}
-          payload={openParty as any}
+          payload={openParty as unknown as PartyDrawerProps['payload']}
           paymentTerms={pickers[0].rows}
           departments={pickers[1].rows}
           trades={pickers[2].rows}
           workerCompGroups={pickers[8].rows}
-          fieldDefs={pickers[3] as any}
+          fieldDefs={pickers[3] as unknown as PartyDrawerProps['fieldDefs']}
           subsidiaries={pickers[4]}
           accounts={pickers[5].rows}
           taxCodes={pickers[6].rows}

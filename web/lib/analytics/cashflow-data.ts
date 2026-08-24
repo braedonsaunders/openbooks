@@ -41,6 +41,12 @@ export type {
 
 import type { SideSummary } from "../cash/core";
 
+interface AccountOptionRow extends Record<string, unknown> {
+  id: string;
+  number: string | null;
+  name: string;
+}
+
 export interface CashflowData {
   asOf: string;
   horizonWeeks: number;
@@ -92,11 +98,11 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
     bankBalances(asOfIso),
     loadCategories(orgId),
     analyticsConfig(orgId, "cashflow"),
-    db.execute(sql`
+    (db.execute<AccountOptionRow>(sql`
       select id, number, name from accounts
       where org_id = ${orgId} and is_summary = false
       order by number nulls last, name
-    `) as Promise<any>,
+    `)),
   ]);
   const weeklyCap = apCfg.weeklyApCap ?? 0;
   const restrictToSafe = (apCfg.restrictToSafe ?? 0) >= 1;
@@ -186,6 +192,6 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
     apSettings: { weeklyCap, restrictToSafe },
     deferredBeyondHorizon: timeline.deferredBeyondHorizon,
     vendorOptions: [...new Map(apItems.filter((i) => i.partyId).map((i) => [i.partyId!, { id: i.partyId!, name: i.partyName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
-    accountOptions: (accountRows.rows as any[]).map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
+    accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name })),
   };
 }

@@ -414,10 +414,10 @@ export async function updateDraftSubcontract(input: {
   if (cmp(retainage, "0") < 0 || cmp(retainage, "100") > 0) throw new SubcontractError("Retainage percent must be between 0 and 100");
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const before = (await tx.execute<any>(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`));
+    const before = (await tx.execute(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`));
     if (!before.rows[0]) throw new SubcontractError("Subcontract not found");
     if (before.rows[0].status !== "draft") throw new SubcontractError("Only a draft subcontract can be edited");
-    const after = (await tx.execute<any>(sql`
+    const after = (await tx.execute(sql`
       update subcontracts set title = ${title}, description = ${input.description ?? null}, original_commitment = ${original},
         default_retainage_percent = ${retainage}, starts_on = ${input.startsOn ?? null}, ends_on = ${input.endsOn ?? null},
         updated_at = now(), updated_by = ${input.userId}
@@ -469,7 +469,7 @@ export async function addSubcontractSovLine(input: {
 export async function removeSubcontractSovLine(orgId: string, userId: string, id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
-    const row = (await tx.execute<any>(sql`
+    const row = (await tx.execute(sql`
       select l.*, s.status from subcontract_sov_lines l join subcontracts s on s.id = l.subcontract_id and s.org_id = l.org_id
       where l.org_id = ${orgId} and l.id = ${id} for update
     `));
@@ -609,7 +609,7 @@ export async function voidSubcontractChangeOrder(orgId: string, userId: string, 
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
     const result = await tx.execute(sql`update subcontract_change_orders set status = 'void', updated_at = now(), updated_by = ${userId} where org_id = ${orgId} and id = ${id} and status = 'draft' returning id`);
-    if (!(result as any).rows[0]) throw new SubcontractError("Only a draft change order can be voided");
+    if (!(result).rows[0]) throw new SubcontractError("Only a draft change order can be voided");
     await audit(tx, orgId, "subcontract_change_orders", id, "void", { after: { status: "void" } }, userId);
   });
 }

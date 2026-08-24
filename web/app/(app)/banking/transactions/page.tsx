@@ -21,7 +21,7 @@ import {
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import { DocumentDrawer } from '../../../../components/document-drawer'
+import { DocumentDrawer, type DocumentDrawerProps } from '../../../../components/document-drawer'
 import { DocumentRowActions } from '../../../../components/document-row-actions'
 import { NewDocumentButton } from '../../../../components/new-document-button'
 
@@ -103,8 +103,8 @@ export default async function BankingTransactions({
         userId: authz.user.id,
         recordType: openKind!,
         userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: pickers[7] as any,
-        lineDefs: pickers[8] as any,
+        headerDefs: (pickers[7]),
+        lineDefs: (pickers[8]),
         explicitLayoutId: pickString(sp.form),
       })
     : null
@@ -151,26 +151,26 @@ export default async function BankingTransactions({
         )}
         drawer={openDoc && pickers && cfg ? (
           <DocumentDrawer
-            payload={openDoc as any}
-            key={(openDoc as any).doc.id}
+            payload={(openDoc)}
+            key={String(openDoc.doc.id)}
             config={cfg}
             basePath={basePath}
             initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-            accounts={pickers[0] as any}
-            taxCodes={pickers[1] as any}
-            taxGroups={pickers[2] as any}
-            departments={(pickers[3] as any).departments}
-            projects={(pickers[3] as any).projects}
-            locations={(pickers[3] as any).locations}
-            classes={(pickers[3] as any).classes}
-            segments={(pickers[3] as any).segments}
-            builtinSegments={(pickers[3] as any).builtinSegments}
-            items={pickers[4] as any}
-            cards={pickers[5] as any}
-            bankAccounts={pickers[6] as any}
-            subsidiaries={(pickers[9] as any) ?? undefined}
-            headerDefs={pickers[7] as any}
-            lineDefs={pickers[8] as any}
+            accounts={(pickers[0])}
+            taxCodes={(pickers[1])}
+            taxGroups={(pickers[2])}
+            departments={((pickers[3])).departments}
+            projects={((pickers[3])).projects}
+            locations={((pickers[3])).locations}
+            classes={((pickers[3])).classes}
+            segments={((pickers[3])).segments}
+            builtinSegments={((pickers[3])).builtinSegments}
+            items={pickers[4] as unknown as DocumentDrawerProps['items']}
+            cards={(pickers[5])}
+            bankAccounts={(pickers[6])}
+            subsidiaries={((pickers[9])) ?? undefined}
+            headerDefs={pickers[7] as unknown as DocumentDrawerProps['headerDefs']}
+            lineDefs={pickers[8] as unknown as DocumentDrawerProps['lineDefs']}
             canCreate={canCreate}
             canPost={can(authz, 'ap.post') || can(authz, 'gl.post')}
             layout={resolvedForm?.layout}

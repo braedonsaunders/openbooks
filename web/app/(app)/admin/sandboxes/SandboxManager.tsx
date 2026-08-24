@@ -104,7 +104,7 @@ export function SandboxManager({
               start(async () => {
                 await createSandboxAction({
                   name,
-                  tier: tier as any,
+                  tier: tier as unknown as "masked" | "as_of" | "dev" | "full",
                   asOfPeriodId: tier === "as_of" ? asOfPeriodId : null,
                 });
                 setName("");

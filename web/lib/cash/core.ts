@@ -283,7 +283,7 @@ export async function paymentStats(side: Side, asOfIso: string): Promise<Payment
        and settled_on <= ${asOfIso}::date
      group by party_id
     having sum(n) > 0
-  `)) as any;
+  `));
   const map = new Map<string, { avg: number; sd: number }>();
   let sum = 0;
   let count = 0;
@@ -301,10 +301,10 @@ export async function paymentStats(side: Side, asOfIso: string): Promise<Payment
 export async function loadCategories(orgId: string): Promise<ForecastCategory[]> {
   const r = (await db.execute(sql`
     select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${orgId}
-  `)) as any;
+  `));
   const raw = r.rows[0]?.cats;
   if (!Array.isArray(raw)) return [];
-  return raw.filter((c: any) => c && typeof c === "object" && c.id && c.name && c.method);
+  return raw.filter((c) => c && typeof c === "object" && c.id && c.name && c.method);
 }
 
 /* ------------------- category engine helpers ------------------------------- */
@@ -445,7 +445,7 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name
-    `)) as any;
+    `));
     const weeklyHistory: Record<string, number> = {};
     const accountTotals = new Map<string, number>();
     for (const x of r.rows as any[]) {
@@ -494,8 +494,8 @@ export async function categoryWeekly(
         and coalesce(d.document_date, d.posting_date) > ${asOfIso}::date - (${historyMonths} || ' months')::interval
         and coalesce(d.document_date, d.posting_date) <= ${asOfIso}::date${subScope(sql`d.subsidiary_id`, context.subIds)}
       group by 1
-    `)) as any;
-    const months = (r.rows as any[]).map((x) => Number(x.paid)).filter((v) => v > 0).sort((a, b) => a - b);
+    `));
+    const months = (r.rows).map((x) => Number(x.paid)).filter((v) => v > 0).sort((a, b) => a - b);
     const mid = Math.floor(months.length / 2);
     const median = months.length ? (months.length % 2 !== 0 ? months[mid]! : (months[mid - 1]! + months[mid]!) / 2) : 0;
     let baseAmount = isSet(cat.expectedWeek) ? median : median / 4.345;
@@ -511,7 +511,7 @@ export async function categoryWeekly(
       vendors: vids.length,
       ...(cat.partyName ? { vendor: cat.partyName } : {}),
     };
-    breakdown = (r.rows as any[])
+    breakdown = (r.rows)
       .map((x) => ({ name: String(x.month), amount: round2(Number(x.paid)), type: "Source Month" }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } else if (cat.method === "credit_card_cycle" && (cat.cardAccountIds?.length || cat.accountIds?.length)) {
@@ -530,13 +530,13 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
-    `)) as any;
+    `));
     const balR = (await db.execute(sql`
       select coalesce(sum(l.amount), 0) as bal
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
-    `)) as any;
+    `));
     const totalCurrentBalance = Math.abs(Number(balR.rows[0]?.bal ?? 0));
 
     interface DayTotals { date: Date; spend: number; paid: number }
@@ -725,7 +725,7 @@ export async function categoryWeekly(
         and d.kind in ('vendor_payment', 'check')
         and coalesce(d.document_date, d.posting_date) >= ${asOfIso}::date - (${historyMonths} || ' months')::interval${subScope(sql`d.subsidiary_id`, context.subIds)}
       group by 1
-    `)) as any;
+    `));
     const events = (r.rows as any[])
       .map((x) => ({ date: parseISO(x.day), amount: Number(x.paid) }))
       .sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -796,7 +796,7 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
-    `)) as any;
+    `));
     const weeklyHistory: Record<string, number> = {};
     const currentWeekKey = toISO(weekStart(asOf));
     const startKey = toISO(tStart);
@@ -905,8 +905,13 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number
     order by coalesce(sum(m.amt), 0) desc
-  `)) as any;
-  return (r.rows as any[]).map((x) => ({ id: x.id, name: x.name, number: x.number, balance: Number(x.balance) }));
+  `));
+  return r.rows.map((x) => ({
+    id: String(x.id),
+    name: String(x.name),
+    number: x.number == null ? null : String(x.number),
+    balance: Number(x.balance),
+  }));
 }
 
 export function bucketOf(daysPastDue: number): string {

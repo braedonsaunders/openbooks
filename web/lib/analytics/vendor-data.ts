@@ -80,6 +80,18 @@ export interface VendorData {
   quadrantBreakdown: { quadrant: Quadrant; count: number; spend: number }[];
 }
 
+interface VendorSpendRow extends Record<string, unknown> {
+  id: string; name: string; spend: string | number; prior_spend: string | number;
+}
+interface VendorBillRow extends Record<string, unknown> {
+  id: string; bills: string | number; last_bill: string | null;
+}
+interface MonthSpendRow extends Record<string, unknown> { month: string; spend: string | number }
+interface VendorPaymentRow extends Record<string, unknown> {
+  id: string; paid_lines: string | number; avg_days: string | number | null;
+  on_time: string | number; late_amount: string | number;
+}
+
 function priorYear(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
   return `${y! - 1}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -119,7 +131,7 @@ export async function vendorData(
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
     // Entry window first: joined inline the planner drives from accounts and
     // probes the entry primary key once per journal line in the tenant.
-    db.execute(sql`
+    db.execute<VendorSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
@@ -134,14 +146,14 @@ export async function vendorData(
       where l.org_id = ${orgId} and a.org_id = ${orgId} and p.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by p.id, p.display_name
-    `) as Promise<any>,
-    db.execute(sql`
+    `),
+    db.execute<VendorBillRow>(sql`
       select party_id as id, count(*)::int as bills, max(posting_date) as last_bill
       from documents
       where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted' and posting_date <= ${ref}
       group by party_id
-    `) as Promise<any>,
-    db.execute(sql`
+    `),
+    db.execute<MonthSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
@@ -153,10 +165,10 @@ export async function vendorData(
       where l.org_id = ${orgId} and a.org_id = ${orgId}
         and a.type in ('cogs','expense','expense_deferred')
       group by 1
-    `) as Promise<any>,
+    `),
     // Payment behaviour: each AP open-item line paid via an application; compare
     // the payment entry's date to the bill's due date.
-    db.execute(sql`
+    db.execute<VendorPaymentRow>(sql`
       select bl.party_id as id,
         count(*)::int as paid_lines,
         round(avg(pe.posting_date - coalesce(bl.due_date, be.posting_date))::numeric, 1) as avg_days,
@@ -173,13 +185,13 @@ export async function vendorData(
         and ba.type = 'liability_payable' and a.unapplied_at is null and bl.party_id is not null
         and be.posting_date >= ${from} and be.posting_date <= ${to}
       group by bl.party_id
-    `) as Promise<any>,
+    `),
   ]);
 
-  const billMap = new Map<string, any>((billRows.rows as any[]).map((r) => [r.id, r]));
-  const payMap = new Map<string, any>((payRows.rows as any[]).map((r) => [r.id, r]));
+  const billMap = new Map(billRows.rows.map((r) => [r.id, r]));
+  const payMap = new Map(payRows.rows.map((r) => [r.id, r]));
 
-  const base = (spendRows.rows as any[])
+  const base = spendRows.rows
     .map((r) => {
       const spend = Number(r.spend);
       const priorSpend = Number(r.prior_spend);
@@ -243,7 +255,7 @@ export async function vendorData(
     return { ...r, sharePct, tier, score, grade: gradeOf(score), performance, quadrant };
   });
 
-  const byMonth = new Map<string, number>((monthRows.rows as any[]).map((r) => [r.month, Number(r.spend)]));
+  const byMonth = new Map<string, number>(monthRows.rows.map((r) => [r.month, Number(r.spend)]));
   const monthly: MonthSpend[] = [];
   for (let i = 0; i < 12; i++) {
     const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));

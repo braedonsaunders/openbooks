@@ -188,6 +188,47 @@ export interface TrueCostData {
   };
 }
 
+type TrueCostSqlNumeric = string | number | null;
+
+interface EmployeeRateSqlRow {
+  id: string;
+  name: string;
+  dept_id: string | null;
+  dept_name: string;
+  title: string;
+  rate: TrueCostSqlNumeric;
+  hours: TrueCostSqlNumeric;
+}
+
+interface HoursSqlRow {
+  department_id: string | null;
+  month: string;
+  billed_hours: TrueCostSqlNumeric;
+  total_hours: TrueCostSqlNumeric;
+  nonbill_cost: TrueCostSqlNumeric;
+}
+
+interface DepartmentSqlRow {
+  id: string;
+  name: string;
+}
+
+interface BurdenAccountSqlRow {
+  account_id: string;
+  number: string | null;
+  name: string;
+  amount: TrueCostSqlNumeric;
+  department_id: string | null;
+  month: string;
+}
+
+interface PriorBurdenSqlRow {
+  account_id: string;
+  amount: TrueCostSqlNumeric;
+  billed_hours: TrueCostSqlNumeric;
+  nonbill_cost: TrueCostSqlNumeric;
+}
+
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(Date.UTC(y!, m! - 1, 1));
@@ -195,7 +236,7 @@ function monthLabel(ym: string): string {
 }
 
 /** Hours-weighted average labour cost rate (cascading composite base). */
-function employeesWeightedRate(rows: any[]): number {
+function employeesWeightedRate(rows: EmployeeRateSqlRow[]): number {
   let wsum = 0, hsum = 0;
   for (const r of rows) {
     const rate = Number(r.rate ?? 0);
@@ -221,7 +262,7 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
 export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
   const r = (await db.execute(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
-  `)) as any;
+  `));
   const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
   let profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
     ? raw!.profiles.map((p) => ({ ...DEFAULT_PROFILE, ...p, categorySettings: p.categorySettings ?? {}, customCategories: p.customCategories ?? [], baseOverrides: p.baseOverrides ?? {} }))
@@ -258,7 +299,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         and a.is_summary = false
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1, 2, 3, 4, 5
-    `) as Promise<any>,
+    `),
     // Labour hours per department × month (billed = is_billable). Non-billable
     // labour cost (Σ hours × cost rate on non-billable time) is a native burden
     // category — the cost of paying people for unbilled time must be recovered
@@ -271,7 +312,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       from time_entries t
       where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
       group by 1, 2
-    `) as Promise<any>,
+    `),
     // Per-employee weighted labour rate + dominant dept/labour class.
     db.execute(sql`
       with per_emp as (
@@ -301,7 +342,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       left join departments d on d.id = dd.department_id and d.org_id = ${orgId}
       left join dom_item di on di.employee_party_id = pe.employee_party_id
       where pe.hours > 0
-    `) as Promise<any>,
+    `),
     // Prior equal window: per-account expense (classified below) + billed hours.
     db.execute(sql`
       select l.account_id, sum(l.amount) as amount,
@@ -315,7 +356,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       where l.org_id = ${orgId} and a.type in ('expense', 'expense_other', 'expense_deferred')
         and a.is_summary = false and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
       group by 1
-    `) as Promise<any>,
+    `),
     // Does the "burden applied" GL mechanism carry postings in the period?
     db.execute(sql`
       select coalesce(-sum(l.amount), 0) as applied, count(*) as lines
@@ -324,8 +365,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId} and a.name ~* 'burden applied|overhead burden'
         and e.posting_date >= ${from} and e.posting_date <= ${to}
-    `) as Promise<any>,
-    db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`) as Promise<any>,
+    `),
+    db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`),
     // Allocation bases by department (): labour $,
     // headcount, revenue, direct cost. Hours come from hoursRows above.
     // One grouped pass per source instead of a correlated GL subquery per
@@ -368,7 +409,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         left join gl on gl.department_id = d.id
         left join hc on hc.department_id = d.id
        where d.org_id = ${orgId}
-    `) as Promise<any>,
+    `),
   ]);
   const profile = cfg.profile;
 
@@ -381,7 +422,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const nonbillCostByMonth = new Map<string, number>();
   const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
   let billedHours = 0, totalHours = 0, nonbillCostTotal = 0;
-  for (const r of hoursRows.rows as any[]) {
+  for (const r of hoursRows.rows as unknown as HoursSqlRow[]) {
     const dept = r.department_id ?? "none";
     const billed = Number(r.billed_hours ?? 0);
     const total = Number(r.total_hours ?? 0);
@@ -401,7 +442,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   // Burden centres = departments with BILLED hours (a dept that bills nothing
   // has no rate denominator; its tagged burden is reallocated like untagged).
-  const departmentsBase = (deptRows.rows as any[])
+  const departmentsBase = (deptRows.rows as unknown as DepartmentSqlRow[])
     .map((d) => ({ id: d.id as string, name: d.name as string, hours: deptHours.get(d.id) ?? { billed: 0, total: 0 } }))
     .filter((d) => d.hours.billed > 0)
     .sort((a, b) => b.hours.billed - a.hours.billed);
@@ -409,7 +450,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   // ---- allocation-base bundle () -----------------
   const deptIds = departmentsBase.map((d) => d.id);
-  const baseMap = new Map((baseRows.rows as any[]).map((r) => [r.dept_id as string, r]));
+  const baseMap = new Map((baseRows.rows).map((r) => [r.dept_id as string, r]));
   const sumBase = (field: string) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
   const byDeptBase = (field: string): Record<string, number> => Object.fromEntries(deptIds.map((id) => [id, Number(baseMap.get(id)?.[field] ?? 0)]));
   const bases: AllocationBaseBundle = {
@@ -450,7 +491,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const monthCatRate = new Map<string, Map<string, number>>(); // month → cat key → amount
   const monthDeptBurden = new Map<string, Map<string, number>>(); // month → dept → amount
 
-  for (const r of acctRows.rows as any[]) {
+  for (const r of acctRows.rows as unknown as BurdenAccountSqlRow[]) {
     if (directLabor.has(r.account_id)) continue; // direct labour is not burden
     const amount = Number(r.amount ?? 0);
     if (amount === 0) continue;
@@ -604,7 +645,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
   // ---- composite rate via the configured method () ---
-  const laborHoursSumForComposite = employeesWeightedRate(empRows.rows as any[]);
+  const typedEmployeeRows = empRows.rows as unknown as EmployeeRateSqlRow[];
+  const laborHoursSumForComposite = employeesWeightedRate(typedEmployeeRows);
   const compositeCats: CompositeCategory[] = categories.map((c) => ({
     id: c.id, rateValue: c.rate, totalExpense: c.totalAmount, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite,
   }));
@@ -631,7 +673,8 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   // ---- prior-window composite for the change chip (same classification) -----------
   const priorBilled = Number(priorRows.rows[0]?.billed_hours ?? 0);
   let priorBurden = 0;
-  for (const r of priorRows.rows as any[]) {
+  const typedPriorRows = priorRows.rows as unknown as PriorBurdenSqlRow[];
+  for (const r of typedPriorRows) {
     if (directLabor.has(r.account_id)) continue;
     if (burdenGroups.byAccount.has(r.account_id)) priorBurden += Number(r.amount ?? 0);
   }
@@ -688,7 +731,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   }
 
   // ---- labour rates ------------------------------------------------------------------------
-  const employees: EmployeeRate[] = (empRows.rows as any[])
+  const employees: EmployeeRate[] = typedEmployeeRows
     .map((r) => ({
       id: r.id, name: r.name, deptId: r.dept_id, deptName: r.dept_name, title: r.title,
       rate: Number(r.rate ?? 0), hours: Number(r.hours ?? 0),

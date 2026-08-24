@@ -237,7 +237,7 @@ export default async function Documents({
 
       {openFile ? (
         <FileDrawer
-          file={openFile as any}
+          file={(openFile)}
           canEdit={accessAtLeast(openFileAccess, 'editor')}
           canManage={accessAtLeast(openFileAccess, 'manager')}
         />
@@ -248,7 +248,7 @@ export default async function Documents({
       {openFolder ? (
         <FolderDrawer
           mode="edit"
-          folder={openFolder as any}
+          folder={(openFolder)}
           folders={localizedTree}
           canManage={accessAtLeast(openFolderAccess, 'manager')}
         />

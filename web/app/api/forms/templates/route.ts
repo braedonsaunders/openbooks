@@ -16,7 +16,7 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select t.id, t.key, t.name, t.category, t.description, t.status, t.kind,
            t.allowed_roles, t.updated_at,
            v.max_version, v.version_count, v.published_version,
@@ -34,7 +34,7 @@ export async function GET() {
       ) rc on true
      where t.org_id = ${user.orgId}
      order by t.status = 'archived', t.name
-  `)) as any
+  `)))
 
   return NextResponse.json({ templates: r.rows })
 }
@@ -67,9 +67,9 @@ export async function POST(req: Request) {
   }
   const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'form'
 
-  const dupe = (await db.execute(sql`
+  const dupe = ((await db.execute(sql`
     select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-  `)) as any
+  `)))
   if (dupe.rows.length > 0) {
     return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
   }

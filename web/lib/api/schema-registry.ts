@@ -39,6 +39,20 @@ import {
 
 export * from "./registry-data";
 
+interface ColumnRow extends Record<string, unknown> {
+  table_name: string; column_name: string; data_type: string; is_nullable: "YES" | "NO"; column_default: string | null;
+}
+interface CustomFieldRow extends Record<string, unknown> {
+  target_table: string; target_kind: string | null; key: string; label: string | null;
+  field_type: string; is_required: boolean;
+}
+interface CustomRecordTypeRow extends Record<string, unknown> {
+  key: string; name: string; description: string | null; fields: unknown;
+}
+interface StoredFormField {
+  id?: string; key?: string; type?: string; required?: boolean; label?: string | null;
+}
+
 /**
  * Load the full API schema for an org: built-in record types (with live DB
  * columns + the org's custom fields on those tables) and the org's published
@@ -54,13 +68,13 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
 
   // Query live column metadata for all built-in tables at once.
   const tables = [...new Set(builtIn.map((t) => t.table!))];
-  const cols = (await db.execute(sql`
+  const cols = await db.execute<ColumnRow>(sql`
     select table_name, column_name, data_type, is_nullable, column_default
       from information_schema.columns
      where table_schema = 'public' and table_name = any(${sql.raw(`ARRAY[${tables.map((t) => `'${t}'`).join(",")}]::text[]`)})
-     order by table_name, ordinal_position`)) as any;
+     order by table_name, ordinal_position`);
 
-  const byTable = new Map<string, any[]>();
+  const byTable = new Map<string, ColumnRow[]>();
   for (const row of cols.rows) {
     const arr = byTable.get(row.table_name) ?? [];
     arr.push(row);
@@ -70,13 +84,13 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   // Custom fields on built-in tables (custom_field_defs), keyed by table and
   // optional kind. Surfaced as `cf_<key>` so bills/parties/etc. advertise and
   // accept their org custom fields — like source platform's `custentity_*`.
-  const cfDefs = (await db.execute(sql`
+  const cfDefs = await db.execute<CustomFieldRow>(sql`
     select target_table, target_kind, key, label, field_type, is_required
       from custom_field_defs
      where org_id = ${orgId} and is_active
-     order by sort_order, label`)) as any;
+     order by sort_order, label`);
 
-  const cfByTargetKind = new Map<string, any[]>();
+  const cfByTargetKind = new Map<string, CustomFieldRow[]>();
   for (const row of cfDefs.rows) {
     const k = `${row.target_table}::${row.target_kind ?? ""}`;
     const arr = cfByTargetKind.get(k) ?? [];
@@ -137,17 +151,17 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
   });
 
   // Layer on custom record types (dynamically defined by the org).
-  const custom = (await db.execute(sql`
+  const custom = await db.execute<CustomRecordTypeRow>(sql`
     select key, name, description, fields
       from custom_record_types
      where org_id = ${orgId} and status = 'published'
-     order by sort_order, name`)) as any;
+     order by sort_order, name`);
 
   for (const row of custom.rows) {
     // Flatten the canonical FormSection[] definition into the API field list.
-    const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: any[] }>;
+    const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: StoredFormField[] }>;
     const flat = sections.flatMap((s) => (Array.isArray(s.fields) ? s.fields : []));
-    const fields: ApiField[] = flat.map((f: any): ApiField => ({
+    const fields: ApiField[] = flat.map((f): ApiField => ({
       name: String(f.id ?? f.key ?? ""),
       type: fieldTypeToApi(f.type ?? "text"),
       required: Boolean(f.required),
@@ -191,7 +205,7 @@ export async function resolveApiType(
 
   const r = (await db.execute(sql`
     select key from custom_record_types
-     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`)) as any;
+     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`));
   if (!r.rows[0]) return null;
   return {
     key: typeKey,

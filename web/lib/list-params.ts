@@ -141,7 +141,7 @@ export function buildListDrawerHref(
  * `<Link href>` (typed-routes refuses string template literals at the type
  * level even though the runtime is fine with them).
  */
-export function buildExportHref(base: string, current: Search): any {
+export function buildExportHref(base: string, current: Search): unknown {
   const merged: Record<string, string | number | undefined | null> = {}
   for (const [k, v] of Object.entries(current)) {
     if (k === 'page' || k === 'perPage') continue

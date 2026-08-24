@@ -81,8 +81,8 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
     db.execute(sql`select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled from orgs where id = ${authz.user.orgId}`),
   ])
   const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
-  const total = Number((totalResult as any).rows[0]?.n ?? 0)
-  const counts = new Map<string, number>((countsResult as any).rows.map((row: any) => [row.status, Number(row.n)]))
+  const total = Number(((totalResult)).rows[0]?.n ?? 0)
+  const counts = new Map<string, number>(((countsResult)).rows.map((row: any) => [row.status, Number(row.n)]))
   const selectedId = pickString(sp.capture)
   let detail: CaptureDetail | null = null
   let options: { vendors: any[]; accounts: any[]; purchaseOrders: any[] } | null = null
@@ -136,10 +136,10 @@ export default async function ApCapturePage({ searchParams }: { searchParams: Pr
         `),
       ])
       detail.evidence = (evidence as any).rows
-      options = { vendors: (vendors as any).rows, accounts: (accounts as any).rows, purchaseOrders: (purchaseOrders as any).rows }
+      options = { vendors: ((vendors)).rows, accounts: ((accounts)).rows, purchaseOrders: ((purchaseOrders)).rows }
     }
   }
-  const captureOperational = Boolean((globalResult as any).rows[0]?.enabled)
+  const captureOperational = Boolean(((globalResult)).rows[0]?.enabled)
     && captureSettings.enabled && captureSettings.hasKey && Boolean(captureSettings.endpoint)
   const actions = (
     <div className="flex items-center gap-2">

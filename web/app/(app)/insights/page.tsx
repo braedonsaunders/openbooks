@@ -66,13 +66,13 @@ export default async function InsightsCards({
     ${status ? sql` and status = ${status}` : sql``}`
 
   const [cards, counts, inventoryEnabled] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select id, name, description, viz_type, status, query, updated_at
         from insight_cards
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
+    `)),
     db.execute(sql`
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
@@ -141,7 +141,7 @@ export default async function InsightsCards({
                 return (
                   <TableRow key={row.id}>
                     <TableCell className="font-semibold">
-                      <Link href={buildListDrawerHref('/insights', sp, 'card', String(row.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
+                      <Link href={(buildListDrawerHref('/insights', sp, 'card', String(row.id)))} className="text-teal-700 hover:underline dark:text-teal-300">
                         {row.name}
                       </Link>
                       {row.description ? (

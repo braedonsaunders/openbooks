@@ -199,7 +199,7 @@ export function ItemRatesEditor({
           { key: 'from', header: t('effectiveFrom'), cell: (v) => v.effective_from },
           { key: 'to', header: t('effectiveTo'), cell: (v) => v.effective_to ?? '—' },
           { key: 'status', header: common('labels.status'), cell: (v) => <Badge variant={v.status === 'active' ? 'success' : 'secondary'}>{v.status}</Badge> },
-          { key: 'rates', header: t('rates'), cell: (v) => v.tiers.map((x: any) => `${x.unitName}: ${money(x.billRate)}`).join(' · ') },
+          { key: 'rates', header: t('rates'), cell: (v) => v.tiers.map((x) => `${x.unitName}: ${money(x.billRate)}`).join(' · ') },
         ]}
       />
     </section>

@@ -25,7 +25,7 @@ test("project charge balances, costs the job, and preserves equipment attributio
     projectId: PROJECT,
     equipmentUnitId: EQUIPMENT,
     extraDims: {},
-  } as any]);
+  } as unknown as { amount: string; id: string; orgId: string; documentId: string; lineNumber: number; itemId: string | null; accountId: string | null; description: string | null; quantity: string; unit: string | null; unitPrice: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string | null; taxAmount: string; taxOverridden: boolean; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; subsidiaryId: string | null; extraDims: unknown; employeeId: string | null; timeEntryId: string | null; timeTypeId: string | null; costMultiplier: string | null; markupPercent: string | null; isBillable: boolean; billedByLineId: string | null; fieldTicketId: string | null; equipmentUnitId: string | null; rateVersionId: string | null; ratePresentation: "summary" | "rate_components" | null; custom: unknown; baseQuantity: string | null; baseUnit: string | null; costRate: string | null; billRate: string | null; costAmount: string | null; billAmount: string | null; recoveryAccountId: string | null; quantityFulfilled: string; quantityBilled: string; stockLocationId: string | null; createdAt: Date; createdBy: string | null; updatedAt: Date; updatedBy: string | null; }]);
 
   assert.equal(lines.length, 2);
   assert.equal(sum(lines.map((line) => line.amount)), "0.0000");

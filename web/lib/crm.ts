@@ -48,7 +48,7 @@ export async function loadCrmAccount(partyId: string, orgId: string) {
         left join crm_sales_territories tt on tt.id = e.to_territory_id and tt.org_id = e.org_id
        where e.account_profile_id = ${profile.rows[0].id} and e.org_id = ${orgId}
        order by e.occurred_at desc`),
-  ]) as any[]
+  ])
   return {
     profile: profile.rows[0],
     activities: activities.rows,
@@ -96,7 +96,7 @@ export async function loadOpportunity(id: string, orgId: string) {
         join crm_opportunity_statuses ts on ts.id = e.to_status_id and ts.org_id = e.org_id
         left join users u on u.id = e.created_by
        where e.opportunity_id = ${id} and e.org_id = ${orgId} order by e.occurred_at desc`),
-  ]) as any[]
+  ])
   const visibleDocuments = []
   for (const row of documents.rows) {
     if (await isDocKindEnabled(orgId, String((row as { kind?: unknown }).kind))) {
@@ -122,7 +122,7 @@ export async function loadActivity(id: string, orgId: string) {
         left join users u on u.id = p.user_id
         left join contacts c on c.id = p.contact_id and c.org_id = p.org_id
        where p.activity_id = ${id} and p.org_id = ${orgId} order by p.created_at`),
-  ]) as any[]
+  ])
   return { activity: activity.rows[0], links: links.rows, participants: participants.rows }
 }
 

@@ -55,7 +55,7 @@ export default async function PeriodClose({
       eventsRes,
       locksRes,
       historyRes,
-    ] = (await Promise.all([
+    ] = ((await Promise.all([
       db.execute(sql`
         select r.*, p.name as period_name, p.starts_on, p.ends_on, p.fiscal_year,
                b.name as book_name, b.code as book_code,
@@ -106,16 +106,16 @@ export default async function PeriodClose({
           from close_run_tasks t join close_runs r on r.id = t.run_id and r.org_id = t.org_id
          where t.org_id = ${orgId} and t.completed_at is not null and r.id <> ${runId}
          group by t.key`),
-    ])) as any[];
+    ])));
     const run = runRes.rows[0];
     if (run) {
       const history = new Map(
-        (historyRes.rows as any[]).map((row) => [
+        ((historyRes.rows)).map((row) => [
           row.key,
           Number(row.average_days),
         ]),
       );
-      const tasks = (tasksRes.rows as any[]).map((task) => ({
+      const tasks = ((tasksRes.rows)).map((task) => ({
         ...task,
         predicted_days: history.get(task.key) ?? null,
       }));
@@ -159,7 +159,7 @@ export default async function PeriodClose({
     : ((books.rows as any[]).find((book) => book.is_primary)?.id ??
       books.rows[0]?.id ??
       "");
-  const [periods, count, fys] = (await Promise.all([
+  const [periods, count, fys] = ((await Promise.all([
     db.execute(sql`
       select p.id, p.name, p.starts_on, p.ends_on, p.fiscal_year, p.period_number,
              r.id as run_id, r.status, r.current_stage, r.readiness_score, r.target_close_date,
@@ -189,7 +189,7 @@ export default async function PeriodClose({
     db.execute(
       sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`,
     ),
-  ])) as any[];
+  ])));
 
   return (
     <ListPageLayout
@@ -232,7 +232,7 @@ export default async function PeriodClose({
               label={t("filters.fiscalYear")}
               hideAll
               defaultValue={String(currentFy)}
-              options={fys.rows.map((row: any) => ({
+              options={fys.rows.map((row) => ({
                 value: String(row.fiscal_year),
                 label: t("filters.fyOption", { year: String(row.fiscal_year) }),
               }))}
@@ -308,7 +308,7 @@ export default async function PeriodClose({
                   {period.run_id ? (
                     <Link
                       className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
-                      href={`/close?run=${period.run_id}` as any}
+                      href={(`/close?run=${period.run_id}`)}
                     >
                       {t("actions.resume")}
                     </Link>

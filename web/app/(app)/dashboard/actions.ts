@@ -59,11 +59,11 @@ export async function saveDashboardLayout(input: unknown) {
       select pg_advisory_xact_lock(hashtextextended(${`dashboard:${authz.user.orgId}:${authz.user.id}`}, 0))
     `)
 
-    const existing = (await tx.execute(sql`
+    const existing = ((await tx.execute(sql`
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `)) as any
+    `)))
     const existingLayout = existing.rows[0]?.layout as DashboardLayoutData | undefined
     if (existingLayout?.quickActions) layout.quickActions = existingLayout.quickActions
 
@@ -119,11 +119,11 @@ export async function saveQuickActions(input: unknown) {
       select pg_advisory_xact_lock(hashtextextended(${`dashboard:${authz.user.orgId}:${authz.user.id}`}, 0))
     `)
 
-    const existing = (await tx.execute(sql`
+    const existing = ((await tx.execute(sql`
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `)) as any
+    `)))
     const existingLayout = (existing.rows[0]?.layout ?? { widgets: [] }) as DashboardLayoutData
     const preserved = (existingLayout.quickActions ?? []).filter((action) => hiddenIds.has(action.id))
     const incomingIds = new Set(incoming.map((action) => action.id))

@@ -81,7 +81,7 @@ export async function promoteSandboxAction(sandboxId: string, name: string): Pro
 
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
-  const r = (await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`)) as any;
+  const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`)));
   if (!r.rows.length) throw new Error("change set not found");
   await applyChangeSet(changeSetId);
   revalidatePath("/admin/sandboxes");

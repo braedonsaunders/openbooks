@@ -188,7 +188,7 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
                         <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500 dark:text-slate-400">{t('history.empty')}</td></tr>
                       ) : history.map((filing) => (
                         <tr key={filing.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                          <td className="px-3 py-2"><Link href={mergeHref('/tax', sp, { filing: filing.id }) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{filing.form_name}</Link><div className="font-mono text-xs text-slate-400">{filing.form_code}</div></td>
+                          <td className="px-3 py-2"><Link href={(mergeHref('/tax', sp, { filing: filing.id }))} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{filing.form_name}</Link><div className="font-mono text-xs text-slate-400">{filing.form_code}</div></td>
                           <td className="whitespace-nowrap px-3 py-2">{t('period', { from: filing.period_from, to: filing.period_to })}</td>
                           <td className="px-3 py-2 tabular-nums">{filing.version}</td>
                           <td className="px-3 py-2"><Badge variant={filing.status === 'filed' ? 'success' : 'warning'}>{t(`history.status.${filing.status}`)}</Badge></td>

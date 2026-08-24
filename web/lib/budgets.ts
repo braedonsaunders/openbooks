@@ -142,14 +142,14 @@ export async function loadBudgetWorkspace(
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${scenario.fiscalYear} and not p.is_adjustment
        order by p.period_number, fc.is_default desc, p.starts_on
-    `) as Promise<{ rows: Record<string, any>[] }>,
+    `) as unknown as Promise<{ rows: Record<string, any>[]; }>,
     db.execute(sql`
       select a.id, a.number, a.name, a.type
         from accounts a
        where ${accountWhere}
        order by a.number nulls last, a.name
        limit ${opts.perPage} offset ${(opts.page - 1) * opts.perPage}
-    `) as Promise<{ rows: Record<string, any>[] }>,
+    `) as unknown as Promise<{ rows: Record<string, any>[]; }>,
     db.execute(sql`select count(*) as n from accounts a where ${accountWhere}`) as Promise<{
       rows: { n: string }[]
     }>,

@@ -18,8 +18,8 @@ export async function loadAccounts(orgId: string): Promise<RefOption[]> {
   const r = (await db.execute(sql`
     select id, number, name from accounts
      where org_id = ${orgId} and not is_summary and is_active
-     order by number nulls last, name`)) as any
-  return r.rows.map((a: any) => ({
+     order by number nulls last, name`))
+  return r.rows.map((a) => ({
     value: a.id as string,
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
   }))
@@ -31,21 +31,21 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`
       select id as value, name as label from accounting_periods
-       where org_id = ${orgId} order by starts_on desc, period_number desc`)) as any
+       where org_id = ${orgId} order by starts_on desc, period_number desc`))
     return periods.rows as RefOption[]
   }
   if (source === 'items') {
     const items = (await db.execute(sql`
       select id as value,
              case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
-        from items where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+        from items where org_id = ${orgId} and is_active order by code nulls last, name`))
     return items.rows as RefOption[]
   }
   if (source === 'customers') {
     const customers = (await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`))
     return customers.rows as RefOption[]
   }
   if (source === 'employees') {
@@ -53,7 +53,7 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
     const employees = (await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`))
     return employees.rows as RefOption[]
   }
   if (source === 'equipment-units') {
@@ -61,7 +61,7 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
     // no setup-registry entry of its own — equipment is managed under Assets.
     const units = (await db.execute(sql`
       select id as value, unit_number || ' · ' || name as label from equipment_units
-       where org_id = ${orgId} and status = 'active' order by unit_number`)) as any
+       where org_id = ${orgId} and status = 'active' order by unit_number`))
     return units.rows as RefOption[]
   }
   if (source === 'job-titles') {
@@ -74,7 +74,7 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
              trim(job_title) as value, trim(job_title) as label
         from employee_roles
        where org_id = ${orgId} and is_active and coalesce(trim(job_title), '') <> ''
-       order by lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')), trim(job_title)`)) as any
+       order by lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')), trim(job_title)`))
     return titles.rows as RefOption[]
   }
   if (source === 'trades') {
@@ -82,13 +82,13 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
     // own, but it is a legitimate scope key (labor_cost_rates uses it too).
     const trades = (await db.execute(sql`
       select id as value, name as label from trades
-       where org_id = ${orgId} and is_active order by name`)) as any
+       where org_id = ${orgId} and is_active order by name`))
     return trades.rows as RefOption[]
   }
   if (source === 'projects') {
     const projects = (await db.execute(sql`
       select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label
-        from projects where org_id = ${orgId} and is_active order by code nulls last, name`)) as any
+        from projects where org_id = ${orgId} and is_active order by code nulls last, name`))
     return projects.rows as RefOption[]
   }
   const target = SETUP_ENTITY_BY_KEY.get(source)
@@ -111,7 +111,7 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
   const r = (await db.execute(sql`
     select ${sql.raw(target.idColumn ?? 'id')} as value, ${labelExpr} as label
       from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
-     order by ${sql.raw(orderCol)}`)) as any
+     order by ${sql.raw(orderCol)}`))
   return r.rows as RefOption[]
 }
 

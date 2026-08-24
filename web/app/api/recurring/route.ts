@@ -96,5 +96,5 @@ export async function POST(req: Request) {
     `);
     return row.rows[0]!;
   });
-  return NextResponse.json({ id: (created as any).id as string }, { status: 201 });
+  return NextResponse.json({ id: ((created)).id as string }, { status: 201 });
 }

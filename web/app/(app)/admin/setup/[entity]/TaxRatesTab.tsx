@@ -60,7 +60,7 @@ export async function TaxRatesTab({
           </Link>
         </div>
         <Button asChild size="sm">
-          <Link href={createHref as any}>
+          <Link href={(createHref)}>
             <Plus size={14} />
             {t('taxRates.new')}
           </Link>
@@ -100,7 +100,7 @@ export async function TaxRatesTab({
                 <TableRow key={row.id}>
                   <TableCell className="text-right tabular-nums">
                     <Link
-                      href={editHref as any}
+                      href={(editHref)}
                       className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {Number(row.rate_percent)}%

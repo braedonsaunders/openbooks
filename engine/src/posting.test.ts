@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertFinalKernelBalance, controlLineIsOpenItem, PostingError, RULES } from "./posting.ts";
+import {
+  assertFinalKernelBalance,
+  controlLineIsOpenItem,
+  PostingError,
+  RULES,
+  type PostingDocument,
+  type PostingDocumentLine,
+} from "./posting.ts";
 
 const controlAccounts = new Set(["ar", "ap"]);
 
@@ -23,14 +30,14 @@ test("expense reports age only genuine AP control balances", () => {
     currency: "CAD",
     fxRate: "1",
     custom: { controlAccountId: "card-liability" },
-  } as any;
+  } as unknown as PostingDocument;
   const line = {
     id: "line",
     lineNumber: 1,
     accountId: "travel",
     amount: "120.0000",
     taxAmount: "0",
-  } as any;
+  } as unknown as PostingDocumentLine;
   const cardProjection = RULES.expense_report!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     openItemAccountIds: new Set(["ar", "ap"]),
@@ -82,7 +89,7 @@ test("purchase tax projection separates recoverable, nonrecoverable, withholding
     currency: "CAD",
     fxRate: "1",
     custom: {},
-  } as any;
+  } as unknown as PostingDocument;
   const line = {
     id: "line",
     lineNumber: 1,
@@ -92,7 +99,7 @@ test("purchase tax projection separates recoverable, nonrecoverable, withholding
     partyId: null,
     projectId: "line-project",
     taxGroupId: "group",
-  } as any;
+  } as unknown as PostingDocumentLine;
   const projected = RULES.vendor_bill!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
@@ -131,7 +138,7 @@ test("sales tax control lines never become project revenue or cost", () => {
     currency: "CAD",
     fxRate: "1",
     custom: {},
-  } as any;
+  } as unknown as PostingDocument;
   const line = {
     id: "line",
     lineNumber: 1,
@@ -140,7 +147,7 @@ test("sales tax control lines never become project revenue or cost", () => {
     taxAmount: "13.0000",
     projectId: "line-project",
     taxCodeId: "tax",
-  } as any;
+  } as unknown as PostingDocumentLine;
   const projected = RULES.customer_invoice!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [{
@@ -171,8 +178,8 @@ test("sales tax control lines never become project revenue or cost", () => {
 });
 
 test("tax profiles cannot post without cross-footing component evidence", () => {
-  const doc = { id: "doc", kind: "customer_invoice", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as any;
-  const line = { id: "line", lineNumber: 1, accountId: "income", amount: "100.0000", taxAmount: "13.0000", taxCodeId: "tax" } as any;
+  const doc = { id: "doc", kind: "customer_invoice", partyId: "customer", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as unknown as PostingDocument;
+  const line = { id: "line", lineNumber: 1, accountId: "income", amount: "100.0000", taxAmount: "13.0000", taxCodeId: "tax" } as unknown as PostingDocumentLine;
   assert.throws(
     () => RULES.customer_invoice!(doc, [line], { control: { ap: "ap", ar: "ar", bank: "bank" } }),
     /no calculation evidence/,

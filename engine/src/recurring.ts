@@ -476,7 +476,7 @@ async function generateFromTemplate(
     throw new Error("template document kind is disabled");
   }
 
-  const lineRes = (await db.execute<Record<string, any>>(sql`
+  const lineRes = (await db.execute<Record<string, unknown>>(sql`
     select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
      order by line_number
   `));

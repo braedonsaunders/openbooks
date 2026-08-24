@@ -25,6 +25,22 @@ const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit'
 type Tab = (typeof TABS)[number]
 const num = (n: number) => n.toLocaleString('en-US')
 
+interface BenfordDrillDocument {
+  date: string
+  entryId: string | null
+  docKind: string | undefined
+  docId: string | null
+  docNumber: string | null
+  partyName: string | null
+  amount: number
+}
+
+interface BenfordDrillData {
+  count: number
+  total: number
+  documents: BenfordDrillDocument[]
+}
+
 function riskTone(score: number) {
   if (score >= 80) return { text: 'text-rose-600 dark:text-rose-400', hex: '#ef4444', badge: 'destructive' as const }
   if (score >= 60) return { text: 'text-amber-600 dark:text-amber-400', hex: '#f59e0b', badge: 'warning' as const }
@@ -201,7 +217,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => `${(Number(v) * 100).toFixed(1)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(1)}%` },
                 xAxis: { type: 'category', data: b.digits.map((d) => String(d.digit)) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
                 series: [
@@ -294,7 +310,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => `${(Number(v) * 100).toFixed(2)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(2)}%` },
                 xAxis: { type: 'category', data: b1.digits.map((d) => String(d.digit)) },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(0)}%` } },
                 series: [
@@ -347,7 +363,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
               option={{
                 grid: { top: 24, bottom: 24, left: 45, right: 12 },
                 legend: { top: 0 },
-                tooltip: { trigger: 'axis', valueFormatter: (v: any) => `${(Number(v) * 100).toFixed(2)}%` },
+                tooltip: { trigger: 'axis', valueFormatter: (v: unknown) => `${(Number(v) * 100).toFixed(2)}%` },
                 xAxis: { type: 'category', data: b2.digits.map((d) => String(d.digit)), axisLabel: { interval: 9 } },
                 yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(1)}%` } },
                 series: [
@@ -411,7 +427,7 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
   const t = useTranslations('analytics.sentinel')
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<BenfordDrillData | null>(null)
   const [error, setError] = useState(false)
   useEffect(() => {
     let live = true
@@ -443,11 +459,11 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
               </tr>
             </thead>
             <tbody>
-              {data.documents.map((d: any, k: number) => (
+              {data.documents.map((d, k) => (
                 <tr key={k} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/60 dark:border-slate-800/60 dark:hover:bg-slate-800/30">
                   <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{fmtDate(d.date)}</td>
                   <td className="px-4 py-1.5"><TxnLink entryId={d.entryId ?? ''} docKind={d.docKind} docId={d.docId} className="font-medium text-slate-700 hover:text-teal-600 dark:text-slate-200 dark:hover:text-teal-400">{d.docNumber || d.docKind}</TxnLink></td>
-                  <td className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName}>{d.partyName || '—'}</td>
+                  <td className="max-w-48 truncate px-4 py-1.5 text-slate-500 dark:text-slate-400" title={d.partyName ?? undefined}>{d.partyName || '—'}</td>
                   <td className="px-4 py-1.5 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{money(d.amount)}</td>
                 </tr>
               ))}
@@ -478,8 +494,8 @@ function AnalysisTab({ data }: { data: SentinelData }) {
     const years = [...byYear.keys()].sort().slice(-2) // show up to 2 most recent years
     const max = Math.max(...data.calendar.map((c) => c.amount), 1)
     return {
-      tooltip: { formatter: (p: any) => `${p.data[0]}<br/>${money0(p.data[1])}` },
-      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: any) => money(Number(v)) },
+      tooltip: { formatter: (p: { data: [string, number] }) => `${p.data[0]}<br/>${money0(p.data[1])}` },
+      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: unknown) => money(Number(v)) },
       calendar: years.map((y, i) => ({
         range: y, top: 60 + i * 150, left: 40, right: 10, cellSize: ['auto', 13] as [string, number],
         itemStyle: { borderColor: 'rgba(148,163,184,0.15)', borderWidth: 1 },
@@ -578,7 +594,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
 
       {sub === 'calendar' ? (
         <Panel title={t('panels.spendCalendar')} icon={CalendarDays} hint={t('panels.spendCalendarHint')}>
-          <Chart option={calendarOption as any} height={Math.min(2, new Set(data.calendar.map((c) => c.date.slice(0, 4))).size) * 150 + 80} />
+          <Chart option={(calendarOption)} height={Math.min(2, new Set(data.calendar.map((c) => c.date.slice(0, 4))).size) * 150 + 80} />
         </Panel>
       ) : null}
     </div>

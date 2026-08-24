@@ -108,6 +108,35 @@ export interface AmendmentRequest {
   anchorSubscriptionId?: string;
 }
 
+interface OwnedPlanRow extends Record<string, unknown> {
+  id: string; name: string; description: string | null; amount: string; currency: string; interval: Interval;
+  intervalCount: number; incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
+}
+interface SubscriptionContextRow extends Record<string, unknown> {
+  id: string; customerId: string; planId: string; status: string; lifecycleId: string | null;
+  planVersionId: string | null; contractRevision: number | null; termStartsOn: string | null;
+  termEndsOn: string | null; trialEndsOn: string | null; billingTiming: BillingTiming | null;
+  renewalPolicy: RenewalPolicy | null; renewalTermMonths: number | null; renewalOn: string | null;
+}
+interface PlanVersionRow extends Record<string, unknown> {
+  id: string; planId: string; interval: Interval; intervalCount: number; billingTiming: BillingTiming;
+  status: string; effectiveFrom: string; effectiveTo: string | null;
+}
+interface SubscriptionComponentRow extends Record<string, unknown> {
+  componentKey: string; name: string; description: string | null; quantity: string; unitPrice: string;
+  incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
+  effectiveFrom: string; effectiveTo: string | null;
+}
+interface AmendmentReplayRow extends Record<string, unknown> { id: string; subscriptionId: string }
+interface BillingPreparationRow extends Record<string, unknown> {
+  billingTiming: BillingTiming | null; termEndsOn: string | null; renewalPolicy: RenewalPolicy | null;
+  renewalTermMonths: number | null; createdBy: string | null;
+}
+interface BillingLifecycleRow extends Record<string, unknown> {
+  contractRevision: number; billingTiming: BillingTiming; currentPeriodStart: string | null;
+  nextBillOn: string; interval: Interval; intervalCount: number;
+}
+
 function validDate(value: string | null | undefined, label: string): string | null {
   if (value == null || value === "") return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
@@ -199,7 +228,7 @@ export function subscriptionComponentTotal(lines: Array<{ quantity: string; unit
 }
 
 async function ownedPlan(orgId: string, planId: string) {
-  const result = (await db.execute<any>(sql`
+  const result = (await db.execute<OwnedPlanRow>(sql`
     select id, name, description, amount, currency_code as currency, interval,
            interval_count as "intervalCount", income_account_id as "incomeAccountId",
            item_id as "itemId", tax_code_id as "taxCodeId"
@@ -248,7 +277,7 @@ async function assertCommercialRefs(
 }
 
 async function subscriptionContext(orgId: string, subscriptionId: string) {
-  const result = (await db.execute<any>(sql`
+  const result = (await db.execute<SubscriptionContextRow>(sql`
     select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status,
            l.id as "lifecycleId", l.plan_version_id as "planVersionId",
            l.contract_revision as "contractRevision", l.term_starts_on as "termStartsOn",
@@ -311,7 +340,7 @@ export async function createPlanVersion(orgId: string, actorId: string, input: C
 
 export async function publishPlanVersion(orgId: string, actorId: string, versionId: string): Promise<void> {
   await withOrg(orgId, async () => {
-    const found = (await db.execute<any>(sql`
+    const found = (await db.execute<Pick<PlanVersionRow, "id" | "planId" | "effectiveFrom" | "status"> & Record<string, unknown>>(sql`
       select id, plan_id as "planId", effective_from as "effectiveFrom", status
         from subscription_plan_versions where id = ${versionId} and org_id = ${orgId} for update
     `));
@@ -343,7 +372,7 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     const sub = await subscriptionContext(orgId, input.subscriptionId);
     if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
     if (sub.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is already active");
-    const versionResult = (await db.execute<any>(sql`
+    const versionResult = (await db.execute<PlanVersionRow>(sql`
       select id, plan_id as "planId", interval, interval_count as "intervalCount", billing_timing as "billingTiming", status,
              effective_from as "effectiveFrom", effective_to as "effectiveTo"
         from subscription_plan_versions where id = ${input.planVersionId} and org_id = ${orgId}
@@ -390,8 +419,10 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
 
 async function snapshot(orgId: string, subscriptionId: string) {
   const lifecycle = await subscriptionContext(orgId, subscriptionId);
-  if (!lifecycle.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is not active");
-  const components = (await db.execute<any>(sql`
+  if (!lifecycle.lifecycleId || !lifecycle.termStartsOn || !lifecycle.billingTiming || !lifecycle.renewalPolicy) {
+    throw new AdvancedSubscriptionError("advanced lifecycle is not active");
+  }
+  const components = (await db.execute<SubscriptionComponentRow>(sql`
     select component_key as "componentKey", name, description, quantity, unit_price as "unitPrice",
            income_account_id as "incomeAccountId", item_id as "itemId", tax_code_id as "taxCodeId",
            effective_from as "effectiveFrom", effective_to as "effectiveTo"
@@ -407,7 +438,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
     if (!request.idempotencyKey.trim()) throw new AdvancedSubscriptionError("idempotency key is required");
     const lock = (await db.execute(sql`select id from subscriptions where id = ${request.subscriptionId} and org_id = ${orgId} for update`));
     if (!lock.rows.length) throw new AdvancedSubscriptionError("subscription not found");
-    const replay = (await db.execute<any>(sql`
+    const replay = (await db.execute<AmendmentReplayRow>(sql`
       select id, subscription_id as "subscriptionId" from subscription_amendments
        where org_id = ${orgId} and idempotency_key = ${request.idempotencyKey}
     `));
@@ -451,7 +482,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
       `);
     }
     if (["add_component", "change_component"].includes(request.type)) {
-      const source = currentComponent ?? {};
+      const source: Partial<SubscriptionComponentRow> = currentComponent ?? {};
       await db.execute(sql`
         insert into subscription_components
           (org_id, subscription_id, component_key, name, description, quantity, unit_price,
@@ -466,7 +497,9 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
     }
     if (request.type === "change_term") {
       const termEndsOn = validDate(request.termEndsOn, "term end");
-      if (termEndsOn && termEndsOn < before.lifecycle.termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
+      const termStartsOn = before.lifecycle.termStartsOn;
+      if (!termStartsOn) throw new AdvancedSubscriptionError("advanced lifecycle is not active");
+      if (termEndsOn && termEndsOn < termStartsOn) throw new AdvancedSubscriptionError("term end cannot precede term start");
       await db.execute(sql`update subscription_lifecycles set term_ends_on = ${termEndsOn}, renewal_on = ${termEndsOn}, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "change_timing") {
@@ -503,7 +536,7 @@ export async function applyAmendment(orgId: string, actorId: string, request: Am
 
 export async function advancedSubscriptionWorkspace(orgId: string) {
   const [versions, lifecycles, amendments] = await Promise.all([
-    db.execute<any>(sql`
+    db.execute(sql`
       select v.id, v.plan_id as "planId", v.version_number as "versionNumber", v.status, v.effective_from as "effectiveFrom",
              v.effective_to as "effectiveTo", v.name, v.currency_code as currency, v.interval,
              v.interval_count as "intervalCount", v.billing_timing as "billingTiming", v.change_summary as "changeSummary",
@@ -512,7 +545,7 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
         from subscription_plan_versions v left join subscription_plan_version_components c on c.version_id = v.id and c.org_id = v.org_id
        where v.org_id = ${orgId} group by v.id order by v.plan_id, v.version_number desc
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select l.subscription_id as "subscriptionId", l.plan_version_id as "planVersionId", l.contract_revision as "contractRevision",
              l.term_starts_on as "termStartsOn", l.term_ends_on as "termEndsOn", l.trial_ends_on as "trialEndsOn",
              l.billing_timing as "billingTiming", l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
@@ -523,7 +556,7 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
         from subscription_lifecycles l left join subscription_components c on c.subscription_id = l.subscription_id and c.org_id = l.org_id
        where l.org_id = ${orgId} group by l.id order by l.created_at desc
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select id, subscription_id as "subscriptionId", amendment_number as "amendmentNumber", amendment_type as "amendmentType",
              effective_on as "effectiveOn", status, reason, applied_at as "appliedAt", request
         from subscription_amendments where org_id = ${orgId} order by applied_at desc, amendment_number desc
@@ -541,7 +574,7 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
  */
 export async function prepareAdvancedSubscriptionBilling(orgId: string, subscriptionId: string, dueOn: string): Promise<boolean> {
   return withOrg(orgId, async () => {
-    const result = (await db.execute<any>(sql`
+    const result = (await db.execute<BillingPreparationRow>(sql`
       select l.billing_timing as "billingTiming", l.term_ends_on as "termEndsOn",
              l.renewal_policy as "renewalPolicy", l.renewal_term_months as "renewalTermMonths",
              s.created_by as "createdBy"
@@ -551,9 +584,10 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
     const row = result.rows[0];
     if (!row?.billingTiming) return true;
     await assertEnabled(orgId);
-    const action = renewalAction({ billingTiming: row.billingTiming, dueOn, termEndsOn: row.termEndsOn, policy: row.renewalPolicy });
+    const action = renewalAction({ billingTiming: row.billingTiming, dueOn, termEndsOn: row.termEndsOn, policy: row.renewalPolicy ?? "none" });
     if (action === "bill") return true;
     if (action === "stop") return false;
+    if (!row.termEndsOn) return true;
     if (!row.createdBy) throw new AdvancedSubscriptionError("automatic renewal needs an owning user");
     await applyAmendment(orgId, row.createdBy, {
       subscriptionId,
@@ -585,7 +619,7 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   lines: AdvancedBillingLine[];
   total: string;
 } | null> {
-  const lifecycle = (await db.execute<any>(sql`
+  const lifecycle = (await db.execute<BillingLifecycleRow>(sql`
     select l.contract_revision as "contractRevision", l.billing_timing as "billingTiming",
            s.current_period_start as "currentPeriodStart", s.next_bill_on as "nextBillOn",
            v.interval, v.interval_count as "intervalCount"

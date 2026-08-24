@@ -31,7 +31,7 @@ export async function GET() {
     members,
     quotas,
     users,
-  ] = (await Promise.all([
+  ] = ((await Promise.all([
     db.execute(
       sql`select * from crm_account_statuses where org_id = ${gate.user.orgId} order by lifecycle_stage, sequence, name`,
     ),
@@ -56,7 +56,7 @@ export async function GET() {
     db.execute(
       sql`select id,name,email from users where org_id=${gate.user.orgId} and is_active order by name`,
     ),
-  ])) as any[];
+  ])));
   return NextResponse.json({
     accountStatuses: accountStatuses.rows,
     opportunityStatuses: opportunityStatuses.rows,
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   await ensureCrmDefaults(user.orgId, user.id);
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
   const action = String(body.action ?? "");
   const recordId = body.id ? String(body.id) : null;
   if (recordId && !isUuid(recordId))
@@ -161,9 +161,9 @@ export async function POST(req: NextRequest) {
       if (
         !isUuid(id) ||
         !(
-          (await db.execute(
+          ((await db.execute(
             sql`select 1 from users where id=${id} and org_id=${user.orgId}`,
-          )) as any
+          )))
         ).rows[0]
       )
         return NextResponse.json(
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
     const members = [...body.members];
     if (
       body.managerUserId &&
-      !members.some((member: any) => member.userId === body.managerUserId)
+      !members.some((member) => member.userId === body.managerUserId)
     )
       members.push({ userId: body.managerUserId, role: "manager" });
     for (const member of members)
@@ -195,9 +195,9 @@ export async function POST(req: NextRequest) {
         !isUuid(member.userId) ||
         !["manager", "member"].includes(member.role ?? "member") ||
         !(
-          (await db.execute(
+          ((await db.execute(
             sql`select 1 from users where id=${member.userId} and org_id=${user.orgId}`,
-          )) as any
+          )))
         ).rows[0]
       )
         return NextResponse.json(
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
           { status: 422 },
         );
     row = await db.transaction(async (tx) => {
-      const team = (
+      const team = ((
         recordId
           ? await tx.execute(
               sql`update crm_sales_teams set name=${name},manager_user_id=${body.managerUserId || null},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
@@ -213,7 +213,7 @@ export async function POST(req: NextRequest) {
           : await tx.execute(
               sql`insert into crm_sales_teams (org_id,key,name,manager_user_id,is_active,created_by,updated_by) values (${user.orgId},${slug(body.key || name)},${name},${body.managerUserId || null},${body.isActive !== false},${user.id},${user.id}) returning *`,
             )
-      ) as any;
+      ));
       const teamRow = team.rows[0];
       if (!teamRow) return team;
       await tx.execute(
@@ -269,9 +269,9 @@ export async function POST(req: NextRequest) {
     if (
       currency !== undefined &&
       !(
-        (await db.execute(
+        ((await db.execute(
           sql`select 1 from currencies where code=${currency}`,
-        )) as any
+        )))
       ).rows[0]
     )
       return NextResponse.json({ error: "invalid currency" }, { status: 422 });
@@ -287,9 +287,9 @@ export async function POST(req: NextRequest) {
     if (
       ownerUserId &&
       !(
-        (await db.execute(
+        ((await db.execute(
           sql`select 1 from users where id=${ownerUserId} and org_id=${user.orgId}`,
-        )) as any
+        )))
       ).rows[0]
     )
       return NextResponse.json(
@@ -299,9 +299,9 @@ export async function POST(req: NextRequest) {
     if (
       salesTeamId &&
       !(
-        (await db.execute(
+        ((await db.execute(
           sql`select 1 from crm_sales_teams where id=${salesTeamId} and org_id=${user.orgId}`,
-        )) as any
+        )))
       ).rows[0]
     )
       return NextResponse.json(

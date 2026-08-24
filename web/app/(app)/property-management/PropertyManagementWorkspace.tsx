@@ -20,18 +20,8 @@ import { UnitRecordDrawer } from "./UnitRecordDrawer";
 import { LeaseDrawer } from "./LeaseDrawer";
 import { LeaseRecordDrawer } from "./LeaseRecordDrawer";
 import { CamCorrectionDrawer, CamDrawer } from "./CamDrawers";
+import type { CamPool, PropertyWorkspace } from "./types";
 
-type Workspace = {
-  properties: any[];
-  units: any[];
-  leases: any[];
-  charges: any[];
-  escalations: any[];
-  schedules: any[];
-  deposits: any[];
-  camPools: any[];
-  camAllocations: any[];
-};
 type Tab = "properties" | "rentRoll" | "cam" | "depositReconciliation";
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 type LeaseCreateContext = { propertyId: string; unitId?: string | null };
@@ -43,7 +33,7 @@ const mainTabs: Array<{ key: Tab }> = [
   { key: "cam" },
   { key: "depositReconciliation" },
 ];
-const empty: Workspace = {
+const empty: PropertyWorkspace = {
   properties: [],
   units: [],
   leases: [],
@@ -103,7 +93,7 @@ export function PropertyManagementWorkspace({
 }) {
   const { money } = useMoney();
   const t = useTranslations("entities.propertyManagement.workspace");
-  const [data, setData] = useState<Workspace>(empty);
+  const [data, setData] = useState<PropertyWorkspace>(empty);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("properties");
@@ -343,10 +333,10 @@ export function PropertyManagementWorkspace({
               busy={busy}
               permissions={permissions}
               act={act}
-              onEdit={(pool: any) =>
+              onEdit={(pool: CamPool) =>
                 setCreateCam({ propertyId: pool.propertyId, poolId: pool.id })
               }
-              onReopen={(pool: any) => setReopenCamPoolId(pool.id)}
+              onReopen={(pool: CamPool) => setReopenCamPoolId(pool.id)}
             />
           ) : (
             <DepositReconciliationWorkspace
@@ -415,10 +405,10 @@ export function PropertyManagementWorkspace({
         onOpenLease={(leaseId: string) => {
           setSelectedLeaseId(leaseId);
         }}
-        onEditCam={(pool: any) =>
+        onEditCam={(pool: CamPool) =>
           setCreateCam({ propertyId: pool.propertyId, poolId: pool.id })
         }
-        onReopenCam={(pool: any) => setReopenCamPoolId(pool.id)}
+        onReopenCam={(pool: CamPool) => setReopenCamPoolId(pool.id)}
         onSave={(payload: ActionPayload) =>
           act({ action: "updateProperty", ...payload }, t("toasts.propertyUpdated"))
         }

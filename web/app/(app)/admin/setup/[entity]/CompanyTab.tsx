@@ -14,7 +14,7 @@ import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition] = (await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary, revenueRecognition] = ((await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -25,13 +25,13 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
     db.execute(sql`select code, name from currencies order by code`),
     subsidiaryFeatureEnabled(orgId),
     isFeatureEnabled(orgId, 'revenueRecognition'),
-  ])) as [any, any, any, boolean, boolean]
+  ])))
 
   const row = org.rows[0]
   const settings = (row?.settings ?? {}) as Record<string, unknown>
   const control = (settings.controlAccounts ?? {}) as Record<string, string>
 
-  const accountOptions: AccountOption[] = accounts.rows.map((a: any) => ({
+  const accountOptions: AccountOption[] = accounts.rows.map((a) => ({
     id: a.id as string,
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
     type: a.type as string,

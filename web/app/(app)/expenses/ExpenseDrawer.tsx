@@ -56,7 +56,7 @@ interface LineRow extends Record<string, unknown> {
 }
 interface ExpensePayload {
   doc: Record<string, any>
-  lines: Record<string, any>[]
+  lines: Record<string, unknown>[]
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {

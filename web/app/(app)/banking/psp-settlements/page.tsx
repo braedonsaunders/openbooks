@@ -10,6 +10,15 @@ import {
   PageContainer,
 } from "../../../../components/page-layout";
 
+interface SettlementBatch {
+  id: string;
+  provider: string;
+  externalRef: string;
+  settlementDate: string;
+  netAmount: string;
+  status: string;
+}
+
 /**
  * Minimal PSP settlement import UI — paste Stripe/Recurly/Chargebee JSON
  * and post the balanced kernel journal for fees/disputes/FX/net deposit.
@@ -17,7 +26,7 @@ import {
 export default function PspSettlementsPage() {
   const t = useTranslations("banking.pspSettlements");
   const today = useBusinessToday();
-  const [batches, setBatches] = useState<any[]>([]);
+  const [batches, setBatches] = useState<SettlementBatch[]>([]);
   const [provider, setProvider] = useState("stripe");
   const [externalRef, setExternalRef] = useState("");
   const [settlementDate, setSettlementDate] = useState(today);

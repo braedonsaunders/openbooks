@@ -5,6 +5,7 @@ import { Drawer, Button, Input, Select, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
+import type { CamPool, PropertyWorkspace, SaveAction } from "./types";
 
 export function CamDrawer({
   open,
@@ -16,7 +17,17 @@ export function CamDrawer({
   expenseAccounts,
   busy,
   onSave,
-}: any) {
+}: {
+  open: boolean;
+  stacked?: boolean;
+  initialPropertyId?: string;
+  pool?: CamPool;
+  onClose: () => void;
+  data: PropertyWorkspace;
+  expenseAccounts: Option[];
+  busy: boolean;
+  onSave: SaveAction;
+}) {
   const today = useBusinessToday();
   const year = Number(today.slice(0, 4));
   const initial = {
@@ -71,7 +82,7 @@ export function CamDrawer({
               onChange={(e) => setForm({ ...form, propertyId: e.target.value })}
             >
               <option value="">Select property</option>
-              {data.properties.map((o: any) => (
+              {data.properties.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name}
                 </option>
@@ -171,7 +182,14 @@ export function CamCorrectionDrawer({
   busy,
   onClose,
   onSave,
-}: any) {
+}: {
+  open: boolean;
+  stacked?: boolean;
+  pool?: CamPool;
+  busy: boolean;
+  onClose: () => void;
+  onSave: (reason: string) => void | Promise<void>;
+}) {
   const [reason, setReason] = useState("");
   useEffect(() => {
     if (open) setReason("");

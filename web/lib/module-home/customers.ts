@@ -72,7 +72,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
     // balance (the same open-item shape the cash engine reads, aggregated).
-    db.execute<any>(sql`
+    db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -100,7 +100,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     // up inside one statement. Both dates come off the lines; reaching them
     // through each line's entry doubled the joins. Trailing 365 days: without
     // the upper bound a future-dated payment counts toward days-to-pay.
-    db.execute<any>(sql`
+    db.execute(sql`
       select round(avg(pl.posting_date - bl.posting_date)) as dso
         from applications ap
         join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ${orgId}
@@ -112,7 +112,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
          and pl.posting_date <= ${today}
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
-    db.execute<any>(sql`
+    db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -149,7 +149,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
        limit 10
     `),
     // 13-week collections trend (posted customer payments by week).
-    db.execute<any>(sql`
+    db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              coalesce(sum(abs(d.total)), 0) as collected
         from documents d
@@ -159,7 +159,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
        group by 1
     `),
     // Directory badges — cheap counts for the workspace's other pages.
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         ${crmOn ? sql`(select count(*) from crm_opportunities o join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
           where o.org_id = ${orgId} and o.is_active and not s.is_closed)` : sql`0`} as open_opps,
@@ -180,7 +180,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     crmOn ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }) : Promise.resolve([]),
   ]))
 
-  const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.collected)]))
+  const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.collected)]))
 
   const ar = arRes.rows[0] ?? {}
   const dso = dsoRes.rows[0] ?? {}

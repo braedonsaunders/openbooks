@@ -47,7 +47,7 @@ const line = (label: string, ours: number, theirs: number) => {
 };
 
 (async () => {
-  const org = ((await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`))) as any).rows[0];
+  const org = ((await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`)))).rows[0];
   if (!org) throw new Error(`no such org: ${ORG}`);
   console.log(`${org.name} (${org.env_kind})  —  posting on/after ${SINCE}\n`);
 
@@ -102,7 +102,7 @@ const line = (label: string, ours: number, theirs: number) => {
   process.exit(0);
 })().catch((e) => {
   const chain: string[] = [];
-  for (let c: any = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 250));
+  for (let c = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 250));
   console.error("FATAL:", chain.pop() ?? "unknown");
   process.exit(1);
 });

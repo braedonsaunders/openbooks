@@ -102,9 +102,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (typeof body.key !== 'string') return NextResponse.json({ error: 'Invalid key' }, { status: 422 })
     const keyIssue = typeKeyError(body.key)
     if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 })
-    const clash = (await db.execute(sql`
+    const clash = ((await db.execute(sql`
       select 1 from custom_record_types where org_id = ${user.orgId} and key = ${body.key} and id <> ${id}
-    `)) as any
+    `)))
     if (clash.rows.length > 0) {
       return NextResponse.json({ error: `A record type with key "${body.key}" already exists` }, { status: 409 })
     }
@@ -161,9 +161,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (type.status !== 'draft') {
     return NextResponse.json({ error: 'Only draft types can be deleted — archive published types instead' }, { status: 422 })
   }
-  const records = (await db.execute(sql`
+  const records = ((await db.execute(sql`
     select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
-  `)) as any
+  `)))
   if (records.rows.length > 0) {
     return NextResponse.json({ error: 'This type already has records and cannot be deleted' }, { status: 422 })
   }

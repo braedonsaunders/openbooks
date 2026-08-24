@@ -90,7 +90,7 @@ export function CollectionsWorklist({
     const ids = selectedEntries.map((e) => e.docId!).filter(Boolean);
     if (!ids.length) return;
     router.push(
-      `/receipts?view=runs&newRun=1&preselect=${ids.join(",")}` as any,
+      (`/receipts?view=runs&newRun=1&preselect=${ids.join(",")}`),
     );
   };
 

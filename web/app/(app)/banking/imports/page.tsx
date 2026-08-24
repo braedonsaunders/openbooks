@@ -10,6 +10,17 @@ import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
+interface FeedRow extends Record<string, unknown> {
+  name: string
+  provider: string
+  status: string
+  last_sync_at: string | null
+  last_error: string | null
+  is_active: boolean
+  account_number: string | null
+  account_name: string
+}
+
 export async function generateMetadata() {
   const t = await getTranslations('banking')
   return { title: t('imports.title') }
@@ -29,7 +40,7 @@ export default async function BankingImports({
   const features = await resolvedFeatureState(authz.user.orgId)
   const feedsEnabled = featureEnabled(features, 'bankFeeds')
   const feeds = feedsEnabled
-    ? ((await db.execute<any>(sql`
+    ? ((await db.execute<FeedRow>(sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_error, c.is_active,
                a.number as account_number, a.name as account_name
           from bank_feed_connections c
@@ -53,7 +64,7 @@ export default async function BankingImports({
         <section className="mb-4 rounded-lg border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('bankFeeds.operational.title')}</h3>
-            <Link href={'/admin/setup/bank-feeds' as any} className="text-sm text-teal-700 hover:underline dark:text-teal-300">
+            <Link href={('/admin/setup/bank-feeds')} className="text-sm text-teal-700 hover:underline dark:text-teal-300">
               {t('bankFeeds.operational.manage')}
             </Link>
           </div>
@@ -61,7 +72,7 @@ export default async function BankingImports({
             <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{t('bankFeeds.operational.none')}</p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {feeds.map((feed: any, index: number) => (
+              {feeds.map((feed, index) => (
                 <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
                   <span className="font-medium text-slate-900 dark:text-slate-100">{feed.name}</span>
                   <Badge variant="outline">{feed.provider}</Badge>

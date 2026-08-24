@@ -149,11 +149,11 @@ export interface EntityListSource {
   /** Row field containing the ISO currency for amount cells. */
   currencyField?: string
   /** Record-specific status semantics layered over the shared badge palette. */
-  statusVariant?: (row: any, value: unknown, columnKey: string) => 'default' | 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'
+  statusVariant?: (row: Record<string, unknown>, value: unknown, columnKey: string) => 'default' | 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'
   /** Source-specific drawer target when rows do not all use one URL param. */
-  drawerTarget?: (row: any) => { param: string; id: string }
+  drawerTarget?: (row: Record<string, unknown>) => { param: string; id: string }
   /** Full row href for read-only aggregate rows that do not own a drawer. */
-  rowHref?: (row: any) => string
+  rowHref?: (row: Record<string, unknown>) => string
 }
 
 export interface EntityQuickFilterOption {
@@ -260,11 +260,11 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'status',
         filterKey: 'status_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select id::text as value, name as label
               from crm_opportunity_statuses
              where org_id = ${orgId} and is_active
-             order by sequence, name`) as any
+             order by sequence, name`)
           return result.rows
         },
       },
@@ -272,11 +272,11 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'owner',
         filterKey: 'owner_user_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select id::text as value, name as label
               from users
              where org_id = ${orgId} and is_active
-             order by name`) as any
+             order by name`)
           return result.rows
         },
       },
@@ -324,7 +324,7 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'owner',
         filterKey: 'assigned_user_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`select id::text as value, name as label from users where org_id=${orgId} and is_active order by name`) as any
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from users where org_id=${orgId} and is_active order by name`)
           return result.rows
         },
       },
@@ -462,12 +462,12 @@ const SOURCES: Record<string, EntityListSource> = {
           // appears cast in the select list is rejected by Postgres, and this
           // filter never loaded. Grouping also keeps the sort numeric — a text
           // sort would put 2030 before 999 and 9999 before 10000.
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select fiscal_year::text as value, fiscal_year::text as label
               from budget_scenarios
              where org_id = ${orgId}
              group by fiscal_year
-             order by fiscal_year desc`) as any
+             order by fiscal_year desc`)
           return result.rows
         },
       },
@@ -475,7 +475,7 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'book',
         filterKey: 'book_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`select id::text as value, name as label from accounting_books where org_id=${orgId} and is_active order by name`) as any
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from accounting_books where org_id=${orgId} and is_active order by name`)
           return result.rows
         },
       },
@@ -555,12 +555,12 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'employee',
         filterKey: 'employee_party_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select p.id::text as value, p.display_name as label
               from parties p
              where p.org_id=${orgId} and p.is_active
                and exists (select 1 from employee_roles r where r.party_id=p.id and r.org_id=p.org_id and r.is_active)
-             order by p.display_name`) as any
+             order by p.display_name`)
           return result.rows
         },
       },
@@ -588,12 +588,12 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'account',
         filterKey: 'account_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select a.id::text as value, concat_ws(' · ', a.number, a.name) as label
               from accounts a
              where a.org_id=${orgId} and a.is_active
                and exists (select 1 from reconciliations r where r.org_id=a.org_id and r.account_id=a.id)
-             order by a.number nulls last, a.name`) as any
+             order by a.number nulls last, a.name`)
           return result.rows
         },
       },
@@ -621,12 +621,12 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'account',
         filterKey: 'account_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select a.id::text as value, concat_ws(' · ', a.number, a.name) as label
               from accounts a
              where a.org_id=${orgId} and a.is_active
                and exists (select 1 from bank_statements bs where bs.org_id=a.org_id and bs.account_id=a.id)
-             order by a.number nulls last, a.name`) as any
+             order by a.number nulls last, a.name`)
           return result.rows
         },
       },
@@ -678,11 +678,11 @@ function crmAccountSource(
         paramKey: 'status',
         filterKey: 'status_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select id::text as value, name as label
               from crm_account_statuses
              where org_id=${orgId} and lifecycle_stage=${stage} and is_active
-             order by sequence, name`) as any
+             order by sequence, name`)
           return result.rows
         },
       },
@@ -690,9 +690,9 @@ function crmAccountSource(
         paramKey: 'owner',
         filterKey: 'owner_user_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select id::text as value, name as label from users
-             where org_id=${orgId} and is_active order by name`) as any
+             where org_id=${orgId} and is_active order by name`)
           return result.rows
         },
       },

@@ -209,7 +209,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   ) {
     throw new Error("reversalDate must be a valid YYYY-MM-DD date");
   }
-  const head = (await tx.execute<any>(sql`
+  const head = (await tx.execute(sql`
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
      where id = ${entryId} and org_id = ${orgId}
@@ -250,7 +250,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (period.rows[0].is_closed) {
     throw new Error(`the GL period covering ${reversalDate} is closed`);
   }
-  const lines = (await tx.execute<any>(sql`
+  const lines = (await tx.execute(sql`
     select account_id, amount, currency, txn_amount, project_id, party_id, memo, subsidiary_id
       from journal_lines where entry_id = ${entryId} and org_id = ${orgId} order by line_number`));
   const [rev] = (await tx.execute(sql`

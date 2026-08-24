@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
   const requestedBook = typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
   const requestedYear = Number(body.fiscalYear)
-  const kind = BUDGET_KINDS.includes(body.kind as any) ? (body.kind as string) : 'budget'
+  const kind = BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? (body.kind as string) : 'budget'
   const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId) ? body.sourceScenarioId : null
 
   const today = await businessToday(user.orgId)

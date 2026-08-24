@@ -60,13 +60,13 @@ export async function GET() {
   }
   const orgId = authz.user.orgId;
   const [plans, subs] = await Promise.all([
-    db.execute<any>(sql`
+    db.execute(sql`
       select id, name, description, amount, currency_code as "currency", interval,
              interval_count as "intervalCount", income_account_id as "incomeAccountId",
              item_id as "itemId", tax_code_id as "taxCodeId", is_active as "isActive"
         from subscription_plans where org_id = ${orgId} order by name
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.quantity,
              s.price_override as "priceOverride", s.status, s.start_on as "startOn",
              s.next_bill_on as "nextBillOn", s.auto_post as "autoPost", s.run_count as "runCount",
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
   const userId = authz.user.id;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
 
   try {
     switch (body.action) {
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
           `);
           return row.rows[0]!;
         });
-        return NextResponse.json({ id: (created as any).id }, { status: 201 });
+        return NextResponse.json({ id: ((created)).id }, { status: 201 });
       }
       case "updatePlan": {
         // Plan currency is Multi-currency configuration. Turning that switch
@@ -249,7 +249,7 @@ export async function POST(req: Request) {
           `);
           return row.rows[0]!;
         });
-        const id = (created as any).id as string;
+        const id = ((created)).id as string;
         let proration: unknown = null;
         if (body.prorateFirstPeriod && firstBillOn > startOn) {
           proration = await prorateFirstInvoice(id, firstBillOn);

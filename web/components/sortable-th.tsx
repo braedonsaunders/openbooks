@@ -42,7 +42,7 @@ function SortLink({
   })
   return (
     <Link
-      href={href as any}
+      href={(href)}
       className={cn(
         'inline-flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-slate-100',
         align === 'right' && 'flex-row-reverse',

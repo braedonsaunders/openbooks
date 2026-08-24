@@ -65,7 +65,7 @@ interface LinkRow {
 }
 export interface OrderPayload {
   doc: Record<string, any>
-  lines: Record<string, any>[]
+  lines: Record<string, unknown>[]
   links: LinkRow[]
 }
 

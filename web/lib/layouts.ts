@@ -51,7 +51,7 @@ export async function layoutsFor(statement: "pnl" | "balance_sheet", orgId?: str
   const resolvedOrgId = await resolveOrgId(orgId);
   const r = (await db.execute(sql`
     select id, name, is_default from statement_layouts
-     where org_id = ${resolvedOrgId} and statement = ${statement} order by is_default desc, name`)) as any;
+     where org_id = ${resolvedOrgId} and statement = ${statement} order by is_default desc, name`));
   return r.rows as { id: string; name: string; is_default: boolean }[];
 }
 
@@ -83,7 +83,7 @@ export async function renderLayout(
        and ${dimSql}
      group by a.id having abs(sum(l.amount)) > 0
      order by a.number nulls last, a.name
-  `)) as any;
+  `));
 
   type Acct = { id: string; number: string | null; name: string; type: string; value: number };
   const accounts: Acct[] = balances.rows.map((r: any) => ({

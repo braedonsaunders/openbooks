@@ -99,7 +99,7 @@ export default async function Items({
       {openItem && pickers ? (
         <ItemDrawer
           key={String(openItem.item.id)}
-          payload={openItem as any}
+          payload={(openItem)}
           accounts={pickers[0].rows}
           taxCodes={pickers[1].rows}
           fieldDefs={pickers[2] as any}

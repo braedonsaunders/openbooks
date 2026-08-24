@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Button, Card, CardContent, Drawer, Input, Popover, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { Empty, Field, Read, RecordTabs, Status } from "./workspace-ui";
+import type { LeaseRow, PropertyRow, SaveAction, UnitRow } from "./types";
 
 export function UnitRecordDrawer({
   unit,
@@ -16,7 +17,18 @@ export function UnitRecordDrawer({
   onAddLease,
   onSave,
   onDelete,
-}: any) {
+}: {
+  unit: UnitRow | null;
+  property: PropertyRow | null;
+  leases: LeaseRow[];
+  permissions: { manage: boolean };
+  busy: boolean;
+  onClose: () => void;
+  onOpenLease: (id: string) => void;
+  onAddLease: () => void;
+  onSave: SaveAction;
+  onDelete: () => void | Promise<void>;
+}) {
   const [tab, setTab] = useState("overview");
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -38,7 +50,7 @@ export function UnitRecordDrawer({
     });
     if (result) setMode("view");
   };
-  const activeLease = leases.some((lease: any) =>
+  const activeLease = leases.some((lease) =>
     ["active", "notice"].includes(lease.status),
   );
   const setAvailability = async (status: "vacant" | "offline") => {
@@ -187,7 +199,7 @@ export function UnitRecordDrawer({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leases.map((lease: any) => (
+                {leases.map((lease) => (
                   <TableRow
                     key={lease.id}
                     tabIndex={0}
@@ -218,7 +230,7 @@ export function UnitRecordDrawer({
   );
 }
 
-function unitForm(unit: any) {
+function unitForm(unit: Partial<UnitRow>) {
   return {
     code: unit.code ?? "",
     name: unit.name ?? "",

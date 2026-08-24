@@ -97,7 +97,7 @@ async function mutateActiveProfile(mutate: (profile: any) => void): Promise<bool
 async function switchProfile(activeProfileId: string): Promise<boolean> {
   const res = await fetch('/api/analytics/true-cost/config')
   if (!res.ok) return false
-  const cfg = await res.json() as { activeProfileId: string; profiles: any[] }
+  const cfg = (await res.json())
   cfg.activeProfileId = activeProfileId
   return apiCall('/api/analytics/true-cost/config', { method: 'PUT', body: JSON.stringify(cfg) })
 }

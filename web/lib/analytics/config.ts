@@ -130,8 +130,8 @@ export function mergeConfig(dashboard: AnalyticsDashboard, stored: unknown): Rec
 
 /** Effective config for one dashboard: org overrides over defaults. */
 export async function analyticsConfig(orgId: string, dashboard: AnalyticsDashboard): Promise<Record<string, number>> {
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select settings -> 'analytics' -> ${dashboard} as cfg from orgs where id = ${orgId}
-  `)) as any;
+  `)));
   return mergeConfig(dashboard, r.rows[0]?.cfg ?? null);
 }

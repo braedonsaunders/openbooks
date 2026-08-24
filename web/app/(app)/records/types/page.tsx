@@ -66,7 +66,7 @@ export default async function RecordTypes({
     ${params.q ? sql` and (t.name ilike ${'%' + params.q + '%'} or t.plural_name ilike ${'%' + params.q + '%'} or t.key ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [types, counts, openType, roles] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select t.id, t.key, t.name, t.plural_name, t.icon_key, t.status, t.show_in_nav,
              t.updated_at,
              (select coalesce(sum(coalesce(jsonb_array_length(elem->'fields'), 1)), 0)
@@ -76,20 +76,20 @@ export default async function RecordTypes({
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select t.status, count(*) as n from custom_record_types t
        where t.org_id = ${authz.user.orgId}
        group by t.status
-    `) as any,
+    `)),
     typeId ? loadRecordTypeById(authz.user.orgId, typeId) : null,
     typeId
-      ? (db.execute(sql`
+      ? ((db.execute(sql`
           select key, name from app_roles where org_id = ${authz.user.orgId} order by name
-        `) as any)
+        `)))
       : null,
   ])
-  const total = counts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
+  const total = counts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const filteredTotal =
     status || params.q
       ? Number(
@@ -154,7 +154,7 @@ export default async function RecordTypes({
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">
                     <Link
-                      href={buildListDrawerHref('/records/types', sp, 'type', String(row.id)) as any}
+                      href={(buildListDrawerHref('/records/types', sp, 'type', String(row.id)))}
                       className="text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {row.name}
@@ -165,7 +165,7 @@ export default async function RecordTypes({
                   <TableCell className="text-right tabular-nums">
                     {row.status === 'published' ? (
                       <Link
-                        href={`/records/${row.key}` as any}
+                        href={(`/records/${row.key}`)}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {Number(row.record_count)}

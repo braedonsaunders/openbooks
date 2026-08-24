@@ -69,7 +69,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, any>
+  const body = (parsedBody.data)
   try {
     if (resource === 'formats') {
       // Format currency is Multi-currency configuration. Turning that

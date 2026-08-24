@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Card, CardContent, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
-import type { Option } from "./workspace-ui";
 import { Empty, Field, Small, Status } from "./workspace-ui";
 import { DepositTable } from "./LeaseTables";
+import type { ChargeRow, DepositRow, EscalationRow, LeaseRow, Money, PropertyAction, PropertyPermissions, WorkspaceOptions } from "./types";
 
 export function ChargesSection({
   lease,
@@ -16,7 +16,15 @@ export function ChargesSection({
   act,
   money,
   options,
-}: any) {
+}: {
+  lease: LeaseRow;
+  charges: ChargeRow[];
+  permissions: PropertyPermissions;
+  busy: boolean;
+  act: PropertyAction;
+  money: Money;
+  options: WorkspaceOptions;
+}) {
   const t = useTranslations("entities.propertyManagement");
   const [form, setForm] = useState({
     chargeType: "cam",
@@ -40,7 +48,7 @@ export function ChargesSection({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {charges.map((row: any) => (
+          {charges.map((row) => (
             <TableRow key={row.id}>
               <TableCell>
                 <div className="font-medium">{row.description}</div>
@@ -134,7 +142,7 @@ export function ChargesSection({
                   }
                 >
                   <option value="">{t("leaseSections.charges.propertyDefault")}</option>
-                  {options.incomeAccounts.map((o: Option) => (
+                  {options.incomeAccounts.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name}
                     </option>
@@ -167,7 +175,7 @@ export function ChargesSection({
   );
 }
 
-export function EscalationsSection({ lease, rows, permissions, busy, act }: any) {
+export function EscalationsSection({ lease, rows, permissions, busy, act }: { lease: LeaseRow; rows: EscalationRow[]; permissions: PropertyPermissions; busy: boolean; act: PropertyAction }) {
   const t = useTranslations("entities.propertyManagement");
   const [form, setForm] = useState({
     effectiveOn: lease.endsOn || lease.startsOn,
@@ -189,7 +197,7 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: any)
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row: any) => (
+            {rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.effectiveOn}</TableCell>
                 <TableCell className="capitalize">
@@ -287,7 +295,15 @@ export function DepositSection({
   busy,
   act,
   money,
-}: any) {
+}: {
+  lease: LeaseRow;
+  rows: DepositRow[];
+  options: WorkspaceOptions;
+  permissions: PropertyPermissions;
+  busy: boolean;
+  act: PropertyAction;
+  money: Money;
+}) {
   const today = useBusinessToday();
   const t = useTranslations("entities.propertyManagement");
   const [form, setForm] = useState({
@@ -299,13 +315,13 @@ export function DepositSection({
     appliedDocumentId: "",
     memo: "",
   });
-  const [reverseRow, setReverseRow] = useState<any>(null);
+  const [reverseRow, setReverseRow] = useState<DepositRow | null>(null);
   const [reversal, setReversal] = useState({
     occurredOn: today,
     reason: "",
   });
   const invoices = options.openInvoices.filter(
-    (o: Option) => o.partyId === lease.tenantId,
+    (o) => o.partyId === lease.tenantId,
   );
   return (
     <div className="space-y-4">
@@ -432,7 +448,7 @@ export function DepositSection({
                     }
                   >
                     <option value="">{t("leaseSections.deposits.propertyDefault")}</option>
-                    {options.bankAccounts.map((o: Option) => (
+                    {options.bankAccounts.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
                       </option>
@@ -449,10 +465,10 @@ export function DepositSection({
                     }
                   >
                     <option value="">{t("leaseSections.deposits.selectPostedInvoice")}</option>
-                    {invoices.map((o: Option) => (
+                    {invoices.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name} ·{" "}
-                        {money(o.openBalance, { currency: lease.currency })}
+                        {money(o.openBalance ?? 0, { currency: lease.currency })}
                       </option>
                     ))}
                   </Select>
@@ -471,7 +487,7 @@ export function DepositSection({
                     }
                   >
                     <option value="">{t("leaseSections.deposits.selectAccount")}</option>
-                    {options.expenseAccounts.map((o: Option) => (
+                    {options.expenseAccounts.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
                       </option>

@@ -58,7 +58,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
   const build = () => {
     const ids = selectedEntries.map((e) => e.docId!).filter(Boolean)
     if (!ids.length) return
-    router.push(`/payments?view=runs&newRun=1&preselect=${ids.join(',')}` as any)
+    router.push((`/payments?view=runs&newRun=1&preselect=${ids.join(',')}`))
   }
 
   return (

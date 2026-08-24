@@ -55,7 +55,7 @@ export function NewSetupButton({
 }
 
 /** Initial form value for one field, read from the (snake-keyed) row. */
-function initialValue(field: SetupField, row: Record<string, any> | null): any {
+function initialValue(field: SetupField, row: Record<string, unknown> | null): unknown {
   const raw = row ? row[toSnake(field.key)] : undefined
   if (!row && field.defaultValue !== undefined) return field.defaultValue
   switch (field.kind) {
@@ -105,8 +105,8 @@ export function SetupDrawer({
   const idColumn = entity.idColumn ?? 'id'
   const closeHref = closeHrefProp ?? `/admin/setup/${entity.key}`
 
-  const [form, setForm] = useState<Record<string, any>>(() => {
-    const init: Record<string, any> = {}
+  const [form, setForm] = useState<Record<string, unknown>>(() => {
+    const init: Record<string, unknown> = {}
     for (const f of entity.fields) init[f.key] = f.kind === 'multiref' ? members : initialValue(f, row)
     return { ...init, ...initialValues, ...fixedValues }
   })
@@ -157,7 +157,7 @@ export function SetupDrawer({
       return
     }
     setBusy(true)
-    const body: Record<string, any> = { ...form, ...fixedValues }
+    const body: Record<string, unknown> = { ...form, ...fixedValues }
     // A field the form stopped showing must not persist behind the UI: a pay
     // component switched from a deduction to an earning gives its protection
     // settings back to their defaults, exactly as the CHECK constraint expects.
@@ -363,7 +363,7 @@ function FieldControl({
   t,
 }: {
   field: SetupField
-  value: any
+  value: unknown
   onChange: (v: any) => void
   creating: boolean
   forceLocked: boolean

@@ -173,7 +173,7 @@ export function CashCockpit({
                   {data.bankAccounts.map((b) => (
                     <tr key={b.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-2.5">
-                        <Link href={`/banking/${b.id}` as any} className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300">
+                        <Link href={(`/banking/${b.id}`)} className="font-medium text-slate-700 hover:text-teal-700 dark:text-slate-300 dark:hover:text-teal-300">
                           {b.name}
                         </Link>
                         {b.number ? <span className="ml-2 text-xs text-slate-400">{b.number}</span> : null}
@@ -249,8 +249,8 @@ export function CashCockpit({
             {t.rich('negativeAlert', {
               amount: money(data.lowestCash),
               date: lowestDate,
-              ap: (chunks) => <Link href={'/ap' as any} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
-              ar: (chunks) => <Link href={'/ar' as any} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
+              ap: (chunks) => <Link href={('/ap')} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
+              ar: (chunks) => <Link href={('/ar')} className="font-semibold underline decoration-red-300 underline-offset-2 hover:text-red-900 dark:hover:text-red-200">{chunks}</Link>,
             })}
           </span>
         </p>

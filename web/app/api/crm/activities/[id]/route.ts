@@ -46,18 +46,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const current = (await db.execute<any>(sql`select * from crm_activities where id = ${id} and org_id = ${user.orgId}`))
+  const current = (await db.execute(sql`select * from crm_activities where id = ${id} and org_id = ${user.orgId}`))
   if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, any>
+  const body = (parsedBody.data)
   if (body.kind !== undefined && !KINDS.includes(body.kind)) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })
   if (body.status !== undefined && !STATUSES.includes(body.status)) return NextResponse.json({ error: 'invalid activity status' }, { status: 422 })
   if (body.priority !== undefined && !PRIORITIES.includes(body.priority)) return NextResponse.json({ error: 'invalid priority' }, { status: 422 })
   if (body.subject !== undefined && !textOrNull(body.subject)) return NextResponse.json({ error: 'subject is required' }, { status: 422 })
   for (const key of ['ownerUserId', 'assignedUserId'] as const) {
     const value = body[key]
-    if (value !== undefined && value !== null && (!isUuid(value) || !(await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`) as any).rows[0])) {
+    if (value !== undefined && value !== null && (!isUuid(value) || !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0])) {
       return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     }
   }
@@ -74,8 +74,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (participants) for (const participant of participants) {
     const targets = [participant.userId, participant.contactId, textOrNull(participant.email)].filter(Boolean)
     if (targets.length !== 1) return NextResponse.json({ error: 'each participant must have exactly one target' }, { status: 422 })
-    if (participant.userId && (!isUuid(participant.userId) || !(await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`) as any).rows[0])) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
-    if (participant.contactId && (!isUuid(participant.contactId) || !(await db.execute(sql`select 1 from contacts where id = ${participant.contactId} and org_id = ${user.orgId}`) as any).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+    if (participant.userId && (!isUuid(participant.userId) || !((await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`))).rows[0])) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
+    if (participant.contactId && (!isUuid(participant.contactId) || !((await db.execute(sql`select 1 from contacts where id = ${participant.contactId} and org_id = ${user.orgId}`))).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
   }
 
     await db.transaction(async (tx) => {

@@ -27,7 +27,7 @@ export async function GET(req: Request) {
 
   const [pay, open, recent] = await Promise.all([
     // Avg days-to-pay + total paid over the trailing 12 months.
-    db.execute(sql`
+    (db.execute(sql`
       select avg(pe.posting_date - be.posting_date) as avg_days,
         coalesce(sum(ap.amount), 0) as total_paid, count(*) as payment_count
       from applications ap
@@ -39,12 +39,12 @@ export async function GET(req: Request) {
       where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
         and bl.party_id = ${party}
         and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
-    `) as Promise<any>,
+    `)),
     // Open items with days-overdue. Applications drain from EITHER side of the
     // link (credits/payments can sit on to_ or from_), and fully-applied lines
     // with a stale is_open_item flag are filtered out — "open" means money is
     // actually outstanding.
-    db.execute(sql`
+    (db.execute(sql`
       with oi as (
         select jl.id, je.id as entry_id, je.source_document_id as doc_id,
           d.kind as doc_kind, d.document_number,
@@ -65,9 +65,9 @@ export async function GET(req: Request) {
       )
       select * from oi where remaining > 0
       order by due_date nulls last
-    `) as Promise<any>,
+    `)),
     // Recent payments (drawer paginates client-side).
-    db.execute(sql`
+    (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount
       from documents d
@@ -76,13 +76,13 @@ export async function GET(req: Request) {
         and d.kind in (${side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`})
       order by coalesce(d.document_date, d.posting_date) desc
       limit 200
-    `) as Promise<any>,
+    `)),
   ]);
 
   const avgDays = pay.rows[0]?.avg_days === null || pay.rows[0]?.avg_days === undefined ? null : Math.round(Number(pay.rows[0].avg_days));
   const totalPaid = Number(pay.rows[0]?.total_paid ?? 0);
   const paymentCount = Number(pay.rows[0]?.payment_count ?? 0);
-  const openItems = (open.rows as any[]).map((r) => {
+  const openItems = ((open.rows)).map((r) => {
     const due = r.due_date as string | null;
     const overdue = due && due < today;
     return {
@@ -113,6 +113,6 @@ export async function GET(req: Request) {
     overdueCount,
     reliability,
     openItems,
-    recentPayments: (recent.rows as any[]).map((r) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: Number(r.amount) })),
+    recentPayments: ((recent.rows)).map((r) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: Number(r.amount) })),
   });
 }

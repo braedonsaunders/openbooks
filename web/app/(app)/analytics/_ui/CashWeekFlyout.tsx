@@ -360,7 +360,7 @@ export function CashWeekFlyout({
           {(side === 'ap' && canPayRun) || (side === 'ar' && canCollectionRun) ? (
             <ActionBar side={side} entries={filtered} onBuild={(ids) => {
               const base = side === 'ap' ? '/payments' : '/receipts'
-              router.push(`${base}?view=runs&newRun=1&preselect=${ids.join(',')}` as any)
+              router.push((`${base}?view=runs&newRun=1&preselect=${ids.join(',')}`))
             }} />
           ) : null}
         </>

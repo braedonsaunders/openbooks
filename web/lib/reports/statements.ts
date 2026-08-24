@@ -51,7 +51,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
      where a.org_id = ${resolvedOrgId}
      group by a.id
      order by a.number nulls last, a.name
-  `)) as any;
+  `));
   return r.rows as {
     id: string; parent_id: string | null; number: string | null; name: string;
     type: string; is_summary: boolean; raw: string;
@@ -123,7 +123,7 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
       ) s on s.account_id = a.id
      where a.org_id = ${orgId}
      order by a.number nulls last, a.name
-  `)) as any;
+  `));
   return r.rows as Awaited<ReturnType<typeof accountBalances>>;
 }
 
@@ -188,7 +188,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
        order by a.number nulls last, a.name
-    `)) as any;
+    `));
     return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
   }
   // Materialized entry set + hash join — see accountBalances.
@@ -209,7 +209,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
        and a.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) > 0
      order by a.number nulls last, a.name
-  `)) as any;
+  `));
   return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
 }
 
@@ -227,6 +227,6 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
      group by p.id, p.display_name
     having abs(sum(l.amount)) > 0
      order by abs(sum(l.amount)) desc
-  `)) as any;
+  `));
   return r.rows as { id: string | null; display_name: string | null; balance: string; line_count: string; latest_due: string | null }[];
 }

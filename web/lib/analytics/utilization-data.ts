@@ -92,10 +92,22 @@ interface StatRow {
   non_billable_cost: number;
 }
 
+interface RawStatRow extends Record<string, unknown> {
+  employee: string;
+  employee_name: string;
+  department: string | null;
+  department_name: string | null;
+  item: string | null;
+  item_name: string | null;
+  total_hours: string | number;
+  billable_hours: string | number;
+  non_billable_cost: string | number;
+}
+
 /** One grouped scan per range.
  *  org filter is EXPLICIT (defense in depth — do not rely on ambient RLS). */
 async function fetchTimeStats(orgId: string, from: string, to: string): Promise<StatRow[]> {
-  const res: any = await db.execute(sql`
+  const res = await db.execute<RawStatRow>(sql`
     select
       t.employee_party_id as employee,
       coalesce(p.display_name, 'Unknown') as employee_name,
@@ -113,7 +125,7 @@ async function fetchTimeStats(orgId: string, from: string, to: string): Promise<
     where t.org_id = ${orgId} and t.worked_on >= ${from} and t.worked_on <= ${to}
     group by 1, 2, 3, 4, 5, 6
   `);
-  return (res.rows as any[]).map((r) => ({
+  return res.rows.map((r) => ({
     employee: r.employee,
     employee_name: r.employee_name,
     department: r.department,

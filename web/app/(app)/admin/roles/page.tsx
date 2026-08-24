@@ -72,7 +72,7 @@ export default async function AdminRolesPage({
     ? (await subsidiaryOptions()).map((s) => ({ id: s.id, name: s.name, depth: s.depth }))
     : null
 
-  const [rowsR, countR, typeCountsR] = (await Promise.all([
+  const [rowsR, countR, typeCountsR] = ((await Promise.all([
     db.execute(sql`
       select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
              r.subsidiary_restriction,
@@ -87,7 +87,7 @@ export default async function AdminRolesPage({
     db.execute(sql`
       select r.is_built_in, count(*)::int as c from app_roles r
        where ${searchWhere} group by r.is_built_in`),
-  ])) as any[]
+  ])))
 
   const roles = (rowsR.rows as any[]).map(
     (r): RoleRow & { permissionCount: number; memberCount: number } => ({
@@ -104,7 +104,7 @@ export default async function AdminRolesPage({
   )
   const total = Number(countR.rows[0]?.c ?? 0)
   const typeCounts = Object.fromEntries(
-    typeCountsR.rows.map((r: any) => [r.is_built_in ? 'built_in' : 'custom', Number(r.c)]),
+    typeCountsR.rows.map((r) => [r.is_built_in ? 'built_in' : 'custom', Number(r.c)]),
   ) as Record<string, number>
 
   const sortProps = { basePath: BASE, currentParams: sp, sort: listParams.sort, dir: listParams.dir }

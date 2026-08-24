@@ -139,7 +139,7 @@ export function TaxReturnLibrary({
   return (
     <>
       <Button asChild variant="outline">
-        <Link href={openHref as any}>
+        <Link href={(openHref)}>
           <Library size={15} />
           {t('open')}
         </Link>

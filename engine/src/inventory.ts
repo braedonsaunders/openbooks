@@ -1613,7 +1613,7 @@ async function reverseInventoryJournal(
   if (!period.rows[0])
     throw new InventoryError(`no accounting period for ${reversalDate}`);
 
-  const lines = (await tx.execute<Record<string, any>>(sql`
+  const lines = (await tx.execute<Record<string, unknown>>(sql`
     select line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
            memo, party_id, department_id, project_id, location_id, class_id,
            equipment_unit_id, payment_card_id, extra_dims, quantity, unit,

@@ -73,6 +73,30 @@ export interface ApiKeyAuth {
   allowedSubsidiaryIds: Set<string> | null;
 }
 
+interface ApiKeySqlRow {
+  id: string;
+  org_id: string;
+  user_id: string;
+  scopes: unknown;
+  is_active: boolean;
+  expires_at: string | Date | null;
+  rate_limit_per_min: string | number | null;
+  email: string;
+  name: string;
+  user_active: boolean;
+}
+
+interface ApiKeyRoleSqlRow {
+  key: string;
+  name: string;
+  permissions: unknown;
+}
+
+interface PermissionOverrideSqlRow {
+  permission: string;
+  effect: "grant" | "deny";
+}
+
 /**
  * Expand a resolved permission Set (which may contain wildcards like `ap.*`
  * or `*`) into concrete catalogue keys. Used to intersect owner permissions
@@ -109,7 +133,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
         from api_keys k
         join users u on u.id = k.user_id
        where k.key_hash = ${keyHash}
-       limit 1`)) as any
+       limit 1`)) as unknown as { rows: ApiKeySqlRow[] }
       ).rows[0],
   );
   if (!keyRow) return null;
@@ -120,7 +144,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
   setRequestOrg(keyRow.org_id);
 
   // Resolve the owner's effective permissions (same logic as authz.getAuthz).
-  const [assignments, overrides, allowedSubs] = (await Promise.all([
+  const [assignmentResult, overrideResult, allowedSubs] = await Promise.all([
     db.execute(sql`
       select r.key, r.name, r.permissions
         from role_assignments a
@@ -131,10 +155,12 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
         from user_permission_overrides
        where user_id = ${keyRow.user_id} and org_id = ${keyRow.org_id}`),
     allowedSubsidiaryIds(keyRow.user_id),
-  ])) as any[];
+  ]);
+  const assignments = assignmentResult as unknown as { rows: ApiKeyRoleSqlRow[] };
+  const overrides = overrideResult as unknown as { rows: PermissionOverrideSqlRow[] };
 
   const ownerPerms = resolveEffectivePermissions({
-    rolePermissionSets: assignments.rows.map((r: any) =>
+    rolePermissionSets: assignments.rows.map((r) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
     overrides: overrides.rows,
@@ -158,7 +184,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     id: keyRow.user_id,
     email: keyRow.email,
     name: keyRow.name,
-    roles: assignments.rows.map((row: any) => ({ key: row.key, name: row.name })),
+    roles: assignments.rows.map((row) => ({ key: row.key, name: row.name })),
     orgId: keyRow.org_id,
     // API keys are always bound to their production org — no sandbox entry.
     envKind: "production",
@@ -202,7 +228,7 @@ export async function enforceRateLimit(
              else 1 end,
            rate_window_start = date_trunc('minute', now())
      where id = ${auth.keyId} and org_id = ${auth.user.orgId}
-     returning rate_window_count as count`)) as any;
+     returning rate_window_count as count`));
   const count = Number(r.rows[0]?.count ?? 1);
   if (count <= auth.rateLimitPerMin) return null;
 

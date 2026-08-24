@@ -63,7 +63,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
 
   const [rosterRes, flowsRes, badgesRes] = (await Promise.all([
     // Roster — one row per reconcilable account with balance + workflow state.
-    db.execute<any>(sql`
+    db.execute(sql`
       select a.id, a.number, a.name, a.type, a.currency_restriction,
              coalesce(bal.balance, 0) as balance,
              coalesce(unm.n, 0) as unmatched,
@@ -115,7 +115,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
        group by 1, 2
     `),
     // Directory badges — org-wide counts for the workspace's other pages.
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         (select count(*) from bank_match_rules r where r.org_id = ${orgId} and r.is_active) as active_rules,
         (select count(*) from bank_match_rules r where r.org_id = ${orgId}) as total_rules,

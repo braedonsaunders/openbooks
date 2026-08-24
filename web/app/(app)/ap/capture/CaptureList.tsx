@@ -98,7 +98,7 @@ export function CaptureList({ rows, currentParams, canCreate, sort, dir }: { row
             const issues = Array.isArray(row.validationIssues) ? row.validationIssues.filter((value) => value.severity === 'blocking').length : 0
             return <TableRow key={row.id}>
               {canCreate ? <TableCell><input type="checkbox" disabled={row.status === 'materialized'} checked={selected.has(row.id)} onChange={(event) => setSelected((current) => { const next = new Set(current); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} aria-label={t('selectDocument', { name: row.filename })} className="h-4 w-4 rounded border-slate-300 text-teal-600" /></TableCell> : null}
-              <TableCell><Link href={mergeHref('/ap/capture', currentParams, { capture: row.id }) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.filename}</Link><div className="text-xs text-slate-400">{row.documentKind === 'vendor_credit' ? t('credit') : t('bill')}</div></TableCell>
+              <TableCell><Link href={(mergeHref('/ap/capture', currentParams, { capture: row.id }))} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{row.filename}</Link><div className="text-xs text-slate-400">{row.documentKind === 'vendor_credit' ? t('credit') : t('bill')}</div></TableCell>
               <TableCell>{row.resolvedVendor ?? row.vendorName ?? '—'}</TableCell>
               <TableCell>{row.invoiceNumber ?? '—'}</TableCell><TableCell>{row.invoiceDate ?? '—'}</TableCell>
               <TableCell className="text-right tabular-nums">{row.total ? `${row.currency ?? ''} ${row.total}`.trim() : '—'}</TableCell>

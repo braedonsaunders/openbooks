@@ -74,7 +74,7 @@ export async function TaxReturnBoxesTab({
           </p>
         </div>
         <Button asChild size="sm">
-          <Link href={createHref as any}>
+          <Link href={(createHref)}>
             <Plus size={14} />
             {t('taxBoxes.new')}
           </Link>
@@ -115,7 +115,7 @@ export async function TaxReturnBoxesTab({
                 <TableRow key={row.id}>
                   <TableCell>
                     <Link
-                      href={editHref as any}
+                      href={(editHref)}
                       className="font-mono text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {row.line_code}

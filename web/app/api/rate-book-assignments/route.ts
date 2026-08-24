@@ -59,7 +59,7 @@ export async function GET(req: Request) {
   const statusFilter = status === 'all' ? sql`` : status === 'active' ? sql`and a.is_active` : sql`and not a.is_active`
 
   const [rateBooks, assignments, count] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select b.id, b.name, b.currency, b.is_default,
              (select v.id from item_rate_versions v
                join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id
@@ -69,8 +69,8 @@ export async function GET(req: Request) {
         from item_rate_books b
        where b.org_id = ${orgId} and b.is_active
          and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
-       order by b.is_default desc, b.name`) as any,
-    db.execute(sql`
+       order by b.is_default desc, b.name`)),
+    (db.execute(sql`
       select a.id, a.rate_book_id, b.name as rate_book_name, b.currency,
              a.effective_from, a.effective_to, a.date_basis, a.is_active,
              coalesce(a.rate_version_id,
@@ -84,12 +84,12 @@ export async function GET(req: Request) {
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
          and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
        order by a.is_active desc, a.effective_from desc nulls last, b.name
-       limit ${perPage} offset ${(page - 1) * perPage}`) as any,
-    db.execute(sql`
+       limit ${perPage} offset ${(page - 1) * perPage}`)),
+    (db.execute(sql`
       select count(*)::int as n
         from item_rate_book_assignments a join item_rate_books b on b.id = a.rate_book_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
-         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)`) as any,
+         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)`)),
   ])
   return NextResponse.json({
     rateBooks: rateBooks.rows,
@@ -105,11 +105,11 @@ export async function GET(req: Request) {
 async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: string) {
   let values = body
   if (rowId) {
-    const current = (await db.execute(sql`
+    const current = ((await db.execute(sql`
       select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
              effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis",
              is_active as "isActive"
-        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}`)) as any
+        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}`)))
     if (!current.rows[0]) return { errorCode: 'save' } as const
     values = { ...current.rows[0], ...body }
   }
@@ -125,19 +125,19 @@ async function normalizedInput(body: AssignmentInput, orgId: string, rowId?: str
   if (effectiveFrom === undefined || effectiveTo === undefined) return { errorCode: 'dates' } as const
   if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) return { errorCode: 'dateOrder' } as const
   if (dateBasis !== 'usage_date' && dateBasis !== 'project_start') return { errorCode: 'dateBasis' } as const
-  const refs = (await db.execute(sql`
+  const refs = ((await db.execute(sql`
     select
       exists(select 1 from item_rate_books b where b.id = ${rateBookId} and b.org_id = ${orgId}
         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)) as book_ok,
       ${customerId ? sql`exists(select 1 from customer_roles where party_id = ${customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
-      ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`)) as any
+      ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`)))
   if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) return { errorCode: 'references' } as const
   const scope = projectId ? sql`project_id = ${projectId}` : sql`customer_id = ${customerId}`
-  const overlap = (await db.execute(sql`
+  const overlap = ((await db.execute(sql`
     select 1 from item_rate_book_assignments
      where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active and ${scope}
        and daterange(effective_from, effective_to, '[]') && daterange(${effectiveFrom}::date, ${effectiveTo}::date, '[]')
-     limit 1`)) as any
+     limit 1`)))
   if (isActive && overlap.rows.length) return { errorCode: 'overlap' } as const
   return { values: { rateBookId, customerId, projectId, effectiveFrom, effectiveTo, dateBasis, isActive } } as const
 }
@@ -186,7 +186,7 @@ export async function DELETE(req: Request) {
   if (gate instanceof NextResponse) return gate
   const id = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
-  const removed = (await db.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`)) as any
+  const removed = ((await db.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`)))
   if (!removed.rows.length) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
   await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'delete', ${JSON.stringify({ deleted: true })}, ${gate.user.id})`)

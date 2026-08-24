@@ -132,7 +132,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
     overdueReceivables: financial.overdue_receivables,
     openPayables: financial.open_payables,
     overduePayables: financial.overdue_payables,
-    recentEntries: ((recentEntries as any).rows).map((r: any) => ({
+    recentEntries: (((recentEntries)).rows).map((r: any) => ({
       id: r.id,
       entryNumber: r.entry_number,
       postingDate: r.posting_date,
@@ -141,7 +141,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
       lineCount: Number(r.line_count),
       totalDebits: r.total_debits,
     })),
-    pendingApprovalList: ((pendingApprovalList as any).rows).map((r: any) => ({
+    pendingApprovalList: (((pendingApprovalList)).rows).map((r: any) => ({
       id: r.id,
       targetKind: r.doc_kind ?? r.subject_kind,
       targetId: r.subject_id,
@@ -158,7 +158,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
       title: g.title,
       createdAt: g.createdAt instanceof Date ? g.createdAt.toISOString() : String(g.createdAt),
     })),
-    draftDocuments: ((draftDocuments as any).rows).map((r: any) => ({
+    draftDocuments: (((draftDocuments)).rows).map((r: any) => ({
       id: r.id,
       kind: r.kind,
       documentNumber: r.document_number,

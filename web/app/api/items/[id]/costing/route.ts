@@ -21,7 +21,7 @@ const COSTING_METHODS = ['fifo', 'moving_average', 'standard']
 const TRACKING = ['none', 'lot', 'serial']
 
 async function loadItem(id: string, orgId: string) {
-  const item = (await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)) as any
+  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
   return Boolean(item.rows[0])
 }
 
@@ -32,13 +32,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const profile = (await db.execute(sql`
+  const profile = ((await db.execute(sql`
     select costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles
-     where org_id = ${gate.user.orgId} and item_id = ${id}`)) as any
+     where org_id = ${gate.user.orgId} and item_id = ${id}`)))
   return NextResponse.json({ profile: profile.rows[0] ?? null })
 }
 

@@ -23,10 +23,10 @@ export async function POST(req: NextRequest) {
   await ensureCrmDefaults(user.orgId, user.id)
   const [number, org] = await Promise.all([
     nextOpportunityNumber(user.orgId),
-    db.execute(sql`select base_currency from orgs where id = ${user.orgId}`) as any,
+    (db.execute(sql`select base_currency from orgs where id = ${user.orgId}`)),
   ])
   const opportunity = await db.transaction(async (tx) => {
-    const status = (await tx.execute<any>(sql`
+    const status = (await tx.execute(sql`
       select id, probability, default_forecast_category from crm_opportunity_statuses
        where org_id = ${user.orgId} and is_default and is_active order by sequence limit 1`))
     const s = status.rows[0]!

@@ -128,7 +128,7 @@ export default async function Forecasts({
        where org_id = ${authz.user.orgId} and is_active
        order by name
     `),
-  ])) as any[]
+  ])) as unknown as [any, any, any, any, any]
 
   const quotas = quotasResult.rows as QuotaRow[]
   const snapshots = snapshotsResult.rows as SnapshotRow[]

@@ -32,7 +32,7 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
           from users u
           join orgs o on o.id = u.org_id
          where u.id = ${uid} and u.is_active
-      `)) as any);
+      `)));
     const row = r.rows[0];
     if (row) {
       if (isLocale(row.user_locale)) return row.user_locale;
@@ -43,7 +43,7 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
 
   const r = await withBypassContext(async () => (await db.execute(
       sql`select settings ->> 'defaultLocale' as org_default from orgs limit 1`,
-    )) as any);
+    )));
   const orgDefault = r.rows[0]?.org_default;
   return isLocale(orgDefault) ? orgDefault : DEFAULT_LOCALE;
 });
@@ -58,7 +58,7 @@ export const userLocalePreference = cache(async (): Promise<Locale | null> => {
   if (!uid) return null;
   const r = await withBypassContext(async () => (await db.execute(
       sql`select locale from users where id = ${uid} and is_active`,
-    )) as any);
+    )));
   const v = r.rows[0]?.locale;
   return isLocale(v) ? v : null;
 });

@@ -5,10 +5,36 @@ import { toast } from "sonner";
 import { Input, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { Empty, Field, Small, Status } from "./workspace-ui";
+import type { Money } from "./types";
 
-export function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
+type ReconciliationRow = {
+  propertyId: string;
+  propertyName: string;
+  propertyCode: string;
+  bankAccounts: Array<{ bankAccountName: string }>;
+  defaultBankAccountName: string | null;
+  subledgerBalance: string;
+  linkedGlBalance: string;
+  locationControlBalance: string | null;
+  controlVariance: string | null;
+  linkedVariance: string;
+  lastActivityOn: string | null;
+  status: string;
+};
+type ReconciliationResult = {
+  rows: ReconciliationRow[];
+  totals: {
+    subledgerBalance: string;
+    linkedGlBalance: string;
+    cashActivity: string;
+    discrepancies: number;
+    configurationRequired: number;
+  };
+};
+
+export function DepositReconciliationWorkspace({ money, onOpenProperty }: { money: Money; onOpenProperty: (id: string) => void }) {
   const [asOf, setAsOf] = useState(useBusinessToday());
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ReconciliationResult | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +67,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
       </div>
     );
   const rows = result?.rows ?? [];
-  const totals = result?.totals ?? {};
+  const totals = result?.totals;
   return (
     <div className="space-y-4 p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -64,14 +90,14 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Small label="Deposit subledger" value={money(totals.subledgerBalance ?? 0)} />
-        <Small label="Linked posted GL" value={money(totals.linkedGlBalance ?? 0)} />
-        <Small label="Deposit cash activity" value={money(totals.cashActivity ?? 0)} />
+        <Small label="Deposit subledger" value={money(totals?.subledgerBalance ?? 0)} />
+        <Small label="Linked posted GL" value={money(totals?.linkedGlBalance ?? 0)} />
+        <Small label="Deposit cash activity" value={money(totals?.cashActivity ?? 0)} />
         <Small
           label="Exceptions"
           value={String(
-            Number(totals.discrepancies ?? 0) +
-              Number(totals.configurationRequired ?? 0),
+            Number(totals?.discrepancies ?? 0) +
+              Number(totals?.configurationRequired ?? 0),
           )}
         />
       </div>
@@ -90,7 +116,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row: any) => {
+            {rows.map((row) => {
               const difference = row.controlVariance ?? row.linkedVariance;
               return (
                 <TableRow
@@ -113,7 +139,7 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
                   <TableCell>
                     {row.bankAccounts?.length
                       ? row.bankAccounts
-                          .map((bank: any) => bank.bankAccountName)
+                          .map((bank) => bank.bankAccountName)
                           .join(", ")
                       : row.defaultBankAccountName ?? "Not configured"}
                   </TableCell>

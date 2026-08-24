@@ -140,9 +140,9 @@ async function asOfPeriodOf(
   orgId: string,
 ): Promise<{ fiscalYear: number; periodNumber: number } | null> {
   if (!periodId) return null;
-  const res = (await db.execute(sql`
+  const res = await db.execute<{ fiscal_year: number; period_number: number }>(sql`
     select fiscal_year, period_number from accounting_periods
-     where id = ${periodId} and org_id = ${orgId}`)) as any;
+     where id = ${periodId} and org_id = ${orgId}`);
   const r = res.rows[0];
   return r ? { fiscalYear: r.fiscal_year, periodNumber: r.period_number } : null;
 }
@@ -209,7 +209,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
 
   const prod = (await db.execute(sql`
     select name, legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${input.productionOrgId}`)) as any;
+      from orgs where id = ${input.productionOrgId}`));
   const p = prod.rows[0];
   if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
 
@@ -287,11 +287,13 @@ export async function refreshSandbox(
   opts: RefreshOptions = {},
 ): Promise<void> {
   const keep = opts.keepCustomizations ?? true;
-  const row = (await db.execute(sql`
-    select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`)) as any;
+  const row = await db.execute<{
+    org_id: string; production_org_id: string; tier: SandboxTier; masked: boolean; as_of_period_id: string | null;
+  }>(sql`
+    select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`);
   const s = row.rows[0];
   if (!s) throw new Error(`sandbox not found: ${sandboxId}`);
-  const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`)) as any;
+  const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`));
   const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
 
   await db.execute(sql`
@@ -345,7 +347,7 @@ export async function resetSandbox(sandboxId: string): Promise<void> {
 /** Permanently delete a sandbox: wipe all its rows, then drop the org (which
  * cascades the sandboxes row). */
 export async function deleteSandbox(sandboxId: string): Promise<void> {
-  const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`)) as any;
+  const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
   const orgId = row.rows[0]?.org_id as string | undefined;
   if (!orgId) return;
   await db.execute(sql`

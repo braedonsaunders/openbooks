@@ -66,7 +66,7 @@ export function ApSelectionConfigDrawer({
 
         <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
           Recurring flows (payroll, rent, loans) shape safe capacity — configure them on the
-          <Link href={'/banking/cash' as any} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
+          <Link href={('/banking/cash')} className="inline-flex items-center gap-0.5 font-medium text-teal-600 hover:underline dark:text-teal-400">
             Cash cockpit <ArrowUpRight size={12} />
           </Link>
         </p>

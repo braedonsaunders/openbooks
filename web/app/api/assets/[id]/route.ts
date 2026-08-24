@@ -109,7 +109,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existRes = (await db.execute<{
     id: string
     status: string
-    custom: Record<string, any> | null
+    custom: Record<string, unknown> | null
     acquisition_cost: string
     salvage_value: string
     in_service_on: string | null
@@ -171,7 +171,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // -- native GL account overrides -----------------------------------------
-  const custom: Record<string, any> = { ...(existing.custom ?? {}) }
+  const custom: Record<string, unknown> = { ...(existing.custom ?? {}) }
   async function accountOverride(v: unknown): Promise<string | null | 'invalid'> {
     const s = strOrNull(v)
     if (s === null) return null
@@ -288,7 +288,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const effInService =
         body.inServiceOn !== undefined
           ? strOrNull(body.inServiceOn)
-          : ((await db.execute(sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`)) as any).rows[0]
+          : (((await db.execute(sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`)))).rows[0]
               ?.in_service_on
       const effMethod = method !== undefined ? method : existing.depreciation_method
       const effFormula = depreciationMethodId !== undefined ? depreciationMethodId : existing.depreciation_method_id

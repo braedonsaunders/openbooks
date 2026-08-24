@@ -148,7 +148,7 @@ function requireMoney(value: unknown): string {
 async function guardSubsidiaryAccess(
   authz: Authz,
   action: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   const allowed = authz.allowedSubsidiaryIds;
   if (!allowed) return null;
@@ -271,7 +271,7 @@ function submittedFixedAssetId(value: unknown): string | null | undefined {
 async function refuseDisabledPropertyFixedAsset(
   orgId: string,
   action: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   if (action !== "createProperty" && action !== "updateProperty") return null;
   const submitted = submittedFixedAssetId(body.fixedAssetId);
@@ -296,7 +296,7 @@ async function refuseDisabledPropertyFixedAsset(
 async function refuseDisabledPropertyCurrency(
   orgId: string,
   action: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   if (action !== "createProperty" && action !== "updateProperty") return null;
   if (
@@ -313,7 +313,7 @@ async function refuseDisabledPropertyCurrency(
 async function refuseDisabledLeaseChargeInventory(
   orgId: string,
   action: string,
-  body: Record<string, any>,
+  body: Record<string, unknown>,
 ): Promise<NextResponse | null> {
   if (action !== "addCharge") return null;
   const itemId = body.itemId;
@@ -330,7 +330,7 @@ async function refuseDisabledLeaseChargeInventory(
 export async function POST(request: Request) {
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
   const action = String(body.action ?? "");
   if (!knownActions.has(action))
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
@@ -368,7 +368,7 @@ export async function POST(request: Request) {
     let result: unknown;
     switch (action) {
       case "createProperty":
-        result = await createManagedProperty({ ...body, ...common } as any);
+        result = await createManagedProperty({ ...body, ...common } as unknown as { orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; });
         break;
       case "updateProperty": {
         const validation = validateCustomValues(
@@ -389,7 +389,7 @@ export async function POST(request: Request) {
           ...body,
           custom: validation.cleaned,
           ...common,
-        } as any);
+        } as unknown as { orgId: string; actorId: string; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
         break;
       }
       case "deleteProperty":
@@ -404,14 +404,14 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           rentableArea: persistMoney(body.rentableArea),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
         break;
       case "updateUnit":
         result = await updatePropertyUnit({
           ...body,
           ...common,
           rentableArea: persistMoney(body.rentableArea),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; });
         break;
       case "deleteUnit":
         result = await deletePropertyUnit(
@@ -428,7 +428,7 @@ export async function POST(request: Request) {
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
           lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as any);
+        } as unknown as { orgId: string; actorId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
         break;
       case "updateLease":
         result = await updatePropertyLease({
@@ -438,7 +438,7 @@ export async function POST(request: Request) {
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
           lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as any);
+        } as unknown as { orgId: string; actorId: string; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
         break;
       case "cancelLease":
         result = await cancelPropertyLease(
@@ -468,14 +468,14 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           amount: requireMoney(body.amount),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
         break;
       case "addEscalation":
         result = await addLeaseEscalation({
           ...body,
           ...common,
           value: requireMoney(body.value),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
         break;
       case "applyEscalation":
         result = await applyLeaseEscalation(
@@ -515,27 +515,27 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           amount: requireMoney(body.amount),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
         break;
       case "reverseDeposit":
         result = await reverseSecurityDepositTransaction({
           ...body,
           ...common,
-        } as any);
+        } as unknown as { orgId: string; actorId: string; transactionId: string; occurredOn: string; reason: string; });
         break;
       case "createCamPool":
         result = await createCamPool({
           ...body,
           ...common,
           budgetAmount: requireMoney(body.budgetAmount),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
         break;
       case "updateCamPool":
         result = await updateCamPool({
           ...body,
           ...common,
           budgetAmount: requireMoney(body.budgetAmount),
-        } as any);
+        } as unknown as { orgId: string; actorId: string; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
         break;
       case "cancelCamPool":
         await cancelCamPool(common.orgId, common.actorId, String(body.poolId));

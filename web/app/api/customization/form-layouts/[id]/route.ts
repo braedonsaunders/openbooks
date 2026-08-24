@@ -123,9 +123,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // pools per-statement). audit_log.changes is jsonb NOT NULL, so log the
   // deleted form's name rather than a bare null (which raised a 500).
   const deleted = await db.transaction(async (tx) => {
-    const r = (await tx.execute(sql`
+    const r = ((await tx.execute(sql`
       delete from form_layouts where id = ${id} and org_id = ${user.orgId}
-        returning name`)) as any;
+        returning name`)));
     const row = r.rows[0];
     if (!row) return null;
     await tx.execute(sql`

@@ -58,7 +58,7 @@ interface LineRow extends Record<string, unknown> {
 }
 interface JournalPayload {
   doc: Record<string, any>
-  lines: Record<string, any>[]
+  lines: Record<string, unknown>[]
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {

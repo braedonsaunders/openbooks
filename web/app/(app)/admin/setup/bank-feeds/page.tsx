@@ -37,7 +37,7 @@ export default async function BankFeedsPage() {
         join accounts a on a.id = c.account_id and a.org_id = c.org_id
        where c.org_id = ${authz.user.orgId} order by c.created_at desc
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select id, number, name from accounts
        where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
        order by number nulls last

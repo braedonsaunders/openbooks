@@ -22,13 +22,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   const refused = await refuseDisabledRecordType(user.orgId, recordType);
   if (refused) return refused;
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
       from form_layouts
      where org_id = ${user.orgId} and record_type = ${recordType}
      order by is_default desc, name
-  `)) as any;
+  `)));
   return NextResponse.json({ rows: r.rows });
 }
 

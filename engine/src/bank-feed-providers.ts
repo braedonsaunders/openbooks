@@ -175,9 +175,9 @@ const PLAID_MAX_PAGES = 20;
  * hard page cap throws instead of letting history fall off the end silently.
  */
 export async function plaidFetchAllTransactions(
-  fetchPage: (offset: number) => Promise<{ transactions?: any[]; has_more?: boolean }>,
+  fetchPage: (offset: number) => Promise<{ transactions?: unknown[]; has_more?: boolean }>,
 ): Promise<any[]> {
-  const all: any[] = [];
+  const all: unknown[] = [];
   for (let offset = 0, page = 1; ; offset += PLAID_PAGE_SIZE, page += 1) {
     if (page > PLAID_MAX_PAGES) {
       throw new FeedError(
@@ -232,7 +232,7 @@ const plaid: BankFeedAdapter = {
       return body;
     });
     let currency: string | null = null;
-    const lines: ParsedStatementLine[] = transactions.map((t: any) => {
+    const lines: ParsedStatementLine[] = transactions.map((t) => {
       currency ??= t.iso_currency_code ?? null;
       // Plaid: positive amount = outflow. Bank convention wants −withdrawal.
       const signed = neg(exactFeedAmount(t.amount));

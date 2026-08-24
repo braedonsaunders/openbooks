@@ -117,6 +117,56 @@ export interface HealthData extends FinancialHealth {
   benchmarks: HealthBenchmarks;
 }
 
+type SqlNumeric = string | number | null;
+
+interface HealthMonthSqlRow {
+  month: string;
+  revenue: SqlNumeric;
+  cogs: SqlNumeric;
+  opex: SqlNumeric;
+  other_exp: SqlNumeric;
+}
+
+interface HealthSegmentSqlRow {
+  id: string;
+  name: string;
+  revenue: SqlNumeric;
+  cogs: SqlNumeric;
+  opex: SqlNumeric;
+  prior_revenue: SqlNumeric;
+}
+
+interface HealthDriverSqlRow {
+  id: string;
+  name: string;
+  type: string;
+  cur_raw: SqlNumeric;
+  prior_raw: SqlNumeric;
+}
+
+interface HealthItemSqlRow {
+  id: string;
+  name: string;
+  current: SqlNumeric;
+  prior: SqlNumeric;
+}
+
+interface BudgetScenarioSqlRow {
+  id: string;
+  book_id: string;
+  name: string;
+  fiscal_year: SqlNumeric;
+  status: string;
+}
+
+interface BudgetAccountSqlRow {
+  id: string;
+  name: string;
+  type: string;
+  budget: SqlNumeric;
+  actual: SqlNumeric;
+}
+
 const PNL_TYPES = ["income", "income_other", "cogs", "expense", "expense_other", "expense_deferred"] as const;
 
 function priorYear(iso: string): string {
@@ -138,7 +188,7 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
   // A per-month P&L series is the exact shape gl_month_activity stores, so the
   // whole months read straight from it; only the final (possibly partial)
   // month falls back to the lines. The window always starts on a first-of-month.
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     with movement as (
       select g.account_id, to_char(g.month, 'YYYY-MM') as month,
              (g.debit_total - g.credit_total) as amt
@@ -164,8 +214,9 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
     join accounts a on a.id = m.account_id and a.org_id = ${orgId}
     where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
     group by 1
-  `)) as any;
-  const by = new Map<string, any>(r.rows.map((x: any) => [x.month, x]));
+  `)));
+  const monthRows = r.rows as unknown as HealthMonthSqlRow[];
+  const by = new Map(monthRows.map((x) => [x.month, x]));
   const out: MonthPoint[] = [];
   for (let i = 0; i < months; i++) {
     const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
@@ -212,7 +263,7 @@ async function segmentsBy(
   // No entry join: the line carries its own posting date, so the window is a
   // plain predicate on journal_lines instead of a join whose date filter the
   // planner applied only after walking every P&L line ever posted.
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       -sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as revenue,
       sum(case when a.type = 'cogs' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cogs,
@@ -227,8 +278,8 @@ async function segmentsBy(
     group by 1, 2
     having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
         or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0
-  `)) as any;
-  const rows = r.rows as any[];
+  `)));
+  const rows = r.rows as unknown as HealthSegmentSqlRow[];
   // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
   // the empty state in that case.
   if (rows.every((x) => x.id === "unassigned")) return [];
@@ -266,7 +317,7 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
   // No entry join: the line carries its own posting date.
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select a.id, a.name, a.type,
       sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
       sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
@@ -276,9 +327,9 @@ async function drivers(orgId: string, from: string, to: string): Promise<{ reven
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, a.type
-  `)) as any;
+  `)));
   const isIncome = (t: string) => t === "income" || t === "income_other";
-  const rows = (r.rows as any[]).map((x) => {
+  const rows = (r.rows as unknown as HealthDriverSqlRow[]).map((x) => {
     const sign = isIncome(x.type) ? -1 : 1;
     const current = sign * Number(x.cur_raw);
     const prior = sign * Number(x.prior_raw);
@@ -316,7 +367,7 @@ async function itemAnalysis(orgId: string, from: string, to: string): Promise<He
   const pTo = priorYear(to);
   let rows: ItemRow[] = [];
   try {
-    const r = (await db.execute(sql`
+    const r = ((await db.execute(sql`
       select a.id, a.name,
         -sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as current,
         -sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior
@@ -326,10 +377,10 @@ async function itemAnalysis(orgId: string, from: string, to: string): Promise<He
         and a.type in ('income','income_other')
         and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
       group by a.id, a.name
-    `)) as any;
+    `)));
     const totalChangeAbs =
-      (r.rows as any[]).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
-    rows = (r.rows as any[])
+      ((r.rows)).reduce((a, x) => a + Math.abs(Number(x.current) - Number(x.prior)), 0) || 1;
+    rows = (r.rows as unknown as HealthItemSqlRow[])
       .map((x): ItemRow => {
         const current = Number(x.current);
         const prior = Number(x.prior);
@@ -535,11 +586,11 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
       )
     order by bs.fiscal_year desc, bs.updated_at desc nulls last
     limit 1
-  `)) as any;
+  `)) as unknown as { rows: BudgetScenarioSqlRow[] };
   const s = scen.rows[0];
   if (!s) return { scenario: null, rows: [], totals: { budget: 0, actual: 0, variance: 0 } };
 
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     with b as (
       select bl.account_id, sum(case when acc.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
       from budget_lines bl
@@ -566,10 +617,10 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
     where acc.org_id = ${orgId} and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
       and (b.budget is not null or abs(coalesce(a.actual, 0)) > 0)
     order by abs(coalesce(a.actual, 0) - coalesce(b.budget, 0)) desc
-  `)) as any;
+  `)));
 
   const isIncome = (t: string) => t === "income" || t === "income_other";
-  const rows: BudgetRow[] = (r.rows as any[]).map((x) => {
+  const rows: BudgetRow[] = (r.rows as unknown as BudgetAccountSqlRow[]).map((x) => {
     const budget = Number(x.budget);
     const actual = Number(x.actual);
     const variance = actual - budget;

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { Drawer, Button, Input } from "@openbooks/ui";
 import { Field } from "./workspace-ui";
+import type { SaveAction } from "./types";
 
-export function UnitDrawer({ propertyId, onClose, busy, onSave }: any) {
+export function UnitDrawer({ propertyId, onClose, busy, onSave }: { propertyId: string | null; onClose: () => void; busy: boolean; onSave: SaveAction }) {
   const [form, setForm] = useState({
     code: "",
     name: "",

@@ -191,7 +191,7 @@ export function SearchSelectFilter({
     next.delete(pageParamKey)
     for (const key of resetParamKeys) next.delete(key)
     const qs = next.toString()
-    router.replace((qs ? `${pathname}?${qs}` : pathname) as any)
+    router.replace(((qs ? `${pathname}?${qs}` : pathname)))
   }
 
   return (
@@ -262,7 +262,7 @@ function FilterItem({
     )
   }
   return (
-    <Link href={href as any} onClick={onSelect} role="option" aria-selected={active} className={className}>
+    <Link href={(href)} onClick={onSelect} role="option" aria-selected={active} className={className}>
       {body}
     </Link>
   )

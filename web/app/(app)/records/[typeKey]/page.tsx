@@ -119,33 +119,33 @@ export default async function RecordModule({
           })()
 
   const [rows, statusCounts, filterCounts] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select r.id, r.record_number, r.data, r.status, r.created_at
         from custom_records r
        where ${where}
        order by ${sortColumn} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.created_at desc
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select r.status, count(*) as n from custom_records r
        where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
        group by r.status
-    `) as any,
+    `)),
     Promise.all(
       filterFields.map(
         (f) =>
-          db.execute(sql`
+          (db.execute(sql`
             select r.data->>${f.id} as v, count(*) as n
              from custom_records r
              where ${scope}
                ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
                and r.data->>${f.id} is not null
              group by 1
-          `) as any,
+          `)),
       ),
     ),
   ])
-  const total = statusCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
+  const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const filtered = Boolean(status || listParams.q || activeFieldFilters.length > 0)
   const filteredTotal = filtered
     ? Number(
@@ -196,7 +196,7 @@ export default async function RecordModule({
             <ShowInactivesToggle basePath={basePath} currentParams={sp} />
             {filterFields.map((f) => {
               const counts = new Map<string, number>(
-                (filterCounts[filterFields.indexOf(f)]?.rows ?? []).map((r: any) => [
+                (filterCounts[filterFields.indexOf(f)]?.rows ?? []).map((r) => [
                   String(r.v),
                   Number(r.n),
                 ]),
@@ -262,7 +262,7 @@ export default async function RecordModule({
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-[13px] font-semibold">
                     <Link
-                      href={buildListDrawerHref(basePath, sp, 'rec', String(r.id)) as any}
+                      href={(buildListDrawerHref(basePath, sp, 'rec', String(r.id)))}
                       className="text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {r.record_number}

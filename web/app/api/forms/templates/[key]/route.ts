@@ -20,12 +20,12 @@ export async function GET(_req: Request, { params }: Params) {
   const template = await getTemplateByKey(user.orgId, key)
   if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const versions = (await db.execute(sql`
+  const versions = ((await db.execute(sql`
     select id, version, changelog, published_at, created_at
       from form_template_versions
      where org_id = ${user.orgId} and template_id = ${template.id}
      order by version desc
-  `)) as any
+  `)))
   const latest = await getLatestVersion(user.orgId, template.id)
 
   return NextResponse.json({

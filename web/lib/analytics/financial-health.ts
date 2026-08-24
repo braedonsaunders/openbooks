@@ -246,7 +246,7 @@ function monthsBetween(from: string, to: string): number {
 }
 
 async function depreciationAmortization(orgId: string, from: string, to: string): Promise<number> {
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -255,15 +255,15 @@ async function depreciationAmortization(orgId: string, from: string, to: string)
        and a.type in ('expense', 'expense_other', 'expense_deferred')
        and (lower(a.name) like '%deprec%' or lower(a.name) like '%amort%')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
-  `)) as any;
+  `)));
   // expense accounts are debit-positive → already the D&A magnitude
   return Number(r.rows[0]?.s ?? 0);
 }
 
 async function activeHeadcount(orgId: string): Promise<number> {
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select count(*)::int as c from employee_roles where org_id = ${orgId} and terminated_on is null
-  `)) as any;
+  `)));
   return Number(r.rows[0]?.c ?? 0);
 }
 

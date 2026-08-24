@@ -165,7 +165,7 @@ export function GlobalPartyDrawerHost({
   return (
     <>
       <PartyDrawer
-        {...({ subsidiaries: data.subsidiaries } as any)}
+        {...(({ subsidiaries: data.subsidiaries }))}
         key={partyId}
         payload={data.payload}
         paymentTerms={data.paymentTerms}

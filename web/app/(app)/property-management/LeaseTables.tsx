@@ -2,8 +2,9 @@
 
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
+import type { DepositRow, LeaseRow, Money, ScheduleRow } from "./types";
 
-export function LeasesTable({ leases, money, onOpen }: any) {
+export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; money: Money; onOpen: (id: string) => void }) {
   if (!leases.length)
     return (
       <Empty
@@ -24,7 +25,7 @@ export function LeasesTable({ leases, money, onOpen }: any) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {leases.map((lease: any) => (
+        {leases.map((lease) => (
           <TableRow
             key={lease.id}
             role="button"
@@ -60,7 +61,7 @@ export function LeasesTable({ leases, money, onOpen }: any) {
   );
 }
 
-export function RentTable({ schedules, leases, money }: any) {
+export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money }) {
   if (!schedules.length)
     return (
       <Empty
@@ -82,8 +83,8 @@ export function RentTable({ schedules, leases, money }: any) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {schedules.slice(0, 300).map((line: any) => {
-          const lease = leases.find((item: any) => item.id === line.leaseId);
+        {schedules.slice(0, 300).map((line) => {
+          const lease = leases.find((item) => item.id === line.leaseId);
           return (
             <TableRow key={line.id}>
               <TableCell>{line.dueOn}</TableCell>
@@ -110,7 +111,7 @@ export function RentTable({ schedules, leases, money }: any) {
   );
 }
 
-export function DepositTable({ deposits, leases, money, onReverse }: any) {
+export function DepositTable({ deposits, leases, money, onReverse }: { deposits: DepositRow[]; leases: LeaseRow[]; money: Money; onReverse?: (row: DepositRow) => void }) {
   if (!deposits.length)
     return (
       <Empty
@@ -132,8 +133,8 @@ export function DepositTable({ deposits, leases, money, onReverse }: any) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {deposits.map((row: any) => {
-          const lease = leases.find((item: any) => item.id === row.leaseId);
+        {deposits.map((row) => {
+          const lease = leases.find((item) => item.id === row.leaseId);
           return (
             <TableRow key={row.id}>
               <TableCell>{row.occurredOn}</TableCell>

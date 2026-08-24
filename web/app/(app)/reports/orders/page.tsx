@@ -32,27 +32,27 @@ export default async function OrdersReport() {
   const orgId = authz.user.orgId
 
   const [pipeline, converted, org] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select kind, status, count(*)::int as n, coalesce(sum(total), 0) as value
         from documents
        where org_id = ${orgId} and kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
-       group by kind, status`) as any,
-    db.execute(sql`
+       group by kind, status`)),
+    (db.execute(sql`
       select d.kind, count(distinct d.id)::int as converted
         from documents d
         join document_links dl on dl.from_document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
-       group by d.kind`) as any,
+       group by d.kind`)),
     orgInfo(orgId),
   ])
 
   const convByKind = new Map<string, number>(converted.rows.map((r: any) => [r.kind, Number(r.converted)]))
   const rows = KINDS.map((kind) => {
-    const forKind = pipeline.rows.filter((r: any) => r.kind === kind)
-    const openRows = forKind.filter((r: any) => r.status !== 'voided')
-    const open = openRows.reduce((a: number, r: any) => a + Number(r.n), 0)
-    const openValue = openRows.reduce((a: number, r: any) => a + Number(r.value), 0)
-    const voided = forKind.filter((r: any) => r.status === 'voided').reduce((a: number, r: any) => a + Number(r.n), 0)
+    const forKind = pipeline.rows.filter((r) => r.kind === kind)
+    const openRows = forKind.filter((r) => r.status !== 'voided')
+    const open = openRows.reduce((a: number, r) => a + Number(r.n), 0)
+    const openValue = openRows.reduce((a: number, r) => a + Number(r.value), 0)
+    const voided = forKind.filter((r) => r.status === 'voided').reduce((a: number, r) => a + Number(r.n), 0)
     const conv = convByKind.get(kind) ?? 0
     const denom = open + conv
     return { kind, open, openValue, voided, conv, rate: denom > 0 ? Math.round((conv / denom) * 100) : 0 }

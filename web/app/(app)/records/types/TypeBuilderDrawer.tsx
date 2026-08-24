@@ -353,7 +353,7 @@ export function TypeBuilderDrawer({
           {type.status === 'published' ? (
             <>
               <Button variant="outline" asChild>
-                <Link href={`/records/${key}` as any}>
+                <Link href={(`/records/${key}`)}>
                   <ExternalLink size={14} /> {t('typeBuilder.openModule')}
                 </Link>
               </Button>

@@ -128,23 +128,23 @@ export default async function ArInvoices({
   const drawer =
     openDoc && pickers && resolvedForm && openKind ? (
       <DocumentDrawer
-        payload={openDoc as any}
+        payload={(openDoc)}
         key={(openDoc as any).doc.id}
         config={DOC_KINDS[openKind]!}
         basePath="/ar/invoices"
         initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
-        parties={pickers[0] as any}
-        accounts={pickers[1] as any}
-        taxCodes={pickers[2] as any}
-        taxGroups={pickers[3] as any}
-        departments={(pickers[4] as any).departments}
-        projects={(pickers[4] as any).projects}
-        locations={(pickers[4] as any).locations}
-        classes={(pickers[4] as any).classes}
-        segments={(pickers[4] as any).segments}
-        builtinSegments={(pickers[4] as any).builtinSegments}
+        parties={(pickers[0])}
+        accounts={(pickers[1])}
+        taxCodes={(pickers[2])}
+        taxGroups={(pickers[3])}
+        departments={((pickers[4])).departments}
+        projects={((pickers[4])).projects}
+        locations={((pickers[4])).locations}
+        classes={((pickers[4])).classes}
+        segments={((pickers[4])).segments}
+        builtinSegments={((pickers[4])).builtinSegments}
         items={pickers[5] as any}
-        subsidiaries={(pickers[6] as any) ?? undefined}
+        subsidiaries={((pickers[6])) ?? undefined}
         headerDefs={headerDefs as any}
         lineDefs={lineDefs as any}
         canCreate={canCreate}

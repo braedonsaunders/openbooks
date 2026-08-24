@@ -7,14 +7,27 @@ import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, Ta
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, teams, sources, items, currencies, closeHref, canManage, multiCurrency = false }: { data:any; statuses:any[]; accounts:any[]; contacts:any[]; owners:any[]; teams:any[]; sources:any[]; items:any[]; currencies:{code:string;name:string}[]; closeHref:string; canManage:boolean; multiCurrency?: boolean }) {
+type Option = { id: string; name: string }
+type ContactOption = Option & { party_id: string }
+type OpportunityRow = {
+  id: string; title: string; party_id: string | null; primary_contact_id: string | null;
+  owner_user_id: string | null; sales_team_id: string | null; status_id: string;
+  lead_source_id: string | null; expected_close_date: string | null; forecast_category: string;
+  probability: string | number; currency: string; next_step: string | null; description: string | null;
+  win_loss_reason: string | null; opportunity_number: string; status_name: string;
+}
+type OpportunityLineRow = { item_id: string | null; description: string | null; quantity: string | number; unit: string | null; unit_price: string | number }
+type OpportunityLineForm = { itemId: string; description: string; quantity: string; unit: string; unitPrice: string }
+type OpportunityData = { opportunity: OpportunityRow; lines: OpportunityLineRow[] }
+
+export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, teams, sources, items, currencies, closeHref, canManage, multiCurrency = false }: { data: OpportunityData; statuses: Option[]; accounts: Option[]; contacts: ContactOption[]; owners: Option[]; teams: Option[]; sources: Option[]; items: Option[]; currencies:{code:string;name:string}[]; closeHref:string; canManage:boolean; multiCurrency?: boolean }) {
   const t=useTranslations('crm'); const tc=useTranslations('common'); const router=useRouter(); const row=data.opportunity
   const [form,setForm]=useState({ title:row.title==='New opportunity'?'':row.title, partyId:row.party_id??'', primaryContactId:row.primary_contact_id??'', ownerUserId:row.owner_user_id??'', salesTeamId:row.sales_team_id??'', statusId:row.status_id, leadSourceId:row.lead_source_id??'', expectedCloseDate:row.expected_close_date??'', forecastCategory:row.forecast_category, probability:String(row.probability), currency:row.currency, nextStep:row.next_step??'', description:row.description??'', winLossReason:row.win_loss_reason??'' })
-  const [lines,setLines]=useState<any[]>(data.lines.map((line:any)=>({itemId:line.item_id??'',description:line.description??'',quantity:String(line.quantity),unit:line.unit??'',unitPrice:String(line.unit_price)})))
+  const [lines,setLines]=useState<OpportunityLineForm[]>(data.lines.map((line)=>({itemId:line.item_id??'',description:line.description??'',quantity:String(line.quantity),unit:line.unit??'',unitPrice:String(line.unit_price)})))
   const [busy,setBusy]=useState(false); const set=(key:string,value:unknown)=>setForm(current=>({...current,[key]:value}))
   async function save(){ if(!form.title.trim()) return toast.error(t('validation.titleRequired')); setBusy(true); try { const { currency, ...fields }=form; const response=await fetch(`/api/crm/opportunities/${row.id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...fields,partyId:form.partyId||null,primaryContactId:form.primaryContactId||null,ownerUserId:form.ownerUserId||null,salesTeamId:form.salesTeamId||null,leadSourceId:form.leadSourceId||null,expectedCloseDate:form.expectedCloseDate||null,probability:Number(form.probability),...(multiCurrency ? { currency } : {}),lines})}); if(!response.ok) throw new Error(); toast.success(tc('feedback.saved')); router.refresh() }catch{toast.error(tc('feedback.saveFailed'))}finally{setBusy(false)} }
   async function estimate(){setBusy(true);try{const response=await fetch(`/api/crm/opportunities/${row.id}/estimate`,{method:'POST'});const result=await response.json();if(!response.ok)throw new Error();toast.success(t('opportunities.estimateCreated'));router.push(`/estimates?estimate=${result.id}&mode=edit`)}catch{toast.error(t('opportunities.estimateFailed'));setBusy(false)}}
-  const accountContacts=contacts.filter((c:any)=>!form.partyId||c.party_id===form.partyId)
+  const accountContacts=contacts.filter((c)=>!form.partyId||c.party_id===form.partyId)
   return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{row.opportunity_number} · {form.title||t('opportunities.newFallback')}<Badge>{row.status_name}</Badge></span>} headerActions={canManage?<><Button variant="outline" onClick={estimate} disabled={busy||!form.partyId||!lines.length}>{t('opportunities.createEstimate')}</Button><Button onClick={save} disabled={busy}>{busy?tc('actions.saving'):tc('actions.save')}</Button></>:undefined}>
     <div className="grid gap-4 sm:grid-cols-3">
       <div className="sm:col-span-2"><Field label={t('fields.title')}><Input value={form.title} onChange={e=>set('title',e.target.value)} disabled={!canManage}/></Field></div>

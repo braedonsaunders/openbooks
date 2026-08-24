@@ -53,8 +53,10 @@ import {
  * after_post scripts run once the entry exists.
  */
 
-type Doc = typeof schema.documents.$inferSelect;
-type DocLine = typeof schema.documentLines.$inferSelect;
+export type PostingDocument = typeof schema.documents.$inferSelect;
+export type PostingDocumentLine = typeof schema.documentLines.$inferSelect;
+type Doc = PostingDocument;
+type DocLine = PostingDocumentLine;
 
 export interface KernelLine {
   accountId: string;

@@ -6,6 +6,7 @@ import { Button, Card, CardContent, Drawer, Input, Popover, cn } from "@openbook
 import { useBusinessToday } from "@/components/business-date-provider";
 import { Field, RecordTabs, Status } from "./workspace-ui";
 import { LeaseDetail } from "./LeaseDetail";
+import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, SaveAction, WorkspaceOptions } from "./types";
 
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 
@@ -20,7 +21,18 @@ export function LeaseRecordDrawer({
   act,
   money,
   onSave,
-}: any) {
+}: {
+  lease: LeaseRow | null;
+  data: PropertyWorkspace;
+  options: WorkspaceOptions;
+  permissions: PropertyPermissions;
+  busy: boolean;
+  stacked?: boolean;
+  onClose: () => void;
+  act: PropertyAction;
+  money: Money;
+  onSave: SaveAction;
+}) {
   const today = useBusinessToday();
   const [tab, setTab] = useState<LeaseTab>("overview");
   const [mode, setMode] = useState<"view" | "edit">("view");
@@ -207,7 +219,7 @@ export function LeaseRecordDrawer({
   );
 }
 
-function leaseForm(lease: any) {
+function leaseForm(lease: Partial<LeaseRow>): LeaseForm {
   return {
     propertyId: lease.propertyId ?? "",
     unitId: lease.unitId ?? "",

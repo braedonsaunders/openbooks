@@ -20,9 +20,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency] = await Promise.all([
     loadParty(id, gate.user.orgId),
-    db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`) as any,
-    db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`) as any,
-    db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`) as any,
+    (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
+    (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
+    (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`)),
     isFeatureEnabled(gate.user.orgId, 'payroll').then((enabled) => enabled
       ? db.execute(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`) as any
       : Promise.resolve({ rows: [] })),
@@ -30,9 +30,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     subsidiaryUiOptions(gate.user.orgId).then((options) => gate.allowedSubsidiaryIds
       ? options.filter((option) => gate.allowedSubsidiaryIds!.has(option.id))
       : options),
-    db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`) as any,
-    db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`) as any,
-    db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`) as any,
+    (db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`)),
+    (db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`)),
+    (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active order by p.display_name`)),
     isFeatureEnabled(gate.user.orgId, 'payroll'),
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
   ])
@@ -47,7 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     userId: gate.user.id,
     recordType: role,
     userRoles: gate.user.roles.map(({ key }) => key),
-    headerDefs: fieldDefs as any,
+    headerDefs: (fieldDefs),
     lineDefs: [],
     explicitLayoutId: formId,
   })

@@ -356,7 +356,7 @@ async function createEntity(
   try {
     const r = (await db.execute(sql`
       insert into ${sql.raw(`"${table}"`)} (${colSql}) values (${valSql})
-      returning *`)) as any;
+      returning *`));
     return { status: 201, body: r.rows[0] };
   } catch (e) {
     return err(422, `could not create record: ${(e as Error).message}`);
@@ -371,7 +371,7 @@ async function updateEntity(
   body: Record<string, unknown>,
 ): Promise<WriteResult> {
   const existing = (await db.execute(sql`
-    select custom from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`)) as any;
+    select custom from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`));
   if (!existing.rows[0]) return err(404, "not found");
 
   const gated = await refuseDisabledItemFeatureColumns(user.orgId, table, body, id);
@@ -397,7 +397,7 @@ async function updateEntity(
     const r = (await db.execute(sql`
       update ${sql.raw(`"${table}"`)} set ${sql.join(sets, sql`, `)}
       where id = ${id} and org_id = ${user.orgId}
-      returning *`)) as any;
+      returning *`));
     return { status: 200, body: r.rows[0] };
   } catch (e) {
     return err(422, `could not update record: ${(e as Error).message}`);
@@ -406,7 +406,7 @@ async function updateEntity(
 
 async function deleteEntity(user: SessionUser, table: string, id: string): Promise<WriteResult> {
   const owned = (await db.execute(sql`
-    select 1 from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`)) as any;
+    select 1 from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId} limit 1`));
   if (!owned.rows[0]) return err(404, "not found");
   try {
     await db.execute(sql`delete from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}`);
@@ -557,7 +557,7 @@ async function updateDocument(
 
 async function deleteDocumentWriter(user: SessionUser, docKind: string, id: string): Promise<WriteResult> {
   const owned = (await db.execute(sql`
-    select 1 from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as any;
+    select 1 from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`));
   if (!owned.rows[0]) return err(404, "not found");
   if (!(await isDocKindEnabled(user.orgId, docKind))) return err(404, "not found");
   try {

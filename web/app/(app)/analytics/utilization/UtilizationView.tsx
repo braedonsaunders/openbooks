@@ -522,9 +522,9 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={tone as any} />
+        <KpiCard icon={ChartArea} accent="sky" label={t('kpi.projectedBillablePct')} value={pct1(f.projectedBillable)} sub={t('sub.trendArrow', { arrow: f.billableTrend >= 0 ? '↑' : '↓', trend: Math.abs(f.billableTrend).toFixed(1) })} tone={(tone)} />
         <KpiCard icon={DollarSign} accent={f.costTrend <= 0 ? 'emerald' : 'red'} label={t('kpi.projectedNonBillCost')} value={money(f.projectedCost)} sub={t('sub.trajectory', { arrow: f.costTrend <= 0 ? '↓' : '↑', amount: money(Math.abs(f.costTrend)) })} tone={f.costTrend <= 0 ? 'positive' : 'negative'} />
-        <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={tone as any} />
+        <KpiCard icon={Target} accent="violet" label={t('kpi.targetStatus')} value={f.projectedBillable >= target ? t('forecast.onTrack') : t('forecast.atRisk')} sub={t('sub.targetPct', { target })} tone={(tone)} />
         <KpiCard icon={Brain} accent="slate" label={t('kpi.confidence')} value={`${f.confidence}%`} sub={t('sub.dataPoints', { count: f.dataPoints })} />
       </div>
       <Panel title={t('panels.forecastTrend')} icon={ChartArea}>

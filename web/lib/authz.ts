@@ -42,7 +42,7 @@ export async function getAuthz(): Promise<Authz | null> {
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`),
     allowedSubsidiaryIds(user.id),
-  ])) as [any, any, Set<string> | null];
+  ])) as unknown as [any, any, any];
   const permissions = resolveEffectivePermissions({
     rolePermissionSets: assignments.rows.map((r: any) =>
       Array.isArray(r.permissions) ? r.permissions : [],

@@ -25,7 +25,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     match?: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string } | null;
   };
 
-  const group: any = await db.execute(sql`
+  const group = await db.execute(sql`
     select id from account_groups where id = ${id} and org_id = ${gate.user.orgId}
   `);
   if (!group.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });

@@ -11,7 +11,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 export type ConfigTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /** Strips sealed originator credentials, keeping only a presence flag. */
-export function profileAuditView(row: Record<string, any>): Record<string, unknown> {
+export function profileAuditView(row: Record<string, unknown>): Record<string, unknown> {
   const { originator_secrets_encrypted, originatorSecretsEncrypted, ...rest } = row
   return {
     ...rest,

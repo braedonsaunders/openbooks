@@ -53,7 +53,7 @@ export async function SegmentValuesTab({
           {t('segmentValues.description', { name: segmentName })}
         </p>
         <Button asChild size="sm">
-          <Link href={createHref as any}>
+          <Link href={(createHref)}>
             <Plus size={14} />
             {t('segmentValues.new')}
           </Link>
@@ -94,7 +94,7 @@ export async function SegmentValuesTab({
                   <TableCell className="font-mono text-xs">{row.code || '—'}</TableCell>
                   <TableCell>
                     <Link
-                      href={editHref as any}
+                      href={(editHref)}
                       className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {row.name}

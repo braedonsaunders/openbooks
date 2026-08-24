@@ -219,7 +219,7 @@ export function ApprovalsTable({
               <TableCell className="font-mono text-[13px] font-semibold">
                 {r.href ? (
                   <Link
-                    href={r.href as any}
+                    href={(r.href)}
                     className="text-teal-700 hover:underline dark:text-teal-300"
                   >
                     {r.documentNumber}

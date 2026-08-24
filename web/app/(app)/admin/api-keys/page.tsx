@@ -31,7 +31,7 @@ export default async function ApiKeysPage({
     ${params.q ? sql` and (k.name ilike ${'%' + params.q + '%'} or u.name ilike ${'%' + params.q + '%'} or u.email ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [keys, totalRow] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
              k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
              u.name as owner_name, u.email as owner_email
@@ -40,7 +40,7 @@ export default async function ApiKeysPage({
        where ${where}
        order by k.created_at desc
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
+    `)),
     db.execute(sql`
       select count(*) as n from api_keys k
         join users u on u.id = k.user_id
@@ -97,7 +97,7 @@ export default async function ApiKeysPage({
           {keys.rows.map((k: any) => (
             <TableRow key={k.id}>
               <TableCell>
-                <Link href={buildListDrawerHref('/admin/api-keys', sp, 'key', String(k.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={(buildListDrawerHref('/admin/api-keys', sp, 'key', String(k.id)))} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {k.name}
                 </Link>
               </TableCell>

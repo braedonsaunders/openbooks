@@ -6,6 +6,16 @@ import { useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */
 type EChartsOption = Record<string, unknown>
+type ChartParam = {
+  axisValue?: string;
+  marker?: string;
+  seriesName?: string;
+  seriesIndex?: number;
+  value: number;
+  name?: string;
+  dataIndex: number;
+  percent?: number;
+}
 
 /**
  * Themed ECharts builders for the analytics dashboards. Every option uses
@@ -66,7 +76,7 @@ export function TrendChart({
     tooltip: {
       ...tooltip,
       valueFormatter: undefined,
-      formatter: (params: any[]) =>
+      formatter: (params: ChartParam[]) =>
         [params[0]?.axisValue, ...params.map((p) => `${p.marker} ${p.seriesName}: ${p.seriesIndex != null && series[p.seriesIndex]?.pct ? pct(p.value) : money(p.value)}`)].join('<br/>'),
     },
     legend: series.length > 1 ? { top: 0, right: 0, textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 } : undefined,
@@ -108,7 +118,7 @@ export function ForecastChart({
   const bandSpan = low.map((v, i) => (v == null || high[i] == null ? null : (high[i] as number) - v))
   const option: EChartsOption = {
     grid: { ...baseGrid, top: 30 },
-    tooltip: { ...tooltip, formatter: (ps: any[]) => [ps[0]?.axisValue, ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${p.seriesName}: ${money(p.value)}`)].join('<br/>') },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => [ps[0]?.axisValue, ...ps.filter((p) => p.value != null && p.seriesName !== '_base' && p.seriesName !== '_band').map((p) => `${p.marker} ${p.seriesName}: ${money(p.value)}`)].join('<br/>') },
     legend: { top: 0, right: 0, data: [t('history'), t('forecast')], textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 12 },
     xAxis: catAxis(labels),
     yAxis: valAxis(money),
@@ -135,7 +145,7 @@ export function DivergingBar({
   const money = useChartMoney()
   const option: EChartsOption = {
     grid: { ...baseGrid, left: 4 },
-    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.name}: ${money(ps[0]?.value)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.name}: ${money(ps[0]?.value ?? 0)}` },
     xAxis: valAxis(money),
     yAxis: { ...catAxis(labels), inverse: true },
     series: [
@@ -143,7 +153,7 @@ export function DivergingBar({
         type: 'bar',
         data: values.map((v) => ({ value: v, itemStyle: { color: v >= 0 ? POS : NEG, borderRadius: [0, 3, 3, 0] } })),
         barMaxWidth: 18,
-        label: { show: true, position: 'right', color: AXIS, fontSize: 9, formatter: (p: any) => money(p.value) },
+        label: { show: true, position: 'right', color: AXIS, fontSize: 9, formatter: (p: ChartParam) => money(p.value) },
       },
     ],
   }
@@ -210,7 +220,7 @@ export function Waterfall({
   })
   const option: EChartsOption = {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money(steps[ps[0]?.dataIndex]?.amount ?? 0)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money(steps[ps[0]?.dataIndex ?? -1]?.amount ?? 0)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
@@ -220,7 +230,7 @@ export function Waterfall({
         stack: 'wf',
         data: bar.map((v, i) => ({ value: v, itemStyle: { color: colors[i], borderRadius: 3 } })),
         barMaxWidth: 40,
-        label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: any) => money(steps[p.dataIndex]?.amount ?? 0) },
+        label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: ChartParam) => money(steps[p.dataIndex]?.amount ?? 0) },
       },
     ],
   }
@@ -244,7 +254,7 @@ export function Donut({
   const money = useChartMoney()
   const fmt = valueFormat ?? money
   const option: EChartsOption = {
-    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.name}: ${fmt(p.value)} (${p.percent}%)` },
+    tooltip: { trigger: 'item', backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: ChartParam) => `${p.name}: ${fmt(p.value)} (${p.percent}%)` },
     legend: { type: 'scroll', orient: 'vertical', right: 0, top: 'center', textStyle: { color: AXIS, fontSize: 10 }, itemHeight: 8, itemWidth: 8 },
     series: [
       {
@@ -284,13 +294,13 @@ export function cashBridgeOption(startCash: number, inflows: number, outflows: n
   const bar = steps.map((s) => Math.abs(s.to - s.from))
   return {
     grid: baseGrid,
-    tooltip: { ...tooltip, formatter: (ps: any[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex]!)}` },
+    tooltip: { ...tooltip, formatter: (ps: ChartParam[]) => `${ps[0]?.axisValue}: ${money([startCash, inflows, -outflows, end][ps[0]?.dataIndex ?? -1]!)}` },
     xAxis: catAxis(steps.map((s) => s.label)),
     yAxis: valAxis(money),
     series: [
       { type: 'bar', stack: 'b', data: base.map(() => ({ value: 0, itemStyle: { color: 'transparent' } })), silent: true },
       { type: 'bar', stack: 'b', data: base.map((b) => ({ value: b, itemStyle: { color: 'transparent' } })), silent: true },
-      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: any) => money([startCash, inflows, -outflows, end][p.dataIndex]!) } },
+      { type: 'bar', stack: 'b', data: bar.map((v, i) => ({ value: v, itemStyle: { color: steps[i]!.color, borderRadius: 3 } })), barMaxWidth: 46, label: { show: true, position: 'top', color: AXIS, fontSize: 9, formatter: (p: ChartParam) => money([startCash, inflows, -outflows, end][p.dataIndex]!) } },
     ],
   }
 }
@@ -320,8 +330,8 @@ export function cashForecastOption(
     grid: baseGrid,
     tooltip: {
       ...tooltip,
-      formatter: (ps: any[]) => {
-        const w = weeks[ps[0]?.dataIndex]
+      formatter: (ps: ChartParam[]) => {
+        const w = weeks[ps[0]?.dataIndex ?? -1]
         if (!w) return ''
         return [
           w.label,
@@ -357,7 +367,7 @@ export function cashForecastOption(
           : undefined,
         markPoint: {
           symbolSize: 44,
-          label: { fontSize: 9, color: '#fff', formatter: (p: any) => money(p.value) },
+          label: { fontSize: 9, color: '#fff', formatter: (p: ChartParam) => money(p.value) },
           itemStyle: { color: ending[lowestIdx]! < 0 ? NEG : '#f59e0b' },
           data: [{ name: labels.lowest, coord: [lowestIdx, ending[lowestIdx]], value: ending[lowestIdx] }],
         },

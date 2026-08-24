@@ -33,13 +33,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
     ${q ? sql` and (r.search_text ilike ${'%' + q.toLowerCase() + '%'} or r.record_number ilike ${'%' + q + '%'})` : sql``}`
 
   const [rows, count] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select r.id, r.record_number, r.data, r.status, r.created_at, r.updated_at
         from custom_records r
        where ${where}
        order by r.created_at desc
        limit ${perPage} offset ${(page - 1) * perPage}
-    `) as any,
+    `)),
     db.execute(sql`select count(*) as n from custom_records r where ${where}`) as any,
   ])
 

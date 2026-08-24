@@ -57,13 +57,13 @@ export default async function CustomFields({
     ${params.q ? sql` and (label ilike ${'%' + params.q + '%'} or key ilike ${'%' + params.q + '%'})` : sql``}`
 
   const [defs, counts, totalRow, open] = await Promise.all([
-    db.execute(sql`
+    (db.execute(sql`
       select id, target_table, target_kind, key, label, field_type, config, is_required, is_active, sort_order
         from custom_field_defs where ${where}
        order by target_table, target_kind nulls first, sort_order, label
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    db.execute(sql`select target_table, count(*) as n from custom_field_defs where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`) as any,
+    `)),
+    (db.execute(sql`select target_table, count(*) as n from custom_field_defs where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`)),
     db.execute(sql`select count(*) as n from custom_field_defs where ${where}`) as any,
     fieldId && fieldId !== 'new'
       ? (db.execute(sql`select * from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`) as any)
@@ -121,7 +121,7 @@ export default async function CustomFields({
           {defs.rows.map((d: any) => (
             <TableRow key={d.id}>
               <TableCell>
-                <Link href={buildListDrawerHref('/admin/custom-fields', sp, 'field', String(d.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={(buildListDrawerHref('/admin/custom-fields', sp, 'field', String(d.id)))} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {d.label}
                 </Link>
               </TableCell>

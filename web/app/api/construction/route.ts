@@ -49,13 +49,13 @@ export async function GET(req: Request) {
   const retainageAccountId = retAcct.rows[0]?.acct ?? null;
 
   const [sov, cos, apps, held, committed] = await Promise.all([
-    db.execute<any>(sql`
+    db.execute(sql`
       select id, item_no as "itemNo", description, scheduled_value as "scheduledValue",
              retainage_percent as "retainagePercent", income_account_id as "incomeAccountId",
              sort_order as "sortOrder", change_order_id as "changeOrderId"
         from sov_lines where org_id = ${orgId} and project_id = ${projectId} order by sort_order
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
              co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
              co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
         left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
        where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
     `),
-    db.execute<any>(sql`
+    db.execute(sql`
       select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
              pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
              d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus",
@@ -84,7 +84,7 @@ export async function GET(req: Request) {
     projectCostSummary(orgId, projectId).catch(() => null),
   ]);
 
-  const contractSum = sum(sov.rows.map((line: any) => String(line.scheduledValue ?? "0")));
+  const contractSum = sum(sov.rows.map((line) => String(line.scheduledValue ?? "0")));
   return NextResponse.json({
     sovLines: sov.rows,
     changeOrders: cos.rows,
@@ -114,7 +114,7 @@ async function ownsProject(orgId: string, projectId: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
-async function actionProjectId(orgId: string, action: string, body: Record<string, any>): Promise<string | null> {
+async function actionProjectId(orgId: string, action: string, body: Record<string, unknown>): Promise<string | null> {
   if (["addSov", "addChangeOrder", "createPayApp", "releaseRetainage"].includes(action)) {
     return typeof body.projectId === "string" && await ownsProject(orgId, body.projectId) ? body.projectId : null;
   }
@@ -135,7 +135,7 @@ async function actionProjectId(orgId: string, action: string, body: Record<strin
 export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, any>;
+  const body = ((parsedBody.data));
   const action = body.action as string;
   const permission = action === "approveChangeOrder" || action === "approvePayApp" || action === "voidPayApp"
     ? "ar.approve"
@@ -192,7 +192,7 @@ export async function POST(req: Request) {
       }
       case "updateSov": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute<any>(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
+          const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length) throw new ConstructionBillingError("A schedule line used by an application is immutable; use a change order");
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
           if (!description || cmp(scheduledValue, "0") <= 0) throw new ConstructionBillingError("Description and a positive scheduled value are required");
           if (retainagePercent !== null && (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)) throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
           const incomeAccountId = await pinIncomeAccount(tx, orgId, body.incomeAccountId);
-          const after = (await tx.execute<any>(sql`
+          const after = (await tx.execute(sql`
             update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
                    retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId} returning *
@@ -220,7 +220,7 @@ export async function POST(req: Request) {
       }
       case "deleteSov": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute<any>(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
+          const before = (await tx.execute(sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`));
           if (!before.rows[0]) throw new ConstructionBillingError("Schedule line not found");
           const used = (await tx.execute(sql`select 1 from pay_application_lines where org_id = ${orgId} and sov_line_id = ${body.id} limit 1`));
           if (used.rows.length || before.rows[0].change_order_id) throw new ConstructionBillingError("A controlled schedule line cannot be deleted; use a reversing change order");
@@ -369,7 +369,7 @@ export async function POST(req: Request) {
       }
       case "voidChangeOrder": {
         await db.transaction(async (tx) => {
-          const before = (await tx.execute<any>(sql`
+          const before = (await tx.execute(sql`
             select * from change_orders where id = ${body.id} and org_id = ${orgId} for update
           `));
           if (!before.rows[0] || before.rows[0].status !== "draft") {

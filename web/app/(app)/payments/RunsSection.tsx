@@ -13,7 +13,7 @@ import { isUuid, parsePrefixedListParams, pickString } from '../../../lib/list-p
 import { dateTime } from '../../../lib/format'
 import { SortTh } from '../../../components/sortable-th'
 import { RunBuilder, type RunBill } from './RunBuilder'
-import { RunDrawer, type RunBlockerClient } from './RunDrawer'
+import { RunDrawer, type PaymentEventClient, type PaymentFileClient, type PaymentInstructionClient, type PaymentRunClient, type PaymentRunItemClient, type RunBlockerClient } from './RunDrawer'
 
 /**
  * Payment-run view: pick posted-open bills across vendors into an EFT run,
@@ -79,12 +79,12 @@ export async function RunsSection({
     const key = RUN_STATUS_COMMON_KEY[status]
     return key ? tCommon(`status.${key}`) : status.replace('_', ' ')
   }
-  const profileCount = (await db.execute(sql`
+  const profileCount = ((await db.execute(sql`
     select count(*)::int as n from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
      where p.org_id = ${orgId} and p.is_active
        and (${collections} = false or (f.direction <> 'credit' and f.rail in ('nacha_debit', 'sepa_debit', 'custom')))
        and (${collections} = true or f.direction <> 'debit')
-  `)) as any
+  `)))
   const hasPaymentProfile = Number(profileCount.rows[0]?.n ?? 0) > 0
 
   const billParams = parsePrefixedListParams(sp, 'bills', {
@@ -135,17 +135,17 @@ export async function RunsSection({
        and d.payment_hold_reason is null`
 
   const [bills, billCount, runs, runCounts, runFilteredCount, bankProfiles] = await Promise.all([
-    building ? db.execute(sql`
+    building ? (db.execute(sql`
       with open_bills as (${openBillsCte})
       select * from open_bills where open > 0 ${billWhere}
       order by ${BILL_SORTS[billParams.sort]} ${billParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, document_number
       limit ${billParams.perPage} offset ${(billParams.page - 1) * billParams.perPage}
-    `) as any : Promise.resolve({ rows: [] }),
-    building ? db.execute(sql`
+    `)) : Promise.resolve({ rows: [] }),
+    building ? (db.execute(sql`
       with open_bills as (${openBillsCte})
       select count(*) as n from open_bills where open > 0 ${billWhere}
-    `) as any : Promise.resolve({ rows: [{ n: 0 }] }),
-    db.execute(sql`
+    `)) : Promise.resolve({ rows: [{ n: 0 }] }),
+    (db.execute(sql`
       select r.id, r.run_number, r.method, r.status, r.currency, r.scheduled_for, r.exported_at, r.created_at,
              a.number as bank_number, a.name as bank_name,
              count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
@@ -157,16 +157,16 @@ export async function RunsSection({
        group by r.id, a.number, a.name
        order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
        limit ${runParams.perPage} offset ${(runParams.page - 1) * runParams.perPage}
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select status, count(*) as n from payment_runs where org_id = ${orgId} and direction = ${direction} group by status
-    `) as any,
-    db.execute(sql`
+    `)),
+    (db.execute(sql`
       select count(*) as n
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
-    `) as any,
+    `)),
     building ? db.execute(sql`
       select p.id, p.name, p.currency, f.name as format_name,
              a.number as bank_number, a.name as bank_name
@@ -190,7 +190,7 @@ export async function RunsSection({
       `)) as any).rows as RunBill[]
     : []
 
-  const runsTotal = runCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
+  const runsTotal = runCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const runsFilteredTotal = Number(runFilteredCount.rows[0]?.n ?? 0)
   const runThProps = {
     basePath,
@@ -206,7 +206,7 @@ export async function RunsSection({
   const runId = typeof sp.run === 'string' && isUuid(sp.run) ? sp.run : undefined
   let drawer: React.ReactNode = null
   if (runId && !building) {
-    const run = (await db.execute(sql`
+    const run = ((await db.execute(sql`
       select r.*, a.number as bank_number, a.name as bank_name,
              p.name as profile_name, f.name as format_name, f.rail,
              p.sftp_server_id as profile_sftp_server_id
@@ -215,10 +215,10 @@ export async function RunsSection({
         left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
         left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
        where r.id = ${runId} and r.org_id = ${orgId} and r.direction = ${direction}
-    `)) as any
+    `)))
     if (run.rows[0]) {
       const [instructions, readiness, files, events, items] = await Promise.all([
-        db.execute(sql`
+        (db.execute(sql`
           select i.id, i.amount, i.currency, i.status, p.display_name as payee,
                  i.payment_document_id, d.document_number, d.status as payment_status,
                  ps.effective_on as settlement_effective_on, ps.bank_reference,
@@ -229,9 +229,9 @@ export async function RunsSection({
             left join payment_settlements ps on ps.payment_instruction_id = i.id and ps.org_id = i.org_id
            where i.payment_run_id = ${runId} and i.org_id = ${orgId}
            order by p.display_name
-        `) as any,
+        `)),
         paymentRunReadiness(runId, orgId),
-        db.execute(sql`
+        (db.execute(sql`
           select pf.id, pf.sequence_number, pf.filename, pf.content_hash, pf.status,
                  pf.payment_count, pf.total_amount, pf.currency, pf.generated_at,
                  pf.approved_at, pf.rejection_reason,
@@ -241,14 +241,14 @@ export async function RunsSection({
             left join payment_file_deliveries d on d.payment_file_id = pf.id and d.org_id = pf.org_id
            where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
            group by pf.id order by pf.sequence_number desc
-        `) as any,
-        db.execute(sql`
+        `)),
+        (db.execute(sql`
           select e.id, e.event_type, e.from_status, e.to_status, e.details, e.created_at,
                  u.name as actor_name
             from payment_events e left join users u on u.id = e.actor_id
            where e.payment_run_id = ${runId} and e.org_id = ${orgId} order by e.created_at desc limit 100
-        `) as any,
-        db.execute(sql`
+        `)),
+        (db.execute(sql`
           select ri.id, ri.kind, ri.gross_amount, ri.discount_amount, ri.credit_amount,
                  ri.payment_amount, ri.currency, ri.status, d.document_number,
                  p.display_name as party_name
@@ -257,18 +257,18 @@ export async function RunsSection({
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
            where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
            order by p.display_name, d.document_number
-        `) as any,
+        `)),
       ])
       drawer = (
         <RunDrawer
-          run={run.rows[0]}
-          instructions={instructions.rows}
+          run={run.rows[0] as unknown as PaymentRunClient}
+          instructions={instructions.rows as unknown as PaymentInstructionClient[]}
           eftConfigured={readiness.eft.ok}
           eftMissing={readiness.eft.ok ? [] : readiness.eft.missing}
           blockers={readiness.blockers as RunBlockerClient[]}
-          files={files.rows}
-          events={events.rows}
-          items={items.rows}
+          files={files.rows as unknown as PaymentFileClient[]}
+          events={events.rows as unknown as PaymentEventClient[]}
+          items={items.rows as unknown as PaymentRunItemClient[]}
           canApprove={canApprove}
           closeHref={`${basePath}?view=runs`}
           paymentBasePath={basePath}
@@ -341,7 +341,7 @@ export async function RunsSection({
                   <TableRow key={r.id}>
                     <TableCell className="font-mono text-[13px] font-semibold">
                       <Link
-                        href={`${basePath}?view=runs&run=${r.id}` as any}
+                        href={(`${basePath}?view=runs&run=${r.id}`)}
                         className="text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {r.run_number}

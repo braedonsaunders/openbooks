@@ -8,16 +8,16 @@ export async function POST() {
   if (gate instanceof NextResponse) return gate
   const created = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${gate.user.orgId}::text))`)
-    const root = (await tx.execute(sql`
+    const root = ((await tx.execute(sql`
       select id from subsidiaries where org_id = ${gate.user.orgId} and is_active and not is_elimination
         ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
        order by (parent_id is null) desc, name limit 1
-    `)) as any
+    `)))
     if (!root.rows[0]) return null
-    const seq = (await tx.execute(sql`
+    const seq = ((await tx.execute(sql`
       select coalesce(max((regexp_replace(unit_number, '\\D', '', 'g'))::int), 0) + 1 as n
         from equipment_units where org_id = ${gate.user.orgId} and unit_number ~ '^EQ-\\d+$'
-    `)) as any
+    `)))
     const unitNumber = `EQ-${String(Number(seq.rows[0]?.n ?? 1)).padStart(4, '0')}`
     const inserted = (await tx.execute(sql`
       insert into equipment_units (org_id, subsidiary_id, unit_number, name, status, created_by, updated_by)

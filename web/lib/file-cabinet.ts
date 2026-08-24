@@ -547,7 +547,7 @@ export async function getFolder(
   orgId: string,
   id: string,
 ): Promise<(FolderNode & { ownerId: string | null }) | null> {
-  const r = (await db.execute<any>(sql`
+  const r = (await db.execute<FolderNode & { ownerId: string | null }>(sql`
     select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
@@ -603,11 +603,11 @@ export async function moveFolder(
   if (parentId === id) return false
   if (parentId) {
     // The new parent must exist inside this org (blocks cross-org reparenting).
-    const parent = (await db.execute<any>(sql`
+    const parent = (await db.execute(sql`
       select 1 from folders where id = ${parentId} and org_id = ${orgId}
     `))
     if (parent.rows.length === 0) return false
-    const cycle = (await db.execute<any>(sql`
+    const cycle = (await db.execute(sql`
       with recursive ancestors as (
         select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
         union
@@ -705,7 +705,7 @@ export async function purgeFolder(orgId: string, id: string): Promise<{ ok: bool
   if (folder.isSystem) return { ok: false, reason: 'system' }
 
   // Check for attached files in this folder (or descendants)
-  const attached = (await db.execute<any>(sql`
+  const attached = (await db.execute(sql`
     with recursive descendants as (
       select id from folders where id = ${id} and org_id = ${orgId}
       union
@@ -806,8 +806,12 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
          and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
        order by fi.updated_at desc`),
   ])
+  const folderRows = folders.rows as unknown as Array<{ id: string; name: string; updatedAt: string }>
+  const fileRows = files.rows as unknown as Array<{
+    id: string; name: string; fileType: string | null; folderName: string | null; updatedAt: string
+  }>
   return [
-    ...((folders as any).rows as any[]).map((f) => ({
+    ...folderRows.map((f) => ({
       kind: 'folder' as const,
       id: f.id,
       name: f.name,
@@ -815,7 +819,7 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
       folderName: null,
       updatedAt: f.updatedAt,
     })),
-    ...((files as any).rows as any[]).map((f) => ({
+    ...fileRows.map((f) => ({
       kind: 'file' as const,
       id: f.id,
       name: f.name,
@@ -883,8 +887,8 @@ export async function listFiles(
     `),
     db.execute(sql`select count(*) as n from files fi where ${where}`),
   ])
-  const files = (rows as any).rows as FileMeta[]
-  const total = Number((count as any).rows[0]?.n ?? 0)
+  const files = (rows).rows as FileMeta[]
+  const total = Number((count).rows[0]?.n ?? 0)
   return { files, total }
 }
 
@@ -990,7 +994,7 @@ export async function listFolderContents(
 
 export async function getFile(orgId: string, id: string, viewer: FileViewer): Promise<FileDetail | null> {
   const scope = await resolveReadScope(orgId, viewer)
-  const meta = (await db.execute<any>(sql`
+  const meta = (await db.execute(sql`
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
            fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
@@ -1022,12 +1026,12 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
         order by created_at desc
     `),
   ])
-  const versionCount = (versions as any).rows.length
+  const versionCount = (versions).rows.length
   return {
     ...f,
     versionCount,
-    versions: (versions as any).rows as FileVersion[],
-    attachments: (attachments as any).rows as FileAttachmentLink[],
+    versions: versions.rows as unknown as FileVersion[],
+    attachments: attachments.rows as unknown as FileAttachmentLink[],
   } as FileDetail
 }
 

@@ -117,9 +117,9 @@ async function validateEntityIntegrity(
     // must stop a new unit link or equipment_charge trigger without wiping
     // rules that already carry one.
     const current = rowId
-      ? ((await db.execute(sql`
+      ? (((await db.execute(sql`
           select trigger, equipment_unit_id from pay_derived_rules
-           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const submittedUnit = Boolean(body.equipmentUnitId)
@@ -137,9 +137,9 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'number-sequences') {
     const current = rowId
-      ? ((await db.execute(sql`
+      ? (((await db.execute(sql`
           select document_kind, subsidiary_id from number_sequences
-           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const documentKind = String(body.documentKind ?? current?.document_kind ?? '')
@@ -150,16 +150,16 @@ async function validateEntityIntegrity(
     if (submittedSubsidiaryId) {
       if (!(await subsidiaryFeatureEnabled(orgId))) return 'Subsidiaries are not enabled for this organization'
       if (!UUID_RE.test(String(submittedSubsidiaryId))) return 'Choose a valid subsidiary'
-      const subsidiary = (await db.execute(sql`
+      const subsidiary = ((await db.execute(sql`
         select 1 from subsidiaries
          where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
-           and is_active and not is_elimination`)) as any
+           and is_active and not is_elimination`)))
       if (!subsidiary.rows.length) return 'Choose an active subsidiary from this organization'
     }
   }
   if (entity.key === 'depreciation-methods') {
     const current = rowId
-      ? ((await db.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const formula = String(body.formula ?? current?.formula ?? '').trim()
@@ -180,7 +180,7 @@ async function validateEntityIntegrity(
   }
   if (entity.key === 'tax-codes') {
     const current = rowId
-      ? ((await db.execute(sql`select * from tax_codes where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`select * from tax_codes where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const value = (camel: string, snake: string, fallback: unknown) =>
@@ -205,53 +205,53 @@ async function validateEntityIntegrity(
     if (calculationType === 'reverse_charge' && (!collectedAccountId || !paidAccountId)) return 'reverse-charge-accounts-required'
     const accountIds = [withholdingAccountId, collectedAccountId, paidAccountId].filter(Boolean).map(String)
     if (accountIds.length > 0) {
-      const accounts = (await db.execute(sql`
+      const accounts = ((await db.execute(sql`
         select id from accounts where org_id = ${orgId} and id = any(${`{${accountIds.join(',')}}`}::uuid[])
           and is_active and not is_summary
-      `)) as any
+      `)))
       if (accounts.rows.length !== new Set(accountIds).size) return 'invalid-tax-account'
     }
     if (!['sales', 'purchases', 'both'].includes(appliesTo)) return 'invalid-tax-application-scope'
   }
   if (entity.key === 'tax-groups') {
     const current = rowId
-      ? ((await db.execute(sql`
-          select price_includes_tax from tax_groups where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`
+          select price_includes_tax from tax_groups where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const members = Array.isArray(body.members)
       ? body.members.map(String)
       : rowId
-        ? ((await db.execute(sql`
+        ? (((await db.execute(sql`
             select tgm.tax_code_id
               from tax_group_members tgm
               join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
              where tgm.tax_group_id = ${rowId}
-             order by tgm.sequence`)) as any).rows.map((row: any) => String(row.tax_code_id))
+             order by tgm.sequence`)))).rows.map((row) => String(row.tax_code_id))
         : []
     if (members.length === 0) return 'tax-group-members-required'
     if (new Set(members).size !== members.length || members.some((id: string) => !UUID_RE.test(id))) return 'invalid-tax-group-members'
-    const rows = (await db.execute(sql`
+    const rows = ((await db.execute(sql`
       select id, calculation_type from tax_codes
        where org_id = ${orgId} and is_active and id = any(${`{${members.join(',')}}`}::uuid[])
-    `)) as any
+    `)))
     if (rows.rows.length !== members.length) return 'invalid-tax-group-members'
     const inclusive = body.priceIncludesTax === undefined
       ? Boolean(current?.price_includes_tax)
       : coerceBoolean(body.priceIncludesTax)
-    if (inclusive && rows.rows.some((row: any) => row.calculation_type !== 'standard')) {
+    if (inclusive && rows.rows.some((row) => row.calculation_type !== 'standard')) {
       return 'inclusive-tax-group-standard-only'
     }
   }
   if (entity.key === 'tax-pool-classes') {
     const current = rowId
-      ? ((await db.execute(sql`select * from tax_pool_classes where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`select * from tax_pool_classes where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const value = (camel: string, snake: string) => body[camel] !== undefined ? body[camel] : current?.[snake]
     const regimeCode = String(value('regime', 'regime') ?? '')
-    const regime = (await db.execute(sql`
-      select calculation_model from tax_regimes where org_id=${orgId} and code=${regimeCode} and is_active limit 1`)) as any
+    const regime = ((await db.execute(sql`
+      select calculation_model from tax_regimes where org_id=${orgId} and code=${regimeCode} and is_active limit 1`)))
     if (!regime.rows[0]) return 'install-or-create-tax-depreciation-regime-first'
     const recovery = Number(value('recoveryPeriodYears', 'recovery_period_years'))
     if (regime.rows[0].calculation_model === 'macrs') {
@@ -268,8 +268,8 @@ async function validateEntityIntegrity(
       return 'primary-active-required'
     }
     if (rowId) {
-      const existing = (await db.execute(sql`
-        select is_primary from accounting_books where id = ${rowId} and org_id = ${orgId}`)) as any
+      const existing = ((await db.execute(sql`
+        select is_primary from accounting_books where id = ${rowId} and org_id = ${orgId}`)))
       if (!existing.rows[0]) return 'not found'
       if (existing.rows[0].is_primary && !coerceBoolean(body.isPrimary)) return 'primary-required'
       if (existing.rows[0].is_primary && !coerceBoolean(body.isActive)) return 'primary-active-required'
@@ -283,9 +283,9 @@ async function validateEntityIntegrity(
     // the declaration (engine/src/payroll-filing-registry.ts) is asked here,
     // at the API boundary, for creates and edits alike.
     const current = rowId
-      ? ((await db.execute(sql`
+      ? (((await db.execute(sql`
           select country, program_type, state_code from payroll_filing_accounts
-           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const country = String(body.country ?? current?.country ?? '')
@@ -309,10 +309,10 @@ async function validateEntityIntegrity(
     // date, the periods-per-year assumption the statutory engines annualize
     // with, and the period-overlap guard.
     const current = rowId
-      ? ((await db.execute(sql`
+      ? (((await db.execute(sql`
           select frequency, periods_per_year, anchor_period_end::text as anchor_period_end
             from pay_schedules
-           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !current) return 'not found'
     const frequency = String(body.frequency ?? current?.frequency ?? '')
@@ -338,29 +338,29 @@ async function validateEntityIntegrity(
       return 'The key must start with a lowercase letter and contain only lowercase letters, numbers, and underscores'
     }
     if (rowId) {
-      const existing = (await db.execute(sql`
-        select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`)) as any
+      const existing = ((await db.execute(sql`
+        select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`)))
       if (!existing.rows[0]) return 'not found'
     }
   }
 
   if (entity.key === 'segment-values') {
     const existing = rowId
-      ? ((await db.execute(sql`
-          select segment_id from segment_values where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`
+          select segment_id from segment_values where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !existing) return 'not found'
     const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
-    const segment = (await db.execute(sql`
+    const segment = ((await db.execute(sql`
       select id, is_hierarchical from segment_definitions
-       where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)) as any
+       where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)))
     if (!segment.rows[0]) return 'Values can only be created for a custom segment'
     const parentId = body.parentId === undefined ? null : body.parentId || null
     if (parentId) {
       if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
-      const parent = (await db.execute(sql`
+      const parent = ((await db.execute(sql`
         select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
-         and segment_id = ${segmentId}`)) as any
+         and segment_id = ${segmentId}`)))
       if (!parent.rows[0]) return 'Choose a parent value from the same segment'
     }
   }
@@ -378,45 +378,45 @@ async function validateEntityIntegrity(
     if (existing?.parent_id === null && body.isActive === false) return 'The root subsidiary cannot be archived'
     if (parentId) {
       if (!UUID_RE.test(String(parentId))) return 'Invalid parent subsidiary'
-      const parent = (await db.execute(sql`
+      const parent = ((await db.execute(sql`
         select id from subsidiaries
-         where id = ${String(parentId)} and org_id = ${orgId} and is_active`)) as any
+         where id = ${String(parentId)} and org_id = ${orgId} and is_active`)))
       if (!parent.rows[0]) return 'Parent subsidiary not found'
       if (rowId) {
-        const cycle = (await db.execute(sql`
+        const cycle = ((await db.execute(sql`
           with recursive descendants as (
             select id from subsidiaries where id = ${rowId} and org_id = ${orgId}
             union all
             select s.id from subsidiaries s join descendants d on s.parent_id = d.id
              where s.org_id = ${orgId}
-          ) select 1 from descendants where id = ${String(parentId)} limit 1`)) as any
+          ) select 1 from descendants where id = ${String(parentId)} limit 1`)))
         if (cycle.rows.length) return 'A subsidiary cannot be parented beneath itself'
       }
     }
     if (rowId && body.isElimination !== undefined && body.isElimination !== existing.is_elimination) {
-      const used = (await db.execute(sql`
-        select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)) as any
+      const used = ((await db.execute(sql`
+        select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)))
       if (used.rows.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
     }
   }
 
   if (entity.key === 'intercompany-pairs') {
     const current = rowId
-      ? ((await db.execute(sql`
-          select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`
+          select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     const fromId = String(body.fromSubsidiaryId ?? current?.from_subsidiary_id ?? '')
     const toId = String(body.toSubsidiaryId ?? current?.to_subsidiary_id ?? '')
     const dueFromId = String(body.dueFromAccountId ?? current?.due_from_account_id ?? '')
     const dueToId = String(body.dueToAccountId ?? current?.due_to_account_id ?? '')
     if (fromId === toId) return 'Intercompany subsidiaries must be different'
-    const subsidiaries = (await db.execute(sql`
+    const subsidiaries = ((await db.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)) as any
+       and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)))
     if (subsidiaries.rows.length !== 2) return 'Choose two active, non-elimination subsidiaries'
-    const accounts = (await db.execute(sql`
+    const accounts = ((await db.execute(sql`
       select id, type, eliminate from accounts where org_id = ${orgId} and is_active and not is_summary
-       and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)) as any
+       and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)))
     const byId = new Map<string, { id: string; type: string; eliminate: boolean }>(
       accounts.rows.map((a: any) => [a.id as string, a]),
     )
@@ -426,16 +426,16 @@ async function validateEntityIntegrity(
     if (!String(dueFrom.type).startsWith('asset_')) return 'The due-from account must be an asset'
     if (!String(dueTo.type).startsWith('liability_')) return 'The due-to account must be a liability'
     if (!dueFrom.eliminate || !dueTo.eliminate) return 'Both intercompany accounts must be marked for elimination'
-    const duplicate = (await db.execute(sql`
+    const duplicate = ((await db.execute(sql`
       select 1 from intercompany_pairs where org_id = ${orgId}
        and id is distinct from ${rowId ?? null}
        and ((from_subsidiary_id = ${fromId} and to_subsidiary_id = ${toId})
-         or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)) as any
+         or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)))
     if (duplicate.rows.length) return 'An intercompany pair already exists for these subsidiaries'
   }
   if (entity.key === 'subsidiary-ownership-interests') {
     const current = rowId
-      ? ((await db.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
+      ? (((await db.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)))).rows[0]
       : null
     const value = (key: string, column: string) => body[key] ?? current?.[column] ?? null
     const method = String(value('method', 'method') ?? 'full')
@@ -456,10 +456,10 @@ async function validateEntityIntegrity(
     ]
     const ids = [...new Set(accountRules.map(([key, column]) => value(key, column)).filter(Boolean).map(String))]
     const rows = ids.length
-      ? ((await db.execute(sql`
+      ? (((await db.execute(sql`
           select id,type from accounts where org_id=${orgId} and is_active and not is_summary
             and id=any(${`{${ids.join(',')}}`}::uuid[])
-        `)) as any).rows as { id: string; type: string }[]
+        `)))).rows as { id: string; type: string }[]
       : []
     const typeById = new Map(rows.map((account) => [account.id, account.type]))
     for (const [key, column, accepts, message] of accountRules) {
@@ -478,8 +478,8 @@ async function validateEntityIntegrity(
     if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || from === to) {
       return 'Choose two different ISO currency codes'
     }
-    const currencies = (await db.execute(sql`
-      select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`)) as any
+    const currencies = ((await db.execute(sql`
+      select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`)))
     if (currencies.rows.length !== 2) return 'Unknown currency code'
     const rateFields = entity.key === 'fx-rates'
       ? ['rate']
@@ -494,8 +494,8 @@ async function validateEntityIntegrity(
     if (entity.key === 'consolidated-fx-rates') {
       const periodId = String(body.periodId ?? '')
       if (!rowId) {
-        const period = (await db.execute(sql`
-          select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`)) as any
+        const period = ((await db.execute(sql`
+          select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`)))
         if (!period.rows.length) return 'Choose an accounting period from this organization'
       }
       if (rowId && body.source !== 'manual') {
@@ -506,11 +506,11 @@ async function validateEntityIntegrity(
   if (entity.key === 'item-rate-book-assignments') {
     let values = body
     if (rowId) {
-      const current = (await db.execute(sql`
+      const current = ((await db.execute(sql`
         select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
                effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis"
           from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
-      `)) as any
+      `)))
       if (!current.rows[0]) return 'Rate book assignment not found'
       values = { ...current.rows[0], ...body }
     }
@@ -525,20 +525,20 @@ async function validateEntityIntegrity(
         ? sql`customer_id = ${values.customerId}`
         : sql`project_id is null and customer_id is null`
     const [refs, overlap] = await Promise.all([
-      db.execute(sql`
+      (db.execute(sql`
         select
           exists(select 1 from item_rate_books where id = ${values.rateBookId} and org_id = ${orgId}) as book_ok,
           ${values.customerId ? sql`exists(select 1 from customer_roles where party_id = ${values.customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
           ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok
-      `) as any,
-      db.execute(sql`
+      `)),
+      (db.execute(sql`
         select 1 from item_rate_book_assignments
          where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active
            and ${scope}
            and daterange(effective_from, effective_to, '[]') &&
                daterange(${values.effectiveFrom ?? null}::date, ${values.effectiveTo ?? null}::date, '[]')
          limit 1
-      `) as any,
+      `)),
     ])
     if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) {
       return 'Choose records from this organization'
@@ -585,18 +585,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
         // Serializes primary-book changes for this tenant, including two admins
         // creating or promoting books at the same time.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
-        const current = (await tx.execute(sql`
+        const current = ((await tx.execute(sql`
           select exists(
             select 1 from accounting_books where org_id = ${orgId} and is_primary
-          ) as has_primary`)) as any
+          ) as has_primary`)))
         const isPrimary = coerceBoolean(body.isPrimary) || !current.rows[0]?.has_primary
         const isActive = isPrimary || body.isActive === undefined || coerceBoolean(body.isActive)
         if (isPrimary) {
-          const demoted = (await tx.execute(sql`
+          const demoted = ((await tx.execute(sql`
             update accounting_books
                set is_primary = false, updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and is_primary
-            returning id`)) as any
+            returning id`)))
           for (const book of demoted.rows) {
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -634,23 +634,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     try {
       const id = await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
-        const current = (await tx.execute(sql`
+        const current = ((await tx.execute(sql`
           select exists(select 1 from item_rate_books where org_id = ${orgId} and is_default and is_active) as has_default
-        `)) as any
+        `)))
         const isDefault = coerceBoolean(body.isDefault) || !current.rows[0]?.has_default
         const isActive = isDefault || body.isActive === undefined || coerceBoolean(body.isActive)
         if (isDefault) {
-          const demoted = (await tx.execute(sql`
+          const demoted = ((await tx.execute(sql`
             update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and is_default returning id
-          `)) as any
+          `)))
           for (const book of demoted.rows) {
             await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
           }
         }
-        const org = (await tx.execute(sql`
+        const org = ((await tx.execute(sql`
           select base_currency from orgs where id = ${orgId}
-        `)) as any
+        `)))
         const currency = body.currency !== undefined
           ? String(body.currency)
           : String(org.rows[0]?.base_currency ?? '')
@@ -674,9 +674,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     const col = toSnake(entity.naturalKey)
     const val = String(body[entity.naturalKey] ?? '')
     const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
-    const dup = (await db.execute(sql`
+    const dup = ((await db.execute(sql`
       select 1 from ${sql.raw(entity.table)}
-       where ${sql.raw(col)} = ${val}${orgFilter} limit 1`)) as any
+       where ${sql.raw(col)} = ${val}${orgFilter} limit 1`)))
     if (dup.rows.length > 0) return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
   }
 
@@ -707,9 +707,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
 
   try {
     const newId = await db.transaction(async (tx) => {
-      const inserted = (await tx.execute(sql`
+      const inserted = ((await tx.execute(sql`
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
-        returning ${sql.raw(idColumn(entity))} as id`)) as any
+        returning ${sql.raw(idColumn(entity))} as id`)))
       const id = String(inserted.rows[0]?.id)
       const members = multirefField(entity)
       if (members && Array.isArray(body[members.key])) {
@@ -772,20 +772,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     try {
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`accounting-books:${orgId}`}, 0))`)
-        const existing = (await tx.execute(sql`
+        const existing = ((await tx.execute(sql`
           select id, is_primary from accounting_books
-           where id = ${id} and org_id = ${orgId} for update`)) as any
+           where id = ${id} and org_id = ${orgId} for update`)))
         if (!existing.rows[0]) throw new Error('not found')
         const isPrimary = coerceBoolean(body.isPrimary)
         const isActive = coerceBoolean(body.isActive)
         if (existing.rows[0].is_primary && !isPrimary) throw new Error('primary-required')
         if (isPrimary && !isActive) throw new Error('primary-active-required')
         if (isPrimary) {
-          const demoted = (await tx.execute(sql`
+          const demoted = ((await tx.execute(sql`
             update accounting_books
                set is_primary = false, updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id <> ${id} and is_primary
-            returning id`)) as any
+            returning id`)))
           for (const book of demoted.rows) {
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -793,12 +793,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
                       ${JSON.stringify({ is_primary: false, reason: 'primary-book-reassigned' })}, ${actorId})`)
           }
         }
-        const updated = (await tx.execute(sql`
+        const updated = ((await tx.execute(sql`
           update accounting_books
              set name = ${String(body.name)}, is_primary = ${isPrimary}, is_active = ${isActive},
                  updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId}
-          returning id`)) as any
+          returning id`)))
         if (!updated.rows.length) throw new Error('not found')
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -826,28 +826,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     try {
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`)
-        const existing = (await tx.execute(sql`
+        const existing = ((await tx.execute(sql`
           select id, is_default from item_rate_books where id = ${id} and org_id = ${orgId} for update
-        `)) as any
+        `)))
         if (!existing.rows[0]) throw new Error('not found')
         const isDefault = coerceBoolean(body.isDefault)
         const isActive = coerceBoolean(body.isActive)
         if (existing.rows[0].is_default && (!isDefault || !isActive)) throw new Error('default-required')
         if (isDefault) {
-          const demoted = (await tx.execute(sql`
+          const demoted = ((await tx.execute(sql`
             update item_rate_books set is_default = false, updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id <> ${id} and is_default returning id
-          `)) as any
+          `)))
           for (const book of demoted.rows) {
             await audit({ orgId, table: 'item_rate_books', rowId: String(book.id), action: 'update', changes: { is_default: false, reason: 'default-rate-book-reassigned' }, actorId }, tx)
           }
         }
-        const updated = (await tx.execute(sql`
+        const updated = ((await tx.execute(sql`
           update item_rate_books set name = ${String(body.name)},
                  currency = case when ${body.currency === undefined} then currency else ${String(body.currency)} end,
                  is_default = ${isDefault}, is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} returning id
-        `)) as any
+        `)))
         if (!updated.rows.length) throw new Error('not found')
         await audit({ orgId, table: 'item_rate_books', rowId: id, action: 'update', changes: body, actorId }, tx)
       })
@@ -888,18 +888,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
     if (entity.key === 'subsidiaries') {
-      const root = (await db.execute(sql`
-        select parent_id from subsidiaries where id = ${id} and org_id = ${orgId}`)) as any
+      const root = ((await db.execute(sql`
+        select parent_id from subsidiaries where id = ${id} and org_id = ${orgId}`)))
       if (!root.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       if (root.rows[0].parent_id === null) {
         return NextResponse.json({ error: 'The root subsidiary cannot be deleted' }, { status: 400 })
       }
     }
     const found = await db.transaction(async (tx) => {
-      const updated = (await tx.execute(sql`
+      const updated = ((await tx.execute(sql`
         update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-        returning ${sql.raw(idColumn(entity))} as id`)) as any
+        returning ${sql.raw(idColumn(entity))} as id`)))
       if (updated.rows.length === 0) return false
       const members = multirefField(entity)
       if (members && Array.isArray(body[members.key])) {
@@ -940,16 +940,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const id = url.searchParams.get('id') ?? ''
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   if (entity.key === 'item-rate-books') {
-    const current = (await db.execute(sql`select is_default from item_rate_books where id = ${id} and org_id = ${orgId}`)) as any
+    const current = ((await db.execute(sql`select is_default from item_rate_books where id = ${id} and org_id = ${orgId}`)))
     if (current.rows[0]?.is_default) return NextResponse.json({ error: 'default-required' }, { status: 409 })
   }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
   try {
-    const deleted = (await db.execute(sql`
+    const deleted = ((await db.execute(sql`
       delete from ${sql.raw(entity.table)}
        where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-      returning ${sql.raw(idColumn(entity))} as id`)) as any
+      returning ${sql.raw(idColumn(entity))} as id`)))
     if (deleted.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
     await audit({
       orgId: entity.orgScoped ? orgId : null,

@@ -65,6 +65,68 @@ export interface SchedulePeriod {
   amount: string;
 }
 
+interface LeaseScheduleContextRow extends Record<string, unknown> {
+  startsOn: string; endsOn: string | null; billingDay: number; status: string;
+}
+interface LeaseChargeScheduleRow extends Record<string, unknown> {
+  id: string; amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time";
+  effectiveFrom: string; effectiveTo: string | null;
+}
+interface LeaseEscalationDbRow extends Record<string, unknown> {
+  id: string; lease_id: string; effective_on: string; method: "percent" | "fixed" | "new_amount";
+  value: string; status: string;
+}
+interface BaseRentChargeRow extends Record<string, unknown> {
+  id: string; description: string; amount: string; frequency: string; effective_from: string;
+  effective_to: string | null; income_account_id: string | null; item_id: string | null; tax_code_id: string | null;
+}
+interface DueLeaseChargeRow extends Record<string, unknown> {
+  id: string; leaseId: string; dueOn: string; amount: string; periodStartsOn: string; periodEndsOn: string;
+  description: string; incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
+  tenantId: string; leaseNumber: string; paymentTermsDays: number; autoPost: boolean; createdBy: string | null;
+  subsidiaryId: string; locationId: string | null; currency: string;
+}
+interface LateFeeRow extends Record<string, unknown> {
+  source_schedule_id: string; lease_id: string; late_fee_type: string; late_fee_value: string;
+  rent_income_account_id: string; transaction_open: string;
+}
+interface DepositContextRow extends Record<string, unknown> {
+  tenant_id: string; subsidiary_id: string; location_id: string | null; currency: string; base_currency: string;
+  deposit_liability_account_id: string | null; default_bank_account_id: string | null;
+  deposit_account_type: string | null; book_id: string | null; period_id: string | null;
+}
+interface DepositReversalRow extends Record<string, unknown> {
+  kind: string; amount: string; lease_id: string; reversal_of_id: string | null; already_reversed: boolean;
+  currency: string; base_currency: string; book_id: string; subsidiary_id: string; period_id: string | null;
+  journal_entry_id: string; bank_account_id: string | null; offset_account_id: string | null;
+}
+interface CamPoolDbRow extends Record<string, unknown> {
+  id: string; property_id: string; status: string; location_id: string | null; period_starts_on: string;
+  period_ends_on: string; expense_account_ids: string[]; allocation_basis: "rentable_area" | "equal" | "custom";
+  budget_amount: string;
+}
+interface CamLeaseRow extends Record<string, unknown> {
+  id: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;
+  overlap_end: string; billed: string;
+}
+interface CamAllocationDbRow extends Record<string, unknown> {
+  id: string; amount: string; lease_id: string; tenant_id: string; lease_number: string; payment_terms_days: number;
+  subsidiary_id: string; location_id: string | null; currency: string; cam_income_account_id: string | null; name: string;
+}
+interface DepositPropertyRow extends Record<string, unknown> {
+  propertyId: string; propertyCode: string; propertyName: string; subsidiaryId: string; locationId: string | null;
+  currency: string; liabilityAccountId: string | null; liabilityAccountName: string | null;
+  defaultBankAccountId: string | null; defaultBankAccountName: string | null; subledgerBalance: string;
+  linkedGlBalance: string; locationControlBalance: string | null; cashActivity: string; lastActivityOn: string | null;
+}
+interface DepositBankRow extends Record<string, unknown> {
+  propertyId: string; bankAccountId: string; bankAccountName: string; cashActivity: string;
+}
+interface DepositLeaseRow extends Record<string, unknown> {
+  leaseId: string; propertyId: string; leaseNumber: string; status: string; tenantName: string;
+  unitCode: string | null; balance: string; lastActivityOn: string | null;
+}
+
 /** Exact, inclusive-day proration for partial first/last rental periods. */
 export function prorateLeaseCharge(amount: string, nominalStart: string, nominalEnd: string, activeStart: string, activeEnd: string): string {
   const total = dayCount(nominalStart, nominalEnd);
@@ -584,10 +646,10 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
 
 export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
   await assertEnabled(db, orgId);
-  const leaseResult = (await db.execute<any>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
+  const leaseResult = (await db.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
-  const charges = (await db.execute<any>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
+  const charges = (await db.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
   let created = 0;
   for (const charge of charges.rows) {
     for (const period of leaseChargeSchedule({ ...charge, leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn, throughOn: horizon, billingDay: lease.billingDay })) {
@@ -605,7 +667,7 @@ export async function scheduleLeaseCharges(orgId: string, actorId: string, lease
 export async function activatePropertyLease(orgId: string, actorId: string, leaseId: string): Promise<{ scheduled: number }> {
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const lease = (await tx.execute<any>(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`));
+    const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`));
     const row = lease.rows[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
     if (row.unit_id) {
       const conflict = (await tx.execute(sql`select 1 from property_leases where org_id=${orgId} and unit_id=${row.unit_id} and id<>${leaseId} and status in ('active','notice')`));
@@ -654,9 +716,9 @@ export async function addLeaseEscalation(input: { orgId: string; actorId: string
 export async function applyLeaseEscalation(orgId: string, actorId: string, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
   const applied = await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const escalation = (await tx.execute<any>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
+    const escalation = (await tx.execute<LeaseEscalationDbRow>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
     const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
-    const chargeResult = (await tx.execute<any>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
+    const chargeResult = (await tx.execute<BaseRentChargeRow>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
     const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
     if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
     // Stored charges and the scheduled escalation stay. Copying an inventory /
@@ -894,7 +956,7 @@ export async function levelLeaseRentStraightLine(
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = asOf ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
-  const due = (await db.execute<any>(sql`
+  const due = (await db.execute<DueLeaseChargeRow>(sql`
     select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
       c.description,c.income_account_id as "incomeAccountId",c.item_id as "itemId",c.tax_code_id as "taxCodeId",
       l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",l.created_by as "createdBy",
@@ -905,7 +967,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
       and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null}) order by l.id,s.due_on,s.id
   `));
-  const groups = new Map<string, any[]>(); for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row]);
+  const groups = new Map<string, DueLeaseChargeRow[]>(); for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row]);
   const invoices: string[] = [];
   for (const [leaseId, rows] of groups) {
     await withOrgTransaction(orgId, async () => {
@@ -960,7 +1022,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
 export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
   const date = validDate(asOf ?? await businessToday(orgId), "Late-fee date")!;
   await assertEnabled(db, orgId);
-  const overdue = (await db.execute<any>(sql`
+  const overdue = (await db.execute<LateFeeRow>(sql`
     select (array_agg(s.id order by s.id))[1] as source_schedule_id,s.lease_id,
       l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
     from lease_schedule_lines s join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
@@ -1010,7 +1072,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     await assertEnabled(tx, input.orgId);
     // The lease lock serializes balance-changing deposit activity. Journal,
     // application, and append-only subledger evidence commit as one unit.
-    const ctx = (await tx.execute<any>(sql`
+    const ctx = (await tx.execute<DepositContextRow>(sql`
       select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
         da.type as deposit_account_type,
         (select id from accounting_books where org_id=l.org_id and is_primary order by id limit 1) as book_id,
@@ -1025,7 +1087,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     `));
     const row = ctx.rows[0];
     if (!row) throw new PropertyManagementError("Lease not found");
-    if (!row.deposit_liability_account_id || !["liability_current_other", "liability_long_term"].includes(row.deposit_account_type)) {
+    if (!row.deposit_liability_account_id || !row.deposit_account_type || !["liability_current_other", "liability_long_term"].includes(row.deposit_account_type)) {
       throw new PropertyManagementError("Configure a liability account for property security deposits");
     }
     if (row.currency !== row.base_currency) {
@@ -1100,7 +1162,7 @@ export async function reverseSecurityDepositTransaction(input: {
   if (!reason) throw new PropertyManagementError("Reversal reason is required");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
-    const context = (await tx.execute<any>(sql`
+    const context = (await tx.execute<DepositReversalRow>(sql`
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
         exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed,
         (select id from accounting_periods where org_id=t.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
@@ -1137,7 +1199,7 @@ export async function reverseSecurityDepositTransaction(input: {
       from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id} order by line_number
     `);
 
-    const applications = (await tx.execute<any>(sql`
+    const applications = (await tx.execute(sql`
       select a.*,source.line_number
       from applications a join journal_lines source on source.id=a.from_line_id and source.org_id=a.org_id
       where a.org_id=${input.orgId} and source.entry_id=${row.journal_entry_id} and a.unapplied_at is null for update of a
@@ -1251,7 +1313,7 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, poo
 export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const poolResult = (await tx.execute<any>(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
+    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
     const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
     const actual = (await tx.execute<{ amount: string }>(sql`select coalesce(sum(jl.amount),0)::text as amount from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
@@ -1259,7 +1321,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`));
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
     if (cmp(actualAmount, "0") < 0) throw new PropertyManagementError("CAM expense activity is net-negative; review the selected accounts before finalizing");
-    const leases = (await tx.execute<any>(sql`select l.id,l.cam_share_percent,u.rentable_area,
+    const leases = (await tx.execute<CamLeaseRow>(sql`select l.id,l.cam_share_percent,u.rentable_area,
       greatest(l.starts_on,coalesce(l.move_in_on,l.starts_on),${pool.period_starts_on}::date)::text as overlap_start,
       least(coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on}::date),${pool.period_ends_on}::date)::text as overlap_end,
       coalesce((select sum(s.amount) from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
@@ -1316,7 +1378,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
 export async function billCamReconciliation(orgId: string, actorId: string, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
   const date = validDate(invoiceDate ?? await businessToday(orgId), "CAM invoice date")!;
   await assertEnabled(db, orgId);
-  const allocations = (await db.execute<any>(sql`select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
+  const allocations = (await db.execute<CamAllocationDbRow>(sql`select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
     p.subsidiary_id,p.location_id,p.currency,p.cam_income_account_id,cp.name from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
     join property_leases l on l.id=a.lease_id and l.org_id=a.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
     where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status='finalized' and a.invoice_document_id is null and a.reconciliation_amount<>0 order by l.lease_number`));
@@ -1350,7 +1412,7 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
 export async function securityDepositReconciliation(orgId: string, asOf?: string) {
   const throughOn = validDate(asOf ?? await businessToday(orgId), "Reconciliation date")!;
   await assertEnabled(db, orgId);
-  const properties = (await db.execute<any>(sql`
+  const properties = (await db.execute<DepositPropertyRow>(sql`
     select p.id as "propertyId",p.code as "propertyCode",p.name as "propertyName",p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency,
       p.deposit_liability_account_id as "liabilityAccountId",concat_ws(' · ',la.number,la.name) as "liabilityAccountName",
       p.default_bank_account_id as "defaultBankAccountId",concat_ws(' · ',ba.number,ba.name) as "defaultBankAccountName",
@@ -1376,7 +1438,7 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
     left join accounts ba on ba.id=p.default_bank_account_id and ba.org_id=p.org_id
     where p.org_id=${orgId} order by p.name
   `));
-  const banks = (await db.execute<any>(sql`
+  const banks = (await db.execute<DepositBankRow>(sql`
     select l.property_id as "propertyId",d.bank_account_id as "bankAccountId",concat_ws(' · ',a.number,a.name) as "bankAccountName",
       sum(case when d.kind='received' then d.amount when d.kind='refunded' then -d.amount else 0 end)::text as "cashActivity"
     from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
@@ -1384,7 +1446,7 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
     where d.org_id=${orgId} and d.occurred_on<=${throughOn} and d.bank_account_id is not null
     group by l.property_id,d.bank_account_id,a.number,a.name order by a.number,a.name
   `));
-  const leases = (await db.execute<any>(sql`
+  const leases = (await db.execute<DepositLeaseRow>(sql`
     select l.id as "leaseId",l.property_id as "propertyId",l.lease_number as "leaseNumber",l.status,t.display_name as "tenantName",u.code as "unitCode",
       coalesce(sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end),0)::text as balance,
       max(d.occurred_on)::text as "lastActivityOn"
@@ -1432,14 +1494,155 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
   };
 }
 
+export type ManagedPropertyRow = {
+  id: string;
+  code: string;
+  name: string;
+  propertyType: string;
+  status: string;
+  currency: string;
+  address: Record<string, string> | null;
+  custom: Record<string, unknown> | null;
+  subsidiaryId: string;
+  subsidiaryName: string;
+  locationId: string | null;
+  locationName: string | null;
+  fixedAssetId: string | null;
+  rentIncomeAccountId: string | null;
+  camIncomeAccountId: string | null;
+  depositLiabilityAccountId: string | null;
+  defaultBankAccountId: string | null;
+  unitCount: number;
+  occupiedUnits: number;
+};
+
+export type PropertyUnitRow = {
+  id: string;
+  propertyId: string;
+  code: string;
+  name: string | null;
+  unitType: string | null;
+  rentableArea: string | null;
+  bedrooms: number | null;
+  status: string;
+};
+
+export type PropertyLeaseRow = {
+  id: string;
+  propertyId: string;
+  unitId: string | null;
+  tenantId: string;
+  leaseNumber: string;
+  status: string;
+  startsOn: string;
+  endsOn: string | null;
+  billingDay: number;
+  paymentTermsDays: number;
+  securityDepositRequired: string;
+  camMethod: string;
+  camSharePercent: string | null;
+  lateFeeType: string;
+  lateFeeValue: string;
+  graceDays: number;
+  autoInvoice: boolean;
+  autoPost: boolean;
+  notes: string | null;
+  baseRent: string | null;
+  propertyName: string;
+  unitCode: string | null;
+  tenantName: string;
+  currency: string;
+  depositBalance: string;
+};
+
+export type LeaseChargeRow = {
+  id: string;
+  leaseId: string;
+  chargeType: string;
+  description: string;
+  amount: string;
+  frequency: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+
+export type LeaseEscalationRow = {
+  id: string;
+  leaseId: string;
+  effectiveOn: string;
+  method: string;
+  value: string;
+  previousAmount: string | null;
+  newAmount: string | null;
+  status: string;
+};
+
+export type LeaseScheduleRow = {
+  id: string;
+  leaseId: string;
+  periodStartsOn: string;
+  periodEndsOn: string;
+  dueOn: string;
+  amount: string;
+  status: string;
+  invoiceDocumentId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  invoiceDueOn: string | null;
+  invoiceOpenBalance: string | null;
+  chargeType: string;
+  description: string;
+};
+
+export type SecurityDepositRow = {
+  id: string;
+  leaseId: string;
+  kind: string;
+  occurredOn: string;
+  amount: string;
+  bankAccountId: string | null;
+  offsetAccountId: string | null;
+  appliedDocumentId: string | null;
+  journalEntryId: string;
+  reversalOfId: string | null;
+  memo: string | null;
+  reversed: boolean;
+};
+
+export type CamPoolRow = {
+  id: string;
+  propertyId: string;
+  name: string;
+  fiscalYear: number;
+  periodStartsOn: string;
+  periodEndsOn: string;
+  allocationBasis: string;
+  budgetAmount: string;
+  actualAmount: string | null;
+  expenseAccountIds: string[];
+  status: string;
+};
+
+export type CamAllocationRow = {
+  id: string;
+  poolId: string;
+  leaseId: string;
+  sharePercent: string;
+  budgetAllocation: string;
+  actualAllocation: string | null;
+  billedEstimate: string;
+  reconciliationAmount: string | null;
+  invoiceDocumentId: string | null;
+};
+
 export async function propertyManagementWorkspace(orgId: string) {
   const [properties, units, leases, charges, escalations, schedules, deposits, pools, allocations] = await Promise.all([
-    db.execute<any>(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
+    db.execute<ManagedPropertyRow>(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
       p.rent_income_account_id as "rentIncomeAccountId",p.cam_income_account_id as "camIncomeAccountId",p.deposit_liability_account_id as "depositLiabilityAccountId",p.default_bank_account_id as "defaultBankAccountId",
       count(u.id)::int as "unitCount",count(u.id) filter(where u.status='occupied')::int as "occupiedUnits" from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId} group by p.id,s.name,l.name order by p.name`),
-    db.execute<any>(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} order by property_id,code`),
-    db.execute<any>(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
+    db.execute<PropertyUnitRow>(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} order by property_id,code`),
+    db.execute<PropertyLeaseRow>(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
       l.billing_day as "billingDay",l.payment_terms_days as "paymentTermsDays",l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",
       l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",l.auto_invoice as "autoInvoice",l.auto_post as "autoPost",l.notes,
       (select c.amount from lease_charges c where c.org_id=l.org_id and c.lease_id=l.id and c.charge_type='base_rent' order by c.effective_from desc limit 1) as "baseRent",
@@ -1447,17 +1650,17 @@ export async function propertyManagementWorkspace(orgId: string) {
       coalesce((select sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end) from security_deposit_transactions d where d.org_id=l.org_id and d.lease_id=l.id),0)::text as "depositBalance"
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
       join parties t on t.id=l.tenant_id and t.org_id=l.org_id where l.org_id=${orgId} order by case l.status when 'active' then 0 when 'notice' then 1 when 'draft' then 2 else 3 end,l.lease_number`),
-    db.execute<any>(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} order by effective_from`),
-    db.execute<any>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on desc`),
-    db.execute<any>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
+    db.execute<LeaseChargeRow>(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} order by effective_from`),
+    db.execute<LeaseEscalationRow>(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on desc`),
+    db.execute<LeaseScheduleRow>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
       d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
       from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
       left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit 2000`),
-    db.execute<any>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
+    db.execute<SecurityDepositRow>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
       exists(select 1 from security_deposit_transactions r where r.org_id=d.org_id and r.reversal_of_id=d.id) as reversed
       from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
-    db.execute<any>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
-    db.execute<any>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
+    db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
+    db.execute<CamAllocationRow>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
   ]);
   return { properties: properties.rows, units: units.rows, leases: leases.rows, charges: charges.rows, escalations: escalations.rows, schedules: schedules.rows, deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows };
 }

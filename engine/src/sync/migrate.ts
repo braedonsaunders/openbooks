@@ -827,8 +827,8 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
 async function upsertRole(table: string, orgId: string, partyId: string, cols: Record<string, unknown>) {
   const keys = Object.keys(cols);
   const colList = keys.map((k) => sql.raw(k));
-  const valList = keys.map((k) => sql`${cols[k] as any}`);
-  const setList = keys.map((k) => sql`${sql.raw(k)} = ${cols[k] as any}`);
+  const valList = keys.map((k) => sql`${cols[k]}`);
+  const setList = keys.map((k) => sql`${sql.raw(k)} = ${cols[k]}`);
   await db.execute(sql`
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})

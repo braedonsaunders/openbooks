@@ -99,7 +99,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
             ) : tab === 'open' ? (
               <table className="w-full text-sm">
                 <tbody>
-                  {visible.map((i: any, k: number) => (
+                  {visible.map((i, k: number) => (
                     <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-1.5"><TxnLink entryId={i.entryId ?? ''} docKind={i.docKind} docId={i.docId} className={linkCls}>{i.docNumber || i.docKind}</TxnLink></td>
                       <td className="px-3 py-1.5 text-right text-xs tabular-nums text-slate-400">{i.dueDate ? dt(i.dueDate) : '—'}{i.overdue ? <span className="ml-1 text-red-500">overdue</span> : null}</td>
@@ -111,7 +111,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
             ) : (
               <table className="w-full text-sm">
                 <tbody>
-                  {visible.map((p: any, k: number) => (
+                  {visible.map((p, k: number) => (
                     <tr key={k} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                       <td className="px-4 py-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400">{dt(p.date)}</td>
                       <td className="px-3 py-1.5"><TxnLink entryId={p.entryId ?? ''} docKind={p.docKind} docId={p.docId} className={linkCls}>{p.docNumber || p.docKind}</TxnLink></td>

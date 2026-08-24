@@ -26,14 +26,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const current = (await db.execute(sql`select * from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)) as any
+  const current = ((await db.execute(sql`select * from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.rows[0].subsidiary_id))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as any
+  const body = (parsedBody.data)
   if (body.fixedAssetId !== undefined) {
     const currentId = current.rows[0].fixed_asset_id ? String(current.rows[0].fixed_asset_id) : null
     const nextId = text(body.fixedAssetId)
@@ -55,11 +55,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const chargeItemId = body.chargeItemId !== undefined ? text(body.chargeItemId) : current.rows[0].charge_item_id
   if (status === 'active' && !chargeItemId) return bad('charge_item_required')
   if (chargeItemId) {
-    const item = (await db.execute(sql`select 1 from items where id = ${chargeItemId} and org_id = ${gate.user.orgId} and kind = 'equipment_charge' and is_active`)) as any
+    const item = ((await db.execute(sql`select 1 from items where id = ${chargeItemId} and org_id = ${gate.user.orgId} and kind = 'equipment_charge' and is_active`)))
     if (!item.rows[0]) return bad('charge_item_not_found')
   }
   const subsidiaryId = body.subsidiaryId !== undefined ? text(body.subsidiaryId) : current.rows[0].subsidiary_id
-  const sub = (await db.execute(sql`select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${gate.user.orgId} and is_active and not is_elimination`)) as any
+  const sub = ((await db.execute(sql`select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${gate.user.orgId} and is_active and not is_elimination`)))
   if (!sub.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(subsidiaryId)))) return bad('invalid_subsidiary')
   const fixedAssetId = body.fixedAssetId !== undefined ? text(body.fixedAssetId) : current.rows[0].fixed_asset_id
   const rateBookId = body.rateBookId !== undefined ? text(body.rateBookId) : current.rows[0].rate_book_id
@@ -67,12 +67,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (value !== undefined && text(value) && !isUuid(text(value)!)) return bad(label === 'Fixed asset' ? 'invalid_fixed_asset' : 'invalid_rate_book')
   }
   if (fixedAssetId) {
-    const found = (await db.execute(sql`select subsidiary_id from fixed_assets where id = ${fixedAssetId} and org_id = ${gate.user.orgId}`)) as any
+    const found = ((await db.execute(sql`select subsidiary_id from fixed_assets where id = ${fixedAssetId} and org_id = ${gate.user.orgId}`)))
     if (!found.rows[0]) return bad('fixed_asset_not_found')
     if (String(found.rows[0].subsidiary_id) !== String(subsidiaryId)) return bad('subsidiary_mismatch')
   }
   if (rateBookId) {
-    const found = (await db.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)) as any
+    const found = ((await db.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)))
     if (!found.rows[0]) return bad('rate_book_not_found')
   }
   const purchasePriceRaw = body.purchasePrice !== undefined
@@ -127,13 +127,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const current = (await db.execute(sql`select status, subsidiary_id from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)) as any
+  const current = ((await db.execute(sql`select status, subsidiary_id from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
   if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.rows[0].subsidiary_id))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 })
   }
   if (current.rows[0].status !== 'draft') return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
-  const used = (await db.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)) as any
+  const used = ((await db.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)))
   if (used.rows[0]) return NextResponse.json({ error: 'charge_history_delete' }, { status: 409 })
   await db.transaction(async (tx) => {
     await tx.execute(sql`delete from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)

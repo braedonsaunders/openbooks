@@ -16,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as any
+  const body = ((parsedBody.data))
   if (body?.action === 'cancel') {
     try {
       await cancelBillingRequest(gate.user.orgId, gate.user.id, id)

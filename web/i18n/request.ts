@@ -43,7 +43,7 @@ export default getRequestConfig(async () => {
 
   return {
     locale,
-    messages: messages as any,
+    messages: (messages),
     // Stable server/client timezone. Monetary rendering uses the same resolved
     // locale through the shared client and server money formatters.
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,

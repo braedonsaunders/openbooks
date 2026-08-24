@@ -61,7 +61,7 @@ export default async function AdminUsersPage({
     `${ORDER[listParams.sort]} ${listParams.dir === 'asc' ? 'asc nulls last' : 'desc nulls last'}, lower(u.email) asc`,
   )
 
-  const [rowsR, countR, statusCountsR, rolesR] = (await Promise.all([
+  const [rowsR, countR, statusCountsR, rolesR] = ((await Promise.all([
     db.execute(sql`
       select u.id, u.name, u.email, u.is_active, u.last_login_at
         from users u
@@ -76,7 +76,7 @@ export default async function AdminUsersPage({
       select id, key, name, is_built_in from app_roles
        where org_id = ${orgId}
        order by is_built_in desc, name asc`),
-  ])) as any[]
+  ])))
 
   const users = rowsR.rows as {
     id: string
@@ -87,7 +87,7 @@ export default async function AdminUsersPage({
   }[]
   const total = Number(countR.rows[0]?.c ?? 0)
   const statusCounts = Object.fromEntries(
-    statusCountsR.rows.map((r: any) => [r.is_active ? 'active' : 'inactive', Number(r.c)]),
+    statusCountsR.rows.map((r) => [r.is_active ? 'active' : 'inactive', Number(r.c)]),
   ) as Record<string, number>
   const allRoles = rolesR.rows as { id: string; key: string; name: string; is_built_in: boolean }[]
 
@@ -95,12 +95,12 @@ export default async function AdminUsersPage({
   const assignmentsR =
     userIds.length === 0
       ? { rows: [] }
-      : ((await db.execute(sql`
+      : (((await db.execute(sql`
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
             join app_roles r on r.id = a.role_id and r.org_id = a.org_id
            where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(',')}}`}::uuid[])
-           order by r.name asc`)) as any)
+           order by r.name asc`))))
   const assignments = assignmentsR.rows as { user_id: string; role_id: string; role_name: string }[]
   const rolesByUser = new Map<string, { id: string; name: string }[]>()
   for (const a of assignments) {

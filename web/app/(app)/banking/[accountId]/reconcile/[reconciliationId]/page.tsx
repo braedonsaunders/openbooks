@@ -35,6 +35,23 @@ const M_SORTS = {
 // underscores spaced out.
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
 
+interface ReconciliationRow extends Record<string, unknown> {
+  id: string
+  account_id: string
+  through_date: string
+  statement_balance: string
+  status: string
+  signed_off_at: string | null
+  signed_off_by_name: string | null
+  account_number: string | null
+  account_name: string
+}
+type WorkspaceProps = Parameters<typeof ReconcileWorkspace>[0]
+type StatementRow = WorkspaceProps['stmtRows'][number] & Record<string, unknown>
+type GlRow = WorkspaceProps['glRows'][number] & Record<string, unknown>
+type MatchedRow = WorkspaceProps['matchedRows'][number] & Record<string, unknown>
+interface CountRow extends Record<string, unknown> { n: string | number }
+
 export default async function ReconcilePage({
   params,
   searchParams,
@@ -51,7 +68,7 @@ export default async function ReconcilePage({
   const sp = await searchParams
   const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`
 
-  const reconRes = (await db.execute<any>(sql`
+  const reconRes = (await db.execute<ReconciliationRow>(sql`
     select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name
@@ -105,7 +122,7 @@ export default async function ReconcilePage({
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
     signedOff
       ? Promise.resolve({ rows: [] })
-      : db.execute<any>(sql`
+      : db.execute<StatementRow>(sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
             from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -115,13 +132,13 @@ export default async function ReconcilePage({
         `),
     signedOff
       ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute<any>(sql`
+      : db.execute<CountRow>(sql`
           select count(*) as n from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
            where ${stmtWhere}`),
     signedOff
       ? Promise.resolve({ rows: [] })
-      : db.execute<any>(sql`
+      : db.execute<GlRow>(sql`
           select jl.id, je.posting_date, je.entry_number, jl.amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
@@ -133,11 +150,11 @@ export default async function ReconcilePage({
         `),
     signedOff
       ? Promise.resolve({ rows: [{ n: 0 }] })
-      : db.execute<any>(sql`
+      : db.execute<CountRow>(sql`
           select count(*) as n from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where ${glWhere}`),
-    db.execute<any>(sql`
+    db.execute<MatchedRow>(sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
              sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
              je.entry_number, je.posting_date as gl_date, jl.amount as gl_amount,
@@ -150,7 +167,7 @@ export default async function ReconcilePage({
        order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
        limit ${mParams.perPage} offset ${(mParams.page - 1) * mParams.perPage}
     `),
-    db.execute<any>(sql`
+    db.execute<CountRow>(sql`
       select count(*) as n from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
         join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
@@ -172,11 +189,11 @@ export default async function ReconcilePage({
               signedOff
                 ? recon.signed_off_by_name
                   ? t('reconcile.signedOffByDescription', {
-                      date: new Date(recon.signed_off_at).toLocaleDateString('en-CA'),
+                      date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
                       name: recon.signed_off_by_name,
                     })
                   : t('reconcile.signedOffDescription', {
-                      date: new Date(recon.signed_off_at).toLocaleDateString('en-CA'),
+                      date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
                     })
                 : t('reconcile.description')
             }
@@ -227,13 +244,13 @@ export default async function ReconcilePage({
         difference={totals.difference}
         canReconcile={canReconcile}
         stmtRows={stmtRows.rows}
-        stmtTotal={Number(stmtCount.rows[0].n)}
+        stmtTotal={Number(stmtCount.rows[0]?.n ?? 0)}
         stmtParams={stmtParams}
         glRows={glRows.rows}
-        glTotal={Number(glCount.rows[0].n)}
+        glTotal={Number(glCount.rows[0]?.n ?? 0)}
         glParams={glParams}
         matchedRows={mRows.rows}
-        matchedTotal={Number(mCount.rows[0].n)}
+        matchedTotal={Number(mCount.rows[0]?.n ?? 0)}
         mParams={mParams}
       />
     </ListPageLayout>

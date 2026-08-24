@@ -107,9 +107,9 @@ function clean(raw: unknown): ForecastCategory | null {
 export async function GET() {
   const gate = await guardPermission("reports.read");
   if (gate instanceof NextResponse) return gate;
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${gate.user.orgId}
-  `)) as any;
+  `)));
   const raw = r.rows[0]?.cats;
   return NextResponse.json({ categories: Array.isArray(raw) ? raw : [] });
 }

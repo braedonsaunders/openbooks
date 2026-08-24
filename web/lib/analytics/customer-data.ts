@@ -249,6 +249,52 @@ export interface Profitability {
   summary: ProfitabilitySummary;
 }
 
+type CustomerSqlNumeric = string | number | null;
+
+interface ProfitabilitySqlRow {
+  customer_id: string;
+  customer_name: string;
+  job_id: string;
+  job_name: string;
+  revenue: CustomerSqlNumeric;
+  costs: CustomerSqlNumeric;
+  txns: CustomerSqlNumeric;
+}
+
+interface CustomerBaseSqlRow {
+  id: string;
+  name: string;
+  revenue: CustomerSqlNumeric;
+  prior_revenue: CustomerSqlNumeric;
+  txn_count: CustomerSqlNumeric;
+  avg_value: CustomerSqlNumeric;
+  first_txn: unknown;
+  last_txn: unknown;
+}
+
+interface CustomerFrictionSqlRow {
+  id: string;
+  credit_count: CustomerSqlNumeric;
+  order_count: CustomerSqlNumeric;
+  credit_value: CustomerSqlNumeric;
+}
+
+interface CustomerPaymentSqlRow {
+  id: string;
+  invoice_count: CustomerSqlNumeric;
+  paid_count: CustomerSqlNumeric;
+  overdue_count: CustomerSqlNumeric;
+  avg_days_to_pay: CustomerSqlNumeric;
+}
+
+interface CustomerGrowthSqlRow {
+  month: string;
+  revenue: CustomerSqlNumeric;
+  unique_customers: CustomerSqlNumeric;
+  txn_count: CustomerSqlNumeric;
+  new_customers: CustomerSqlNumeric;
+}
+
 function profitTierOf(marginPct: number): ProfitTier {
   if (marginPct >= 40) return "high";
   if (marginPct >= 25) return "medium";
@@ -282,7 +328,7 @@ export async function customerProfitability(period: { from: string; to: string }
   // The entry window materializes first. Joined inline, the planner drives
   // from accounts and probes the entry primary key once per journal line in
   // the tenant before the date filter narrows anything.
-  const r = (await db.execute(sql`
+  const r = ((await db.execute(sql`
     with ew as materialized (
       select id, org_id from journal_entries
        where posting_date >= ${from} and posting_date <= ${to}
@@ -304,10 +350,10 @@ export async function customerProfitability(period: { from: string; to: string }
       and l.project_id is not null and pr.customer_id is not null
       ${orgFilter}
     group by pr.customer_id, cp.display_name, pr.id, pr.name
-  `)) as any;
+  `)));
 
   const byCustomer = new Map<string, ProfitCustomer>();
-  for (const row of r.rows as any[]) {
+  for (const row of r.rows as unknown as ProfitabilitySqlRow[]) {
     const revenue = Number(row.revenue);
     const costs = Number(row.costs);
     const profit = revenue - costs;
@@ -408,7 +454,7 @@ export async function customerData(period: { from: string; to: string; label: st
     // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer count / revenue / avg / first / last / recency / tenure.
     // Prior-year revenue added for YoY context (openbooks extension).
-    db.execute(sql`
+    (db.execute(sql`
       select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
         count(*) filter (where d.posting_date >= ${from}) as txn_count,
         sum(abs(d.total)) filter (where d.posting_date >= ${from}) as revenue,
@@ -423,10 +469,10 @@ export async function customerData(period: { from: string; to: string; label: st
         and d.posting_date >= ${pFrom} and d.posting_date <= ${to}
       group by d.party_id, p.display_name
       having sum(abs(d.total)) filter (where d.posting_date >= ${from}) > 0
-    `) as Promise<any>,
+    `)),
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
-    db.execute(sql`
+    (db.execute(sql`
       select d.party_id as id,
         count(*) filter (where d.kind = 'customer_credit') as credit_count,
         coalesce(sum(abs(d.total)) filter (where d.kind = 'customer_credit'), 0) as credit_value,
@@ -437,11 +483,11 @@ export async function customerData(period: { from: string; to: string; label: st
         and d.posting_date >= ${from} and d.posting_date <= ${to}
       group by d.party_id
       having count(*) filter (where d.kind = 'customer_invoice') > 0
-    `) as Promise<any>,
+    `)),
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
     // application date − invoice date; overdue =
     // past due and not fully paid, as of the reference date.
-    db.execute(sql`
+    (db.execute(sql`
       with inv as (
         select d.id, d.party_id, d.posting_date, d.due_date, abs(d.total) as total,
           coalesce(sum(ap.amount), 0) as applied,
@@ -465,7 +511,7 @@ export async function customerData(period: { from: string; to: string; label: st
         count(*) filter (where due_date < ${ref} and applied < total) as overdue_count
       from inv
       group by party_id
-    `) as Promise<any>,
+    `)),
     // Growth trends — monthly revenue / unique customers / txns / NEW customers
     // (no earlier customer doc of any kind, lifetime — the NOT EXISTS).
     // A customer is new in the month it first appears. Asking that as a
@@ -473,7 +519,7 @@ export async function customerData(period: { from: string; to: string; label: st
     // in the window; each party's first month is computed once instead, which
     // is the same test — the invoice itself qualifies, so "no earlier document"
     // and "first document is this month" coincide.
-    db.execute(sql`
+    (db.execute(sql`
       with first_doc as (
         select party_id, min(date_trunc('month', posting_date)) as first_month
           from documents
@@ -493,17 +539,17 @@ export async function customerData(period: { from: string; to: string; label: st
         and d.voided_at is null and d.party_id is not null
         and d.posting_date >= ${from} and d.posting_date <= ${to}
       group by 1 order by 1
-    `) as Promise<any>,
+    `)),
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
-    db.execute(sql`
+    (db.execute(sql`
       select party_id as id, max(posting_date) as last_order, min(posting_date) as first_order,
         sum(abs(total)) as lifetime_revenue
       from documents
       where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
         and voided_at is null and party_id is not null
       group by party_id
-    `) as Promise<any>,
+    `)),
     customerProfitability(period, orgId),
   ]);
 
@@ -512,7 +558,7 @@ export async function customerData(period: { from: string; to: string; label: st
     id: string; name: string; revenue: number; priorRevenue: number; txns: number;
     avgValue: number; first: string | null; last: string | null; recency: number; tenure: number;
   }
-  const base: Base[] = (baseRows.rows as any[]).map((r) => {
+  const base: Base[] = (baseRows.rows as unknown as CustomerBaseSqlRow[]).map((r) => {
     const last = r.last_txn ? String(r.last_txn) : null;
     const first = r.first_txn ? String(r.first_txn) : null;
     return {
@@ -601,7 +647,7 @@ export async function customerData(period: { from: string; to: string; label: st
 
   /* ---- friction / payment lookups ---- */
   const frictionMap = new Map<string, { points: number; level: RiskLevel; credits: number; creditValue: number; returnRate: number }>();
-  for (const r of frictionRows.rows as any[]) {
+  for (const r of frictionRows.rows as unknown as CustomerFrictionSqlRow[]) {
     const credits = Number(r.credit_count ?? 0);
     const orders = Number(r.order_count ?? 0);
     const points = credits * 2; // returns×3 unavailable — no return-auth kind
@@ -615,7 +661,7 @@ export async function customerData(period: { from: string; to: string; label: st
 
   const paymentMap = new Map<string, { score: number; rating: CustomerRow["paymentRating"]; avgDays: number | null; overdue: number; rate: number }>();
   let totInvoices = 0, totPaid = 0, totOverdue = 0;
-  for (const r of paymentRows.rows as any[]) {
+  for (const r of paymentRows.rows as unknown as CustomerPaymentSqlRow[]) {
     const invoices = Number(r.invoice_count ?? 0);
     const paid = Number(r.paid_count ?? 0);
     const overdue = Number(r.overdue_count ?? 0);
@@ -794,7 +840,7 @@ export async function customerData(period: { from: string; to: string; label: st
   });
 
   /* ---- growth () ---- */
-  const gRows = growthRows.rows as any[];
+  const gRows = growthRows.rows as unknown as CustomerGrowthSqlRow[];
   const revenues = gRows.map((r) => Number(r.revenue ?? 0)).sort((a, b) => a - b);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : 0;
   const minRevenueThreshold = medianRevenue * 0.1;
@@ -848,7 +894,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const activeCut = sixMonthsAgo.toISOString().slice(0, 10);
   const cohortMap = new Map<string, Cohort>();
   let lifetimeCustomers = 0, lifetimeActive = 0;
-  for (const r of cohortRows.rows as any[]) {
+  for (const r of (cohortRows.rows)) {
     const year = String(r.first_order).slice(0, 4);
     const isActive = String(r.last_order) >= activeCut;
     lifetimeCustomers++;

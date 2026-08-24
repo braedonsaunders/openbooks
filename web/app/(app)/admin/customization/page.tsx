@@ -17,8 +17,22 @@ import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
 import { disabledRecordTypes } from '../../../../lib/customization/gates'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
+import type { ComponentProps } from 'react'
 
 export const dynamic = 'force-dynamic'
+
+type FormDesignerDef = NonNullable<ComponentProps<typeof FormDesigner>['def']>
+type ListViewDesignerDef = NonNullable<ComponentProps<typeof ListViewDesigner>['def']>
+interface FormListRow {
+  id: string; name: string; recordType: string; isDefault: boolean;
+  isActive: boolean; allowedRoles: string[] | null
+}
+interface ViewListRow {
+  id: string; name: string; recordType: string; scope: 'org' | 'user';
+  isDefault: boolean; isActive: boolean
+}
+interface FormCopySqlRow { name: string; layout: FormLayoutConfig }
+interface FilterOptionResult { rows: Array<{ value: string; label: string }> }
 
 export async function generateMetadata() {
   const t = await getTranslations('customization')
@@ -67,43 +81,43 @@ export default async function CustomizationPage({
   const typeFilter = recordType ? sql`record_type = ${recordType}` : hiddenFilter
   const searchFilter = params.q ? sql`name ilike ${`%${params.q}%`}` : sql`true`
   const [forms, views, formCount, viewCount] = await Promise.all([
-    canManageOrg ? db.execute(sql`
+    canManageOrg ? (db.execute(sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
              is_active as "isActive", allowed_roles as "allowedRoles"
         from form_layouts
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
        order by record_type, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any : Promise.resolve({ rows: [] }),
-    db.execute(sql`
+    `)) : Promise.resolve({ rows: [] }),
+    (db.execute(sql`
       select id, name, record_type as "recordType", scope, is_default as "isDefault", is_active as "isActive"
         from list_views
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
        order by record_type, scope asc, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `) as any,
-    canManageOrg ? db.execute(sql`
+    `)),
+    canManageOrg ? (db.execute(sql`
       select count(*) as n from form_layouts
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
-    `) as any : Promise.resolve({ rows: [{ n: 0 }] }),
-    db.execute(sql`
+    `)) : Promise.resolve({ rows: [{ n: 0 }] }),
+    (db.execute(sql`
       select count(*) as n from list_views
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
-    `) as any,
+    `)),
   ])
 
   const openForm =
     formId && formId !== 'new'
-      ? ((await db.execute(sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`)) as any).rows[0] ?? null
+      ? ((await db.execute(sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`)) as unknown as { rows: FormDesignerDef[] }).rows[0] ?? null
       : null
   const openView =
     viewId && viewId !== 'new'
-      ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as any).rows[0] ?? null
+      ? ((await db.execute(sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`)) as unknown as { rows: ListViewDesignerDef[] }).rows[0] ?? null
       : null
-  if (openForm && hiddenKinds.has(openForm.recordType)) notFound()
-  if (openView && hiddenKinds.has(openView.recordType)) notFound()
+  if (openForm?.recordType && hiddenKinds.has(openForm.recordType)) notFound()
+  if (openView?.recordType && hiddenKinds.has(openView.recordType)) notFound()
 
   // Copy source when creating a new form from an existing/standard baseline.
   const fromParam = pickString(sp.from)
@@ -117,7 +131,7 @@ export default async function CustomizationPage({
     if (fromParam === 'standard') {
       duplicateFrom = { name: t('designer.forms.copyName', { name: t('designer.forms.standardName', { type: typeLabel }) }), layout: defaultFormLayout(recordType) }
     } else {
-      const src = ((await db.execute(sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`)) as any).rows[0]
+      const src = ((await db.execute(sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`)) as unknown as { rows: FormCopySqlRow[] }).rows[0]
       if (src) duplicateFrom = { name: t('designer.forms.copyName', { name: src.name }), layout: src.layout as FormLayoutConfig }
     }
   }
@@ -139,7 +153,7 @@ export default async function CustomizationPage({
   if (viewId && designerRecordType) {
     const entityFilters = RECORD_TYPE_BY_KEY[designerRecordType]?.listFilters.filter((filter) => filter.entitySource) ?? []
     await Promise.all(entityFilters.map(async (filter) => {
-      let result: any = null
+      let result: FilterOptionResult | null = null
       switch (filter.entitySource) {
         case 'crm_opportunity_status':
           result = await db.execute(sql`select id::text as value, name as label from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence, name`)
@@ -268,7 +282,7 @@ export default async function CustomizationPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {forms.rows.map((f: any) => (
+              {(forms.rows as unknown as FormListRow[]).map((f) => (
                 <TableRow key={f.id}>
                   <TableCell>
                     <Link href={`/admin/customization?recordType=${f.recordType}&tab=forms&form=${f.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
@@ -312,7 +326,7 @@ export default async function CustomizationPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {views.rows.map((v: any) => (
+              {(views.rows as unknown as ViewListRow[]).map((v) => (
                 <TableRow key={v.id}>
                   <TableCell>
                     <Link href={`/admin/customization?recordType=${v.recordType}&tab=views&view=${v.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
@@ -341,8 +355,8 @@ export default async function CustomizationPage({
         </>
       )}
 
-      {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} subsidiaryEnabled={subsidiaryUiEnabled} /> : null}
-      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as any} filterOptions={listFilterOptions} inventoryEnabled={inventoryEnabled} crmEnabled={crmEnabled} /> : null}
+      {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={(designerHeaderDefs)} lineDefs={(designerLineDefs)} duplicateFrom={duplicateFrom} subsidiaryEnabled={subsidiaryUiEnabled} /> : null}
+      {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={canManageOrg} userId={authz.user.id} showInListDefs={viewShowInList as unknown as ComponentProps<typeof ListViewDesigner>['showInListDefs']} filterOptions={listFilterOptions} inventoryEnabled={inventoryEnabled} crmEnabled={crmEnabled} /> : null}
     </ListPageLayout>
   )
 }

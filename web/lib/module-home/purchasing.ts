@@ -67,7 +67,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
 
   const [apRes, topRes, trendRes, badgeRes] = (await Promise.all([
     // Open payables aggregate — open bill/expense items with remaining balance.
-    db.execute<any>(sql`
+    db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -92,7 +92,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         from oi where remaining > 0
     `),
     // Hero roster — vendor commitments: open POs and open bills side by side.
-    db.execute<any>(sql`
+    db.execute(sql`
       with oi as (
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
@@ -139,7 +139,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
        limit 10
     `),
     // 13-week billed-spend trend (posted vendor bills by week).
-    db.execute<any>(sql`
+    db.execute(sql`
       select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
              coalesce(sum(abs(d.total)), 0) as spend
         from documents d
@@ -149,7 +149,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
        group by 1
     `),
     // Directory badges + the remaining vitals.
-    db.execute<any>(sql`
+    db.execute(sql`
       select
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_pos,
@@ -172,7 +172,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
     `),
   ]))
 
-  const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.spend)]))
+  const byWeek = new Map(trendRes.rows.map((r) => [String(r.wk).slice(0, 10), Number(r.spend)]))
 
   const ap = apRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}

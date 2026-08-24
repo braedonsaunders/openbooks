@@ -30,6 +30,18 @@ const PROMOTABLE = [
 
 const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
 
+interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string }
+interface SandboxSeedRow extends Record<string, unknown> { sandbox_seed: string }
+interface TableNameRow extends Record<string, unknown> { table_name: string }
+interface ChangeDiffRow extends Record<string, unknown> {
+  sbx_id: string; prod_id: string | null; sbx_row: Record<string, unknown>; prod_row: Record<string, unknown> | null;
+}
+interface IdRow extends Record<string, unknown> { id: string }
+interface ChangeSetRow extends Record<string, unknown> { org_id: string; status: string }
+interface ChangeSetItemRow extends Record<string, unknown> {
+  table_name: string; target_id: string; op: "insert" | "update" | "delete"; payload: Record<string, unknown> | null;
+}
+
 function contentSig(row: Record<string, unknown> | null): string {
   if (!row) return "";
   const o: Record<string, unknown> = {};
@@ -42,14 +54,16 @@ export async function buildChangeSet(
   name: string,
   createdBy?: string | null,
 ): Promise<{ changeSetId: string; itemCount: number }> {
-  const s = (await db.execute(sql`
-    select org_id, production_org_id from sandboxes where id = ${sandboxId}`)) as any;
+  const s = await db.execute<SandboxTargetRow>(sql`
+    select org_id, production_org_id from sandboxes where id = ${sandboxId}`);
   const row = s.rows[0];
   if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
   const sbx = assertUuid(row.org_id);
   const prod = assertUuid(row.production_org_id);
-  const seedRes = (await db.execute(sql`select sandbox_seed from orgs where id = ${row.org_id}`)) as any;
-  const seed = assertUuid(seedRes.rows[0].sandbox_seed);
+  const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`);
+  const seedRow = seedRes.rows[0];
+  if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
+  const seed = assertUuid(seedRow.sandbox_seed);
 
   const cs = (await db
     .insert(schema.changeSets)
@@ -57,21 +71,21 @@ export async function buildChangeSet(
     .returning({ id: schema.changeSets.id }))[0]!;
 
   // Which promotable tables actually exist and carry org_id + id.
-  const present = (await db.execute(sql`
+  const present = await db.execute<TableNameRow>(sql`
     select table_name from information_schema.columns
      where table_schema = 'public' and column_name = 'org_id'
-       and table_name = any(${PROMOTABLE})`)) as any;
-  const tables = present.rows.map((r: any) => r.table_name);
+       and table_name = any(${PROMOTABLE})`);
+  const tables = present.rows.map((r) => r.table_name);
 
   let itemCount = 0;
   for (const t of tables) {
     // Inserts + updates: every sandbox row, matched to its production origin.
-    const diff = (await db.execute(sql.raw(`
+    const diff = await db.execute<ChangeDiffRow>(sql.raw(`
       select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
         from "${t}" s
         left join "${t}" p on p.org_id = '${prod}' and ob_rebase(p.id, '${seed}') = s.id
-       where s.org_id = '${sbx}'`))) as any;
-    for (const d of diff.rows as any[]) {
+       where s.org_id = '${sbx}'`));
+    for (const d of diff.rows) {
       if (contentSig(d.sbx_row) === contentSig(d.prod_row)) continue; // unchanged
       const targetId = d.prod_id ?? randomUUID();
       const payload = { ...d.sbx_row, id: targetId, org_id: prod, created_by: null, updated_by: null };
@@ -86,11 +100,11 @@ export async function buildChangeSet(
       itemCount++;
     }
     // Deletes: production rows with no sandbox counterpart.
-    const dels = (await db.execute(sql.raw(`
+    const dels = await db.execute<IdRow>(sql.raw(`
       select p.id from "${t}" p
        where p.org_id = '${prod}'
-         and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`))) as any;
-    for (const dr of dels.rows as any[]) {
+         and not exists (select 1 from "${t}" s where s.org_id = '${sbx}' and s.id = ob_rebase(p.id, '${seed}'))`));
+    for (const dr of dels.rows) {
       await db.insert(schema.changeSetItems).values({
         orgId: prod,
         changeSetId: cs.id,
@@ -107,18 +121,18 @@ export async function buildChangeSet(
 
 /** Apply a draft change set to production in one transaction. */
 export async function applyChangeSet(changeSetId: string): Promise<void> {
-  const cs = (await db.execute(sql`select org_id, status from change_sets where id = ${changeSetId}`)) as any;
+  const cs = await db.execute<ChangeSetRow>(sql`select org_id, status from change_sets where id = ${changeSetId}`);
   const c = cs.rows[0];
   if (!c) throw new Error(`change set not found: ${changeSetId}`);
   if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
   const prod = assertUuid(c.org_id);
 
-  const items = (await db.execute(sql`
+  const items = await db.execute<ChangeSetItemRow>(sql`
     select table_name, target_id, op, payload from change_set_items
-     where change_set_id = ${changeSetId} and org_id = ${prod} order by created_at`)) as any;
+     where change_set_id = ${changeSetId} and org_id = ${prod} order by created_at`);
 
   await withOrg(prod, async () => {
-    for (const it of items.rows as any[]) {
+    for (const it of items.rows) {
       const t = it.table_name as string;
       const target = assertUuid(it.target_id);
       if (it.op === "delete") {

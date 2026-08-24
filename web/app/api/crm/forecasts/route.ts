@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
   if (ownerUserId && !isUuid(ownerUserId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (salesTeamId && !isUuid(salesTeamId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
-  const [forecast, quotas, snapshots] = await Promise.all([
+  const [forecast, quotas, snapshots] = (await Promise.all([
     calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId }),
     db.execute(sql`
       select q.*, u.name as owner_name, t.name as sales_team_name from crm_sales_quotas q
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
         ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
         ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
       order by s.as_of desc limit 50`),
-  ]) as any[]
+  ]))
   return NextResponse.json({ periodStart, periodEnd, forecast, quotas: quotas.rows, snapshots: snapshots.rows })
 }
 
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   const { user } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, any>
+  const body = (parsedBody.data)
   const periodStart = String(body.periodStart ?? '')
   const periodEnd = String(body.periodEnd ?? '')
   if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })

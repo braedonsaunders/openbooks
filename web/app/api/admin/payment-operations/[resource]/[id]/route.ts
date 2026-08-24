@@ -21,7 +21,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, any>
+  const body = (parsedBody.data)
   try {
     if (body.country !== undefined) {
       const country = optionalCountry(body.country)
@@ -49,12 +49,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       ) {
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
-      const before = (await db.execute<Record<string, any>>(sql`
+      const before = (await db.execute<Record<string, unknown>>(sql`
         select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
       `))
       if (!before.rows[0]) return NextResponse.json({ error: 'built-in payment formats are read-only' }, { status: 409 })
       await db.transaction(async (tx) => {
-        const updated = (await tx.execute<Record<string, any>>(sql`
+        const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_formats set
             name = coalesce(${body.name?.trim() ?? null}, name),
             country = case when ${body.country === undefined} then country else ${body.country ?? null} end,
@@ -79,10 +79,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       }
       await db.transaction(async (tx) => {
-        const before = (await tx.execute<Record<string, any>>(sql`
+        const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}
         `))
-        const updated = (await tx.execute<Record<string, any>>(sql`
+        const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_schedules set
             name = coalesce(${body.name?.trim() ?? null}, name),
             payment_bank_profile_id = coalesce(${body.paymentBankProfileId ?? null}::uuid, payment_bank_profile_id),
@@ -101,10 +101,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
       })
     } else {
       await db.transaction(async (tx) => {
-        const before = (await tx.execute<Record<string, any>>(sql`
+        const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
         `))
-        const updated = (await tx.execute<Record<string, any>>(sql`
+        const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_mandates set
             status = coalesce(${body.status ?? null}, status),
             signed_on = case when ${body.signedOn === undefined} then signed_on else ${body.signedOn || null}::date end,
