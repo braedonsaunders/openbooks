@@ -91,7 +91,7 @@ const hooks = registerHooks({
 const resourceUrl = './record-resources.ts?xlsx-field-aware-import-test'
 const { recordResource } = await import(resourceUrl) as typeof import('./record-resources.ts')
 const parseUrl = './parse.ts?record-xlsx-field-aware-import-test'
-const { parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
+const { CELL_PROVENANCE_KEY, parseImportFile } = await import(parseUrl) as typeof import('./parse.ts')
 hooks.deregister()
 
 const sections: FormSection[] = [
@@ -100,6 +100,20 @@ const sections: FormSection[] = [
     title: 'Identity',
     fields: [
       { id: 'external_id', label: 'External ID', type: 'text', required: true },
+      {
+        id: 'category',
+        label: 'Category',
+        type: 'select',
+        required: true,
+        validation: { options: [{ value: '101', label: 'Category 101' }] },
+      },
+      {
+        id: 'priority',
+        label: 'Priority',
+        type: 'radio',
+        required: true,
+        validation: { options: [{ value: '202', label: 'Priority 202' }] },
+      },
       { id: 'quantity', label: 'Quantity', type: 'number', required: true },
       { id: 'amount', label: 'Amount', type: 'currency', required: true },
     ],
@@ -109,8 +123,14 @@ const sections: FormSection[] = [
 async function parsedWorkbookRow(): Promise<Record<string, unknown>> {
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Custom records')
-  sheet.addRow(['external_id', 'quantity', 'amount'])
-  sheet.addRow([123456, 7.5, 42.25])
+  sheet.addRow(['external_id', 'category', 'priority', 'quantity', 'amount'])
+  sheet.addRow([
+    123456,
+    101,
+    { formula: '101+101', result: 202 },
+    7.5,
+    42.25,
+  ])
   const buffer = await workbook.xlsx.writeBuffer()
   const parsed = await parseImportFile('xlsx', {
     base64: Buffer.from(buffer as ArrayBuffer).toString('base64'),
@@ -120,12 +140,15 @@ async function parsedWorkbookRow(): Promise<Record<string, unknown>> {
   return row
 }
 
-test('custom-record XLSX import coerces only text fields to their display string', async () => {
+test('custom-record XLSX import coerces schema-owned text and choice fields to display strings', async () => {
   importState.searchData = null
   const row = await parsedWorkbookRow()
   assert.equal(typeof row.external_id, 'number')
+  assert.equal(typeof row.category, 'number')
+  assert.equal(typeof row.priority, 'number')
   assert.equal(typeof row.quantity, 'number')
   assert.equal(typeof row.amount, 'number')
+  assert.deepEqual(row[CELL_PROVENANCE_KEY], { priority: 'formula' })
 
   const outcome = await recordResource('org-1', 'inventory-tag', sections, 'Inventory tag').write(
     [row],
@@ -138,10 +161,14 @@ test('custom-record XLSX import coerces only text fields to their display string
   assert.ok(searchData)
   assert.deepEqual(searchData, {
     external_id: '123456',
+    category: '101',
+    priority: '202',
     quantity: 7.5,
     amount: 42.25,
   })
   assert.equal(typeof searchData.external_id, 'string')
+  assert.equal(typeof searchData.category, 'string')
+  assert.equal(typeof searchData.priority, 'string')
   assert.equal(typeof searchData.quantity, 'number')
   assert.equal(typeof searchData.amount, 'number')
 })

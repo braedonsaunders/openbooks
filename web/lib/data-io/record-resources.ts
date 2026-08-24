@@ -88,11 +88,18 @@ function recordColumns(sections: FormSection[]): { key: string; label: string }[
  * XLSX keeps numeric cells numeric so exact-money resources can reject values
  * that already crossed IEEE-754. Custom-record text fields, however, have a
  * schema-owned string representation and historically accept numeric-looking
- * identifiers from spreadsheets. Restore that display value only after the
- * record field type is known; numeric and currency fields remain numbers.
+ * identifiers and choice values from spreadsheets. Restore that display value
+ * only after the record field type is known; numeric and currency fields
+ * remain numbers.
  */
 function importRecordFieldValue(field: FormField, value: unknown): unknown {
-  if ((field.type === 'text' || field.type === 'long_text') && typeof value === 'number') {
+  if (
+    (field.type === 'text' ||
+      field.type === 'long_text' ||
+      field.type === 'select' ||
+      field.type === 'radio') &&
+    typeof value === 'number'
+  ) {
     return String(value)
   }
   return value
