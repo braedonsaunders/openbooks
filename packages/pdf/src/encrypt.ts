@@ -103,7 +103,13 @@ export async function pdfEncryptionAvailable(): Promise<boolean> {
 
 function runQpdf(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(qpdfExecutable(), ['@-'], { stdio: ['pipe', 'ignore', 'pipe'] })
+    // qpdf is provisioned by the runtime image (or the explicit environment
+    // override), not a build asset. Without this annotation Turbopack treats
+    // the dynamic executable as filesystem access and copies the whole
+    // project into the standalone server output.
+    const child = spawn(/* turbopackIgnore: true */ qpdfExecutable(), ['@-'], {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
     let stderr = ''
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', (chunk: string) => {

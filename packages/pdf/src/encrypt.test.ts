@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { PDFDocument } from 'pdf-lib'
 import { encryptPdf, PdfEncryptionError, pdfEncryptionAvailable } from './encrypt'
@@ -15,6 +16,11 @@ async function samplePdf(): Promise<Buffer> {
   doc.addPage([200, 200]).drawText('net pay')
   return Buffer.from(await doc.save())
 }
+
+test('qpdf is excluded from Turbopack filesystem tracing', () => {
+  const source = readFileSync(new URL('./encrypt.ts', import.meta.url), 'utf8')
+  assert.match(source, /spawn\(\/\* turbopackIgnore: true \*\/ qpdfExecutable\(\),/)
+})
 
 test('an empty password is refused', async () => {
   const pdf = await samplePdf()
