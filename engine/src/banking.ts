@@ -826,10 +826,11 @@ export async function importStatement(
         createdBy: ctx.userId,
       })
       .returning({ id: schema.bankStatements.id });
+    const statementId = stmt!.id;
     await tx.insert(schema.bankStatementLines).values(
       ordered.map((l, i) => ({
         orgId: ctx.orgId,
-        statementId: stmt!.id,
+        statementId,
         accountId: account.id,
         lineNumber: i + 1,
         postedOn: l.postedOn,
@@ -846,11 +847,11 @@ export async function importStatement(
       insert into audit_log
         (id, org_id, table_name, row_id, action, changes, actor_id)
       values
-        (${evidence.auditId}, ${ctx.orgId}, 'bank_statements', ${stmt.id}, 'insert',
+        (${evidence.auditId}, ${ctx.orgId}, 'bank_statements', ${statementId}, 'insert',
          ${JSON.stringify(evidence.changes)}::jsonb, ${ctx.userId})
     `);
     return {
-      statementId: stmt.id,
+      statementId,
       sourceEvidenceRef: evidence.ref,
       imported: fresh.length,
       duplicates,
