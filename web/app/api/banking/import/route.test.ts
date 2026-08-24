@@ -6,6 +6,12 @@ interface ImportCall {
   options: {
     dryRun?: boolean
     lines: unknown[]
+    sourceEvidence?: {
+      content: string
+      filename?: string | null
+      parserVersion?: string | null
+      csvMapping?: Record<string, number> | null
+    }
   }
   context: {
     orgId: string
@@ -45,6 +51,8 @@ const mockSources = new Map<string, string>([
         description: 'Deposit',
         bankTransactionId: 'bank-line-1',
       }
+
+      export const BANK_STATEMENT_PARSER_VERSION = 'test-parser-v1'
 
       export class BankingError extends Error {
         constructor(message, status = 422) {
@@ -169,6 +177,12 @@ test('import mode invokes the importer with persistence enabled', async () => {
   assert.equal(response.status, 200)
   assert.equal(importState.calls.length, 1)
   assert.equal(importState.calls[0]?.options.dryRun, false)
+  assert.deepEqual(importState.calls[0]?.options.sourceEvidence, {
+    content: validBody.text,
+    filename: null,
+    parserVersion: 'test-parser-v1',
+    csvMapping: validBody.mapping,
+  })
   assert.equal(body.statementId, 'statement-1')
   assert.equal('lines' in body, false)
 })

@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
+  BANK_STATEMENT_PARSER_VERSION,
   BankingError,
   importStatement,
   parseBai2,
@@ -127,6 +128,8 @@ export async function POST(req: Request) {
         sourceEvidence: {
           content: body.text,
           filename: typeof body.filename === 'string' ? body.filename : null,
+          parserVersion: BANK_STATEMENT_PARSER_VERSION,
+          csvMapping: body.source === 'csv' ? body.mapping : null,
         },
         dryRun: mode === 'preview',
       },

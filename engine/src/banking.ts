@@ -49,11 +49,16 @@ export interface ParsedStatement {
 
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
 
-/** Exact source bytes retained with an imported statement for later audit. */
+/** Increment whenever statement-to-line normalization semantics change. */
+export const BANK_STATEMENT_PARSER_VERSION = "2026.08.1";
+
+/** Exact source and transformation evidence retained for later audit. */
 export interface StatementSourceEvidence {
   content: string | Uint8Array;
   filename?: string | null;
   contentType?: string | null;
+  parserVersion?: string | null;
+  csvMapping?: CsvMapping | null;
 }
 
 const CTX = Symbol();
@@ -294,12 +299,36 @@ export interface CsvMapping {
   debitAmount?: number;
 }
 
+const CSV_MAPPING_FIELDS = [
+  "date",
+  "amount",
+  "description",
+  "counterpartyRef",
+  "bankTransactionId",
+  "debitAmount",
+] as const satisfies readonly (keyof CsvMapping)[];
+
+/** Validate and copy only mapping fields that can affect CSV normalization. */
+function canonicalCsvMapping(mapping: CsvMapping): CsvMapping {
+  const canonical = {} as CsvMapping;
+  for (const field of CSV_MAPPING_FIELDS) {
+    const index = mapping[field];
+    if (index === undefined) continue;
+    if (!Number.isSafeInteger(index) || index < 0) {
+      throw new BankingError(`CSV mapping ${field} must be a non-negative integer`);
+    }
+    canonical[field] = index;
+  }
+  return canonical;
+}
+
 /**
  * Parse CSV text into normalized statement lines using a column mapping.
  * The header row is skipped automatically when the mapped date column of the
  * first row does not parse as a date.
  */
 export function parseCsv(text: string, mapping: CsvMapping): ParsedStatementLine[] {
+  mapping = canonicalCsvMapping(mapping);
   const rows = parseCsvRows(text);
   let start = 0;
   if (rows[0] && parseCsvDate(rows[0][mapping.date] ?? "") === null) start = 1;
@@ -680,6 +709,23 @@ function sourceEvidence(
     .trim()
     .slice(0, 240);
   const filename = requestedFilename || defaultStatementFilename(opts.source, sha256);
+  const requestedParserVersion = supplied?.parserVersion?.trim();
+  if (supplied?.parserVersion != null && !requestedParserVersion) {
+    throw new BankingError("Statement parser version evidence is empty");
+  }
+  if (requestedParserVersion && requestedParserVersion.length > 100) {
+    throw new BankingError("Statement parser version evidence exceeds 100 characters");
+  }
+  const parserVersion = requestedParserVersion ?? BANK_STATEMENT_PARSER_VERSION;
+  const csvMapping = supplied?.csvMapping
+    ? canonicalCsvMapping(supplied.csvMapping)
+    : null;
+  if (opts.source === "csv" && !csvMapping) {
+    throw new BankingError("CSV source evidence requires the column mapping used to parse it");
+  }
+  if (opts.source !== "csv" && csvMapping) {
+    throw new BankingError("CSV mapping evidence is only valid for CSV statements");
+  }
   const auditId = randomUUID();
   return {
     auditId,
@@ -696,6 +742,8 @@ function sourceEvidence(
         byteLength: bytes.length,
         sha256,
         provenance: supplied ? "original_source" : "normalized_import_request",
+        parserVersion,
+        csvMapping,
       },
     },
   };
