@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { filterDuplicateStatementLines, type ParsedStatementLine } from "./banking.ts";
+import {
+  filterDuplicateStatementLines,
+  statementSourceSha256,
+  type ParsedStatementLine,
+} from "./banking.ts";
 import { plaidFetchAllTransactions } from "./bank-feed-providers.ts";
 
 const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine => ({
@@ -32,6 +36,33 @@ test("content-identical ID-less transactions in separate imports both remain fre
 test("content-identical ID-less transactions within one import are all retained", () => {
   const filtered = filterDuplicateStatementLines([line(), line(), line()], new Set());
   assert.equal(filtered.lines.length, 3);
+  assert.equal(filtered.duplicates, 0);
+});
+
+test("exact retries of an ID-less statement source suppress every line", () => {
+  const source = Buffer.from("Date,Amount,Description\n2026-08-01,-25.00,COFFEE SHOP\n");
+  const importedSourceHashes = new Set([statementSourceSha256(source)]);
+  const retryHash = statementSourceSha256(Buffer.from(source));
+  const filtered = filterDuplicateStatementLines(
+    [line(), line({ amount: "-10.0000" })],
+    new Set(),
+    importedSourceHashes.has(retryHash),
+  );
+
+  assert.deepEqual(filtered.lines, []);
+  assert.equal(filtered.duplicates, 2);
+});
+
+test("one-byte-different sources do not suppress ID-less lines", () => {
+  const importedHash = statementSourceSha256("date,amount\n2026-08-01,-25.00\n");
+  const nextHash = statementSourceSha256("date,amount\n2026-08-01,-25.01\n");
+  const filtered = filterDuplicateStatementLines(
+    [line()],
+    new Set(),
+    importedHash === nextHash,
+  );
+
+  assert.equal(filtered.lines.length, 1);
   assert.equal(filtered.duplicates, 0);
 });
 
