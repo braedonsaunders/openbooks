@@ -5,6 +5,9 @@ import {
   ACCEPTANCE_ADAPTERS,
   CLAIMABLE_FROM,
   computeSurcharge,
+  normalizeAcceptanceProviderSettings,
+  resolveAcceptanceProviderApiBase,
+  testAcceptanceConnection,
   toMinorUnits,
   type WebhookEvent,
 } from "./payment-acceptance.ts";
@@ -255,4 +258,94 @@ test("gocardless webhook: payment lifecycle events resolve against the billing r
   assert.equal(chargedBack.status, "refunded");
   assert.equal(chargedBack.externalRef, "PM-9");
   assert.equal(chargedBack.alternateExternalRef, "BRQ-9");
+});
+
+test("payment provider API bases accept only published HTTPS endpoints", () => {
+  assert.equal(resolveAcceptanceProviderApiBase("stripe"), "https://api.stripe.com");
+  assert.equal(
+    resolveAcceptanceProviderApiBase("gocardless", "https://api.gocardless.com/"),
+    "https://api.gocardless.com",
+  );
+  for (const base of [
+    "https://checkout-test.adyen.com/v72",
+    "https://prefix-checkout-live.adyenpayments.com/checkout/v72",
+    "https://prefix-checkout-live-au.adyenpayments.com/checkout/v72",
+    "https://prefix-checkout-live-us.adyenpayments.com/checkout/v72",
+    "https://prefix-checkout-live-apse.adyenpayments.com/checkout/v72",
+  ]) {
+    assert.equal(resolveAcceptanceProviderApiBase("adyen", base), base);
+  }
+
+  const rejected: Array<["stripe" | "adyen" | "gocardless", string]> = [
+    ["stripe", "http://127.0.0.1"],
+    ["stripe", "https://api.stripe.com.evil.invalid"],
+    ["adyen", "https://checkout-test.adyen.com@127.0.0.1/v71"],
+    ["adyen", "https://prefix-checkout-live.adyenpayments.com.evil.invalid/checkout/v72"],
+    ["adyen", "https://checkout-test.adyen.com:8443/v71"],
+    ["gocardless", "https://api.gocardless.com/?next=http://127.0.0.1"],
+  ];
+  for (const [provider, base] of rejected) {
+    assert.throws(() => resolveAcceptanceProviderApiBase(provider, base), /not allowlisted/);
+  }
+
+  assert.deepEqual(
+    normalizeAcceptanceProviderSettings("adyen", {
+      merchantAccount: "merchant",
+      apiBase: " https://checkout-test.adyen.com/v72/ ",
+    }),
+    { merchantAccount: "merchant", apiBase: "https://checkout-test.adyen.com/v72" },
+  );
+});
+
+test("payment provider requests refuse redirects and reject unsafe bases before fetch", async () => {
+  const checkout = {
+    linkToken: "link-token",
+    description: "Invoice INV-1",
+    invoiceAmount: "10.0000",
+    surchargeAmount: "0.0000",
+    currency: "USD",
+    returnUrl: "https://merchant.example/pay/link-token",
+  };
+  const redirectModes: string[] = [];
+
+  await ACCEPTANCE_ADAPTERS.stripe.createCheckout(
+    { apiKey: "stripe-key" },
+    checkout,
+    async (_url, init) => {
+      redirectModes.push(init.redirect);
+      return { status: 200, json: async () => ({ id: "cs_1", url: "https://checkout.stripe.com/cs_1" }) };
+    },
+  );
+  await ACCEPTANCE_ADAPTERS.adyen.createCheckout(
+    { apiKey: "adyen-key", merchantAccount: "merchant" },
+    checkout,
+    async (_url, init) => {
+      redirectModes.push(init.redirect);
+      return { status: 200, json: async () => ({ id: "adyen-1", url: "https://checkoutshopper-test.adyen.com/adyen-1" }) };
+    },
+  );
+  await ACCEPTANCE_ADAPTERS.gocardless.createCheckout(
+    { apiKey: "gocardless-key" },
+    checkout,
+    async (url, init) => {
+      redirectModes.push(init.redirect);
+      return url.endsWith("/billing_requests")
+        ? { status: 200, json: async () => ({ billing_requests: { id: "BRQ-1" } }) }
+        : { status: 200, json: async () => ({ billing_request_flows: { authorisation_url: "https://pay.gocardless.com/flow-1" } }) };
+    },
+  );
+  assert.deepEqual(redirectModes, ["error", "error", "error", "error"]);
+
+  let fetched = false;
+  const result = await testAcceptanceConnection(
+    "gocardless",
+    { apiKey: "secret", apiBase: "http://127.0.0.1" },
+    async () => {
+      fetched = true;
+      return { status: 200, json: async () => ({}) };
+    },
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.detail, /not allowlisted/);
+  assert.equal(fetched, false);
 });

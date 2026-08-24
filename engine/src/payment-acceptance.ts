@@ -91,7 +91,12 @@ export type WebhookVerification =
   /** Every actionable event in the authenticated delivery, in provider order. */
   | { signatureValid: true; events: WebhookEvent[] };
 
-type FetchFn = (url: string, init: { method: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; json: () => Promise<any> }>;
+type FetchFn = (url: string, init: {
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+  redirect: "error";
+}) => Promise<{ status: number; json: () => Promise<any> }>;
 
 const defaultFetch: FetchFn = (url, init) => fetch(url, init);
 
@@ -331,6 +336,7 @@ const stripeAdapter: PaymentProviderAdapter = {
     params.set("line_items[0][price_data][product_data][name]", req.description.slice(0, 250));
     const res = await fetchFn(`${base}/v1/checkout/sessions`, {
       method: "POST",
+      redirect: "error",
       headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
       body: params.toString(),
     });
@@ -417,6 +423,7 @@ const adyenAdapter: PaymentProviderAdapter = {
     const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
     const res = await fetchFn(`${base}/sessions`, {
       method: "POST",
+      redirect: "error",
       headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
       body: JSON.stringify({
         merchantAccount: secrets.merchantAccount,
@@ -492,6 +499,7 @@ const gocardlessAdapter: PaymentProviderAdapter = {
     // Billing request → payment → billing request flow (hosted pages).
     const brRes = await fetchFn(`${base}/billing_requests`, {
       method: "POST",
+      redirect: "error",
       headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
       body: JSON.stringify({
         billing_requests: {
@@ -509,6 +517,7 @@ const gocardlessAdapter: PaymentProviderAdapter = {
     if (brRes.status >= 400 || !brId) throw new PaymentAcceptanceError(`gocardless billing request failed: ${br?.error?.message ?? brRes.status}`);
     const flowRes = await fetchFn(`${base}/billing_request_flows`, {
       method: "POST",
+      redirect: "error",
       headers: { authorization: `Bearer ${secrets.apiKey}`, "content-type": "application/json", "GoCardless-Version": "2015-07-06" },
       body: JSON.stringify({
         billing_request_flows: {
@@ -1433,6 +1442,7 @@ export async function testAcceptanceConnection(
       const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
       const res = await fetchFn(`${base}/v1/account`, {
         method: "GET",
+        redirect: "error",
         headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}` },
       });
       const json = await res.json();
@@ -1445,6 +1455,7 @@ export async function testAcceptanceConnection(
       const base = resolveAcceptanceProviderApiBase("adyen", secrets.apiBase);
       const res = await fetchFn(`${base}/paymentMethods`, {
         method: "POST",
+        redirect: "error",
         headers: { "x-api-key": secrets.apiKey, "content-type": "application/json" },
         body: JSON.stringify({ merchantAccount: secrets.merchantAccount }),
       });
@@ -1458,6 +1469,7 @@ export async function testAcceptanceConnection(
     const base = resolveAcceptanceProviderApiBase("gocardless", secrets.apiBase);
     const res = await fetchFn(`${base}/billing_requests?limit=1`, {
       method: "GET",
+      redirect: "error",
       headers: { authorization: `Bearer ${secrets.apiKey}`, "GoCardless-Version": "2015-07-06" },
     });
     return res.status < 400
