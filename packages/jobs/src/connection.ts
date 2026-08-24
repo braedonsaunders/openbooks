@@ -13,12 +13,20 @@ let blockingConnection: Redis | undefined
 const WORKER_HEARTBEAT_KEY = 'openbooks:worker:heartbeat'
 
 export function getConnection(): ConnectionOptions {
-  producerConnection ??= new Redis(getRedisUrl(), { enableReadyCheck: false, maxRetriesPerRequest: 1 })
+  producerConnection ??= new Redis(getRedisUrl(), {
+    enableReadyCheck: false,
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+  })
   return producerConnection as unknown as ConnectionOptions
 }
 
 export function getBlockingConnection(): ConnectionOptions {
-  blockingConnection ??= new Redis(getRedisUrl(), { enableReadyCheck: false, maxRetriesPerRequest: null })
+  blockingConnection ??= new Redis(getRedisUrl(), {
+    enableReadyCheck: false,
+    lazyConnect: true,
+    maxRetriesPerRequest: null,
+  })
   return blockingConnection as unknown as ConnectionOptions
 }
 
@@ -41,6 +49,10 @@ export async function closeJobConnections(): Promise<void> {
   blockingConnection = undefined
   await Promise.allSettled(
     connections.map(async (connection) => {
+      if (connection.status === 'wait') {
+        connection.disconnect(false)
+        return
+      }
       try {
         await connection.quit()
       } catch {
