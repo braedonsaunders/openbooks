@@ -363,7 +363,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
   const stalePolicy = byKey.get("stale_accounting_documents");
   if (stalePolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(stalePolicy, agentThreshold);
-    const staleAfterDays = stalePolicy.parameters.staleAfterDays;
+    const staleAfterDays = stalePolicy.parameters.staleAfterDays!;
     const staleOnOrBefore = addCalendarDays(today, -staleAfterDays);
     const stale = (await db.execute<{
         document_count: number;
@@ -392,7 +392,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
         agentKey: "accounting",
         findingType: "stale_accounting_documents",
         fingerprint: "stale-accounting-documents",
-        severity: Number(staleRow.document_count) >= stalePolicy.parameters.criticalItemCount || absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(stalePolicy.parameters.criticalMaterialityMultiple) ? "critical" : "warning",
+        severity: Number(staleRow.document_count) >= stalePolicy.parameters.criticalItemCount! || absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(stalePolicy.parameters.criticalMaterialityMultiple!) ? "critical" : "warning",
         confidence: "1.0000",
         materiality,
         subjectType: "documents",
@@ -508,8 +508,8 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
           actual: row.actual,
           accountType: row.type,
           threshold,
-          minimumVarianceBps: budgetVariancePolicy.parameters.minimumVariancePercent * 100,
-          criticalVarianceBps: budgetVariancePolicy.parameters.criticalVariancePercent * 100,
+          minimumVarianceBps: budgetVariancePolicy.parameters.minimumVariancePercent! * 100,
+          criticalVarianceBps: budgetVariancePolicy.parameters.criticalVariancePercent! * 100,
         });
         if (!classification.include) continue;
         findings.push({
@@ -566,7 +566,8 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
      order by p.ends_on desc limit 2
     `));
     if (periods.rows.length === 2) {
-      const [current, prior] = periods.rows;
+      const current = periods.rows[0]!;
+      const prior = periods.rows[1]!;
       const metrics = async (period: { id: string }) => {
       const result = (await db.execute<{ revenue: string; cogs: string; opex: string }>(sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
@@ -605,7 +606,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
           agentKey: "finance",
           findingType: "period_revenue_decline",
           fingerprint: `period-revenue-decline:${current.id}`,
-          severity: performance.revenueChangeBps !== null && performance.revenueChangeBps <= -(revenuePolicy.parameters.criticalDeclinePercent * 100) ? "critical" : "warning",
+          severity: performance.revenueChangeBps !== null && performance.revenueChangeBps <= -(revenuePolicy.parameters.criticalDeclinePercent! * 100) ? "critical" : "warning",
           confidence: "1.0000",
           materiality: moneyAbs(fromUnits(toUnits(priorMetrics.revenue) - toUnits(currentMetrics.revenue))),
           subjectType: "accounting_period",
@@ -625,14 +626,14 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
         });
       }
       const marginThreshold = marginPolicy?.enabled ? effectiveDetectorMateriality(marginPolicy, agentThreshold) : agentThreshold;
-      if (marginPolicy?.enabled && performance.grossMarginDropBps !== null && performance.grossMarginDropBps >= marginPolicy.parameters.minimumDropPoints * 100 && absoluteUnits(currentMetrics.revenue) >= absoluteUnits(marginThreshold)) {
+      if (marginPolicy?.enabled && performance.grossMarginDropBps !== null && performance.grossMarginDropBps >= marginPolicy.parameters.minimumDropPoints! * 100 && absoluteUnits(currentMetrics.revenue) >= absoluteUnits(marginThreshold)) {
         const currentGross = toUnits(currentMetrics.revenue) - toUnits(currentMetrics.cogs);
         const priorGross = toUnits(priorMetrics.revenue) - toUnits(priorMetrics.cogs);
         findings.push({
           agentKey: "finance",
           findingType: "gross_margin_decline",
           fingerprint: `gross-margin-decline:${current.id}`,
-          severity: performance.grossMarginDropBps >= marginPolicy.parameters.criticalDropPoints * 100 ? "critical" : "warning",
+          severity: performance.grossMarginDropBps >= marginPolicy.parameters.criticalDropPoints! * 100 ? "critical" : "warning",
           confidence: "1.0000",
           materiality: fromUnits(priorGross > currentGross ? priorGross - currentGross : 0n),
           subjectType: "accounting_period",

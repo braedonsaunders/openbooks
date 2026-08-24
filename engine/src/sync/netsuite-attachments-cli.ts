@@ -17,7 +17,7 @@ function parseArgs(argv: string[]): ImportOptions {
     throw new Error("--limit must be a positive integer");
   }
   const sourceFileIds = argv.flatMap((value, index) => {
-    if (value === "--file-id") return argv[index + 1] ? [argv[index + 1]] : [];
+    if (value === "--file-id") return argv[index + 1] ? [argv[index + 1]!] : [];
     if (value === "--file-ids") return argv[index + 1]?.split(",") ?? [];
     return [];
   });

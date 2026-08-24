@@ -342,11 +342,11 @@ async function ensureTaxParityConfig(
     erpTaxBase.parent_account,
   );
 
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.taxInput] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.taxInput!] =
     "TAX_INPUT";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.taxOutput] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.taxOutput!] =
     "TAX_OUTPUT";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.withholding] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.withholding!] =
     "WITHHOLDING";
   manifest.accountMap.erpnext[erpTaxInputAccount] = "TAX_INPUT";
   manifest.accountMap.erpnext[erpTaxInputCompoundAccount] = "TAX_INPUT";
@@ -731,7 +731,7 @@ async function ensureInventoryParityConfig(
     manifest.erpnext.inventory = erpnext;
   }
 
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing!] =
     "STOCK_ADJUSTMENT";
   manifest.accountMap.erpnext[erpnext.stockAdjustmentAccount] =
     "STOCK_ADJUSTMENT";
@@ -932,9 +932,9 @@ async function ensureAdvancedInventoryAccountMap(
       "ERPNext parity company needs Stock Received But Not Billed and Expenses Included In Valuation accounts",
     );
   }
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing!] =
     "STOCK_ADJUSTMENT";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.freight] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.freight!] =
     "EXPENSE";
   manifest.accountMap.erpnext[receivedNotBilled[0].name] = "STOCK_ADJUSTMENT";
   manifest.accountMap.erpnext[valuationExpense[0].name] = "EXPENSE";
@@ -1617,9 +1617,9 @@ async function approveAndPost(
     .where(eq(schema.documents.id, documentId));
   return postDocument(documentId, {
     control: {
-      ar: manifest.openbooks.accounts.ar,
-      ap: manifest.openbooks.accounts.ap,
-      bank: manifest.openbooks.accounts.bank,
+      ar: manifest.openbooks.accounts.ar!,
+      ap: manifest.openbooks.accounts.ap!,
+      bank: manifest.openbooks.accounts.bank!,
       taxPaid: manifest.openbooks.accounts.taxInput,
       taxCollected: manifest.openbooks.accounts.taxOutput,
       employeePayable: manifest.openbooks.accounts.ap,
@@ -1811,9 +1811,9 @@ async function runJournal(): Promise<void> {
     .where(eq(schema.documents.id, documentId));
   await postDocument(documentId, {
     control: {
-      ar: manifest.openbooks.accounts.ar,
-      ap: manifest.openbooks.accounts.ap,
-      bank: manifest.openbooks.accounts.bank,
+      ar: manifest.openbooks.accounts.ar!,
+      ap: manifest.openbooks.accounts.ap!,
+      bank: manifest.openbooks.accounts.bank!,
       taxPaid: manifest.openbooks.accounts.taxInput,
       taxCollected: manifest.openbooks.accounts.taxOutput,
     },
@@ -1959,7 +1959,7 @@ async function runDocumentCorrections(): Promise<void> {
       kind: correction.kind,
       marker: `${marker}-${correction.label}-CORRECTION`,
       partyId: correction.partyId,
-      accountId: correction.accountId,
+      accountId: correction.accountId!,
       amount: correction.originalAmount,
     });
     const erpOriginal = await client.create<{ name: string }>(
@@ -2073,9 +2073,9 @@ async function runDocumentCorrections(): Promise<void> {
     }
     await postDocument(replacement.replacementDocumentId, {
       control: {
-        ar: manifest.openbooks.accounts.ar,
-        ap: manifest.openbooks.accounts.ap,
-        bank: manifest.openbooks.accounts.bank,
+        ar: manifest.openbooks.accounts.ar!,
+        ap: manifest.openbooks.accounts.ap!,
+        bank: manifest.openbooks.accounts.bank!,
         taxPaid: manifest.openbooks.accounts.taxInput,
         taxCollected: manifest.openbooks.accounts.taxOutput,
       },
@@ -2137,7 +2137,7 @@ async function runCore(): Promise<void> {
     kind: "customer_invoice",
     marker,
     partyId: manifest.openbooks.customerId,
-    accountId: manifest.openbooks.accounts.revenue,
+    accountId: manifest.openbooks.accounts.revenue!,
     amount: "100.00",
   });
   const erpSalesInvoice = await client.create<{ name: string }>(
@@ -2202,7 +2202,7 @@ async function runCore(): Promise<void> {
     kind: "vendor_bill",
     marker,
     partyId: manifest.openbooks.vendorId,
-    accountId: manifest.openbooks.accounts.adjustment,
+    accountId: manifest.openbooks.accounts.adjustment!,
     amount: "80.00",
   });
   const erpPurchaseInvoice = await client.create<{ name: string }>(
@@ -2614,7 +2614,7 @@ async function runSecondary(): Promise<void> {
       kind: credit.openbooksKind,
       marker,
       partyId: credit.partyId,
-      accountId: credit.openbooksAccount,
+      accountId: credit.openbooksAccount!,
       amount: credit.amount,
     });
     const erpDraft = await client.create<{ name: string }>(
@@ -2800,7 +2800,7 @@ async function runSecondary(): Promise<void> {
       kind: item.openbooksKind,
       marker,
       partyId: item.partyId,
-      accountId: item.accountId,
+      accountId: item.accountId!,
       amount: item.amount,
     });
     const erpJournal = await client.create<{ name: string }>("Journal Entry", {
@@ -2914,7 +2914,7 @@ async function runTax(): Promise<void> {
       label: "sales-tax-exclusive",
       openbooksKind: "customer_invoice" as const,
       partyId: manifest.openbooks.customerId,
-      accountId: manifest.openbooks.accounts.revenue,
+      accountId: manifest.openbooks.accounts.revenue!,
       taxCodeId,
       netAmount: "100.00",
       taxAmount: "13.00",
@@ -2952,7 +2952,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-exclusive",
       openbooksKind: "vendor_bill" as const,
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId,
       netAmount: "100.00",
       taxAmount: "13.00",
@@ -2994,7 +2994,7 @@ async function runTax(): Promise<void> {
       label: "sales-tax-inclusive",
       openbooksKind: "customer_invoice" as const,
       partyId: manifest.openbooks.customerId,
-      accountId: manifest.openbooks.accounts.revenue,
+      accountId: manifest.openbooks.accounts.revenue!,
       taxCodeId: inclusiveTaxCodeId,
       netAmount: "100.00",
       taxAmount: "13.00",
@@ -3033,7 +3033,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-inclusive",
       openbooksKind: "vendor_bill" as const,
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId: inclusiveTaxCodeId,
       netAmount: "100.00",
       taxAmount: "13.00",
@@ -3076,7 +3076,7 @@ async function runTax(): Promise<void> {
       label: "sales-tax-rounding-half-cent",
       openbooksKind: "customer_invoice" as const,
       partyId: manifest.openbooks.customerId,
-      accountId: manifest.openbooks.accounts.revenue,
+      accountId: manifest.openbooks.accounts.revenue!,
       taxCodeId,
       netAmount: "0.05",
       taxAmount: "0.01",
@@ -3114,7 +3114,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-rounding-half-cent",
       openbooksKind: "vendor_bill" as const,
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId,
       netAmount: "0.05",
       taxAmount: "0.01",
@@ -3156,7 +3156,7 @@ async function runTax(): Promise<void> {
       label: "sales-tax-return",
       openbooksKind: "customer_credit" as const,
       partyId: manifest.openbooks.customerId,
-      accountId: manifest.openbooks.accounts.revenue,
+      accountId: manifest.openbooks.accounts.revenue!,
       taxCodeId,
       netAmount: "25.00",
       taxAmount: "3.25",
@@ -3195,7 +3195,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-return",
       openbooksKind: "vendor_credit" as const,
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId,
       netAmount: "20.00",
       taxAmount: "2.60",
@@ -3238,7 +3238,7 @@ async function runTax(): Promise<void> {
       label: "sales-tax-compound",
       openbooksKind: "customer_invoice",
       partyId: manifest.openbooks.customerId,
-      accountId: manifest.openbooks.accounts.revenue,
+      accountId: manifest.openbooks.accounts.revenue!,
       taxGroupId: compoundTaxGroupId,
       taxConfigs: compoundConfigs,
       netAmount: "100.00",
@@ -3285,7 +3285,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-compound",
       openbooksKind: "vendor_bill",
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxGroupId: compoundTaxGroupId,
       taxConfigs: compoundConfigs,
       netAmount: "100.00",
@@ -3338,7 +3338,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-withholding",
       openbooksKind: "vendor_bill",
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId: withholdingTaxCodeId,
       netAmount: "100.00",
       taxAmount: "-10.00",
@@ -3380,7 +3380,7 @@ async function runTax(): Promise<void> {
       label: "purchase-tax-reverse-charge",
       openbooksKind: "vendor_bill",
       partyId: manifest.openbooks.vendorId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       taxCodeId: reverseChargeTaxCodeId,
       netAmount: "100.00",
       taxAmount: "0.00",
@@ -3548,7 +3548,7 @@ async function runPostingRules(): Promise<void> {
       kind: testCase.kind,
       marker,
       partyId: employeeId,
-      accountId: manifest.openbooks.accounts.adjustment,
+      accountId: manifest.openbooks.accounts.adjustment!,
       amount: testCase.amount,
     });
     if (testCase.card) {
@@ -3736,7 +3736,7 @@ async function runPostingRules(): Promise<void> {
     kind: "project_charge",
     marker,
     partyId: manifest.openbooks.customerId,
-    accountId: manifest.openbooks.accounts.adjustment,
+    accountId: manifest.openbooks.accounts.adjustment!,
     amount: "40.00",
   });
   await db
@@ -4642,7 +4642,7 @@ async function runInventoryAdvanced(): Promise<void> {
     {
       amount: "5",
       basis: "value",
-      freightAccountId: manifest.openbooks.accounts.freight,
+      freightAccountId: manifest.openbooks.accounts.freight!,
       subsidiaryId: manifest.openbooks.subsidiaryId,
       voucherDate: "2026-07-15",
       memo: `Parity landed-cost voucher ${marker}`,
@@ -5901,9 +5901,9 @@ async function runFxSettlementParity(): Promise<void> {
   `);
   await postDocument(invoiceId, {
     control: {
-      ar: manifest.openbooks.accounts.ar,
-      ap: manifest.openbooks.accounts.ap,
-      bank: manifest.openbooks.accounts.bank,
+      ar: manifest.openbooks.accounts.ar!,
+      ap: manifest.openbooks.accounts.ap!,
+      bank: manifest.openbooks.accounts.bank!,
       fxRealizedGainLoss: manifest.openbooks.accounts.fxGainLoss,
     },
   });
@@ -6156,7 +6156,7 @@ async function runRevenueRecognitionParity(): Promise<void> {
   const client = new ErpNextParityClient(erpConfig());
   const marker = new Date().toISOString().replace(/\D/g, "").slice(0, 17);
 
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.recognized] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.recognized!] =
     "REVENUE";
   const erpAccounts = await client.list<{
     name: string;
@@ -6313,9 +6313,9 @@ async function runRevenueRecognitionParity(): Promise<void> {
   );
   await postDocument(invoiceId, {
     control: {
-      ar: manifest.openbooks.accounts.ar,
-      ap: manifest.openbooks.accounts.ap,
-      bank: manifest.openbooks.accounts.bank,
+      ar: manifest.openbooks.accounts.ar!,
+      ap: manifest.openbooks.accounts.ap!,
+      bank: manifest.openbooks.accounts.bank!,
     },
   });
   await client.submit("Sales Invoice", erpInvoice.name);
@@ -6462,7 +6462,7 @@ async function runRevenueRecognitionParity(): Promise<void> {
     kind: "customer_credit",
     marker: `${marker}-RECOGNIZED`,
     partyId: manifest.openbooks.customerId,
-    accountId: manifest.openbooks.accounts.recognized,
+    accountId: manifest.openbooks.accounts.recognized!,
     amount: "300.00",
   });
   const erpCredit = await client.create<{ name: string }>("Sales Invoice", {
@@ -6699,21 +6699,21 @@ async function runProjectRecognitionParity(): Promise<void> {
        true, ${manifest.openbooks.actorId}, ${manifest.openbooks.actorId})
   `);
 
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.invAsset] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.invAsset!] =
     "LABOR_WIP";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.clearing!] =
     "LABOR_CLEARING";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.adjustment] =
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.adjustment!] =
     "OVERHEAD";
   manifest.accountMap.erpnext[erpLaborWip.name] = "LABOR_WIP";
   manifest.accountMap.erpnext[erpLaborClearing.name] = "LABOR_CLEARING";
-  manifest.accountMap.erpnext[manifest.erpnext.accounts.expense] = "OVERHEAD";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.cogs] =
+  manifest.accountMap.erpnext[manifest.erpnext.accounts.expense!] = "OVERHEAD";
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.cogs!] =
     "EQUIPMENT_COST";
   manifest.accountMap.openbooks[equipmentRecoveryId] = "EQUIPMENT_RECOVERY";
-  manifest.accountMap.erpnext[manifest.erpnext.accounts.cogs] =
+  manifest.accountMap.erpnext[manifest.erpnext.accounts.cogs!] =
     "EQUIPMENT_COST";
-  manifest.accountMap.erpnext[manifest.erpnext.accounts.revenue] =
+  manifest.accountMap.erpnext[manifest.erpnext.accounts.revenue!] =
     "EQUIPMENT_RECOVERY";
   saveJson(manifestPath, manifest);
 
@@ -6918,12 +6918,12 @@ async function runProjectRecognitionParity(): Promise<void> {
     currency: "CAD",
     lines: [
       {
-        accountId: manifest.openbooks.accounts.adjustment,
+        accountId: manifest.openbooks.accounts.adjustment!,
         amount: "50",
         projectId: manifest.openbooks.projectId,
       },
       {
-        accountId: manifest.openbooks.accounts.adjustment,
+        accountId: manifest.openbooks.accounts.adjustment!,
         amount: "-50",
       },
     ],
@@ -7022,9 +7022,9 @@ async function runProjectRecognitionParity(): Promise<void> {
   `);
   await postDocument(equipmentDocumentId, {
     control: {
-      ar: manifest.openbooks.accounts.ar,
-      ap: manifest.openbooks.accounts.ap,
-      bank: manifest.openbooks.accounts.bank,
+      ar: manifest.openbooks.accounts.ar!,
+      ap: manifest.openbooks.accounts.ap!,
+      bank: manifest.openbooks.accounts.bank!,
     },
   });
   const erpEquipment = await client.create<{ name: string }>("Journal Entry", {
@@ -7460,7 +7460,7 @@ async function runConsolidationParity(): Promise<void> {
     manifest.accountMap.erpnext[account.name] = "DUE_FROM";
   for (const account of Object.values(erpDueTo))
     manifest.accountMap.erpnext[account.name] = "DUE_TO";
-  manifest.accountMap.openbooks[manifest.openbooks.accounts.bank] = "CASH";
+  manifest.accountMap.openbooks[manifest.openbooks.accounts.bank!] = "CASH";
   manifest.accountMap.erpnext[parentCash] = "CASH";
   manifest.accountMap.erpnext[childCash] = "CASH";
   saveJson(manifestPath, manifest);
@@ -7476,7 +7476,7 @@ async function runConsolidationParity(): Promise<void> {
     currency: "CAD",
     lines: [
       { accountId: dueFromId, amount: "120" },
-      { accountId: manifest.openbooks.accounts.bank, amount: "-120" },
+      { accountId: manifest.openbooks.accounts.bank!, amount: "-120" },
     ],
   });
   const childEntry = await postProjectGlEntry({
@@ -7489,7 +7489,7 @@ async function runConsolidationParity(): Promise<void> {
     subsidiaryId: childId,
     currency: "CAD",
     lines: [
-      { accountId: manifest.openbooks.accounts.bank, amount: "120" },
+      { accountId: manifest.openbooks.accounts.bank!, amount: "120" },
       { accountId: dueToId, amount: "-120" },
     ],
   });
@@ -7698,7 +7698,7 @@ async function runConsolidationParity(): Promise<void> {
     subsidiaryId: childId,
     currency: "CAD",
     lines: [
-      { accountId: manifest.openbooks.accounts.bank, amount: "1000" },
+      { accountId: manifest.openbooks.accounts.bank!, amount: "1000" },
       { accountId: ownershipOb.get("childEquity")!, amount: "-1000" },
     ],
   });
@@ -7712,8 +7712,8 @@ async function runConsolidationParity(): Promise<void> {
     subsidiaryId: childId,
     currency: "CAD",
     lines: [
-      { accountId: manifest.openbooks.accounts.bank, amount: "100" },
-      { accountId: manifest.openbooks.accounts.revenue, amount: "-100" },
+      { accountId: manifest.openbooks.accounts.bank!, amount: "100" },
+      { accountId: manifest.openbooks.accounts.revenue!, amount: "-100" },
     ],
   });
   if (!capitalEntry || !profitEntry) throw new Error("ownership source failed");
@@ -8277,7 +8277,7 @@ async function runSyncCorrectionsParity(): Promise<void> {
     kind: "customer_invoice",
     marker: `${marker}-SOURCE-DELETION`,
     partyId: manifest.openbooks.customerId,
-    accountId: manifest.openbooks.accounts.revenue,
+    accountId: manifest.openbooks.accounts.revenue!,
     amount,
   });
   const erpInvoice = await client.create<{ name: string }>("Sales Invoice", {

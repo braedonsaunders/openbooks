@@ -115,7 +115,7 @@ async function concurrentMap<T, R>(
     for (;;) {
       const index = next++;
       if (index >= values.length) return;
-      result[index] = await task(values[index], index);
+      result[index] = await task(values[index]!, index);
     }
   }));
   return result;
@@ -182,7 +182,7 @@ async function resolveContext(options: ImportOptions): Promise<{
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
   `));
   if (orgResult.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
-  const orgId = orgResult.rows[0].id;
+  const orgId = orgResult.rows[0]!.id;
 
   const connectionResult = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string | null }>(sql`
     select id, config, secrets
@@ -413,7 +413,7 @@ function titleizeKind(s: string): string {
   return s
     .split("_")
     .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .map((w) => w[0]!.toUpperCase() + w.slice(1))
     .join(" ");
 }
 
@@ -439,7 +439,7 @@ async function ensureRecordFolder(
       values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id
     `));
   }
-  const rootId = root.rows[0].id;
+  const rootId = root.rows[0]!.id;
 
   // Nest the per-record leaf under a kind group folder so the cabinet never
   // enumerates tens of thousands of flat attachment folders.
@@ -461,10 +461,10 @@ async function ensureRecordFolder(
 
   const inserted = (await tx.execute<{ id: string }>(sql`
     insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
-    values (${orgId}, ${group.rows[0].id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
+    values (${orgId}, ${group.rows[0]!.id}, ${`documents / ${documentId.slice(0, 8)}`}, true, 'documents', ${documentId}, now(), now())
     returning id
   `));
-  return inserted.rows[0].id;
+  return inserted.rows[0]!.id;
 }
 
 function derivedFileType(contentType: string): "pdf" | "image" {
@@ -501,7 +501,7 @@ async function persistFile(input: {
     const unchanged = existing.rows[0]?.contentHash === hash;
     if (!fileId) {
       fileId = randomUUID();
-      const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]);
+      const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]!);
       await tx.execute(sql`
         insert into files (id, org_id, folder_id, name, extension, file_type, content_type,
                            size_bytes, storage_kind, source_system, source_id, source_modified_at, content_hash,
@@ -515,7 +515,7 @@ async function persistFile(input: {
 
     if (created || !unchanged) {
       const versionId = randomUUID();
-      const versionNumber = created ? 1 : Number(existing.rows[0].maxVersion) + 1;
+      const versionNumber = created ? 1 : Number(existing.rows[0]!.maxVersion) + 1;
       await tx.execute(sql`
         insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind,
                                    content_hash, created_by, created_at)

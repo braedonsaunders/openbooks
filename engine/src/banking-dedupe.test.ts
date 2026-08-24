@@ -15,7 +15,7 @@ const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine
 test("content-identical ID-less transactions in separate imports both remain fresh", () => {
   const first = filterDuplicateStatementLines([line()], new Set());
   assert.equal(first.lines.length, 1);
-  assert.equal(first.lines[0].bankTransactionId, null);
+  assert.equal(first.lines[0]!.bankTransactionId, null);
 
   // The first import persisted no source ID, so there is no sound identity to
   // suppress a second real transaction with the same visible content.

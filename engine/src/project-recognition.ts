@@ -416,7 +416,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
         orgId,
         actorId,
         origin: "labor_burden",
-        entryNumber: `LAB-${postingDate}-${group.timeEntryIds[0].slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+        entryNumber: `LAB-${postingDate}-${group.timeEntryIds[0]!.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
         postingDate,
         memo: "Approved labor cost → project WIP",
         subsidiaryId: group.subsidiaryId,

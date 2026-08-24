@@ -79,11 +79,11 @@ export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role:
 
   for (let i = 0; i < usable.length - 1; i++) {
     if (counts[i] === 0n) continue;
-    const lowerSubtotal = mul(fromUnits(counts[i]), rateFor(usable[i]!, role)!);
+    const lowerSubtotal = mul(fromUnits(counts[i]!), rateFor(usable[i]!, role)!);
     const upperRate = rateFor(usable[i + 1]!, role)!;
     if (cmp(lowerSubtotal, upperRate) > 0) {
       counts[i] = 0n;
-      counts[i + 1] += 10_000n;
+      counts[i + 1] = counts[i + 1]! + 10_000n;
     }
   }
 
@@ -142,7 +142,7 @@ export function priceLowestCost(baseQuantity: string, tiers: RateTier[], role: R
   for (let at = winner; at > 0; ) {
     const p = prior[at];
     if (!p) throw new Error("Invalid rate ladder solution");
-    counts[p.tier] += 10_000n;
+    counts[p.tier] = counts[p.tier]! + 10_000n;
     at = p.at;
   }
   const components = usable

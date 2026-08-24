@@ -273,7 +273,7 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
     const plan: BackupPlanStep[] = [
       { name: "orgs", where: `t.id = '${orgId}'` },
       ...tenantTables.map((name) => ({ name, where: `t.org_id = '${orgId}'` })),
-      ...childTables.map((name) => ({ name, where: PARENT_FILTER[name](orgId) })),
+      ...childTables.map((name) => ({ name, where: PARENT_FILTER[name]!(orgId) })),
       ...presentAuthTables.rows.map(({ table_name: name }) => ({
         name,
         where:

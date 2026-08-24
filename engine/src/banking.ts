@@ -81,7 +81,7 @@ function ofxValue(block: string, tag: string): string | undefined {
 function ofxDate(raw: string): string {
   const m = raw.match(/^(\d{4})(\d{2})(\d{2})/);
   if (!m) throw new BankingError(`OFX: unparseable date "${raw}"`);
-  return assertRealDate(m[1], m[2], m[3], `OFX date "${raw}"`);
+  return assertRealDate(m[1]!, m[2]!, m[3]!, `OFX date "${raw}"`);
 }
 
 function assertRealDate(y: string, mo: string, d: string, label: string): string {
@@ -150,7 +150,7 @@ export function parseOfx(text: string): ParsedStatement {
     throw new BankingError("No transactions found — expected OFX <STMTTRN> blocks");
   }
   const lines: ParsedStatementLine[] = chunks.map((chunk, i) => {
-    const block = chunk.split(/<\/STMTTRN>/i)[0];
+    const block = chunk.split(/<\/STMTTRN>/i)[0]!;
     const dt = ofxValue(block, "DTPOSTED");
     const amt = ofxValue(block, "TRNAMT");
     if (!dt) throw new BankingError(`OFX transaction ${i + 1}: missing DTPOSTED`);
@@ -241,22 +241,24 @@ const MONTHS: Record<string, number> = {
 export function parseCsvDate(raw: string): string | null {
   const s = raw.trim();
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-  if (m) return safeDate(m[1], m[2], m[3]);
+  if (m) return safeDate(m[1]!, m[2]!, m[3]!);
   m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
   if (m) {
     // first part >12 ⇒ it is the day (DD/MM/YYYY); otherwise MM/DD/YYYY
     // (documented import assumption for ambiguous dates).
-    return Number(m[1]) > 12 ? safeDate(m[3], m[2], m[1]) : safeDate(m[3], m[1], m[2]);
+    return Number(m[1]) > 12
+      ? safeDate(m[3]!, m[2]!, m[1]!)
+      : safeDate(m[3]!, m[1]!, m[2]!);
   }
   m = s.match(/^(\d{1,2})[ -]([A-Za-z]{3,})[ -,]+(\d{4})$/);
   if (m) {
-    const month = MONTHS[m[2].slice(0, 3).toLowerCase()];
-    return month ? safeDate(m[3], String(month), m[1]) : null;
+    const month = MONTHS[m[2]!.slice(0, 3).toLowerCase()];
+    return month ? safeDate(m[3]!, String(month), m[1]!) : null;
   }
   m = s.match(/^([A-Za-z]{3,})[ .]+(\d{1,2}),?\s+(\d{4})$/);
   if (m) {
-    const month = MONTHS[m[1].slice(0, 3).toLowerCase()];
-    return month ? safeDate(m[3], String(month), m[2]) : null;
+    const month = MONTHS[m[1]!.slice(0, 3).toLowerCase()];
+    return month ? safeDate(m[3]!, String(month), m[2]!) : null;
   }
   return null;
 }
@@ -339,10 +341,10 @@ export function parseCsv(text: string, mapping: CsvMapping): ParsedStatementLine
 
 function xmlTag(block: string, tag: string): string | undefined {
   const m = block.match(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "i"));
-  return m ? decodeOfxEntities(m[1].trim()) : undefined;
+  return m ? decodeOfxEntities(m[1]!.trim()) : undefined;
 }
 function xmlTags(block: string, tag: string): string[] {
-  return [...block.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "gi"))].map((m) => m[1]);
+  return [...block.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`, "gi"))].map((m) => m[1]!);
 }
 
 /**
@@ -375,7 +377,7 @@ export function parseCamt053(text: string): ParsedStatement {
     const ref =
       xmlTag(txDtls, "EndToEndId") ?? xmlTag(txDtls, "TxId") ?? xmlTag(txDtls, "AcctSvcrRef") ?? null;
     lines.push({
-      postedOn: assertRealDate(iso[1], iso[2], iso[3], `CAMT.053 date "${dt}"`),
+      postedOn: assertRealDate(iso[1]!, iso[2]!, iso[3]!, `CAMT.053 date "${dt}"`),
       amount: signed,
       description,
       counterpartyRef: ref,
@@ -395,7 +397,7 @@ export function parseCamt053(text: string): ParsedStatement {
       if (amt) closingBalance = normalizeAmount((ind === "DBIT" ? "-" : "") + amt, "CAMT.053 balance");
       const bd = xmlTag(bal, "Dt");
       const m = bd?.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (m) statementDate = assertRealDate(m[1], m[2], m[3], "CAMT.053 balance date");
+      if (m) statementDate = assertRealDate(m[1]!, m[2]!, m[3]!, "CAMT.053 balance date");
     }
   }
   return { lines, currency, statementDate, closingBalance };
@@ -430,12 +432,12 @@ export function parseBai2(text: string): ParsedStatement {
     if (f[0] === "02") {
       const d = f[4]; // YYMMDD
       const m = d?.match(/^(\d{2})(\d{2})(\d{2})$/);
-      if (m) statementDate = assertRealDate("20" + m[1], m[2], m[3], `BAI2 date "${d}"`);
+      if (m) statementDate = assertRealDate("20" + m[1]!, m[2]!, m[3]!, `BAI2 date "${d}"`);
     } else if (f[0] === "03") {
       if (f[2]) currency = f[2];
       // status/summary type codes follow in groups of (code, amount, ...)
       for (let i = 3; i + 1 < f.length; i += 1) {
-        if (f[i] === "015" && f[i + 1]) closingBalance = baiAmount(f[i + 1]); // 015 = closing ledger
+        if (f[i] === "015" && f[i + 1]) closingBalance = baiAmount(f[i + 1]!); // 015 = closing ledger
       }
     } else if (f[0] === "16") {
       const typeCode = Number(f[1]);
@@ -482,8 +484,8 @@ export function parseMt940(text: string): ParsedStatement {
   const fields: { tag: string; value: string }[] = [];
   for (const ln of body.split("\n")) {
     const m = ln.match(/^:(\d{2}[A-Z]?):(.*)$/);
-    if (m) fields.push({ tag: m[1], value: m[2] });
-    else if (fields.length && ln.trim() && ln.trim() !== "-") fields[fields.length - 1].value += "\n" + ln;
+    if (m) fields.push({ tag: m[1]!, value: m[2]! });
+    else if (fields.length && ln.trim() && ln.trim() !== "-") fields[fields.length - 1]!.value += "\n" + ln;
   }
   const lines: ParsedStatementLine[] = [];
   let currency: string | undefined;
@@ -500,13 +502,13 @@ export function parseMt940(text: string): ParsedStatement {
       // YYMMDD [MMDD] {D|C|RD|RC} [funds] amount(,) type ...
       const m = value.match(/^(\d{6})(\d{4})?(R?[DC])([A-Z])?([\d.,]+)/);
       if (!m) throw new BankingError(`MT940: unparseable :61: line "${value.slice(0, 40)}"`);
-      const dm = m[1].match(/^(\d{2})(\d{2})(\d{2})$/)!;
-      const debit = /D/.test(m[3]);
+      const dm = m[1]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
+      const debit = /D/.test(m[3]!);
       const amount = normalizeAmount((debit ? "-" : "") + m[5], "MT940 amount");
       const rest = value.slice(m[0].length);
       const ref = rest.split("//")[0]?.replace(/^N[A-Z]{3}/, "").trim() || null;
       pending = {
-        postedOn: assertRealDate("20" + dm[1], dm[2], dm[3], `MT940 date "${m[1]}"`),
+        postedOn: assertRealDate("20" + dm[1]!, dm[2]!, dm[3]!, `MT940 date "${m[1]}"`),
         amount,
         description: null,
         counterpartyRef: ref,
@@ -522,8 +524,8 @@ export function parseMt940(text: string): ParsedStatement {
       if (m) {
         closingBalance = normalizeAmount((m[1] === "D" ? "-" : "") + m[4], "MT940 closing balance");
         currency = currency ?? m[3];
-        const dm = m[2].match(/^(\d{2})(\d{2})(\d{2})$/)!;
-        statementDate = assertRealDate("20" + dm[1], dm[2], dm[3], "MT940 balance date");
+        const dm = m[2]!.match(/^(\d{2})(\d{2})(\d{2})$/)!;
+        statementDate = assertRealDate("20" + dm[1]!, dm[2]!, dm[3]!, "MT940 balance date");
       }
     }
   }
@@ -630,9 +632,9 @@ export async function importStatement(
     const dateMatch = line.postedOn.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!dateMatch) throw new BankingError(`Statement line ${index + 1}: posted date must be YYYY-MM-DD`);
     const postedOn = assertRealDate(
-      dateMatch[1],
-      dateMatch[2],
-      dateMatch[3],
+      dateMatch[1]!,
+      dateMatch[2]!,
+      dateMatch[3]!,
       `Statement line ${index + 1} date`,
     );
     const bankTransactionId = line.bankTransactionId?.trim() || null;
@@ -698,15 +700,15 @@ export async function importStatement(
             ? 1
             : a.index - b.index,
       );
-    const statementDate = opts.statementDate ?? ordered[ordered.length - 1].postedOn;
+    const statementDate = opts.statementDate ?? ordered[ordered.length - 1]!.postedOn;
     const statementDateMatch = statementDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!statementDateMatch) {
       throw new BankingError("Statement date must be YYYY-MM-DD");
     }
     assertRealDate(
-      statementDateMatch[1],
-      statementDateMatch[2],
-      statementDateMatch[3],
+      statementDateMatch[1]!,
+      statementDateMatch[2]!,
+      statementDateMatch[3]!,
       "Statement date",
     );
     const [stmt] = await tx
@@ -725,7 +727,7 @@ export async function importStatement(
     await tx.insert(schema.bankStatementLines).values(
       ordered.map((l, i) => ({
         orgId: ctx.orgId,
-        statementId: stmt.id,
+        statementId: stmt!.id,
         accountId: account.id,
         lineNumber: i + 1,
         postedOn: l.postedOn,
@@ -739,7 +741,7 @@ export async function importStatement(
       })),
     );
     return {
-      statementId: stmt.id,
+      statementId: stmt!.id,
       imported: fresh.length,
       duplicates,
       lines: fresh,
@@ -783,7 +785,7 @@ export async function startReconciliation(
   if (!dateMatch) {
     throw new BankingError("Through date must be YYYY-MM-DD");
   }
-  assertRealDate(dateMatch[1], dateMatch[2], dateMatch[3], "Through date");
+  assertRealDate(dateMatch[1]!, dateMatch[2]!, dateMatch[3]!, "Through date");
   const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
     await tx.execute(sql`
@@ -827,7 +829,7 @@ export async function startReconciliation(
         createdBy: ctx.userId,
       })
       .returning({ id: schema.reconciliations.id });
-    return { id: recon.id };
+    return { id: recon!.id };
   });
 }
 
@@ -872,7 +874,7 @@ async function reconciliationTotalsUsing(
         where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
           and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}) as unmatched_stmt
   `));
-  const row = r.rows[0];
+  const row = r.rows[0]!;
   const clearedBalance = fromUnits(toUnits(row.cleared));
   const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(row.cleared));
   return {
@@ -981,7 +983,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
       let bestIdx = -1;
       let bestDays = Infinity;
       for (let i = 0; i < candidates.length; i++) {
-        const days = daysBetween(line.posted_on, candidates[i].date);
+        const days = daysBetween(line.posted_on, candidates[i]!.date);
         if (days < bestDays) {
           bestDays = days;
           bestIdx = i;
@@ -991,7 +993,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
       const [winner] = candidates.splice(bestIdx, 1);
       pairs.push({
         statementLineId: line.id,
-        journalLineId: winner.id,
+        journalLineId: winner!.id,
         confidence: bestDays <= 3 ? "0.9" : "0.7",
       });
     }
@@ -1316,7 +1318,7 @@ export async function markReconciled(
           from journal_lines
          where org_id = ${ctx.orgId} and reconciliation_id = ${recon.id}
       `));
-      return { journalLinesReconciled: existing.rows[0].count };
+      return { journalLinesReconciled: existing.rows[0]!.count };
     }
 
     const statementEvidence = (await tx.execute<{ count: number }>(sql`
@@ -1327,7 +1329,7 @@ export async function markReconciled(
          and currency = ${recon.currency}
          and posted_on <= ${recon.through_date}
     `));
-    if (statementEvidence.rows[0].count === 0) {
+    if (statementEvidence.rows[0]!.count === 0) {
       throw new BankingError(
         "Cannot sign off without imported statement evidence through the reconciliation date",
       );
@@ -1342,9 +1344,9 @@ export async function markReconciled(
          and posted_on <= ${recon.through_date}
          and match_status = 'unmatched'
     `));
-    if (unmatched.rows[0].count > 0) {
+    if (unmatched.rows[0]!.count > 0) {
       throw new BankingError(
-        `Cannot sign off: ${unmatched.rows[0].count} statement line(s) through the cutoff remain unmatched`,
+        `Cannot sign off: ${unmatched.rows[0]!.count} statement line(s) through the cutoff remain unmatched`,
       );
     }
 
@@ -1394,7 +1396,7 @@ export async function markReconciled(
                             where rm.reconciliation_id = ${recon.id}
                               and rm.org_id = ${ctx.orgId}))
     `));
-    const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0].cleared));
+    const difference = fromUnits(toUnits(recon.statement_balance) - toUnits(bal.rows[0]!.cleared));
     if (!isZero(difference)) {
       throw new BankingError(
         `Cannot sign off: difference is ${difference}, not 0.0000 — match or unmatch lines until it balances`,
@@ -1440,7 +1442,7 @@ export async function markReconciled(
            currency: recon.currency,
            throughDate: recon.through_date,
            matchedJournalLines: stamped.rows.length,
-           excludedStatementLines: excluded.rows[0].count,
+           excludedStatementLines: excluded.rows[0]!.count,
            difference: "0.0000",
          })}::jsonb,
          ${ctx.userId})

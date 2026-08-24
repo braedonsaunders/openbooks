@@ -271,7 +271,7 @@ export async function captureFieldTicketLaborEvidence(
          and field_ticket_id = ${args.fieldTicketId}
       returning id, revision
     `));
-    const snapshot = inserted.rows[0];
+    const snapshot = inserted.rows[0]!;
 
     if (args.lines.length > 0) {
       const encodedLines = JSON.stringify(args.lines);

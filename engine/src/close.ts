@@ -653,7 +653,7 @@ export async function ensureCloseDefaults(
           sort_order = excluded.sort_order, updated_at = now()
         where close_blueprint_steps.org_id = ${orgId}
         returning id`));
-        stepIds.set(step.key, inserted.rows[0].id);
+        stepIds.set(step.key, inserted.rows[0]!.id);
       }
       for (const [stepKey, dependencyKey] of DEFAULT_DEPENDENCIES) {
         await tx.execute(sql`
@@ -798,7 +798,7 @@ export async function generateAccountingPeriods(
           for (const module of CLOSE_MODULES) {
             await tx.execute(sql`
               insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
-              values (${orgId}, ${inserted.rows[0].id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
+              values (${orgId}, ${inserted.rows[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
               on conflict (org_id, period_id, book_id, subsidiary_id, module) do nothing`);
           }
         }
@@ -969,7 +969,7 @@ export async function startCloseRun(args: {
         updated_at = now(), updated_by = ${args.actorId}
       where close_runs.org_id = ${args.orgId}
       returning id`));
-      const runId = inserted.rows[0].id;
+      const runId = inserted.rows[0]!.id;
       const steps = (await tx.execute<any>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
@@ -2070,7 +2070,7 @@ export async function closeApprovedRun(
     const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
        where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`));
-    if (Number(blockers.rows[0].count) > 0)
+    if (Number(blockers.rows[0]!.count) > 0)
       throw new CloseError(
         "critical exceptions reappeared after approval; review the run again",
       );
@@ -2257,7 +2257,7 @@ export async function requestPeriodReopen(args: {
             ${JSON.stringify({ ...impact.rows[0], reports: ["balance-sheet", "pnl", "cash-flow", "trial-balance"] })}::jsonb,
             ${args.actorId}, ${args.actorId}, ${args.actorId})
     returning id`));
-  return inserted.rows[0].id;
+  return inserted.rows[0]!.id;
 }
 
 export async function decidePeriodReopen(args: {

@@ -333,7 +333,7 @@ export async function enactedRatePercent(
        and subsidiary_id = ${subsidiaryId}
   `));
   if (subsidiaryId && cmp(scoped.rows[0]?.rate ?? "0", "0") > 0)
-    return scoped.rows[0].rate;
+    return scoped.rows[0]!.rate;
   const wide = (await db.execute<{ rate: string }>(sql`
     select coalesce(sum(rate_percent), 0)::text as rate from income_tax_rates
      where org_id = ${orgId} and is_active
@@ -930,7 +930,7 @@ export async function postProvisionRun(
               ${actorId}, ${actorId})
     `);
     for (let i = 0; i < nonzero.length; i++) {
-      const l = nonzero[i];
+      const l = nonzero[i]!;
       await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)

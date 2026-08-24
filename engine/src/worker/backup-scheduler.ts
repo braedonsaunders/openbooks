@@ -180,11 +180,12 @@ export async function tick(): Promise<void> {
         throw error;
       }
       if (run.rows.length === 0) continue;
+      const runId = run.rows[0]!.id;
       await enqueueBackupRun(
-        { op: "run", runId: run.rows[0].id, orgId: policy.org_id },
-        { jobId: run.rows[0].id },
+        { op: "run", runId, orgId: policy.org_id },
+        { jobId: runId },
       );
-      console.log(`[backup-scheduler] org ${policy.org_id}: scheduled run ${run.rows[0].id} enqueued`);
+      console.log(`[backup-scheduler] org ${policy.org_id}: scheduled run ${runId} enqueued`);
     }
 
     // Self-heal queued runs whose job never made it to (or survived in) Redis.

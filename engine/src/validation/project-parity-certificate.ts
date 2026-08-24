@@ -407,7 +407,7 @@ async function refreshSource(): Promise<void> {
       ["sourceProjectGl", paths.sourceProjectGl],
     ].map(([key, path]) => [
       key,
-      { path, sha256: fileHash(path)! },
+      { path, sha256: fileHash(path!)! },
     ]),
   );
   const manifest: SourceSnapshotManifest = {

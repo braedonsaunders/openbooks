@@ -196,7 +196,7 @@ test(
         starts.filter((result) => result.status === "rejected").length,
         1,
       );
-      const reconciliationId = fulfilled[0].value.id;
+      const reconciliationId = fulfilled[0]!.value.id;
       const ctx = { orgId: org.orgId, userId: actor };
 
       const automatic = await autoMatch(reconciliationId, ctx);
@@ -209,7 +209,7 @@ test(
           {
             reconciliationId,
             statementLineId: withdrawalId,
-            journalLineIds: [splitWithdrawal[0]],
+            journalLineIds: [splitWithdrawal[0]!],
           },
           ctx,
         ),

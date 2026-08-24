@@ -131,7 +131,7 @@ function shareByValue(layers: { value: bigint }[], deltaUnits: bigint): bigint[]
     .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
   let k = 0;
   while (remainder > 0n) {
-    base[order[k % order.length]!.i] += 1n;
+    base[order[k % order.length]!.i]! += 1n;
     remainder -= 1n;
     k++;
   }

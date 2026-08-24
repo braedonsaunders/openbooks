@@ -403,5 +403,5 @@ async function ensurePool(
     insert into tax_depreciation_pools (org_id, book_id, subsidiary_id, regime, class_code, rate, method, created_by, updated_by)
     values (${orgId}, ${bookId}, ${subsidiaryId}, ${regime}, ${classDef.code}, ${normalizeDecimal(classDef.rate, 10)}, ${classDef.method}, ${actorId}, ${actorId})
     returning id`));
-  return { id: ins.rows[0].id, openingBalance: "0" };
+  return { id: ins.rows[0]!.id, openingBalance: "0" };
 }

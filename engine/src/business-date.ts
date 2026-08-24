@@ -64,7 +64,7 @@ export async function businessToday(orgId: string): Promise<string> {
 /** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */
 export function parseIsoDate(iso: string): Date {
   const [year, month, day] = iso.split("-").map(Number);
-  return new Date(Date.UTC(year, (month ?? 1) - 1, day ?? 1));
+  return new Date(Date.UTC(year!, (month ?? 1) - 1, day ?? 1));
 }
 
 function isoDay(date: Date): string {
@@ -114,7 +114,7 @@ export function weekStartsEndingOn(iso: string, weeks: number): string[] {
 export function calendarQuarterBounds(iso: string): { start: string; end: string } {
   const [year, month] = iso.split("-").map(Number);
   const quarter = Math.floor(((month ?? 1) - 1) / 3);
-  const start = new Date(Date.UTC(year, quarter * 3, 1));
-  const end = new Date(Date.UTC(year, quarter * 3 + 3, 0));
+  const start = new Date(Date.UTC(year!, quarter * 3, 1));
+  const end = new Date(Date.UTC(year!, quarter * 3 + 3, 0));
   return { start: isoDay(start), end: isoDay(end) };
 }

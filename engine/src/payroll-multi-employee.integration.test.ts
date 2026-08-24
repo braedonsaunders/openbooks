@@ -632,7 +632,7 @@ test(
         agreementId, code: "WELF", name: "Welfare fund", calc: "percent_of_gross",
         value: "10", paidBy: "employer", jobCosted: true,
         expenseAccountId: fx.accounts.burdenExpense,
-        liabilityAccountId: fx.accounts.otherPayable,
+        liabilityAccountId: fx.accounts.otherPayable!,
       });
 
       const id = await employee(fx, "Jo Jobcost", { vacationPercent: null });

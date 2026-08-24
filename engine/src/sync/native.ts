@@ -170,9 +170,9 @@ export async function buildNativeContext(
   ).rows;
   const ctrl = org?.ctrl ?? {};
   const control: PostingDeps["control"] = {
-    ar: ctrl.ar,
-    ap: ctrl.ap,
-    bank: ctrl.bank,
+    ar: ctrl.ar!,
+    ap: ctrl.ap!,
+    bank: ctrl.bank!,
     taxCollected: ctrl.taxCollected,
     taxPaid: ctrl.taxPaid,
     employeePayable: ctrl.employeePayable,
