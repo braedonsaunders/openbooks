@@ -15,6 +15,8 @@ interface TransactionImportState {
   rootInsertCalls: number
   transactionInsertTargets: string[]
   rollbacks: number
+  outOfTransactionInsertStatements: number
+  strandedTransactionWrites: number
   documents: Record<string, unknown>[]
   lines: Record<string, unknown>[]
   attemptedLines: Record<string, unknown>[]
@@ -27,6 +29,8 @@ const importState: TransactionImportState = {
   rootInsertCalls: 0,
   transactionInsertTargets: [],
   rollbacks: 0,
+  outOfTransactionInsertStatements: 0,
+  strandedTransactionWrites: 0,
   documents: [],
   lines: [],
   attemptedLines: [],
@@ -59,7 +63,22 @@ const mockSources = new Map<string, string>([
         throw new Error('unexpected insert target')
       }
 
-      function insertInto(target, pending) {
+      // Any INSERT routed through the root connection escapes the import's
+      // transaction, no matter whether it goes through the query builder or
+      // raw SQL — both are counted so the regression can fail on them.
+      function isInsertStatement(query) {
+        const text = Array.isArray(query?.strings) ? query.strings.join('') : String(query)
+        return /\\binsert\\s+into\\b/i.test(text)
+      }
+
+      async function executeOnConnection(query, inTransaction) {
+        if (!inTransaction && isInsertStatement(query)) {
+          state.outOfTransactionInsertStatements++
+        }
+        return { rows: [{ base_currency: 'CAD' }] }
+      }
+
+      function insertInto(target, connection, pending) {
         return {
           values(values) {
             if (target === schema.documents) {
@@ -71,13 +90,27 @@ const mockSources = new Map<string, string>([
               }
             }
             if (target === schema.documentLines) {
-              return Promise.resolve().then(() => {
-                const lines = Array.isArray(values) ? values : [values]
-                state.attemptedLines.push(...lines)
-                if (state.failLineInsert) {
-                  throw new Error('forced document line insert failure')
-                }
-                pending.lines.push(...lines)
+              // Settle on a macrotask the way real line I/O does: a write the
+              // code under test never awaits cannot settle before its
+              // transaction resolves and is reported as stranded.
+              return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                  connection.settle()
+                  const lines = Array.isArray(values) ? values : [values]
+                  state.attemptedLines.push(
+                    ...lines.map((line) => ({
+                      ...line,
+                      via: connection.transactionId === null ? 'root' : 'transaction',
+                      transactionId: connection.transactionId,
+                    })),
+                  )
+                  if (state.failLineInsert) {
+                    reject(new Error('forced document line insert failure'))
+                    return
+                  }
+                  pending.lines.push(...lines)
+                  resolve()
+                }, 0)
               })
             }
             throw new Error('unexpected insert target')
@@ -86,27 +119,41 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        async execute() {
-          return { rows: [{ base_currency: 'CAD' }] }
+        execute(query) {
+          return executeOnConnection(query, false)
         },
         insert(target) {
           state.rootInsertCalls++
-          return insertInto(target, state)
+          return insertInto(target, { transactionId: null, settle() {} }, state)
         },
         async transaction(callback) {
           state.transactionCalls++
+          const transactionId = 'txn-' + String(state.transactionCalls)
           const pending = { documents: [], lines: [] }
+          let unsettledWrites = 0
+          const connection = {
+            transactionId,
+            settle() {
+              unsettledWrites--
+            },
+          }
           try {
             const result = await callback({
+              execute(query) {
+                return executeOnConnection(query, true)
+              },
               insert(target) {
                 state.transactionInsertTargets.push(insertTargetName(target))
-                return insertInto(target, pending)
+                if (target === schema.documentLines) unsettledWrites++
+                return insertInto(target, connection, pending)
               },
             })
+            if (unsettledWrites > 0) state.strandedTransactionWrites += unsettledWrites
             state.documents.push(...pending.documents)
             state.lines.push(...pending.lines)
             return result
           } catch (error) {
+            if (unsettledWrites > 0) state.strandedTransactionWrites += unsettledWrites
             state.rollbacks++
             throw error
           }
@@ -191,6 +238,8 @@ function resetImportState(failLineInsert: boolean): void {
   importState.rootInsertCalls = 0
   importState.transactionInsertTargets.length = 0
   importState.rollbacks = 0
+  importState.outOfTransactionInsertStatements = 0
+  importState.strandedTransactionWrites = 0
   importState.documents.length = 0
   importState.lines.length = 0
   importState.attemptedLines.length = 0
@@ -345,6 +394,15 @@ test('transaction import rolls back its draft when line persistence fails', asyn
   )
   assert.equal(importState.rollbacks, 1)
   assert.equal(importState.attemptedLines[0]?.amount, '999999999999999.1234')
+  // The line write itself must have been issued on the import's transaction
+  // connection and settled inside it: no root-connection escape hatch (query
+  // builder or raw SQL) and no fire-and-forget write may exist.
+  assert.deepEqual(
+    importState.attemptedLines.map((line) => [line.via, line.transactionId]),
+    [['transaction', 'txn-1']],
+  )
+  assert.equal(importState.outOfTransactionInsertStatements, 0)
+  assert.equal(importState.strandedTransactionWrites, 0)
   assert.deepEqual(
     importState.documents,
     [],
@@ -366,6 +424,16 @@ test('transaction import commits its draft and lines together', async () => {
     ['documents', 'documentLines'],
   )
   assert.equal(importState.rollbacks, 0)
+  // The committed draft and its lines must come from one transaction
+  // connection: every attempted line write carries that provenance, nothing
+  // was inserted through the root connection (builder or raw SQL), and no
+  // write was left unsettled when the transaction resolved.
+  assert.deepEqual(
+    importState.attemptedLines.map((line) => [line.via, line.transactionId]),
+    [['transaction', 'txn-1']],
+  )
+  assert.equal(importState.outOfTransactionInsertStatements, 0)
+  assert.equal(importState.strandedTransactionWrites, 0)
   assert.deepEqual(importState.documents, [
     {
       orgId: 'org-1',
