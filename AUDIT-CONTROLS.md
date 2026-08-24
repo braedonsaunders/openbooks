@@ -65,6 +65,7 @@ enabled on **327 tables**.
 | E5 | Close evidence, sign-offs, and close events are append-only once recorded. | Database | `close_events_append_only`, `close_signoffs_append_only`, `close_evidence_append_only` triggers |
 | E6 | Inventory movements cannot be deleted once posted (`inv_move_guard`), so stock history cannot be rewritten to fabricate quantities. | Database | `engine/src/inventory.integration.test.ts` |
 | E7 | Field-ticket signatures and signature requests are immutable once captured, with HMAC signing. | Database | `field_ticket_signature_immutable`, `field_ticket_signature_request_immutable` |
+| E8 | **An open item can be reserved by only one live payment run at a time.** A `selected` payment-run item reserves its source bill or credit line, and the partial unique index `payment_run_items_live_source` allows one live reservation per organisation per open line — two operators, or an operator and the scheduler, cannot build overlapping runs against the same payable. Cancellation, rejection, rollback, return, reversal, and settlement release the reservation through lifecycle triggers before the line can be selected again. | Database | `payment_run_items_live_source`, `payment_run_item_instruction_lifecycle`, `payment_run_item_run_lifecycle`; exercised by `engine/src/payments.integration.test.ts` |
 
 ### Completeness
 *All transactions and events that should have been recorded have been recorded.*
