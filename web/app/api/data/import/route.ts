@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
-import { guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
+import { CELL_PROVENANCE_KEY, guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
 import { IMPORT_FORMATS, type ImportFormat, type ImportMode } from '../../../../lib/data-io/types'
 
 export const runtime = 'nodejs'
@@ -159,19 +159,30 @@ function applyMapping(raw: Record<string, unknown>, mapping: Record<string, stri
   const out: Record<string, unknown> = {}
   const mapped = new Set<string>()
   const sources: Record<string, string> = {}
+  const rawProvenance = raw[CELL_PROVENANCE_KEY]
+  const sourceProvenance =
+    rawProvenance !== null && typeof rawProvenance === 'object' && !Array.isArray(rawProvenance)
+      ? rawProvenance as Record<string, unknown>
+      : null
+  const mappedProvenance: Record<string, 'formula'> = {}
   for (const [source, field] of Object.entries(mapping)) {
     if (!field) continue
     out[field] = raw[source]
     mapped.add(source)
     sources[field] = source
+    if (sourceProvenance?.[source] === 'formula') mappedProvenance[source] = 'formula'
   }
   if (Object.keys(sources).length > 0) out[SOURCE_COLUMNS_KEY] = sources
+  if (Object.keys(mappedProvenance).length > 0) {
+    out[CELL_PROVENANCE_KEY] = mappedProvenance
+  }
   // Header → its raw value, so a resource can tell "unmapped and empty" from
   // "unmapped and carrying money". Nested under the reserved key rather than
   // spread into the row: a source header that happens to be spelled like a
   // field key must never supply a value for that field.
   const unmapped: Record<string, unknown> = {}
   for (const header of Object.keys(raw)) {
+    if (header === CELL_PROVENANCE_KEY) continue
     if (!mapped.has(header)) unmapped[header] = raw[header]
   }
   if (Object.keys(unmapped).length > 0) out[UNMAPPED_COLUMNS_KEY] = unmapped

@@ -87,8 +87,9 @@ interface TxnLineInput {
 
 // Kept in lockstep with parse.ts and the import route's reserved mapping keys.
 // Formula provenance starts under CELL_PROVENANCE_KEY on a parsed row; the
-// route preserves it inside UNMAPPED_COLUMNS_KEY and records the mapped source
-// header under SOURCE_COLUMNS_KEY.
+// route retains the selected source entries under that key and records each
+// mapped source header under SOURCE_COLUMNS_KEY. The nested lookup accepts rows
+// produced by the earlier metadata handoff as well.
 const CELL_PROVENANCE_KEY = '__openbooksCellProvenance'
 const SOURCE_COLUMNS_KEY = '__sourceColumns'
 const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
