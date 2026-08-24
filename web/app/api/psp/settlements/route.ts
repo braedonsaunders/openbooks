@@ -15,7 +15,9 @@ import {
   type PspProvider,
 } from "@openbooks/engine/src/psp-settlement.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { can, getAuthz } from "../../../../lib/authz";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
 
@@ -45,13 +47,27 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardFeaturePermission("banking.reconcile", "banking");
-  if (gate instanceof NextResponse) return gate;
-  const orgId = gate.user.orgId;
-  const userId = gate.user.id;
+  const authz = await getAuthz();
+  if (!authz)
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = ((parsedBody.data));
+  const requiredPermission =
+    body.action === "saveConfig"
+      ? "admin.setup.manage"
+      : "banking.reconcile";
+  if (!can(authz, requiredPermission)) {
+    return NextResponse.json(
+      { error: `missing permission: ${requiredPermission}` },
+      { status: 403 },
+    );
+  }
+  const orgId = authz.user.orgId;
+  const userId = authz.user.id;
 
   try {
     switch (body.action) {
