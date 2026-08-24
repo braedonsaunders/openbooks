@@ -896,7 +896,7 @@ const projectProfitability: AssistantToolDef = {
         select id, name, status from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}
       `));
       if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
-      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects/${a.projectId}` } };
+      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId)), href: `/projects?project=${a.projectId}` } };
     }
     const limit = Math.min(a.limit ?? 20, 50);
     const like = a.query ? `%${a.query}%` : null;
