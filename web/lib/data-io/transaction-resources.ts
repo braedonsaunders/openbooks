@@ -321,37 +321,48 @@ async function writeTransactions(
       const number = wantNumber || (await nextDocumentNumber(ctx.orgId, cfg.kind, cfg.numberPrefix))
       const currency = String(src.currency ?? '').trim() || baseCurrency
       const documentId = await db.transaction(async (tx) => {
-        const [doc] = await tx
-          .insert(schema.documents)
-          .values({
-            orgId: ctx.orgId,
-            kind: cfg.kind,
-            documentNumber: number,
-            partyId,
-            documentDate,
-            dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
-            currency,
-            referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
-            memo: src.memo ? String(src.memo) : null,
-            status: 'draft',
-            createdBy: ctx.actorId,
-          })
-          .returning({ id: schema.documents.id })
-        if (!doc) throw new Error('document insert did not return an id')
+        // Row-scoped savepoint. Under the import route's outer org transaction
+        // a nested db.transaction PARTICIPATES instead of opening (and rolling
+        // back) its own, so a mid-row failure must undo this row's partial
+        // writes explicitly or they would ride the outer commit as an orphan.
+        await tx.execute(sql`savepoint document_import_row`)
+        try {
+          const [doc] = await tx
+            .insert(schema.documents)
+            .values({
+              orgId: ctx.orgId,
+              kind: cfg.kind,
+              documentNumber: number,
+              partyId,
+              documentDate,
+              dueDate: cfg.hasDueDate && src.dueDate ? String(src.dueDate) : null,
+              currency,
+              referenceNumber: cfg.hasReference && src.reference ? String(src.reference) : null,
+              memo: src.memo ? String(src.memo) : null,
+              status: 'draft',
+              createdBy: ctx.actorId,
+            })
+            .returning({ id: schema.documents.id })
+          if (!doc) throw new Error('document insert did not return an id')
 
-        await tx.insert(schema.documentLines).values(
-          built.map((l, idx) => ({
-            orgId: ctx.orgId,
-            documentId: doc.id,
-            lineNumber: idx + 1,
-            accountId: l.accountId,
-            description: l.description,
-            amount: l.amount,
-            taxCodeId: l.taxCodeId,
-            createdBy: ctx.actorId,
-          })),
-        )
-        return doc.id
+          await tx.insert(schema.documentLines).values(
+            built.map((l, idx) => ({
+              orgId: ctx.orgId,
+              documentId: doc.id,
+              lineNumber: idx + 1,
+              accountId: l.accountId,
+              description: l.description,
+              amount: l.amount,
+              taxCodeId: l.taxCodeId,
+              createdBy: ctx.actorId,
+            })),
+          )
+          await tx.execute(sql`release savepoint document_import_row`)
+          return doc.id
+        } catch (e) {
+          await tx.execute(sql`rollback to savepoint document_import_row`)
+          throw e
+        }
       })
 
       if (ctx.post && deps) {

@@ -18,7 +18,26 @@ interface ImportRouteState {
   resourceWriteCalls: number
   rootInsertCalls: number
   transactionCalls: number
+  transactionInsertTargets: string[]
+  rollbacks: number
   mappedRows: Record<string, unknown>[] | null
+  withOrgTransactionCalls: number
+  orgTransactionRollbacks: number
+  historyInsertCalls: number
+  outOfTransactionHistoryInserts: number
+  failHistoryInsert: boolean
+  insideOrgTransaction: boolean
+  activeOrgTxn: {
+    orgId: string
+    documents: Record<string, unknown>[]
+    lines: Record<string, unknown>[]
+    historyJobs: Record<string, unknown>[]
+  } | null
+  committed: {
+    documents: Record<string, unknown>[]
+    lines: Record<string, unknown>[]
+    historyJobs: Record<string, unknown>[]
+  }
 }
 
 const stateKey = Symbol.for('openbooks.data-import-route-test')
@@ -28,20 +47,21 @@ const importState: ImportRouteState = {
   resourceWriteCalls: 0,
   rootInsertCalls: 0,
   transactionCalls: 0,
+  transactionInsertTargets: [],
+  rollbacks: 0,
   mappedRows: null,
+  withOrgTransactionCalls: 0,
+  orgTransactionRollbacks: 0,
+  historyInsertCalls: 0,
+  outOfTransactionHistoryInserts: 0,
+  failHistoryInsert: false,
+  insideOrgTransaction: false,
+  activeOrgTxn: null,
+  committed: { documents: [], lines: [], historyJobs: [] },
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = importState
 
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
   [
     'mock:drizzle',
     `
@@ -58,17 +78,120 @@ const mockSources = new Map<string, string>([
         documents: Symbol.for('openbooks.data-import-route-test.documents'),
         documentLines: Symbol.for('openbooks.data-import-route-test.document-lines'),
       }
-      export const db = {
-        async execute() {
+
+      function statementText(query) {
+        return Array.isArray(query?.strings) ? query.strings.join('') : String(query)
+      }
+
+      function isInsertStatement(query) {
+        return /\\binsert\\s+into\\b/i.test(statementText(query))
+      }
+
+      // Writes land in the active org transaction's staging buffer while one
+      // is open (that is how withOrgTransaction participation behaves) and in
+      // the committed store otherwise.
+      function buffer() {
+        return state.activeOrgTxn ?? state.committed
+      }
+
+      async function executeOnConnection(query) {
+        const text = statementText(query)
+        if (/select\\s+base_currency\\s+from\\s+orgs/i.test(text)) {
           return { rows: [{ base_currency: 'CAD' }] }
+        }
+        if (/\\binsert\\s+into\\s+import_jobs\\b/i.test(text)) {
+          state.historyInsertCalls++
+          if (!state.insideOrgTransaction) state.outOfTransactionHistoryInserts++
+          if (state.failHistoryInsert) {
+            throw new Error('forced import_jobs insert failure')
+          }
+          buffer().historyJobs.push({ values: query.values })
+          return { rows: [{ id: 'job-1' }] }
+        }
+        return { rows: [] }
+      }
+
+      export async function withOrgTransaction(orgId, work) {
+        state.withOrgTransactionCalls++
+        if (state.activeOrgTxn) {
+          throw new Error('nested org transactions are not expected')
+        }
+        state.activeOrgTxn = { orgId, documents: [], lines: [], historyJobs: [] }
+        state.insideOrgTransaction = true
+        try {
+          const result = await work()
+          state.committed.documents.push(...state.activeOrgTxn.documents)
+          state.committed.lines.push(...state.activeOrgTxn.lines)
+          state.committed.historyJobs.push(...state.activeOrgTxn.historyJobs)
+          return result
+        } catch (error) {
+          state.orgTransactionRollbacks++
+          throw error
+        } finally {
+          state.insideOrgTransaction = false
+          state.activeOrgTxn = null
+        }
+      }
+
+      export const db = {
+        execute(query) {
+          if (isInsertStatement(query) && !state.insideOrgTransaction) {
+            state.outOfTransactionInsertStatements =
+              (state.outOfTransactionInsertStatements ?? 0) + 1
+          }
+          return executeOnConnection(query)
         },
         insert() {
           state.rootInsertCalls++
-          throw new Error('root inserts are not expected during a preview')
+          throw new Error('root inserts are not expected during any import mode')
         },
-        async transaction() {
+        async transaction(callback) {
           state.transactionCalls++
-          throw new Error('transactions are not expected during a preview')
+          const pending = { documents: [], lines: [] }
+          try {
+            const result = await callback({
+              execute(query) {
+                if (isInsertStatement(query) && !state.insideOrgTransaction) {
+                  state.outOfTransactionInsertStatements =
+                    (state.outOfTransactionInsertStatements ?? 0) + 1
+                }
+                return executeOnConnection(query)
+              },
+              insert(target) {
+                if (target === schema.documents) {
+                  state.transactionInsertTargets.push('documents')
+                  return {
+                    values(values) {
+                      return {
+                        async returning() {
+                          pending.documents.push({ ...values, id: 'document-1' })
+                          return [{ id: 'document-1' }]
+                        },
+                      }
+                    },
+                  }
+                }
+                if (target === schema.documentLines) {
+                  state.transactionInsertTargets.push('documentLines')
+                  return {
+                    values(values) {
+                      const lines = Array.isArray(values) ? values : [values]
+                      pending.lines.push(...lines.map((line) => ({ ...line })))
+                      return Promise.resolve()
+                    },
+                  }
+                }
+                throw new Error('unexpected insert target')
+              },
+            })
+            const buffer_ = buffer()
+            buffer_.documents.push(...pending.documents)
+            buffer_.lines.push(...pending.lines)
+            return result
+          } catch (error) {
+            state.rollbacks++
+            throw error
+          }
         },
       }
     `,
@@ -124,7 +247,7 @@ const mockSources = new Map<string, string>([
       }
 
       export async function nextDocumentNumber() {
-        throw new Error('nextDocumentNumber is not expected during a preview')
+        return 'CC-000001'
       }
     `,
   ],
@@ -155,7 +278,6 @@ const hooks = registerHooks({
       return { url: 'data:text/javascript,export {}', format: 'module', shortCircuit: true }
     }
     const mockUrl = new Map([
-      ['@/lib/api/json', 'mock:json'],
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/src/db.ts', 'mock:db'],
       ['@openbooks/engine/src/posting.ts', 'mock:posting'],
@@ -201,7 +323,19 @@ function resetImportState(): void {
   importState.resourceWriteCalls = 0
   importState.rootInsertCalls = 0
   importState.transactionCalls = 0
+  importState.transactionInsertTargets.length = 0
+  importState.rollbacks = 0
   importState.mappedRows = null
+  importState.withOrgTransactionCalls = 0
+  importState.orgTransactionRollbacks = 0
+  importState.historyInsertCalls = 0
+  importState.outOfTransactionHistoryInserts = 0
+  importState.failHistoryInsert = false
+  importState.insideOrgTransaction = false
+  importState.activeOrgTxn = null
+  importState.committed.documents.length = 0
+  importState.committed.lines.length = 0
+  importState.committed.historyJobs.length = 0
 }
 
 test('route rejects an unknown mode before resource lookup or writes', async () => {
@@ -218,13 +352,176 @@ test('route rejects an unknown mode before resource lookup or writes', async () 
   }))
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), {
-    error: 'mode must be parse, preview or commit',
-  })
+  const payload = await response.json()
+  assert.equal(payload.error, 'mode must be parse, preview or commit')
   assert.equal(importState.resourceLookupCalls, 0)
   assert.equal(importState.resourceWriteCalls, 0)
   assert.equal(importState.rootInsertCalls, 0)
   assert.equal(importState.transactionCalls, 0)
+})
+
+test('route rejects an unknown format instead of importing it as csv', async () => {
+  resetImportState()
+
+  const response = await POST(new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'preview',
+      resource: 'txn:card_charge',
+      format: 'xml',
+      rows: [],
+      mapping: {},
+    }),
+  }))
+
+  assert.equal(response.status, 400)
+  const payload = await response.json()
+  assert.equal(payload.error, 'format must be csv, xlsx or json')
+  assert.equal(importState.resourceLookupCalls, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.withOrgTransactionCalls, 0)
+  assert.equal(importState.historyInsertCalls, 0)
+})
+
+test('route rejects an unknown importMode instead of coercing it to upsert', async () => {
+  resetImportState()
+
+  const response = await POST(new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'preview',
+      resource: 'txn:card_charge',
+      rows: [],
+      mapping: {},
+      importMode: 'replace',
+    }),
+  }))
+
+  assert.equal(response.status, 400)
+  const payload = await response.json()
+  assert.equal(payload.error, 'importMode must be insert or upsert')
+  assert.equal(importState.resourceLookupCalls, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.withOrgTransactionCalls, 0)
+  assert.equal(importState.historyInsertCalls, 0)
+})
+
+test('route rejects a non-boolean posting flag instead of treating it as true', async () => {
+  resetImportState()
+
+  const response = await POST(new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'commit',
+      resource: 'txn:card_charge',
+      rows: [],
+      mapping: {},
+      post: 'yes',
+    }),
+  }))
+
+  assert.equal(response.status, 400)
+  const payload = await response.json()
+  assert.equal(payload.error, 'post must be a boolean')
+  assert.equal(importState.resourceLookupCalls, 0)
+  assert.equal(importState.resourceWriteCalls, 0)
+  assert.equal(importState.withOrgTransactionCalls, 0)
+  assert.equal(importState.historyInsertCalls, 0)
+})
+
+function commitRequest(overrides: Record<string, unknown> = {}): Request {
+  return new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'commit',
+      resource: 'txn:card_charge',
+      format: 'json',
+      rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
+      mapping: { documentDate: 'documentDate', account: 'account', amount: 'amount' },
+      importMode: 'insert',
+      fileName: 'charges.csv',
+      ...overrides,
+    }),
+  })
+}
+
+test('commit persists imported rows and their import_jobs evidence in ONE org transaction', async () => {
+  resetImportState()
+
+  const response = await POST(commitRequest())
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    outcome: { created: 1, updated: 0, failed: 0, errors: [] },
+    jobId: 'job-1',
+    total: 1,
+  })
+  assert.equal(importState.withOrgTransactionCalls, 1)
+  assert.equal(importState.historyInsertCalls, 1)
+  // The evidence row must have been written while the org transaction held
+  // the writes — never on a separate connection after they committed.
+  assert.equal(importState.outOfTransactionHistoryInserts, 0)
+  assert.equal(importState.transactionCalls, 1)
+  assert.equal(importState.rollbacks, 0)
+  assert.equal(importState.rootInsertCalls, 0)
+  assert.deepEqual(importState.transactionInsertTargets, ['documents', 'documentLines'])
+  assert.equal(importState.committed.documents.length, 1)
+  assert.equal(importState.committed.lines.length, 1)
+  assert.equal(importState.committed.historyJobs.length, 1)
+})
+
+test('commit applies the documented defaults when optional fields are absent', async () => {
+  resetImportState()
+
+  const response = await POST(new Request('http://openbooks.test/api/data/import', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'commit',
+      resource: 'txn:card_charge',
+      rows: [{ documentDate: '2026-08-24', account: '5000', amount: '100.0000' }],
+      mapping: { documentDate: 'documentDate', account: 'account', amount: 'amount' },
+    }),
+  }))
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), {
+    outcome: { created: 1, updated: 0, failed: 0, errors: [] },
+    jobId: 'job-1',
+    total: 1,
+  })
+  const job = importState.committed.historyJobs[0] as { values: unknown[] } | undefined
+  assert.ok(job)
+  // values: org_id, resource_key, resource_label, format, file_name, mode, …
+  assert.equal(job.values[3], 'csv')
+  assert.equal(job.values[4], null)
+  assert.equal(job.values[5], 'upsert')
+})
+
+test('a failed import_jobs insert rolls the whole commit back — no data without evidence', async () => {
+  resetImportState()
+  importState.failHistoryInsert = true
+
+  await assert.rejects(
+    POST(commitRequest()),
+    { message: 'forced import_jobs insert failure' },
+  )
+
+  assert.equal(importState.withOrgTransactionCalls, 1)
+  assert.equal(importState.orgTransactionRollbacks, 1)
+  assert.equal(importState.historyInsertCalls, 1)
+  assert.equal(importState.outOfTransactionHistoryInserts, 0)
+  assert.deepEqual(
+    importState.committed.documents,
+    [],
+    'the imported draft must roll back with its failed evidence row',
+  )
+  assert.deepEqual(importState.committed.lines, [])
+  assert.deepEqual(importState.committed.historyJobs, [])
 })
 
 test('reserved import metadata wire keys have one shared definition', async () => {
@@ -238,7 +535,7 @@ test('reserved import metadata wire keys have one shared definition', async () =
   const sources = await Promise.all(
     files.map((file) => readFile(new URL(file, import.meta.url), 'utf8')),
   )
-  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapeRegExp = (value: string) => value.replace(/[.*+?${}()|[\]\\]/g, '\\$&')
   for (const key of [CELL_PROVENANCE_KEY, SOURCE_COLUMNS_KEY, UNMAPPED_COLUMNS_KEY]) {
     const definition = new RegExp(`=\\s*(['"])${escapeRegExp(key)}\\1`, 'g')
     const count = sources.reduce(
