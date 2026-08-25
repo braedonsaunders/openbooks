@@ -34,50 +34,65 @@ function isConflict(error: unknown): boolean {
   return error instanceof AppPlatformError && error.status === 409
 }
 
+type PlatformFixture = {
+  org: Awaited<ReturnType<typeof createScratchOrg>>
+  actorId: string
+  platform: ReturnType<typeof createAppPlatformAdapter>
+  inOrg: <Result>(work: () => Promise<Result>) => Promise<Result>
+}
+
+/** Scratch org + full-grant admin whose writes exercise the real writer stack. */
+async function makePlatformFixture(seed?: (org: PlatformFixture['org'], actorId: string) => Promise<void>): Promise<PlatformFixture> {
+  const { org, adminId: actorId } = await withBypass(async () => {
+    const created = await createScratchOrg()
+    const adminId = (await seedFlowActors(created.orgId)).adminId
+    if (seed) await seed(created, adminId)
+    return { org: created, adminId }
+  })
+  return {
+    org,
+    actorId,
+    platform: createAppPlatformAdapter({
+      orgId: org.orgId,
+      user: {
+        id: actorId,
+        email: 'platform-occ@scratch.test',
+        name: 'Platform OCC Controller',
+        roles: [{ key: 'admin', name: 'Admin' }],
+        orgId: org.orgId,
+        envKind: 'production' as const,
+        productionOrgId: org.orgId,
+        isSuperAdmin: false,
+        homeUserId: actorId,
+        homeOrgId: org.orgId,
+      },
+      grantedPermissions: ['*'],
+      userCan: () => true,
+      allowedSubsidiaryIds: null,
+    }),
+    inOrg: <Result>(work: () => Promise<Result>) => withOrgContext(org.orgId, work),
+  }
+}
+
 test(
   'platform document reads round-trip the exact PostgreSQL revision token',
   { skip: !env.OPENBOOKS_DB_URL },
   async (t) => {
     const documentId = randomUUID()
-    const fixture = await withBypass(async () => {
-      const org = await createScratchOrg()
-      const actorId = (await seedFlowActors(org.orgId)).adminId
+    const { org, platform, inOrg } = await makePlatformFixture(async (scratch, adminId) => {
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, currency, status, subtotal, tax_total, total, memo,
            custom, extra_dims, created_by, created_at, updated_at, updated_by)
         values
-          (${documentId}, ${org.orgId}, 'vendor_bill', 'PLATFORM-OCC-1',
-           ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft',
+          (${documentId}, ${scratch.orgId}, 'vendor_bill', 'PLATFORM-OCC-1',
+           ${scratch.vendorId}, ${scratch.subsidiaryId}, ${scratch.date}, 'CAD', 'draft',
            '0', '0', '0', 'opened value', '{}'::jsonb, '{}'::jsonb,
-           ${actorId}, ${OPENED_REVISION}::timestamptz,
+           ${adminId}, ${OPENED_REVISION}::timestamptz,
            ${OPENED_REVISION}::timestamptz, null)
       `)
-      return { actorId, org }
     })
-
-    const { actorId, org } = fixture
-    const user = {
-      id: actorId,
-      email: 'platform-occ@scratch.test',
-      name: 'Platform OCC Controller',
-      roles: [{ key: 'admin', name: 'Admin' }],
-      orgId: org.orgId,
-      envKind: 'production' as const,
-      productionOrgId: org.orgId,
-      isSuperAdmin: false,
-      homeUserId: actorId,
-      homeOrgId: org.orgId,
-    }
-    const platform = createAppPlatformAdapter({
-      orgId: org.orgId,
-      user,
-      grantedPermissions: ['*'],
-      userCan: () => true,
-      allowedSubsidiaryIds: null,
-    })
-    const inOrg = <Result>(work: () => Promise<Result>) => withOrgContext(org.orgId, work)
 
     try {
       await t.test('the prior noncanonical raw token is rejected without mutating the draft', async () => {
@@ -161,6 +176,94 @@ test(
         assert.equal(listed.total, 1)
         assert.deepEqual(listed.records, expected.rows)
       })
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'a rejected platform document create rolls back its hidden draft to zero rows',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, platform, inOrg } = await makePlatformFixture()
+    const documentCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from documents where org_id = ${org.orgId}
+    `))).rows[0]!.n
+    const documentLineCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from document_lines where org_id = ${org.orgId}
+    `))).rows[0]!.n
+
+    try {
+      // Control: a valid create persists exactly one draft with one line,
+      // proving this path reaches the writer's persistence.
+      await inOrg(() => platform.create('bills', {
+        partyId: org.vendorId,
+        documentDate: org.date,
+        lines: [{ accountId: org.accounts.freight, amount: '5' }],
+      }))
+      assert.equal(await documentCount(), 1)
+      assert.equal(await documentLineCount(), 1)
+
+      // The line validator fires AFTER the writer has inserted the draft, so
+      // without an atomic unit this rejection used to strand a hidden zero-row
+      // bill. The transaction must erase it.
+      await assert.rejects(
+        inOrg(() => platform.create('bills', {
+          partyId: org.vendorId,
+          documentDate: org.date,
+          lines: [{ amount: '5' }],
+        })),
+        (error) =>
+          error instanceof AppPlatformError &&
+          error.status === 422 &&
+          /Line 1: an account is required/.test(error.message),
+      )
+      assert.equal(await documentCount(), 1)
+      assert.equal(await documentLineCount(), 1)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  },
+)
+
+test(
+  'a rejected platform custom-record create rolls back its hidden draft to zero rows',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const typeKey = 'platguard'
+    const { org, platform, inOrg } = await makePlatformFixture(async (scratch, adminId) => {
+      await db.execute(sql`
+        insert into custom_record_types
+          (org_id, key, name, plural_name, icon_key, fields, status, show_in_nav, created_by, updated_by)
+        values (${scratch.orgId}, ${typeKey}, 'Platform Guard', 'Platform Guards', 'box',
+                ${JSON.stringify([{
+                  id: 'main',
+                  title: 'Details',
+                  fields: [{ id: 'req_code', label: 'Code', type: 'text', required: true }],
+                }])}::jsonb, 'published', true, ${adminId}, ${adminId})
+      `)
+    })
+    const recordCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from custom_records where org_id = ${org.orgId} and type_key = ${typeKey}
+    `))).rows[0]!.n
+
+    try {
+      // Control: a bare create seeds and keeps its draft.
+      await inOrg(() => platform.create(typeKey, {}))
+      assert.equal(await recordCount(), 1)
+
+      // Activating with the required field empty is rejected by the submit-stage
+      // validator AFTER the draft row was inserted — the rollback must leave
+      // only the control row.
+      await assert.rejects(
+        inOrg(() => platform.create(typeKey, { data: { req_code: '' }, status: 'active' })),
+        (error) =>
+          error instanceof AppPlatformError &&
+          error.status === 422 &&
+          /Fill every required field before activating/.test(error.message),
+      )
+      assert.equal(await recordCount(), 1)
     } finally {
       await dropScratchOrg(org.orgId)
     }

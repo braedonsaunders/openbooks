@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import type { AppPlatformAdapter } from '@openbooks/engine/src/apps-runtime.ts'
 import type { SessionUser } from '@/lib/auth'
 import { pgTextArrayLiteral } from '@/lib/pg-array'
@@ -278,10 +278,17 @@ async function writeRecord(
   }
   await assertSubsidiaryWriteScope(ctx, resolved, typeKey, operation, id, body)
   if (operation !== 'create' && (!id || !isUuid(id))) throw new AppPlatformError('invalid record id', 400)
-  const fields = await writableFields(ctx, resolved)
-  if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body))
-  if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body))
-  return unwrapWrite(await deleteRecord(ctx.user, resolved, id!))
+  // One atomic unit per platform write. Document and custom-record creates
+  // persist a draft BEFORE the edit validates; a rejected write must roll that
+  // draft back (zero rows), the same all-or-nothing contract /api/v1 gets from
+  // executeIdempotent's withOrgTransaction. unwrapWrite's throw is the
+  // rollback trigger.
+  return withOrgTransaction(ctx.orgId, async () => {
+    const fields = await writableFields(ctx, resolved)
+    if (operation === 'create') return unwrapWrite(await createRecord(ctx.user, resolved, fields, body))
+    if (operation === 'update') return unwrapWrite(await updateRecord(ctx.user, resolved, fields, id!, body))
+    return unwrapWrite(await deleteRecord(ctx.user, resolved, id!))
+  })
 }
 
 async function assertSubsidiaryWriteScope(
