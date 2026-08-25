@@ -77,6 +77,15 @@ test("GoCardless webhook verification distinguishes invalid signatures and prese
 });
 
 test("the route acknowledges a signed adyen delivery after isolating its malformed item", { skip: !DB }, async () => {
+  const arrayItem = {
+    pspReference: "PSP-ROUTE-ARRAY",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_route_array",
+    amount: { value: 10300, currency: "CAD" },
+    eventCode: ["IGNORED", "AUTHORISATION"],
+    success: ["false", "true"],
+  };
   const org = await createScratchOrg();
   const originalConsoleError = console.error;
   const malformedLogs: string[] = [];
@@ -108,6 +117,15 @@ test("the route acknowledges a signed adyen delivery after isolating its malform
         "metadata.hmacSignature": createHmac("sha256", keyBytes).update(message, "utf8").digest("base64"),
       };
     };
+    const arrayItem = {
+      pspReference: "PSP-ROUTE-ARRAY",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_route_array",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: ["IGNORED", "AUTHORISATION"],
+      success: ["false", "true"],
+    };
     const malformed = {
       pspReference: "PSP-ROUTE-BAD",
       originalReference: "",
@@ -126,10 +144,12 @@ test("the route acknowledges a signed adyen delivery after isolating its malform
       eventCode: "AUTHORISATION",
       success: "true",
     };
+    signItem(arrayItem);
     signItem(malformed);
     signItem(sibling);
     const body = JSON.stringify({
       notificationItems: [
+        { NotificationRequestItem: arrayItem },
         { NotificationRequestItem: malformed },
         { NotificationRequestItem: sibling },
       ],

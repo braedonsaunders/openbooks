@@ -400,9 +400,22 @@ function normalizeAdyenSuccessFlag(value: unknown): "true" | "false" | null {
   return null;
 }
 
+function adyenScalarString(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    let found: string | null = null;
+    for (const entry of value) {
+      if (typeof entry === "string") found = entry;
+    }
+    return found;
+  }
+  return null;
+}
+
 function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: any): WebhookEvent | null {
-  const successFlag = normalizeAdyenSuccessFlag(item.success);
-  if (item.eventCode === "AUTHORISATION" && successFlag === "true") {
+  const eventCode = adyenScalarString(item.eventCode);
+  const successFlag = normalizeAdyenSuccessFlag(adyenScalarString(item.success) ?? item.success);
+  if (eventCode === "AUTHORISATION" && successFlag === "true") {
     return {
       externalRef: String(item.pspReference ?? ""),
       linkToken: item.merchantReference ?? null,
@@ -418,10 +431,10 @@ function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: 
       raw: payload,
     };
   }
-  if (item.eventCode === "AUTHORISATION") {
+  if (eventCode === "AUTHORISATION") {
     return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "failed", raw: payload };
   }
-  if (item.eventCode === "CANCELLATION" || item.eventCode === "CANCEL_OR_REFUND") {
+  if (eventCode === "CANCELLATION" || eventCode === "CANCEL_OR_REFUND") {
     return { externalRef: String(item.pspReference ?? ""), linkToken: item.merchantReference ?? null, status: "refunded", raw: payload };
   }
   return null;
