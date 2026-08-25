@@ -405,8 +405,11 @@ export interface ReceiveInput {
   stockLocationId: string;
   /** base-unit quantity (> 0). */
   quantity: string;
-  /** actual unit cost paid. */
-  unitCost: string;
+  /** Actual unit cost paid. Omit only for write-ups without a source price:
+   *  the receipt then carries at the position's prevailing average, re-read
+   *  under the position lock so a concurrent movement cannot strand it on a
+   *  stale pre-lock snapshot. */
+  unitCost?: string;
   subsidiaryId: string;
   /** GL account the receipt credits (GRNI / clearing). Required unless
    *  postJournal is false (the source document already moved the GL). */
@@ -465,39 +468,52 @@ export async function receiveInventory(
     locationId: input.locationId ?? null,
   };
 
-  // Costing.
-  let layerUnitCost = input.unitCost;
-  let inventoryValue = extendCost(input.quantity, input.unitCost);
-  let variance = "0";
-  if (profile.costingMethod === "standard") {
-    const std = profile.standardCost ?? input.unitCost;
-    const rs = receiveStandard(input.quantity, input.unitCost, std);
-    inventoryValue = rs.inventoryValue;
-    variance = rs.variance;
-    layerUnitCost = std;
-  }
-  const offsetTotal = add(inventoryValue, variance); // = qty × actual
-
-  // When the source document already DR'd inventory (postJournal === false), we
-  // skip the entry and only record the layer. Standard costing needs its own
-  // entry to book the variance, so it requires a real offset (a clearing acct).
-  const postJournal = input.postJournal !== false;
-  if (!postJournal && !isZero(variance)) {
-    throw new InventoryError(
-      "standard-cost receipts require a received-not-billed account to book purchase variance",
-    );
-  }
-  if (!postJournal && !input.linkEntryId) {
-    throw new InventoryError(
-      "a non-posting receipt requires its source journal entry",
-    );
-  }
-  if (postJournal && !input.offsetAccountId) {
-    throw new InventoryError("receipt requires an offset account");
-  }
-
   return await db.transaction(async (tx) => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+
+    // Costing lives under the position lock: a receipt without an explicit
+    // cost carries at the average prevailing at commit time — a pre-lock
+    // snapshot would let a concurrent movement strand it on a stale value.
+    let layerUnitCost = input.unitCost;
+    if (layerUnitCost === undefined) {
+      const onHand = await getOnHandWith(
+        tx,
+        orgId,
+        input.itemId,
+        input.stockLocationId,
+      );
+      layerUnitCost = isZero(onHand.unitCost) ? "0" : onHand.unitCost;
+    }
+    let inventoryValue = extendCost(input.quantity, layerUnitCost);
+    let variance = "0";
+    if (profile.costingMethod === "standard") {
+      const std = profile.standardCost ?? layerUnitCost;
+      const rs = receiveStandard(input.quantity, layerUnitCost, std);
+      inventoryValue = rs.inventoryValue;
+      variance = rs.variance;
+      layerUnitCost = std;
+    }
+    const offsetTotal = add(inventoryValue, variance); // = qty × actual
+
+    // When the source document already DR'd inventory (postJournal === false),
+    // we skip the entry and only record the layer. Standard costing needs its
+    // own entry to book the variance, so it requires a real offset (a clearing
+    // acct).
+    const postJournal = input.postJournal !== false;
+    if (!postJournal && !isZero(variance)) {
+      throw new InventoryError(
+        "standard-cost receipts require a received-not-billed account to book purchase variance",
+      );
+    }
+    if (!postJournal && !input.linkEntryId) {
+      throw new InventoryError(
+        "a non-posting receipt requires its source journal entry",
+      );
+    }
+    if (postJournal && !input.offsetAccountId) {
+      throw new InventoryError("receipt requires an offset account");
+    }
+
     await validateTrackingSelection(
       tx,
       orgId,
@@ -1094,8 +1110,9 @@ export interface AdjustInput {
 
 /**
  * Adjust on-hand quantity against the item's adjustment account. A positive
- * delta receives at `unitCost` (else current cost); a negative delta issues at
- * current cost. Used by stock counts and manual write-ups/downs.
+ * delta receives at `unitCost` (else the average prevailing under the position
+ * lock); a negative delta issues at current cost. Used by stock counts and
+ * manual write-ups/downs.
  */
 export async function adjustInventory(
   orgId: string,
@@ -1104,19 +1121,16 @@ export async function adjustInventory(
 ): Promise<MovementResult> {
   const profile = await resolveProfile(orgId, input.itemId);
   const offset = profile.adjustmentAccountId ?? profile.cogsAccountId;
-  const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
   const sign = cmp(input.quantityDelta, "0");
   if (sign === 0)
     throw new InventoryError("adjustment quantity cannot be zero");
 
   if (sign > 0) {
-    const unitCost =
-      input.unitCost ?? (isZero(onHand.unitCost) ? "0" : onHand.unitCost);
     return receiveInventory(orgId, actorId, {
       itemId: input.itemId,
       stockLocationId: input.stockLocationId,
       quantity: input.quantityDelta,
-      unitCost,
+      unitCost: input.unitCost,
       subsidiaryId: input.subsidiaryId,
       offsetAccountId: offset,
       date: input.date,
