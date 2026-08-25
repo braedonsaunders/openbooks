@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { pgTextArrayLiteral } from "@/lib/pg-array";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -77,7 +78,7 @@ export async function PUT(req: Request) {
   )
   if (configuredAppKeys.length > 0) {
     const installed = (await db.execute<{ key: string }>(sql`
-      select key from apps where org_id = ${user.orgId} and key = any(${configuredAppKeys}::text[])
+      select key from apps where org_id = ${user.orgId} and key = any(${pgTextArrayLiteral(configuredAppKeys)}::text[])
     `))
     if (installed.rows.length !== configuredAppKeys.length) {
       return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
