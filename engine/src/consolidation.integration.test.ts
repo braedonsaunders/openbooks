@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
-import { db } from "./db.ts";
+import { deriveConsolidatedRates, runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
+import { db, withOrgTransaction } from "./db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -253,6 +253,98 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
       `),
       (error: any) => /overlap/.test(String(error?.cause?.message ?? error?.message)),
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("derived consolidated FX refresh is all-or-nothing and respects manual overrides", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const usdSubsidiaryId = randomUUID();
+    const eurSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${usdSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
+        (${eurSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Euro Co', 'EUR', 'DE', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    // Spot coverage for USD→CAD only, dated before the period so the average
+    // falls back to the carried current rate. EUR→CAD has no spot history at
+    // all — the API's wrapped derivation (web/app/api/consolidation drives
+    // deriveConsolidatedRates inside withOrgTransaction) must refuse without
+    // committing ANY pair, leaving no partially refreshed period behind.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-06-20', 'spot', '0.7300000000')`);
+
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId)),
+      /no spot rate for EUR→CAD/,
+    );
+    const partial = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from consolidated_fx_rates where org_id = ${org.orgId}`));
+    assert.equal(partial.rows[0]!.n, 0);
+
+    // With every needed pair covered, the same wrapped call commits the whole
+    // period at once: current = latest spot on/before period end; average and
+    // historical fall back to it when no in-period rates or prior period exist.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'EUR', 'CAD', '2026-06-25', 'spot', '0.6600000000')`);
+    const written = await withOrgTransaction(org.orgId, () =>
+      deriveConsolidatedRates(org.orgId, org.periodId),
+    );
+    assert.equal(written, 2);
+    const expected = [
+      {
+        from_currency: "EUR",
+        current_rate: "0.6600000000",
+        average_rate: "0.6600000000",
+        historical_rate: "0.6600000000",
+      },
+      {
+        from_currency: "USD",
+        current_rate: "0.7300000000",
+        average_rate: "0.7300000000",
+        historical_rate: "0.7300000000",
+      },
+    ];
+    const firstPass = (await db.execute<{
+      from_currency: string;
+      current_rate: string;
+      average_rate: string;
+      historical_rate: string;
+    }>(sql`
+      select from_currency, current_rate, average_rate, historical_rate
+        from consolidated_fx_rates
+       where org_id = ${org.orgId} and period_id = ${org.periodId}
+       order by from_currency`));
+    assert.deepEqual(firstPass.rows, expected);
+
+    // A newer USD spot arrives, but a controller pins USD→CAD to 'manual':
+    // the rerun refreshes derived pairs only and never touches pinned rows.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-06-28', 'spot', '0.7500000000')`);
+    await db.execute(sql`
+      update consolidated_fx_rates set source = 'manual'
+       where org_id = ${org.orgId} and period_id = ${org.periodId} and from_currency = 'USD'`);
+    const rewritten = await withOrgTransaction(org.orgId, () =>
+      deriveConsolidatedRates(org.orgId, org.periodId),
+    );
+    assert.equal(rewritten, 2);
+    const secondPass = (await db.execute<{
+      from_currency: string;
+      current_rate: string;
+      average_rate: string;
+      historical_rate: string;
+    }>(sql`
+      select from_currency, current_rate, average_rate, historical_rate
+        from consolidated_fx_rates
+       where org_id = ${org.orgId} and period_id = ${org.periodId}
+       order by from_currency`));
+    assert.deepEqual(secondPass.rows, expected);
   } finally {
     await dropScratchOrg(org.orgId);
   }
