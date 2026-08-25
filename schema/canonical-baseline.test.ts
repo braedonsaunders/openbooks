@@ -36,6 +36,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0012_payment_run_posting_recovery.sql",
     "0013_document_revision_monotonic.sql",
     "0014_flow_email_outbox.sql",
+    "0015_payment_instruction_posting_claim_fence.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

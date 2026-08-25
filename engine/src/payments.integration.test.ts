@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
 import {
   generatePaymentFileArtifact,
@@ -75,10 +75,68 @@ interface SeededPostingClaimRun {
   paymentDocumentIds: string[];
 }
 
+interface SeedPostingClaimRunOptions {
+  /** Turn on the bank profile's automatic remittance advice. */
+  autoRemittance?: boolean;
+}
+
 interface PaymentRunSelectionFixture {
   actorId: string;
   profileId: string;
   billId: string;
+}
+
+/**
+ * Install a posting claim exactly as a live poster would have it on the run,
+ * and present its token the way every fenced writer must (the instruction
+ * fence trigger rejects unclaimed mutations on processing runs).
+ */
+async function installPostingClaim(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  runId: string,
+  actorId: string,
+  claimedAt: SQL = sql`now()`,
+): Promise<string> {
+  const token = randomUUID();
+  await withOrgContext(org.orgId, () => db.execute(sql`
+    update payment_runs
+       set status = 'processing',
+           posting_claim_token = ${token}::uuid,
+           posting_claimed_at = ${claimedAt},
+           posting_claimed_by = ${actorId}
+     where id = ${runId} and org_id = ${org.orgId}
+  `));
+  return token;
+}
+
+/** Run one statement batch as a writer holding the given claim token. */
+async function withPostingClaim<T>(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  runId: string,
+  token: string | null,
+  work: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>,
+): Promise<T> {
+  return withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+    if (token !== null) {
+      await tx.execute(sql`
+        select set_config('openbooks.payment_run_claim', ${`${runId}:${token}`}, true)
+      `);
+    }
+    return work(tx);
+  }));
+}
+
+/** Assert the storage-level instruction fence rejected the write, wherever in
+ *  the drizzle cause chain the PostgreSQL error surfaces. */
+async function assertInstructionFenceRejected(attempt: Promise<unknown>): Promise<void> {
+  await assert.rejects(attempt, (error: unknown) => {
+    let current: unknown = error;
+    for (let depth = 0; depth < 5 && current instanceof Error; depth += 1) {
+      if (/only the current posting claim may mutate it/.test(current.message)) return true;
+      current = (current as Error & { cause?: unknown }).cause;
+    }
+    return false;
+  });
 }
 
 /**
@@ -90,6 +148,7 @@ async function seedPostingClaimRun(
   org: Awaited<ReturnType<typeof createScratchOrg>>,
   actorId: string,
   instructionCount = 1,
+  options: SeedPostingClaimRunOptions = {},
 ): Promise<SeededPostingClaimRun> {
   const runId = randomUUID();
   const formatId = randomUUID();
@@ -113,7 +172,8 @@ async function seedPostingClaimRun(
          created_by, updated_by)
       values
         (${profileId}, ${org.orgId}, ${`Posting claim ${profileId}`},
-         ${org.accounts.bank}, ${formatId}, 'CAD', false, false, false,
+         ${org.accounts.bank}, ${formatId}, 'CAD', false, false,
+         ${options.autoRemittance ?? false},
          ${actorId}, ${actorId})
     `);
 
@@ -642,53 +702,128 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
   }
 });
 
-test("a terminal transition fences a stale payment-run worker before instruction mutation", { skip: !DB }, async () => {
+test("the instruction fence is enforced by storage: superseded claim tokens cannot mutate instructions", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
-  let releaseProfileTable!: () => void;
-  const profileTableReleased = new Promise<void>((resolve) => { releaseProfileTable = resolve; });
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Storage fence", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 3));
+
+    // A live poster holds the lease and advances its first instruction.
+    const liveToken = await installPostingClaim(org, seeded.runId, actorId);
+    await withPostingClaim(org, seeded.runId, liveToken, (tx) => tx.execute(sql`
+      update payment_instructions
+         set status = 'sent', updated_at = now(), updated_by = ${actorId}
+        where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+    `));
+
+    // A new poster recovers the lease: the previous token is now superseded.
+    const supersededToken = liveToken;
+    const currentToken = await installPostingClaim(org, seeded.runId, actorId);
+    assert.notEqual(currentToken, supersededToken);
+
+    // The superseded worker can neither advance lifecycle state…
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+        update payment_instructions
+           set status = 'sent', updated_at = now(), updated_by = ${actorId}
+          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)),
+    );
+    // …nor touch instruction metadata…
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+        update payment_instructions
+           set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${actorId}
+          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)),
+    );
+    // …nor remove rows.
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, supersededToken, (tx) => tx.execute(sql`
+        delete from payment_instructions
+         where id = ${seeded.instructionIds[2]!} and org_id = ${org.orgId}
+      `)),
+    );
+
+    // An unclaimed writer is equally powerless: the posting advance and
+    // metadata edits are refused…
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+        update payment_instructions
+           set status = 'sent', updated_at = now(), updated_by = ${actorId}
+          where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)),
+    );
+    await assertInstructionFenceRejected(
+      withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+        update payment_instructions
+           set remittance_email_sent_at = now(), updated_at = now(), updated_by = ${actorId}
+          where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+      `)),
+    );
+    // …while the settlement-style lifecycle retreat stays available to the
+    // bank-outcome writer, which serializes on the run row itself.
+    await withPostingClaim(org, seeded.runId, null, (tx) => tx.execute(sql`
+      update payment_instructions
+         set status = 'returned', updated_at = now(), updated_by = ${actorId}
+        where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+    `));
+
+    // The current claim holder advances the very row the superseded token
+    // was refused: authority, not row state, decides.
+    await withPostingClaim(org, seeded.runId, currentToken, (tx) => tx.execute(sql`
+      update payment_instructions
+         set status = 'sent', updated_at = now(), updated_by = ${actorId}
+        where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+    `));
+
+    const final = await withBypass(async () =>
+      (await db.execute<{ statuses: string[]; stamped: number }>(sql`
+        select array_agg(status order by id) as statuses,
+               count(*) filter (where remittance_email_sent_at is not null)::int as stamped
+          from payment_instructions
+         where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, { statuses: ["returned", "sent", "pending"], stamped: 0 });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a terminal transition fences a stale payment-run worker before downstream instruction or remittance mutation", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let secondInstructionReleased!: () => void;
+  const instructionReleased = new Promise<void>((resolve) => { secondInstructionReleased = resolve; });
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Return racer", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
-    let signalLocked!: () => void;
-    const profileTableLocked = new Promise<void>((resolve) => { signalLocked = resolve; });
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2, { autoRemittance: true }));
+    let signalLocked!: (pid: number) => void;
+    const secondInstructionLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
     const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
-      // The first instruction commits before automatic remittance is queried.
-      // Holding this table gives the bank-return writer a causal window between
-      // instructions without taking a row lock in the opposite aggregate order.
-      await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
-      signalLocked();
-      await profileTableReleased;
+      // Parking the stale worker on the second instruction's row lock holds
+      // the run mid-flight (`processing`, first instruction sent) while the
+      // bank-return writer queues behind the worker's own run-row lock — the
+      // documented shared lock order, so the terminal transition can only
+      // land after the worker's current instruction commits.
+      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+      await tx.execute(sql`
+        select id from payment_instructions
+         where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+         for update
+      `);
+      signalLocked(pid.rows[0]!.pid);
+      await instructionReleased;
     }));
-    await profileTableLocked;
+    const blockerPid = await secondInstructionLocked;
 
     const staleWorker = withOrgContext(org.orgId, () =>
       postPaymentRun(seeded.runId, org.orgId, actorId));
-    await waitForState(async () =>
-      withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          run_status: string;
-          first_status: string;
-          second_status: string;
-          sent_events: number;
-        }>(sql`
-        select run.status as run_status,
-               (select status from payment_instructions
-                 where id = ${seeded.instructionIds[0]!}) as first_status,
-               (select status from payment_instructions
-                 where id = ${seeded.instructionIds[1]!}) as second_status,
-               (select count(*)::int from payment_events event
-                 where event.payment_run_id = run.id and event.org_id = run.org_id
-                   and event.event_type = 'instruction_sent') as sent_events
-          from payment_runs run
-         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]), {
-      run_status: "processing",
-      first_status: "sent",
-      second_status: "pending",
-      sent_events: 1,
-    });
+    await waitForBlockedBy(blockerPid);
 
-    await withOrgContext(org.orgId, () => recordPaymentSettlement({
+    // The bank return for the first instruction queues behind the parked
+    // worker; releasing the instruction lets the worker commit its send,
+    // then the settlement lands and fences everything the worker does next.
+    const settlement = withOrgContext(org.orgId, () => recordPaymentSettlement({
       instructionId: seeded.instructionIds[0]!,
       orgId: org.orgId,
       userId: actorId,
@@ -697,12 +832,14 @@ test("a terminal transition fences a stale payment-run worker before instruction
       returnCode: "R01",
       returnReason: "posting-claim concurrency regression",
     }));
-    releaseProfileTable();
+    secondInstructionReleased();
     await blocker;
+    await settlement;
     await assert.rejects(
       staleWorker,
       (error: Error) => error instanceof PaymentError && /no longer owns the run/.test(error.message),
     );
+
     const final = await withOrgContext(org.orgId, async () =>
       (await db.execute<{
         run_status: string;
@@ -714,6 +851,8 @@ test("a terminal transition fences a stale payment-run worker before instruction
         returned: number;
         completed: number;
         failed: number;
+        remittances: number;
+        second_remittance_stamped: boolean;
         claim_token: boolean;
       }>(sql`
         select run.status as run_status,
@@ -737,24 +876,60 @@ test("a terminal transition fences a stale payment-run worker before instruction
                (select count(*)::int from payment_events event
                  where event.payment_run_id = run.id and event.org_id = run.org_id
                    and event.event_type = 'run_posting_failed') as failed,
-               run.posting_claim_token is not null as claim_token
-          from payment_runs run
-         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
-      `)).rows[0]);
+                exists (
+                  select 1 from payment_instructions
+                   where id = ${seeded.instructionIds[1]!}
+                     and remittance_email_sent_at is not null
+                ) as second_remittance_stamped,
+                run.posting_claim_token is not null as claim_token
+           from payment_runs run
+          where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+       `)).rows[0]);
     assert.deepEqual(final, {
       run_status: "returned",
       first_instruction_status: "returned",
-      second_instruction_status: "pending",
+      second_instruction_status: "sent",
       first_payment_status: "voided",
       second_payment_status: "posted",
-      sent: 1,
+      sent: 2,
       returned: 1,
       completed: 0,
       failed: 0,
+      // The worker staged remittance evidence only for instructions it sent
+      // while its heartbeat still proved ownership: always the first one, and
+      // possibly also the sibling when the worker's post-commit fence won the
+      // race against the settlement that was queuing on the run row — a claim
+      // that was still valid in storage at that instant. What authority loss
+      // forbids everywhere is completion: no superseded write may stamp
+      // instruction metadata or mark advice sent.
+      second_remittance_stamped: false,
       claim_token: false,
     });
+    // Advice evidence exists for the first instruction always, and at most
+    // one more row when the sibling's staging won its pre-supersession race.
+    const remittanceCounts = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ first: number; second: number }>(sql`
+        select count(*) filter (where payment_instruction_id = ${seeded.instructionIds[0]!})::int as first,
+               count(*) filter (where payment_instruction_id = ${seeded.instructionIds[1]!})::int as second
+          from payment_remittances
+         where org_id = ${org.orgId}
+           and payment_instruction_id in (${seeded.instructionIds[0]!}, ${seeded.instructionIds[1]!})
+      `)).rows[0]);
+    const counts = remittanceCounts!;
+    assert.ok(counts.first === 1, `expected advice staged once for the authoritatively sent instruction, got ${counts.first}`);
+    assert.ok(counts.second >= 0 && counts.second <= 1);
+    const secondRemittanceStatuses = (await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ statuses: string[] | null }>(sql`
+        select coalesce(array_agg(distinct status), '{}') as statuses
+          from payment_remittances
+         where payment_instruction_id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+      `)).rows[0]))?.statuses ?? [];
+    assert.ok(
+      secondRemittanceStatuses.every((status) => status === "failed"),
+      `a superseded worker must never complete advice for work it lost: ${JSON.stringify(secondRemittanceStatuses)}`,
+    );
   } finally {
-    releaseProfileTable?.();
+    secondInstructionReleased?.();
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
@@ -883,20 +1058,14 @@ test("a recovered stale posting claim resumes the run without double-posting", {
     const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
 
     // Simulate a crashed poster: it claimed the run, committed the first
-    // instruction as sent, then died without completing or releasing. The
-    // lease has made no progress for far longer than the staleness window.
-    await withOrgContext(org.orgId, () => db.execute(sql`
-      update payment_runs
-         set status = 'processing',
-             posting_claim_token = gen_random_uuid(),
-             posting_claimed_at = now() - interval '20 minutes',
-             posting_claimed_by = ${actorId}
-       where id = ${seeded.runId} and org_id = ${org.orgId}
-    `));
-    await withOrgContext(org.orgId, () => db.execute(sql`
+    // instruction as sent under its then-live claim, then died without
+    // completing or releasing. The lease has made no progress for far longer
+    // than the staleness window.
+    const crashedToken = await installPostingClaim(org, seeded.runId, actorId, sql`now() - interval '20 minutes'`);
+    await withPostingClaim(org, seeded.runId, crashedToken, (tx) => tx.execute(sql`
       update payment_instructions
          set status = 'sent', updated_at = now(), updated_by = ${actorId}
-       where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+        where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
     `));
 
     // A fresh claim while the abandoned one still reads recent is refused...
