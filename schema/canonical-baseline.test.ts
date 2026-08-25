@@ -6,6 +6,8 @@ const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
 const bankStatementSourceEvidenceMigrationPath =
   "schema/migrations/generated/0010_bank_statement_source_evidence.sql";
+const paymentRunLiveSelectionMigrationPath =
+  "schema/migrations/generated/0011_payment_run_live_selection.sql";
 const paymentRunPostingRecoveryMigrationPath =
   "schema/migrations/generated/0012_payment_run_posting_recovery.sql";
 const documentRevisionMonotonicMigrationPath =
@@ -56,6 +58,33 @@ test("bank statement source evidence is mandatory after forward migrations", () 
     migration,
     /ALTER COLUMN raw_file_ref SET NOT NULL/,
   );
+});
+
+test("an instruction's lifecycle fan-out can never cross payment runs", () => {
+  const migration = readFileSync(paymentRunLiveSelectionMigrationPath, "utf8");
+  // The historical repair predicates on the instruction's own run, so a
+  // cross-run reference is never advanced or released by a foreign
+  // instruction's terminal state.
+  assert.match(migration, /AND item\.payment_run_id = instruction\.payment_run_id/);
+  // A stray reference is refused outright instead of guessed into a run.
+  assert.match(migration, /\$payment_run_item_instruction_run_preflight\$/);
+  assert.match(
+    migration,
+    /references an instruction of another payment run/,
+  );
+  // Storage makes the shape unrepresentable for every future writer: an
+  // item's (org, run) must equal its instruction's (org, run).
+  assert.match(
+    migration,
+    /ADD CONSTRAINT payment_run_items_instruction_run\s+FOREIGN KEY \(org_id, payment_run_id, payment_instruction_id\)\s+REFERENCES public\.payment_instructions \(org_id, payment_run_id, id\)/,
+  );
+  // Every lifecycle branch carries the same run predicate as defense in
+  // depth — one payment run's instruction can never move another run's
+  // live reservation, even for data planted before the key existed.
+  const scopedBranches = migration.match(
+    /and payment_run_id = new\.payment_run_id\s+and payment_instruction_id = new\.id/g,
+  );
+  assert.equal(scopedBranches?.length, 4);
 });
 
 test("payment-run posting claims are leased and stranded claims are released on rollout", () => {
