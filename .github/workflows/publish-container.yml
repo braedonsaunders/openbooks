@@ -89,6 +89,11 @@ jobs:
           npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/db.ts';
           void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
           finally { await pool.end(); } })();"
+      - name: Install qpdf
+        # Payroll ciphertext certification shells out to the real qpdf binary;
+        # without it verify:release fail-closes on spawn ENOENT and can never
+        # exercise the verified-ciphertext contract.
+        run: sudo apt-get update && sudo apt-get install -y qpdf
       - name: Verify types, accounting tests, and production build
         run: npm run verify:release
 

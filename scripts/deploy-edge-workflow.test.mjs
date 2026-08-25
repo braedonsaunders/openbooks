@@ -11,13 +11,6 @@ const publishWorkflow = readFileSync(
   "utf8",
 );
 
-const triggerShaValidationBlock = `          if [[ ! "$TRIGGER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "The tested commit must be a full lowercase SHA-1." >&2
-            exit 1
-          fi
-
-`;
-
 function occurrenceCount(source, value) {
   return source.split(value).length - 1;
 }
@@ -242,6 +235,79 @@ test("the exact publish receipt cannot be rebound before the watch", () => {
       () => assertExactPublishRunDataflow(deployWorkflow.replace(contract, mutation)),
       /must/,
       `dataflow guard must reject ${mutation}`,
+    );
+  }
+});
+
+function assertPublishVerificationProvisionsQpdf(source) {
+  const jobStart = source.indexOf("  verify:");
+  const jobEnd = source.indexOf("\n  container-security:");
+  assert.notEqual(jobStart, -1, "the publish workflow must keep its verify job");
+  assert.notEqual(jobEnd, -1, "the publish workflow must keep its security job");
+  const verifyJob = source.slice(jobStart, jobEnd);
+
+  const qpdfStepMarker = "      - name: Install qpdf\n";
+  assert.equal(
+    occurrenceCount(verifyJob, qpdfStepMarker),
+    1,
+    "the verify job must declare exactly one qpdf provisioning step",
+  );
+  const qpdfStep = namedStep(verifyJob, "Install qpdf");
+  assert.match(
+    qpdfStep,
+    /run: sudo apt-get update && sudo apt-get install -y qpdf/,
+    "the qpdf step must install the real binary before verification",
+  );
+
+  const releaseGateIndex = verifyJob.indexOf("        run: npm run verify:release");
+  assert.notEqual(
+    releaseGateIndex,
+    -1,
+    "the verify job must still run the full release verification",
+  );
+  assert.ok(
+    verifyJob.indexOf(qpdfStepMarker) < releaseGateIndex,
+    "qpdf must be provisioned before the release verification runs",
+  );
+}
+
+test("container verification provisions qpdf before the release gate", () => {
+  assertPublishVerificationProvisionsQpdf(publishWorkflow);
+});
+
+test("the publish qpdf provisioning contract cannot drift", () => {
+  const mutations = [
+    [
+      "      - name: Install qpdf\n",
+      "",
+    ],
+    [
+      "      - name: Install qpdf\n",
+      "      - name: Prepare PDF toolchain\n",
+    ],
+    [
+      "run: sudo apt-get update && sudo apt-get install -y qpdf",
+      'run: echo "assuming qpdf is preinstalled"',
+    ],
+    [
+      "        run: npm run verify:release\n",
+      "        run: npm run check:product-neutrality\n",
+    ],
+  ];
+
+  for (const [contract, mutation] of mutations) {
+    assert.equal(
+      occurrenceCount(publishWorkflow, contract),
+      1,
+      `mutation fixture must uniquely identify ${JSON.stringify(contract)}`,
+    );
+    assert.throws(
+      () =>
+        assertPublishVerificationProvisionsQpdf(
+          publishWorkflow.replace(contract, mutation),
+        ),
+      /must|before/,
+      `qpdf provisioning guard must reject ${mutation || "<removed>"}`,
     );
   }
 });
