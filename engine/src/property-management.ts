@@ -644,16 +644,15 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
   return { id: result.rows[0].id };
 }
 
-export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
-  await assertEnabled(db, orgId);
-  const leaseResult = (await db.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
+async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<number> {
+  const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
-  const charges = (await db.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
+  const charges = (await runner.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
   let created = 0;
   for (const charge of charges.rows) {
     for (const period of leaseChargeSchedule({ ...charge, leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn, throughOn: horizon, billingDay: lease.billingDay })) {
-      const result = (await db.execute(sql`
+      const result = (await runner.execute(sql`
         insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,created_by,updated_by)
         values(${orgId},${leaseId},${charge.id},${period.periodStartsOn},${period.periodEndsOn},${period.dueOn},${period.amount},${actorId},${actorId})
         on conflict(org_id,charge_id,period_starts_on) do nothing returning id
@@ -661,11 +660,17 @@ export async function scheduleLeaseCharges(orgId: string, actorId: string, lease
       created += result.rows.length;
     }
   }
+  return created;
+}
+
+export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
+  await assertEnabled(db, orgId);
+  const created = await db.transaction((tx) => generateLeaseSchedule(tx, orgId, actorId, leaseId, throughOn));
   return { created };
 }
 
 export async function activatePropertyLease(orgId: string, actorId: string, leaseId: string): Promise<{ scheduled: number }> {
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`));
     const row = lease.rows[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
@@ -675,9 +680,10 @@ export async function activatePropertyLease(orgId: string, actorId: string, leas
       await tx.execute(sql`update property_units set status='occupied',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.unit_id}`);
     }
     await tx.execute(sql`update property_leases set status='active',activated_at=now(),activated_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${leaseId} and org_id=${orgId}`);
+    const scheduled = await generateLeaseSchedule(tx, orgId, actorId, leaseId);
     await audit(tx, orgId, "property_leases", leaseId, "activate", actorId, { after: { status: "active" } });
+    return { scheduled };
   });
-  return { scheduled: (await scheduleLeaseCharges(orgId, actorId, leaseId)).created };
 }
 
 export async function terminatePropertyLease(orgId: string, actorId: string, leaseId: string, terminatedOn: string, reason: string): Promise<void> {
@@ -765,10 +771,10 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
       values(${orgId},${e.lease_id},'base_rent',${charge.description},${next},${charge.frequency},${e.effective_on},${charge.effective_to},${charge.income_account_id},${charge.item_id},${charge.tax_code_id},${actorId},${actorId}) returning id`));
     await tx.execute(sql`update lease_escalations set status='applied',previous_amount=${charge.amount},new_amount=${next},applied_at=now(),applied_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${escalationId} and org_id=${orgId}`);
     await audit(tx, orgId, "lease_escalations", escalationId, "apply", actorId, { previousAmount: charge.amount, newAmount: next, effectiveOn: e.effective_on });
-    return { chargeId: inserted.rows[0]!.id, newAmount: next, leaseId: e.lease_id };
+    await generateLeaseSchedule(tx, orgId, actorId, e.lease_id);
+    return { chargeId: inserted.rows[0]!.id, newAmount: next };
   });
-  await scheduleLeaseCharges(orgId, actorId, applied.leaseId);
-  return { chargeId: applied.chargeId, newAmount: applied.newAmount };
+  return applied;
 }
 
 function billingKey(leaseId: string, scheduleIds: string[]): string { return `rent:${leaseId}:${[...scheduleIds].sort().join(",")}`; }
