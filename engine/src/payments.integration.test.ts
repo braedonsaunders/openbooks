@@ -72,6 +72,12 @@ interface SeededPostingClaimRun {
   paymentDocumentIds: string[];
 }
 
+interface PaymentRunSelectionFixture {
+  actorId: string;
+  profileId: string;
+  billId: string;
+}
+
 /**
  * A generated wire run whose instructions point at ALREADY-posted payment
  * documents, so posting an instruction is purely the claim/fence/sent flip —
@@ -314,47 +320,51 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
   }
 });
 
+async function seedPaymentRunSelectionFixture(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<PaymentRunSelectionFixture> {
+  return withBypass(async () => {
+    const actorId = await createScratchUser(org.orgId, "Run Operator", "accountant");
+    const formatId = randomUUID();
+    const profileId = randomUUID();
+    const billId = randomUUID();
+
+    await db.execute(sql`
+      insert into payment_formats
+        (id, org_id, code, name, rail, direction, country, currency, created_by, updated_by)
+      values
+        (${formatId}, ${org.orgId}, 'CPA005-RESERVE', 'CPA-005 credit reservation test',
+         'cpa005_credit', 'credit', 'CA', 'CAD', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into payment_bank_profiles
+        (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
+         currency, country, created_by, updated_by)
+      values
+        (${profileId}, ${org.orgId}, 'Reservation run profile', ${org.accounts.bank},
+         ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+      values (${billId}, ${org.orgId}, 'vendor_bill', 'approved', 'BILL-RESERVE-1',
+              ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
+              '125', '0', '125', ${actorId})`);
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, quantity, unit_price,
+         amount, tax_amount)
+      values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
+              '125', '0')`);
+    await postDocument(billId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
+
+    return { actorId, profileId, billId };
+  });
+}
+
 test("an open item can be reserved by only one live payment run at a time", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const options = await withBypass(async () => {
-      const actorId = await createScratchUser(org.orgId, "Run Operator", "accountant");
-      const formatId = randomUUID();
-      const profileId = randomUUID();
-      const billId = randomUUID();
-
-      await db.execute(sql`
-        insert into payment_formats
-          (id, org_id, code, name, rail, direction, country, currency, created_by, updated_by)
-        values
-          (${formatId}, ${org.orgId}, 'CPA005-RESERVE', 'CPA-005 credit reservation test',
-           'cpa005_credit', 'credit', 'CA', 'CAD', ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into payment_bank_profiles
-          (id, org_id, name, bank_account_id, subsidiary_id, payment_format_id,
-           currency, country, created_by, updated_by)
-        values
-          (${profileId}, ${org.orgId}, 'Reservation run profile', ${org.accounts.bank},
-           ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into documents
-          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
-           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-        values (${billId}, ${org.orgId}, 'vendor_bill', 'approved', 'BILL-RESERVE-1',
-                ${org.subsidiaryId}, ${org.vendorId}, ${org.date}, 'CAD', '1',
-                '125', '0', '125', ${actorId})`);
-      await db.execute(sql`
-        insert into document_lines
-          (org_id, document_id, line_number, account_id, quantity, unit_price,
-           amount, tax_amount)
-        values (${org.orgId}, ${billId}, 1, ${org.accounts.cogs}, '1', '125',
-                '125', '0')`);
-      await postDocument(billId, {
-        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-      });
-
-      return { actorId, profileId, billId };
-    });
+    const options = await seedPaymentRunSelectionFixture(org);
 
     await withOrgContext(org.orgId, async () => {
       const openLineId = (await db.execute<{ id: string }>(sql`
