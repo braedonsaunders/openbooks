@@ -15,6 +15,7 @@ import {
   type DataResource,
   type WriteCtx,
 } from './resource-core'
+import { parseImportJson } from './import-parse'
 import {
   CELL_PROVENANCE_KEY,
   SOURCE_COLUMNS_KEY,
@@ -401,7 +402,12 @@ function parseLines(src: Record<string, unknown>): { lines: TxnLineInput[]; erro
       }
     }
     try {
-      const arr = typeof raw === 'string' ? JSON.parse(raw) : raw
+      // parseImportJson, not JSON.parse: an unquoted number token must reach
+      // exactLineAmount as its source text — JSON.parse would first collapse
+      // e.g. 999999999999998.99 into the integer-valued double
+      // 999999999999999 and the exact-amount boundary could no longer tell a
+      // rounded token from literal input.
+      const arr = typeof raw === 'string' ? parseImportJson(raw) : raw
       if (Array.isArray(arr)) return { lines: arr as TxnLineInput[], error: null }
     } catch {
       /* fall through to single-line */
