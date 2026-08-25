@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
+import pg from "pg";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, env } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
   adjustInventory,
@@ -898,6 +899,154 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
     await assertInvariant(org);
   } finally {
     await dropScratchOrg(other.orgId);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Positive adjustment default cost must be read under the position lock
+// ---------------------------------------------------------------------------
+
+/** The engine's advisory key split into the (classid, objid) halves pg_locks shows. */
+async function positionLockHalves(key: string): Promise<{ classid: bigint; objid: bigint }> {
+  const r = (await db.execute<{ key: string }>(sql`
+    select hashtextextended(${key}, 0)::text as key`));
+  const wide = BigInt.asUintN(64, BigInt(r.rows[0]!.key));
+  return { classid: wide >> 32n, objid: wide & 0xffffffffn };
+}
+
+test("positive adjustment values stock at the average prevailing under the position lock", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const sub = org.subsidiaryId;
+    const loc = org.stockLocationId;
+
+    // Seed the moving-average position: 10 units @ 10.00 → average 10.00.
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.movingAvg,
+      stockLocationId: loc,
+      quantity: "10",
+      unitCost: "10.00",
+      subsidiaryId: sub,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
+    await assertInvariant(org);
+
+    // A competing writer holds the position lock while an adjustment is in
+    // flight, and commits a re-blend of the average to 20.00 inside that
+    // window. The mutation is direct SQL so the interleaving stays
+    // deterministic — a second receiveInventory call would queue on the same
+    // advisory key behind this holder. The GL legs book exactly what a real
+    // receipt blending the layer to 20.00 would leave behind (+100 asset),
+    // keeping GL = Σ layer value intact for the invariant below.
+    const competitor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    await competitor.connect();
+    let committed = false;
+    let adjustment: ReturnType<typeof adjustInventory> | undefined;
+    try {
+      await competitor.query("begin");
+      await competitor.query(
+        "select set_config('app.bypass_rls', 'on', true)",
+      );
+      const lockKey = `inventory:${org.items.movingAvg}:${loc}`;
+      await competitor.query(
+        "select pg_advisory_xact_lock(hashtextextended($1, 0))",
+        [lockKey],
+      );
+
+      // Fire the write-up with no explicit unit cost. adjustInventory reads
+      // its default cost from on-hand BEFORE receiveInventory requests the
+      // position lock, so once this promise is queued on the advisory key
+      // that pre-lock read is already done and holds the stale average.
+      const pending = adjustInventory(org.orgId, null, {
+        itemId: org.items.movingAvg,
+        stockLocationId: loc,
+        quantityDelta: "10",
+        subsidiaryId: sub,
+        date: org.date,
+      });
+      adjustment = pending;
+
+      // Deterministic rendezvous: block until the adjustment is queued on the
+      // position lock — proof its default-cost read has already executed.
+      const halves = await positionLockHalves(lockKey);
+      let queued = false;
+      for (let waited = 0; waited < 10_000 && !queued; waited += 25) {
+        const waiter = (await db.execute(sql`
+          select 1 from pg_locks
+           where locktype = 'advisory' and granted = false
+             and classid::bigint = ${halves.classid}
+             and objid::bigint = ${halves.objid}`));
+        queued = waiter.rows.length > 0;
+        if (!queued) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(queued, true, "adjustment never queued on the inventory position lock");
+
+      // The committed re-blend lands AFTER the adjustment's cost read but
+      // BEFORE its locked posting: exactly the staleness window.
+      await competitor.query(
+        `update cost_layers set unit_cost = '20' where org_id = $1 and item_id = $2 and stock_location_id = $3`,
+        [org.orgId, org.items.movingAvg, loc],
+      );
+      const entry = await competitor.query<{ id: string }>(
+        `insert into journal_entries
+           (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+         values ($1, $2, $3, $4, $5, $6, 'Competing receipt re-blend', 'draft', 'inventory', null, null)
+         returning id`,
+        [
+          org.orgId,
+          org.bookId,
+          sub,
+          `INV-RCPT-${org.date}-${loc.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+          org.date,
+          org.periodId,
+        ],
+      );
+      const entryId = entry.rows[0]!.id;
+      for (const [lineNumber, accountId, amount] of [
+        [1, org.accounts.invAsset, "100.0000"],
+        [2, org.accounts.clearing, "-100.0000"],
+      ] as const) {
+        await competitor.query(
+          `insert into journal_lines
+             (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+           values ($1, $2, $3, $4, $5, $6, 'CAD', $6, 1)`,
+          [org.orgId, entryId, lineNumber, accountId, sub, amount],
+        );
+      }
+      await competitor.query(
+        `update journal_entries set status = 'posted', posted_at = now() where id = $1 and org_id = $2`,
+        [entryId, org.orgId],
+      );
+      await competitor.query("commit");
+      committed = true;
+
+      await pending;
+
+      // The write-up must value its 10 units at the locked-in current
+      // average of 20.00 — not the stale 10.00 it observed before parking:
+      // 10 @ 20 carried + 10 @ 20 written up = 400 over 20 units.
+      const onHand = await getOnHand(org.orgId, org.items.movingAvg, loc);
+      assert.equal(toUnits(onHand.quantity), toUnits("20"));
+      assert.equal(toUnits(onHand.value), toUnits("400"));
+      assert.equal(toUnits(onHand.unitCost), toUnits("20"));
+      const movement = (await db.execute<{ unit_cost: string; total_value: string }>(sql`
+        select unit_cost, total_value from inventory_movements
+         where org_id = ${org.orgId} and item_id = ${org.items.movingAvg}
+           and stock_location_id = ${loc} and kind = 'receipt'
+         order by created_at desc, id desc limit 1`));
+      assert.equal(toUnits(movement.rows[0]!.unit_cost), toUnits("20"));
+      assert.equal(toUnits(movement.rows[0]!.total_value), toUnits("200"));
+      await assertInvariant(org);
+    } finally {
+      if (!committed) {
+        await competitor.query("rollback").catch(() => {});
+        await adjustment?.catch(() => {});
+      }
+      await competitor.end();
+    }
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });
