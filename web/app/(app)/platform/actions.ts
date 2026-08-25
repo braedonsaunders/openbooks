@@ -61,6 +61,15 @@ export async function setSuperAdminAction(
   }
 
   await withBypass(async () => {
+    // Serialize every platform-wide super-admin grant/revoke. The active
+    // quorum check below reads other administrators' rows, which this
+    // transaction does not lock; without one serialization point, two
+    // concurrent cross-revocations each count the other's target as still
+    // present and jointly strip every platform administrator.
+    await db.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended('openbooks:platform-super-admin', 0))
+    `);
+
     const targetResult = (await db.execute(sql`
       select id, org_id as "orgId", email, name, is_super_admin as "isSuperAdmin", is_active as "isActive"
         from users
