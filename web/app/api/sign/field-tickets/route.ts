@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { uploadAndAttach } from '../../../../lib/file-cabinet'
+import { resolveFieldTicketLockId } from '../../../../lib/field-ticket-lock'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
 
 export const runtime = 'nodejs'
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
   return withOrgTransaction(verified.orgId, async () => {
     // Serialize signers of this request BEFORE any check or write; the lock is
     // transaction-scoped on the pinned connection, so it holds until commit.
-    await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`field-ticket-sign:${verified.requestId}`}))`)
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${resolveFieldTicketLockId('sign', verified.orgId, verified.ticketId, verified.requestId)}, 0))`)
     if (!(await validateSigningRequest(String(body.token ?? ''), verified))) {
       return NextResponse.json({ error: 'This signing request is no longer available' }, { status: 422 })
     }
