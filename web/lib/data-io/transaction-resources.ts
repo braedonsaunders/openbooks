@@ -84,6 +84,11 @@ interface TxnLineInput {
   amount?: unknown
   description?: unknown
   taxCode?: unknown
+  /**
+   * Legacy quantity/unitPrice slots exist for spreadsheets that tried to map
+   * one convenience column onto quantity × unitPrice. Imports refuse them to
+   * avoid rounding in JS numbers; callers must provide literal amounts.
+   */
   quantity?: unknown
   unitPrice?: unknown
 }
@@ -252,6 +257,16 @@ async function writeTransactions(
         outcome.errors.push({ row: rowNo, message: 'at least one line (account + amount) is required' })
         continue
       }
+      const hasQuantity = rawLines.some((l) => l.quantity !== undefined)
+      const hasUnitPrice = rawLines.some((l) => l.unitPrice !== undefined)
+      if (hasQuantity || hasUnitPrice) {
+        outcome.failed++
+        outcome.errors.push({
+          row: rowNo,
+          message: 'quantity and unitPrice cannot be imported; provide literal line amounts',
+        })
+        continue
+      }
       const built: { accountId: string; amount: string; description: string | null; taxCodeId: string | null }[] = []
       let lineErr: string | null = null
       for (const l of rawLines) {
@@ -362,7 +377,11 @@ function exactLineAmount(value: unknown): string | null {
   // boundary. Even `Number.isSafeInteger` cannot recover the source token:
   // 999999999999998.99 arrives here as the safe integer 999999999999999.
   // Require the import representation to retain the original decimal text.
-  if (typeof value !== 'string') return null
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value)) return null
+    return normalizeMoney(String(value))
+  }
+  if (typeof value !== 'string' || value.trim() === '') return null
   const exact = canonicalDecimal(value, 4)
   if (exact === null) return null
   try {
