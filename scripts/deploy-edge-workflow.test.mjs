@@ -83,6 +83,32 @@ function assertExactPublishRunDataflow(source) {
   const waitStep = namedStep(source, "Wait for edge container publish");
 
   assert.equal(
+    occurrenceCount(dispatchStep, 'dispatch_response="$('),
+    1,
+    "the dispatch receipt must have exactly one assignment",
+  );
+  const responseIndex = dispatchStep.indexOf('dispatch_response="$(');
+  assert.notEqual(
+    responseIndex,
+    -1,
+    "the dispatch receipt must be captured in the dispatch step",
+  );
+  assert.match(
+    dispatchStep,
+    /dispatch_response="\$\(\n\s+gh api \\\n\s+--method POST \\\n/,
+    "the dispatch receipt must be captured from the inline dispatch call",
+  );
+  assert.match(
+    dispatchStep,
+    /workflows\/publish-container\.yml\/dispatches" \\\n\s+--input - <<< "\$dispatch_payload"\n\s+\)"/,
+    "the dispatch receipt body must be the tested-commit dispatch response",
+  );
+  assert.ok(
+    responseIndex < dispatchStep.indexOf('publish_run_id="$('),
+    "the dispatch receipt must be captured before its run id is extracted",
+  );
+
+  assert.equal(
     (dispatchStep.match(/\bpublish_run_id\s*=/g) ?? []).length,
     1,
     "publish_run_id must have exactly one assignment",
@@ -195,6 +221,15 @@ test("the exact publish receipt cannot be rebound before the watch", () => {
         '          PUBLISH_RUN_ID="$GITHUB_RUN_ID"',
     ],
     ['gh run watch "$PUBLISH_RUN_ID"', 'gh run watch "$GITHUB_RUN_ID"'],
+    [
+      'publish_run_id="$(',
+      "dispatch_response=\"$(gh run list --workflow publish-container.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')\"\n" +
+        '          publish_run_id="$(',
+    ],
+    [
+      'actions/workflows/publish-container.yml/dispatches" \\',
+      'actions/workflows/publish-container.yml/runs?per_page=1" \\',
+    ],
   ];
 
   for (const [contract, mutation] of mutations) {
