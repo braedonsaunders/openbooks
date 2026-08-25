@@ -19,6 +19,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const parsed = await parseJsonBody(req, fileDecisionBody)
   if (!parsed.ok) return parsed.response
-  try { await decidePaymentFile(fileId, gate.user.orgId, gate.user.id, parsed.data.decision, parsed.data.reason); return NextResponse.json({ ok: true }) }
+  try { await decidePaymentFile(fileId, gate.user.orgId, gate.user.id, parsed.data.decision, parsed.data.reason, { runId: id }); return NextResponse.json({ ok: true }) }
   catch (e) { return paymentErrorResponse(e) }
 }
