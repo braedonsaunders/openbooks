@@ -28,6 +28,12 @@ const PROMOTABLE = [
   "app_roles",
 ];
 
+// Drizzle binds an interpolated JS array as a row constructor "( $1, $2 )"
+// without an array cast, so the catalog lookup dies on the second entry —
+// bind ONE PostgreSQL array-literal param instead (elements are internal
+// table identifiers, so the literal needs no escaping).
+const PROMOTABLE_ARRAY = `{${PROMOTABLE.join(",")}}`;
+
 const STRUCTURAL = new Set(["id", "org_id", "created_at", "updated_at", "created_by", "updated_by"]);
 
 interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string }
@@ -74,7 +80,7 @@ export async function buildChangeSet(
   const present = await db.execute<TableNameRow>(sql`
     select table_name from information_schema.columns
      where table_schema = 'public' and column_name = 'org_id'
-       and table_name = any(${PROMOTABLE})`);
+       and table_name = any(${PROMOTABLE_ARRAY}::text[])`);
   const tables = present.rows.map((r) => r.table_name);
 
   let itemCount = 0;
