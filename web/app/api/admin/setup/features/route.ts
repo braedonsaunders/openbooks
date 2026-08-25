@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { provisionFeatureDefaults } from '@openbooks/engine/src/organization-provisioning.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import {
@@ -18,6 +18,13 @@ export const dynamic = 'force-dynamic'
  * Toggle optional features on/off for the org. Only registry keys are
  * accepted. Enabling a feature installs its editable baseline configuration;
  * disabling it preserves all existing data and only hides its surfaces.
+ *
+ * The stored flags, scheduler reconciliation, and baseline provisioning commit
+ * as ONE atomic unit: a provisioning or schedule-refresh failure rolls the
+ * whole toggle back, so the org can never hold an enabled-but-unprovisioned
+ * feature (its surfaces would render against missing defaults) or a stale
+ * executable schedule for a disabled scripts feature. Provisioning is
+ * idempotent, so retrying a failed toggle converges exactly once.
  */
 export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
@@ -46,10 +53,15 @@ export async function PUT(req: Request) {
     }
   }
 
-  const dependencyError = await db.transaction(async (tx) => {
-    const before = (await tx.execute<{ features: Record<string, boolean> }>(sql`
+  const dependencyError = await withOrgTransaction(orgId, async () => {
+    // Inside this pinned tenant transaction every db call below (including the
+    // ones inside the engine's provisioning and scripting helpers) routes to
+    // the same connection, so a failure anywhere rolls back the flags, the
+    // audit evidence, the schedule refresh, and the baseline defaults
+    // together.
+    const before = await db.execute<{ features: Record<string, boolean> }>(sql`
       select coalesce(settings->'features', '{}'::jsonb) as features
-        from orgs where id = ${orgId} for update`))
+        from orgs where id = ${orgId} for update`)
     if (!before.rows[0]) return { error: 'not-found' }
     const currentState = before.rows[0].features ?? {}
     const after = { ...currentState, ...clean }
@@ -69,24 +81,32 @@ export async function PUT(req: Request) {
       ).map((candidate) => candidate.key)
       if (dependents.length > 0) return { error: 'feature-dependents-enabled', key, dependentKeys: dependents }
     }
-    await tx.execute(sql`
+    await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', ${JSON.stringify(after)}::jsonb)
        where id = ${orgId}`)
-    await tx.execute(sql`
+    await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({
         before: { features: currentState },
         after: { features: after },
       })}, ${gate.user.id})`)
+    // Reconcile schedules while the new flag state is visible to this
+    // transaction: disabling scripts nulls next_run_at in the SAME commit that
+    // stores the disable, so a scheduler pass can never execute a script for a
+    // feature the org has already turned off.
+    if (clean.scripts !== undefined) {
+      const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting.ts')
+      await refreshScheduledNextRuns(orgId)
+    }
+    // Install each enabled feature's editable baseline under the same
+    // transaction. The helpers read the feature gate through the pinned
+    // transaction (they see `after` above) and are all conflict-safe no-ops on
+    // existing rows, so retries converge without duplicating defaults.
+    for (const [key, enabled] of Object.entries(clean)) {
+      if (enabled) await provisionFeatureDefaults(orgId, gate.user.id, key)
+    }
     return null
   })
   if (dependencyError) return NextResponse.json(dependencyError, { status: dependencyError.error === 'not-found' ? 404 : 409 })
-  if (clean.scripts !== undefined) {
-    const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting.ts')
-    await refreshScheduledNextRuns(orgId)
-  }
-  for (const [key, enabled] of Object.entries(clean)) {
-    if (enabled) await provisionFeatureDefaults(orgId, gate.user.id, key)
-  }
   return NextResponse.json({ ok: true })
 }
