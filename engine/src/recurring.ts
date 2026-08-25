@@ -18,11 +18,15 @@ import { computeNextRunAt } from "./scripting.ts";
  * bespoke invoice table) means every recurring invoice, bill, or standing
  * journal flows through the exact same posting rule as its hand-entered twin.
  *
- * Claiming is done by the same advance-and-guard trick the script scheduler
- * uses: the UPDATE … WHERE next_run_on = $old means only one tick can win an
- * occurrence, so horizontal scaling can never double-bill. A failed attempt
- * rolls its claim back — guarded on the claimed value — so the occurrence is
- * retried on the next tick, never silently lost.
+ * Claiming is the same advance-and-guard trick the script scheduler uses — the
+ * UPDATE … WHERE next_run_on = $old lets only one tick win an occurrence — but
+ * it runs INSIDE the generation transaction: the claim and the generated
+ * document commit atomically. An earlier design claimed first in its own
+ * transaction and rolled back on failure, which a hard process kill between
+ * the two commits could not do — the claim stayed advanced with nothing
+ * generated, permanently skipping the occurrence. Sharing one transaction
+ * closes that window: a crash rolls both back, the schedule stays due, and the
+ * next tick retries. Never silently lost.
  *
  * Retrying safely requires the generation itself to be idempotent per
  * occurrence: each generated document is committed together with a
@@ -120,47 +124,6 @@ export function advanceCadence(
   const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
   const day = Math.min(d!, lastDay);
   return `${targetYear}-${pad(targetMonth + 1)}-${pad(day)}`;
-}
-
-export interface ScheduleClaimRollback {
-  /** Apply the restore only while the row still holds this (claimed) value. */
-  expectedNextRunOn: string;
-  nextRunOn: string;
-  /** The due scan only claims active schedules, so a rollback reactivates. */
-  isActive: boolean;
-  lastRunAt: Date | null;
-}
-
-/**
- * Rollback payload for a generation attempt that failed AFTER its occurrence
- * was claimed: the pre-claim schedule fields, so the next tick retries instead
- * of the occurrence being silently lost. The caller must apply it with
- * `where next_run_on = expectedNextRunOn` — if a concurrent writer has already
- * moved the schedule on, the guarded update matches nothing and that writer
- * wins. When the live value is known, pass it to skip building a rollback that
- * could no longer apply. Pure — unit-tested.
- */
-export function scheduleClaimRollback(
-  prior: { nextRunOn: string; lastRunAt: Date | null },
-  claimedNextRunOn: string,
-): ScheduleClaimRollback;
-export function scheduleClaimRollback(
-  prior: { nextRunOn: string; lastRunAt: Date | null },
-  claimedNextRunOn: string,
-  currentNextRunOn: string,
-): ScheduleClaimRollback | null;
-export function scheduleClaimRollback(
-  prior: { nextRunOn: string; lastRunAt: Date | null },
-  claimedNextRunOn: string,
-  currentNextRunOn?: string,
-): ScheduleClaimRollback | null {
-  if (currentNextRunOn !== undefined && currentNextRunOn !== claimedNextRunOn) return null;
-  return {
-    expectedNextRunOn: claimedNextRunOn,
-    nextRunOn: prior.nextRunOn,
-    isActive: true,
-    lastRunAt: prior.lastRunAt,
-  };
 }
 
 /** Whole-day difference b − a (both ISO), used to carry the payment term. */
@@ -292,11 +255,10 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
         nextRunOn: string;
         endsOn: string | null;
         autoPost: boolean;
-        lastRunAt: Date | null;
       }>(sql`
       select rs.id, rs.org_id as "orgId", rs.template_document_id as "templateId",
              rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
-             rs.auto_post as "autoPost", rs.last_run_at as "lastRunAt"
+             rs.auto_post as "autoPost"
         from recurring_schedules rs
         join orgs o on o.id = rs.org_id and o.env_kind = 'production'
         join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
@@ -327,56 +289,51 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     // Deactivate once we pass ends_on rather than looping forever.
     const stillActive = !s.endsOn || advanced <= s.endsOn;
 
-    // Claim the occurrence: only the tick that flips next_run_on off its current
-    // value proceeds. Deactivate in the same statement if this was the last one.
-    // If generation then fails, the catch rolls this claim back: a persistently
-    // failing schedule stays due and retries every tick, surfacing through
-    // last_error (the operator's signal — there is no failure counter in the
-    // schema). That is preferable to silently losing the occurrence, which is
-    // what leaving the claim advanced would do.
-    const claimed = await withBypass(async () => {
-      return (await db.execute<{ id: string }>(sql`
-        update recurring_schedules
-           set next_run_on = ${advanced},
-               is_active = ${stillActive},
-               last_run_at = now()
-         where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${occurrenceDate}
-        returning id
-      `));
-    });
-    if (!claimed.rows.length) continue; // another tick won it
-
-    let gen: { documentId: string; documentNumber: string; posted: boolean };
+    // Claim the occurrence INSIDE the generation transaction: the tick that
+    // flips next_run_on off its current value and the cloned document commit
+    // atomically, so no crash window can strand an advanced next_run_on with
+    // nothing generated — a killed process rolls back to "still due" and the
+    // next tick retries. Only one tick can win the compare-and-swap: a
+    // concurrent tick blocks on this row lock and, when the winner commits,
+    // re-evaluates the WHERE against the advanced value and claims zero rows.
+    // Deactivating a final occurrence shares the same fate — it lands only if
+    // the document did.
+    let gen: { documentId: string; documentNumber: string; posted: boolean } | null = null;
     try {
-      gen = await withOrg(s.orgId, async () =>
-        generateFromTemplate(s.orgId, s.templateId, today, s.autoPost, {
+      gen = await withOrg(s.orgId, async () => {
+        const claimed = (await db.execute<{ id: string }>(sql`
+          update recurring_schedules
+             set next_run_on = ${advanced},
+                 is_active = ${stillActive},
+                 last_run_at = now()
+           where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${occurrenceDate}
+          returning id
+        `));
+        if (!claimed.rows.length) return null; // another tick won it
+        return generateFromTemplate(s.orgId, s.templateId, today, s.autoPost, {
           scheduleId: s.id,
           occurrenceOn: occurrenceDate,
-        }),
-      );
-      result.generated += 1;
-      if (gen.posted) result.posted += 1;
-      result.documents.push({ scheduleId: s.id, ...gen });
+        });
+      });
     } catch (e) {
+      // Generation threw — withOrg already rolled the whole unit back, claim
+      // included, so there is nothing to restore. A persistently failing
+      // schedule stays due and retries every tick, surfacing through
+      // last_error (the operator's signal — there is no failure counter in
+      // the schema). That is preferable to silently losing the occurrence.
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
       await withBypass(async () => {
-        // Roll the claim back so the next tick retries the occurrence. The
-        // restore is guarded on the advanced value: a concurrent writer that
-        // has legitimately moved the schedule wins over our rollback.
-        const rollback = scheduleClaimRollback(s, advanced);
-        await db.execute(sql`
-          update recurring_schedules
-             set next_run_on = ${rollback.nextRunOn}, is_active = ${rollback.isActive},
-                 last_run_at = ${rollback.lastRunAt}
-            where id = ${s.id} and org_id = ${s.orgId} and next_run_on = ${rollback.expectedNextRunOn}
-        `);
         await db.execute(sql`
           update recurring_schedules set last_error = ${message} where id = ${s.id} and org_id = ${s.orgId}
         `);
       });
       continue;
     }
+    if (!gen) continue; // another tick won it
+    result.generated += 1;
+    if (gen.posted) result.posted += 1;
+    result.documents.push({ scheduleId: s.id, ...gen });
     // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
     // point the occurrence durably produced exactly one document (the
     // generation transaction committed it together with its occurrence-guard

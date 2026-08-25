@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { advanceCadence, scheduleClaimRollback } from "./recurring.ts";
+import { advanceCadence } from "./recurring.ts";
 
 test("weekly and biweekly step by exact day counts", () => {
   assert.equal(advanceCadence("2026-07-21", "weekly"), "2026-07-28");
@@ -29,56 +29,56 @@ test("a malformed custom cron falls back to a monthly step instead of looping", 
   assert.equal(advanceCadence("2026-07-21", "custom_cron", "not a cron"), "2026-08-21");
 });
 
-test("scheduleClaimRollback puts the pre-claim occurrence back so the next tick retries", () => {
-  const prior = { nextRunOn: "2026-06-01", lastRunAt: new Date("2026-05-15T09:30:00Z") };
-  const rollback = scheduleClaimRollback(prior, "2026-07-01");
-  // The restore targets the ORIGINAL occurrence, never the claimed (advanced)
-  // one, and reactivates — the due scan only ever claims active schedules.
-  assert.deepEqual(rollback, {
-    expectedNextRunOn: "2026-07-01", // guard: only while the row still holds the claim
-    nextRunOn: "2026-06-01",
-    isActive: true,
-    lastRunAt: prior.lastRunAt,
-  });
-});
-
-test("scheduleClaimRollback yields nothing when a concurrent writer moved the schedule", () => {
-  const prior = { nextRunOn: "2026-06-01", lastRunAt: null };
-  // The row moved past our claim — the rollback must not clobber it.
-  assert.equal(scheduleClaimRollback(prior, "2026-07-01", "2026-07-15"), null);
-  assert.equal(scheduleClaimRollback(prior, "2026-07-01", "2026-06-01"), null);
-  // Live value unknown → still build the payload; the SQL WHERE decides atomically.
-  assert.ok(scheduleClaimRollback(prior, "2026-07-01"));
-});
-
-test("a failed generation tick rolls its claim back instead of losing the occurrence", () => {
-  // The runner claims by advancing next_run_on before generateFromTemplate
-  // runs; if generation throws, the catch must restore the pre-claim
-  // occurrence — pinned structurally, like fx-revaluation does.
+test("the claim and the generation share one transaction, closing the crash-skip window", () => {
+  // The defect: the tick claimed by committing next_run_on advancement in its
+  // own transaction BEFORE generating; a process killed between the two
+  // commits stranded an advanced next_run_on with no document — permanently
+  // skipping the occurrence. The fix: claim INSIDE the generation transaction
+  // so either both commit or neither does.
   const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
   const run = source.indexOf("export async function runDueRecurringSchedules");
-  const claim = source.indexOf("set next_run_on = ${advanced}", run);
-  const catchBlock = source.indexOf("} catch (e) {", claim);
-  const rollbackCall = source.indexOf("scheduleClaimRollback(s, advanced)", catchBlock);
-  const restore = source.indexOf("next_run_on = ${rollback.nextRunOn}", rollbackCall);
-  const restoreGuard = source.indexOf(
-    "next_run_on = ${rollback.expectedNextRunOn}",
-    rollbackCall,
-  );
-  const lastError = source.indexOf("last_error = ${message}", rollbackCall);
-  assert.ok(claim > run, "the occurrence is claimed by advancing next_run_on");
-  assert.ok(catchBlock > claim, "generation failures are caught after the claim");
-  assert.ok(rollbackCall > catchBlock, "the catch builds a claim rollback");
-  assert.ok(restore > rollbackCall, "the failed attempt restores the pre-claim next_run_on");
-  assert.ok(restoreGuard > restore, "the restore is guarded on the claimed value");
-  assert.ok(lastError > restoreGuard, "last_error is still written for observability");
-  // The claim itself stays compare-and-swap: only one tick can win an
-  // occurrence, and the claim is org-scoped like every other schedule write.
+  const loopStart = source.indexOf("for (const s of due.rows)", run);
+  const orgTxn = source.indexOf("gen = await withOrg(s.orgId, async () => {", run);
+  const claim = source.indexOf("set next_run_on = ${advanced}", orgTxn);
+  const generateCall = source.indexOf("generateFromTemplate(s.orgId, s.templateId", claim);
+  assert.ok(orgTxn > loopStart, "generation runs in one pinned org transaction");
+  assert.ok(claim > orgTxn, "the occurrence is claimed inside that same transaction");
+  assert.ok(generateCall > claim, "generation follows the claim within it");
+  // Nothing between the claim and generateFromTemplate may end a transaction,
+  // and no separate committed claim step may exist before the org transaction:
+  // any commit boundary there is exactly the crash window this closes.
+  const inside = source.slice(orgTxn, source.indexOf("});", generateCall));
+  assert.doesNotMatch(inside.slice(source.indexOf("returning id")), /withBypass|withOrg\(/,
+    "the claimed unit is not broken by another transaction boundary");
+  const before = source.slice(loopStart, orgTxn);
+  assert.doesNotMatch(before, /update recurring_schedules/,
+    "nothing may claim (write the schedule) outside the generation transaction");
   const claimSql = source.slice(claim, source.indexOf("returning id", claim));
   assert.match(
     claimSql,
     /where id = \$\{s\.id\} and org_id = \$\{s\.orgId\} and next_run_on = \$\{occurrenceDate\}/,
+    "the claim stays compare-and-swap and org-scoped: one tick wins an occurrence",
   );
+  assert.equal(source.indexOf("scheduleClaimRollback"), -1,
+    "the in-process rollback machinery is gone — atomicity replaced it");
+});
+
+test("a failed generation leaves the occurrence due and records why — restoring nothing", () => {
+  // Atomicity makes "rolled back" and "never claimed" indistinguishable from
+  // outside, so the failure path must contain NO next_run_on writer at all:
+  // only last_error observability. (The success-bookkeeping path below it is
+  // pinned separately to never touch next_run_on either.)
+  const source = readFileSync(new URL("./recurring.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueRecurringSchedules");
+  const claim = source.indexOf("set next_run_on = ${advanced}", run);
+  const catchBlock = source.indexOf("} catch (e) {", claim);
+  const catchEnd = source.indexOf("if (!gen) continue", catchBlock);
+  const bookkeeping = source.indexOf("set run_count = run_count + 1", catchBlock);
+  assert.ok(catchBlock > claim && catchEnd > catchBlock && bookkeeping > catchEnd,
+    "the failure path sits between the claim and the bookkeeping");
+  const failurePath = source.slice(catchBlock, catchEnd);
+  assert.match(failurePath, /last_error = \$\{message\}/, "failures surface through last_error");
+  assert.doesNotMatch(failurePath, /next_run_on/, "the failure path never writes next_run_on");
 });
 
 test("generation is guarded per occurrence before anything is created", () => {

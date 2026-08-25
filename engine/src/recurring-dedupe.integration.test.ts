@@ -136,30 +136,60 @@ test(
 );
 
 test(
-  "a failed generation still rolls its claim back and commits nothing",
+  "an interrupted generation consumes nothing — the next tick retries and completes it",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     try {
       const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
-      // auto_post with no attributable creator throws after the draft insert —
-      // proving the whole generation transaction (draft + guard) rolls back.
+      // auto_post with no attributable creator throws mid-generation — AFTER
+      // the occurrence was claimed inside the same transaction. Atomicity
+      // makes that indistinguishable from a hard process kill: nothing about
+      // the claim may become durable.
       const scheduleId = await seedInvoiceSchedule(org, actorId, { templateCreatedBy: null });
 
       const run = await runDueRecurringSchedules(org.date);
       assert.equal(run.failed, 1);
-      const state = (await db.execute<{ nextRunOn: string; lastError: string | null }>(sql`
-        select next_run_on as "nextRunOn", last_error as "lastError"
+      const state = (await db.execute<{ nextRunOn: string; lastError: string | null; isActive: boolean; runCount: number; lastDocumentId: string | null }>(sql`
+        select next_run_on as "nextRunOn", last_error as "lastError", is_active as "isActive",
+               run_count as "runCount", last_document_id as "lastDocumentId"
           from recurring_schedules where id = ${scheduleId}
       `));
       assert.equal(state.rows[0]!.nextRunOn, org.date, "the occurrence stays due for the next tick");
       assert.ok(state.rows[0]!.lastError, "last_error names the failure");
+      assert.equal(state.rows[0]!.isActive, true, "the schedule was not deactivated by the failure");
+      assert.equal(state.rows[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
+      assert.equal(state.rows[0]!.lastDocumentId, null);
       assert.equal(await postedInvoiceCount(org.orgId), 0);
       assert.equal(await journalEntryCount(org.orgId), 0);
       const guard = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from recurring_occurrence_documents where org_id = ${org.orgId}
       `));
       assert.equal(Number(guard.rows[0]!.n), 0, "a failed generation never consumes the occurrence");
+
+      // The crash-window regression: whatever killed the first attempt (here a
+      // mid-generation throw; equally a SIGKILL — no durable claim exists to
+      // strand), the next tick must complete the SAME occurrence exactly once.
+      await db.execute(sql`
+        update recurring_schedules set last_error = null where id = ${scheduleId}
+      `);
+      const templateId = (await db.execute<{ id: string }>(sql`
+        select template_document_id as id from recurring_schedules where id = ${scheduleId}
+      `)).rows[0]!.id;
+      await db.execute(sql`
+        update documents set created_by = ${actorId} where id = ${templateId}
+      `);
+      const retry = await runDueRecurringSchedules(org.date);
+      assert.equal(retry.failed, 0);
+      assert.equal(retry.generated, 1, "the retried tick generates the missed occurrence");
+      assert.equal(retry.posted, 1);
+      assert.equal(await postedInvoiceCount(org.orgId), 1, "exactly one invoice ever exists");
+      assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
+      const retriedState = (await db.execute<{ nextRunOn: string; runCount: number }>(sql`
+        select next_run_on as "nextRunOn", run_count as "runCount" from recurring_schedules where id = ${scheduleId}
+      `));
+      assert.notEqual(retriedState.rows[0]!.nextRunOn, org.date, "the claim now advances");
+      assert.equal(retriedState.rows[0]!.runCount, 1);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
