@@ -246,7 +246,7 @@ export function buildOpenApiSpec(
               content: { "application/json": { schema: { $ref: `#/components/schemas/${modelKey}` } } },
             },
             "404": { description: "Not found" },
-            "409": { description: "Conflict — the record changed after it was read", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+            "409": { description: "Conflict — the record changed after it was read, or the expectedUpdatedAt precondition was missing or stale. Re-read the record and retry once with the fresh updated_at copied verbatim into expectedUpdatedAt.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
             "422": { description: "Validation error", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           },
         },
