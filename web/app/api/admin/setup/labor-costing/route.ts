@@ -1,8 +1,8 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import {
@@ -28,6 +28,11 @@ export const dynamic = 'force-dynamic'
  *  POST { action:'end-rate' }   set/clear a row's effective_to.
  *  POST { action:'delete-rate' }
  *
+ * PUT is a strict financial-policy boundary: every field is validated before
+ * any write, and the settings + control accounts + audit row commit in ONE
+ * transaction — a rejected save persists nothing, and an accepted save always
+ * leaves audit evidence.
+ *
  * Wage data is confidential: gated on admin.setup.manage (PMs never see it —
  * projects only ever carry the blended standard cost rate snapshot).
  */
@@ -35,6 +40,65 @@ export const dynamic = 'force-dynamic'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 const COMPONENT_KINDS = new Set(['percent_of_wage', 'per_hour', 'per_day', 'worker_comp'])
+
+/** The settings payload carries at most this many burden components. */
+const MAX_COMPONENTS = 20
+
+/** Control-account keys this save owns (orgs.settings.controlAccounts paths). */
+const CONTROL_ACCOUNT_KEYS = ['laborWip', 'laborClearing', 'payrollVariance'] as const
+
+type Parsed<T> = { ok: true; value: T } | { ok: false; error: string }
+
+/**
+ * Strict financial-policy boundary for burden components. A component that is
+ * present but malformed rejects the whole save: the previous parser silently
+ * dropped unknown kinds / unparseable or negative values and truncated past
+ * 20, so an admin could save believing statutory burden was configured while
+ * payroll actually ran without it. Absent optional labels keep their old
+ * deterministic defaults; wrong-typed ones are refused.
+ */
+function parseComponents(input: unknown): Parsed<LaborCostComponent[]> {
+  if (input == null) return { ok: true, value: [] }
+  if (!Array.isArray(input)) return { ok: false, error: 'components must be an array' }
+  if (input.length > MAX_COMPONENTS) {
+    return { ok: false, error: `at most ${MAX_COMPONENTS} components` }
+  }
+  const out: LaborCostComponent[] = []
+  for (const [i, entry] of input.entries()) {
+    const label = `component ${i + 1}`
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      return { ok: false, error: `${label}: must be an object` }
+    }
+    const raw = entry as Record<string, unknown>
+    if (typeof raw.kind !== 'string' || !COMPONENT_KINDS.has(raw.kind)) {
+      return { ok: false, error: `${label}: unknown kind` }
+    }
+    const value = canonicalDecimal(raw.value, 4)
+    if (value === null) {
+      return { ok: false, error: `${label}: value must be a number with at most 4 decimals` }
+    }
+    if (compareDecimal(value, '0') < 0) {
+      return { ok: false, error: `${label}: value cannot be negative` }
+    }
+    if (raw.scaleWithOvertime !== undefined && typeof raw.scaleWithOvertime !== 'boolean') {
+      return { ok: false, error: `${label}: scaleWithOvertime must be a boolean` }
+    }
+    if (raw.key !== undefined && raw.key !== null && typeof raw.key !== 'string') {
+      return { ok: false, error: `${label}: key must be text` }
+    }
+    if (raw.name !== undefined && raw.name !== null && typeof raw.name !== 'string') {
+      return { ok: false, error: `${label}: name must be text` }
+    }
+    out.push({
+      key: (typeof raw.key === 'string' ? raw.key.trim().slice(0, 40) : '') || `c${out.length}`,
+      name: (typeof raw.name === 'string' ? raw.name.trim().slice(0, 120) : '') || 'Component',
+      kind: raw.kind as LaborCostComponent['kind'],
+      value,
+      scaleWithOvertime: raw.scaleWithOvertime === true,
+    })
+  }
+  return { ok: true, value: out }
+}
 
 async function configuredCurrencies(orgId: string): Promise<string[]> {
   const result = await db.execute<{ code: string }>(sql`
@@ -44,25 +108,6 @@ async function configuredCurrencies(orgId: string): Promise<string[]> {
       select base_currency as code from subsidiaries where org_id = ${orgId} and is_active
     ) configured order by code`)
   return result.rows.map((row) => row.code)
-}
-
-function cleanComponents(input: unknown): LaborCostComponent[] {
-  if (!Array.isArray(input)) return []
-  const out: LaborCostComponent[] = []
-  for (const c of input.slice(0, 20)) {
-    if (!c || typeof c !== 'object') continue
-    const kind = String((c as Record<string, unknown>).kind)
-    const value = canonicalDecimal((c as Record<string, unknown>).value, 4)
-    if (!COMPONENT_KINDS.has(kind) || value === null || compareDecimal(value, '0') < 0) continue
-    out.push({
-      key: String((c as Record<string, unknown>).key ?? '').slice(0, 40) || `c${out.length}`,
-      name: String((c as Record<string, unknown>).name ?? '').slice(0, 120) || 'Component',
-      kind: kind as LaborCostComponent['kind'],
-      value,
-      scaleWithOvertime: (c as Record<string, unknown>).scaleWithOvertime === true,
-    })
-  }
-  return out
 }
 
 /** GET ?employee=<partyId> → that employee's wage-rate history (confidential;
@@ -110,10 +155,17 @@ export async function PUT(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
 
-  const s = body.settings ?? {}
-  const hoursPerDayRaw = s.hoursPerDay == null || s.hoursPerDay === ''
+  // Validate the ENTIRE payload before any write: a rejected save must leave
+  // the stored policy exactly as it was.
+  const s = body.settings
+  if (s !== undefined && (typeof s !== 'object' || s === null || Array.isArray(s))) {
+    return NextResponse.json({ error: 'settings must be an object' }, { status: 422 })
+  }
+  const cfg = (s ?? {}) as Record<string, unknown>
+
+  const hoursPerDayRaw = cfg.hoursPerDay == null || cfg.hoursPerDay === ''
     ? '8'
-    : canonicalDecimal(s.hoursPerDay, 4)
+    : canonicalDecimal(cfg.hoursPerDay, 4)
   if (
     hoursPerDayRaw === null ||
     compareDecimal(hoursPerDayRaw, '0') <= 0 ||
@@ -127,9 +179,9 @@ export async function PUT(req: Request) {
   } catch {
     return NextResponse.json({ error: 'invalid hoursPerDay' }, { status: 422 })
   }
-  const annualHoursRaw = s.annualHours == null || s.annualHours === ''
+  const annualHoursRaw = cfg.annualHours == null || cfg.annualHours === ''
     ? '2080'
-    : canonicalDecimal(s.annualHours, 4)
+    : canonicalDecimal(cfg.annualHours, 4)
   if (
     annualHoursRaw === null ||
     compareDecimal(annualHoursRaw, '0') <= 0 ||
@@ -143,33 +195,70 @@ export async function PUT(req: Request) {
   } catch {
     return NextResponse.json({ error: 'invalid annualHours' }, { status: 422 })
   }
+  if (cfg.mode !== undefined && cfg.mode !== 'off' && cfg.mode !== 'post') {
+    return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
+  }
+  const components = parseComponents(cfg.components)
+  if (!components.ok) return NextResponse.json({ error: components.error }, { status: 422 })
   const settings = {
-    mode: s.mode === 'post' ? 'post' : 'off',
+    mode: cfg.mode === 'post' ? ('post' as const) : ('off' as const),
     hoursPerDay,
     annualHours,
-    components: cleanComponents(s.components),
+    components: components.value,
   }
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting}', ${JSON.stringify(settings)}::jsonb)
-     where id = ${orgId}`)
 
   // Control accounts ride the same save (existing controlAccounts keys).
   const accounts: Record<string, string | null> = {}
-  for (const key of ['laborWip', 'laborClearing', 'payrollVariance'] as const) {
+  for (const key of CONTROL_ACCOUNT_KEYS) {
     if (!(key in body)) continue
     const v = body[key]
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     accounts[key] = v
   }
-  for (const [key, v] of Object.entries(accounts)) {
-    await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{controlAccounts,${key}}`}::text[], ${JSON.stringify(v)}::jsonb)
-       where id = ${orgId}`)
+  // A referenced account must be a real posting account in this org.
+  const accountIds = [...new Set(Object.values(accounts).filter((v): v is string => v !== null))]
+  if (accountIds.length > 0) {
+    const found = await db.execute<{ id: string }>(sql`
+      select id from accounts
+       where org_id = ${orgId} and not is_summary
+         and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})`)
+    const valid = new Set(found.rows.map((row) => row.id))
+    for (const [key, v] of Object.entries(accounts)) {
+      if (v !== null && !valid.has(v)) {
+        return NextResponse.json(
+          { error: `${key}: account not found or is a summary account` },
+          { status: 422 },
+        )
+      }
+    }
   }
 
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ laborCosting: settings, ...accounts })}, ${gate.user.id})`)
+  // Settings + control accounts + audit evidence commit together or not at
+  // all — no partial save can survive a failure past validation.
+  await withOrgTransaction(orgId, async () => {
+    const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
+      select settings from orgs where id = ${orgId}`)
+    const beforeSettings = (current.rows[0]?.settings ?? {}) as Record<string, unknown>
+    const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>
+
+    // One single-assignment update: every jsonb_set nests around the last.
+    let nextSettings: SQL = sql`jsonb_set(coalesce(settings, '{}'::jsonb), '{laborCosting}', ${JSON.stringify(settings)}::jsonb)`
+    for (const [key, v] of Object.entries(accounts)) {
+      nextSettings = sql`jsonb_set(${nextSettings}, ${`{controlAccounts,${key}}`}::text[], ${JSON.stringify(v)}::jsonb)`
+    }
+    await db.execute(sql`
+      update orgs set settings = ${nextSettings}, updated_at = now(), updated_by = ${gate.user.id}
+       where id = ${orgId}`)
+
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({
+        laborCosting: [beforeSettings.laborCosting ?? null, settings],
+        controlAccounts: Object.fromEntries(
+          Object.entries(accounts).map(([key, v]) => [key, [beforeControl[key] ?? null, v]]),
+        ),
+      })}, ${gate.user.id})`)
+  })
   return NextResponse.json({ ok: true })
 }
 
