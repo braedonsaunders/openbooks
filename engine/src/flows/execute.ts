@@ -19,6 +19,7 @@ import {
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
 import { renderFlowPdf } from "./pdf-hook.ts";
+import { enqueueFlowEmail } from "../scheduler-outbox.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -35,6 +36,13 @@ import { renderFlowPdf } from "./pdf-hook.ts";
  *     loser sees zero returned rows and skips the node. On failure the claim
  *     is released (no checkpoint is left behind — unchanged semantics: a
  *     failed node leaves no effect row, so retries resume from it).
+ *   • Emails are DEFERRED through the durable scheduler_outbox, never handed
+ *     to Redis inline. The outbox row is written through whatever database
+ *     transaction the caller owns, so a rolled-back business unit (void
+ *     reservation, posting command) discards the pending send together with
+ *     the rest of the flow's effects instead of delivering mail for mutations
+ *     that never committed. The scheduler-outbox worker delivers after commit;
+ *     per-effect occurrence keys make replays collapse onto one row.
  *   • Gates fan out to MULTIPLE flow_gates rows (one per resolved assignee,
  *     shared groupKey, quorum any/all) with reminder/escalation timestamps —
  *     and configurable quorum.
@@ -197,32 +205,39 @@ export async function executeFlowPlan(
           }
         }
         try {
-          const [{ enqueueEmail }, { flowNotificationEmail }] = await Promise.all([
-            import("@openbooks/jobs"),
-            import("@openbooks/emails"),
-          ]);
+          const { flowNotificationEmail } = await import("@openbooks/emails");
           const mail = flowNotificationEmail({ orgName: brand, subject, body });
-          await enqueueEmail({
+          // Deferred through the durable outbox (see module contract): the
+          // row commits with — or rolls back with — the caller's transaction,
+          // and the scheduler-outbox worker performs the actual Redis send
+          // afterwards. The occurrence key is this run's effect identity, so
+          // a replayed execution cannot enqueue a second copy.
+          await enqueueFlowEmail({
             orgId: ctx.orgId,
-            to,
-            subject: mail.subject,
-            html: mail.html,
-            text: mail.text,
-            ...(attachments.length > 0 ? { attachments } : {}),
-            meta: { category: "flows" },
+            runId,
+            occurrenceKey: `${runId}:email:${nodeId}`,
+            payload: {
+              to,
+              subject: mail.subject,
+              html: mail.html,
+              text: mail.text,
+              ...(attachments.length > 0 ? { attachments } : {}),
+              meta: { category: "flows" },
+            },
           });
         } catch (e) {
-          // The queue is the durable transport; when Redis is down we record
-          // the skip on the effect rather than failing the whole run — the
-          // rest of the flow (status changes, gates) matters more than one
-          // notification (same posture as scheduler.ts's inline fallback).
-          console.error(`[flows] send_email enqueue failed (run ${runId}):`, e);
+          // The outbox is the durable transport; when even its insert fails
+          // we record the skip on the effect rather than failing the whole
+          // run — the rest of the flow (status changes, gates) matters more
+          // than one notification (same posture as scheduler.ts's inline
+          // fallback).
+          console.error(`[flows] send_email deferral failed (run ${runId}):`, e);
           await markEffectComplete(`${flow.id}:action:${nodeId}`, {
             action: "send_email",
-            skipped: "email queue unavailable",
+            skipped: "email outbox unavailable",
             to: to.length,
           });
-          return `send_email→${to.length} (queue unavailable, skipped)`;
+          return `send_email→${to.length} (outbox unavailable, skipped)`;
         }
         return `send_email→${to.length}${pdfNote}`;
       }
@@ -484,10 +499,7 @@ async function createGate(
   );
 
   try {
-    const [{ enqueueEmail }, { flowApprovalRequestEmail }] = await Promise.all([
-      import("@openbooks/jobs"),
-      import("@openbooks/emails"),
-    ]);
+    const { flowApprovalRequestEmail } = await import("@openbooks/emails");
     // One-click decision links are bound to a specific gate ROW (gateId +
     // assignee), so read the inserted rows back (this also covers rows
     // skipped by onConflictDoNothing on replay) and send one email per
@@ -515,19 +527,29 @@ async function createGate(
         flowName: flow.name,
         ...(gateRowId ? emailActionUrls(gateRowId, u.id) : {}),
       });
-      await enqueueEmail({
+      // Same deferral contract as send_email: the outbox row rides the
+      // caller's transaction (rollback discards it with the gates it
+      // announces), and the occurrence key is bound to the gate ROW so a
+      // replayed execution collapses onto one pending send.
+      await enqueueFlowEmail({
         orgId: ctx.orgId,
-        to: u.email,
-        subject: mail.subject,
-        html: mail.html,
-        text: mail.text,
-        meta: { category: "approvals" },
+        runId,
+        occurrenceKey: gateRowId
+          ? `${runId}:gate-email:${gateRowId}`
+          : `${runId}:gate-email:${nodeId}:${u.id}`,
+        payload: {
+          to: [u.email],
+          subject: mail.subject,
+          html: mail.html,
+          text: mail.text,
+          meta: { category: "approvals" },
+        },
       });
     }
   } catch (e) {
-    // In-app gate + notification already exist; a down queue only costs the
-    // email nudge.
-    console.error(`[flows] gate email enqueue failed (run ${runId}):`, e);
+    // In-app gate + notification already exist; a failed deferral only costs
+    // the email nudge.
+    console.error(`[flows] gate email deferral failed (run ${runId}):`, e);
   }
 
   return assignees.length;

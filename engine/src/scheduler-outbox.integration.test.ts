@@ -5,8 +5,10 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import {
   enqueueApprovalEscalation,
+  enqueueFlowEmail,
   listFailedSchedulerOutbox,
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
+  parseFlowEmailPayload,
   processDueSchedulerOutbox,
   recoverStaleSchedulerOutbox,
 } from "./scheduler-outbox.ts";
@@ -203,5 +205,98 @@ test("a recovered scheduler lease fences the stale worker completion", { skip: !
   } finally {
     releaseOld?.();
     await db.execute(sql`delete from scheduler_outbox where occurrence_key=${occurrenceKey}`);
+  }
+});
+
+test("flow email payload validation fails closed on every malformed shape", () => {
+  const valid = {
+    to: ["a@example.test"],
+    subject: "s",
+    html: "<p>s</p>",
+    text: "s",
+  };
+  assert.deepEqual(parseFlowEmailPayload(valid), valid);
+  const withExtras = {
+    ...valid,
+    attachments: [{ filename: "r.pdf", content: "AAAA", contentType: "application/pdf" }],
+    meta: { category: "flows" },
+  };
+  assert.deepEqual(parseFlowEmailPayload(withExtras), withExtras);
+  for (const [detail, bad] of [
+    ["non-object", "nope"],
+    ["empty to", { ...valid, to: [] }],
+    ["bad recipient", { ...valid, to: ["no-at-sign"] }],
+    ["missing subject", { ...valid, subject: undefined }],
+    ["html not a string", { ...valid, html: 5 }],
+    ["attachments not array", { ...valid, attachments: {} }],
+    ["attachment without content", { ...valid, attachments: [{ filename: "x" }] }],
+    ["meta values must be strings", { ...valid, meta: { category: 7 } }],
+  ] as const) {
+    assert.throws(() => parseFlowEmailPayload(bad), /malformed/, detail);
+  }
+});
+
+test("flow_email rows are idempotent by occurrence key and terminal once delivered", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const runId = randomUUID();
+  try {
+    const payload = { to: ["approver@scratch.test"], subject: "Approval", html: "<b>Approval</b>", text: "Approval" };
+    const first = await enqueueFlowEmail({
+      orgId: org.orgId,
+      runId,
+      occurrenceKey: `${runId}:email:n1`,
+      payload,
+    });
+    // A replay of the same effect (same occurrence key) collapses onto the
+    // existing row instead of enqueueing a second send.
+    const second = await enqueueFlowEmail({
+      orgId: org.orgId,
+      runId,
+      occurrenceKey: `${runId}:email:n1`,
+      payload,
+    });
+    assert.equal(first, true);
+    assert.equal(second, false);
+
+    let deliveries = 0;
+    await processDueSchedulerOutbox(new Date(Date.now() + 1_000), 50, async (row) => {
+      if (row.subject_id === runId) {
+        deliveries++;
+        assert.deepEqual(row.payload, payload);
+      }
+    });
+    assert.equal(deliveries, 1, "the worker delivered the deferred email exactly once");
+    const delivered = (await db.execute<{ status: string; attempt_count: number }>(sql`
+      select status, attempt_count from scheduler_outbox where subject_id=${runId}
+    `)).rows[0]!;
+    assert.equal(delivered.status, "succeeded", "a flow email is terminal after delivery");
+    assert.equal(delivered.attempt_count, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an undeliverable flow email retries visibly instead of sending garbage", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const runId = randomUUID();
+  try {
+    // Tampered storage: a payload that cannot be validated must fail the
+    // attempt loudly (the default runner validates before any delivery and
+    // must never reach the mail transport).
+    await db.execute(sql`
+      insert into scheduler_outbox
+        (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
+      values (${org.orgId}, 'flow_email', ${runId}, ${`${runId}:corrupt`}, 'pending', ${new Date(Date.now() - 1_000)}, '{"to":"all"}'::jsonb)
+    `);
+    await processDueSchedulerOutbox(new Date(), 50);
+    const failedRow = (await listFailedSchedulerOutbox(200)).find((row) => row.subjectId === runId);
+    assert.ok(failedRow, "the corrupt row stays visible to operators");
+    assert.match(failedRow!.error ?? "", /malformed/);
+    assert.equal(failedRow!.status, "failed");
+    assert.equal(failedRow!.attemptCount, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+    await dropScratchOrg(org.orgId);
   }
 });

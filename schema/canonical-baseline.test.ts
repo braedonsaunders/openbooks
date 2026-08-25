@@ -10,6 +10,8 @@ const paymentRunPostingRecoveryMigrationPath =
   "schema/migrations/generated/0012_payment_run_posting_recovery.sql";
 const documentRevisionMonotonicMigrationPath =
   "schema/migrations/generated/0013_document_revision_monotonic.sql";
+const flowEmailOutboxMigrationPath =
+  "schema/migrations/generated/0014_flow_email_outbox.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -33,6 +35,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0011_payment_run_live_selection.sql",
     "0012_payment_run_posting_recovery.sql",
     "0013_document_revision_monotonic.sql",
+    "0014_flow_email_outbox.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -80,6 +83,35 @@ test("document revisions can never repeat: storage forces every update to advanc
   assert.match(migration, /BEFORE UPDATE ON public\.documents/);
   assert.match(migration, /CREATE TRIGGER documents_revision_monotonic/);
   assert.match(migration, /COMMENT ON FUNCTION public\.documents_revision_monotonic\(\) IS/);
+});
+
+test("transactional flow emails defer through the durable scheduler outbox", () => {
+  const migration = readFileSync(flowEmailOutboxMigrationPath, "utf8");
+  // The rendered delivery rides the row, so the eventual send never depends
+  // on later record mutations.
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS payload jsonb/);
+  assert.match(migration, /COMMENT ON COLUMN public\.scheduler_outbox\.payload IS/);
+  // The kind and scope guards must admit flow_email — org + run + payload —
+  // while leaving the scan and escalation shapes exactly as they were.
+  const kindCheck = migration.match(
+    /ADD CONSTRAINT scheduler_outbox_kind\s+CHECK \(([\s\S]*?)\)\);/,
+  )?.[1];
+  assert.ok(kindCheck, "migration must (re)create the scheduler_outbox_kind check");
+  assert.match(kindCheck, /'flow_email'::text/);
+  for (const priorKind of [
+    "'dunning'::text",
+    "'subscription_billing'::text",
+    "'property_billing'::text",
+    "'fx_providers'::text",
+    "'approval_escalation'::text",
+  ]) {
+    assert.ok(kindCheck.includes(priorKind), `kind check lost ${priorKind}`);
+  }
+  const scopeCheck = migration.match(
+    /ADD CONSTRAINT scheduler_outbox_scope CHECK \(\(([\s\S]*?)\)\);/,
+  )?.[1];
+  assert.ok(scopeCheck, "migration must (re)create the scheduler_outbox_scope check");
+  assert.match(scopeCheck, /\(kind = 'flow_email'\) AND \(org_id IS NOT NULL\) AND \(subject_id IS NOT NULL\) AND \(payload IS NOT NULL\)/);
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
