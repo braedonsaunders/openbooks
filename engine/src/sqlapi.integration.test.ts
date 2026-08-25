@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypass } from './db.ts'
+import type { PoolClient } from 'pg'
+import { db, pool, withBypass } from './db.ts'
 import { createScratchOrg, dropScratchOrg } from './test-fixtures.ts'
 import { listSchema, runUserSql } from './sqlapi.ts'
 
@@ -49,6 +50,35 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
     )
     assert.deepEqual(firstRows.rows, [{ org_id: first.orgId }])
     assert.deepEqual(secondRows.rows, [{ org_id: second.orgId }])
+    const boundary = await runUserSql(
+      `select current_setting('transaction_read_only') as read_only,
+              current_user as current_user,
+              current_schema as current_schema,
+              current_setting('app.current_org') as current_org,
+              current_setting('app.bypass_rls') as bypass_rls`,
+      { orgId: first.orgId },
+    )
+    assert.deepEqual(boundary.rows, [{
+      read_only: 'on',
+      current_user: 'openbooks_read',
+      current_schema: 'openbooks_query',
+      current_org: first.orgId,
+      bypass_rls: 'off',
+    }])
+    const capped = await runUserSql('select generate_series(1, 3) as value', {
+      orgId: first.orgId,
+      maxRows: 2,
+    })
+    assert.deepEqual(capped.rows, [{ value: 1 }, { value: 2 }])
+    assert.equal(capped.truncated, true)
+    await assert.rejects(
+      runUserSql('select lo_create(0)', { orgId: first.orgId }),
+      /read-only transaction/i,
+    )
+    await assert.rejects(
+      runUserSql('select pg_sleep(0.1)', { orgId: first.orgId, timeoutMs: 20 }),
+      /statement timeout|canceling statement/i,
+    )
     const firstTaxMembers = await runUserSql(
       'select id::text as id from tax_group_members order by id',
       { orgId: first.orgId },
@@ -142,5 +172,47 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
   } finally {
     await withBypass(() => dropScratchOrg(second.orgId))
     await withBypass(() => dropScratchOrg(first.orgId))
+  }
+})
+
+test('governed SQL stays available while the ordinary request pool is saturated', { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const heldClients: PoolClient[] = []
+  try {
+    assert.equal(pool.options.max, 10)
+    for (let index = 0; index < pool.options.max; index += 1) {
+      heldClients.push(await pool.connect())
+    }
+
+    const operations = Promise.all([
+      runUserSql('select 42 as answer', { orgId: org.orgId }),
+      listSchema(org.orgId),
+    ])
+    let outcome:
+      | { ok: true; value: Awaited<typeof operations> }
+      | { ok: false; error: unknown }
+      | undefined
+    const settled = operations.then(
+      (value) => { outcome = { ok: true, value }; return outcome },
+      (error: unknown) => { outcome = { ok: false, error }; return outcome },
+    )
+
+    for (let turn = 0; turn < 2_000 && !outcome && pool.waitingCount === 0; turn += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 5))
+    }
+    const ordinaryWaitersWhileHeld = pool.waitingCount
+    const completedWhileHeld = outcome !== undefined
+
+    for (const client of heldClients.splice(0)) client.release()
+    const finalOutcome = await settled
+    if (!finalOutcome.ok) throw finalOutcome.error
+
+    assert.equal(ordinaryWaitersWhileHeld, 0)
+    assert.equal(completedWhileHeld, true)
+    assert.deepEqual(finalOutcome.value[0].rows, [{ answer: 42 }])
+    assert.ok(finalOutcome.value[1].length > 0)
+  } finally {
+    for (const client of heldClients) client.release()
+    await withBypass(() => dropScratchOrg(org.orgId))
   }
 })

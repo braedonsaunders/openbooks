@@ -35,6 +35,23 @@ export interface OrderHandlerConfig {
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
+const STALE_REVISION = 'this order changed after you opened it; reload and review the latest revision'
+
+/**
+ * Mandatory optimistic-concurrency fence for every mutating order request.
+ * The caller echoes documents.updated_at as expectedUpdatedAt; a missing,
+ * malformed, or non-current token is refused before any side effect. Both
+ * sides compare at millisecond precision: the wire token is an ISO string, so
+ * SQL equality against the stored microsecond timestamp would never hold
+ * (same idiom as parties/[id] and lib/documents).
+ */
+function staleRevision(expected: unknown, actual: unknown): boolean {
+  if (typeof expected !== 'string' || expected === '') return true
+  const expectedTime = new Date(expected).getTime()
+  const actualTime = new Date(actual as string | number | Date).getTime()
+  return Number.isNaN(expectedTime) || expectedTime !== actualTime
+}
+
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
   return async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,6 +71,9 @@ export function makeGET(cfg: OrderHandlerConfig) {
 }
 
 interface OrderPatchBody {
+  /** Optimistic-concurrency token from documents.updated_at. Required for
+   * every mutation (autosave, issue, void) so a stale view can never win. */
+  expectedUpdatedAt?: string
   partyId?: string | null
   documentDate?: string
   dueDate?: string | null
@@ -80,8 +100,8 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const { user } = gate
     const { id } = await params
 
-    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null }>(
-      sql`select status, document_date, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; updated_at: Date }>(
+      sql`select status, document_date, subsidiary_id as "subsidiaryId", updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
@@ -116,22 +136,75 @@ export function makePATCH(cfg: OrderHandlerConfig) {
 
     // --- status transitions ------------------------------------------------
     if (body.status) {
+      if (body.status === 'voided') {
+        if (status === 'voided') {
+          return NextResponse.json({ error: 'already voided' }, { status: 422 })
+        }
+        if (status !== 'approved') {
+          return NextResponse.json(
+            { error: 'only an issued order can be voided; discard a draft instead' },
+            { status: 422 },
+          )
+        }
+        // Fence before the engine's claim: a stale view must not even enter
+        // the void pipeline. requestDocumentVoid re-checks the same token
+        // inside its claim transaction, so a row that changes after this
+        // probe still cannot be voided from the stale view.
+        if (staleRevision(body.expectedUpdatedAt, existing.rows[0].updated_at)) {
+          return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+        }
+        try {
+          const result = await requestDocumentVoid({
+            documentId: id,
+            orgId: user.orgId,
+            actorId: user.id,
+            reason: body.reason ?? '',
+            reversalDate: body.reversalDate,
+            source: 'ui',
+            expectedUpdatedAt: body.expectedUpdatedAt,
+          })
+          if (result.status === 'pending_approval') {
+            const order = await loadOrder(id, user.orgId, cfg.kind)
+            return NextResponse.json(
+              { ...order, voidPending: true, requestId: result.runId },
+              { status: 202 },
+            )
+          }
+          const order = await loadOrder(id, user.orgId, cfg.kind)
+          return NextResponse.json(order)
+        } catch (error) {
+          if (error instanceof DocumentVoidError) {
+            return NextResponse.json({ error: error.message }, { status: 422 })
+          }
+          throw error
+        }
+      }
+
       return withOrgTransaction(user.orgId, async () => {
-        // Serialize issuing/voiding with draft replacement at the aggregate
-        // root. The status used to be checked before either command owned a
-        // row lock, allowing a late draft PATCH to rewrite an issued order.
+        // Serialize issuing with draft replacement at the aggregate root. A
+        // late draft PATCH must not rewrite an order after issuance commits.
+        // Void owns its transaction internally so it can reserve the aggregate
+        // before before_void effects. Script queries use the separate governed
+        // READ ONLY pool while script writes join that atomic reservation.
         const locked = (await db.execute<{
           status: string
           party_id: string | null
           total: string
+          updated_at: Date
         }>(sql`
-          select status, party_id, total
+          select status, party_id, total, updated_at
             from documents
            where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
            for update
         `))
         const current = locked.rows[0]
         if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+        // The aggregate lock is held: an exact token mismatch here is a stale
+        // caller, refused before the issuance side effects.
+        if (staleRevision(body.expectedUpdatedAt, current.updated_at)) {
+          return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+        }
 
         if (body.status === 'approved') {
           if (current.status !== 'draft') {
@@ -174,39 +247,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
               { status: 202 },
             )
           }
-        } else if (body.status === 'voided') {
-          if (current.status === 'voided') {
-            return NextResponse.json({ error: 'already voided' }, { status: 422 })
-          }
-          if (current.status !== 'approved') {
-            return NextResponse.json(
-              { error: 'only an issued order can be voided; discard a draft instead' },
-              { status: 422 },
-            )
-          }
-          const result = await requestDocumentVoid({
-            documentId: id,
-            orgId: user.orgId,
-            actorId: user.id,
-            reason: body.reason ?? '',
-            reversalDate: body.reversalDate,
-            source: 'ui',
-          })
-          if (result.status === 'pending_approval') {
-            const order = await loadOrder(id, user.orgId, cfg.kind)
-            return NextResponse.json(
-              { ...order, voidPending: true, requestId: result.runId },
-              { status: 202 },
-            )
-          }
         }
         const order = await loadOrder(id, user.orgId, cfg.kind)
         return NextResponse.json(order)
-      }).catch((error: unknown) => {
-        if (error instanceof DocumentVoidError) {
-          return NextResponse.json({ error: error.message }, { status: 422 })
-        }
-        throw error
       })
     }
 
@@ -310,13 +353,14 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     }
 
     const mutation = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{ status: string }>(sql`
-        select status
+      const locked = (await tx.execute<{ status: string; updated_at: Date }>(sql`
+        select status, updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
       `))
       if (!locked.rows[0]) return 'not_found' as const
+      if (staleRevision(body.expectedUpdatedAt, locked.rows[0].updated_at)) return 'stale' as const
       if (locked.rows[0].status !== 'draft') return 'not_editable' as const
 
       if (preparedLines) {
@@ -376,6 +420,9 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     if (mutation === 'not_found') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
+    if (mutation === 'stale') {
+      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+    }
     if (mutation === 'not_editable') {
       return NextResponse.json({ error: 'only draft orders can be edited' }, { status: 422 })
     }
@@ -391,17 +438,24 @@ export function makePATCH(cfg: OrderHandlerConfig) {
  * to a posted doc).
  */
 export function makeDELETE(cfg: OrderHandlerConfig) {
-  return async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
+    // A missing/malformed body just means no revision token was supplied;
+    // the fence below answers that with the same reload-and-retry 409 as a
+    // stale token, so legacy empty-body deletes fail closed uniformly.
+    const parsedBody = await parseJsonBody(req, jsonObject)
+    const expectedUpdatedAt = parsedBody.ok
+      ? (parsedBody.data as { expectedUpdatedAt?: string }).expectedUpdatedAt
+      : undefined
     return withOrgTransaction(user.orgId, async () => {
       // Draft discard is another lifecycle mutation. Own the same aggregate
       // lock used by issue/void before deleteDocument reads draft status, so a
       // delete that waited behind issuance cannot remove the issued order.
-      const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-        select subsidiary_id as "subsidiaryId"
+      const owned = (await db.execute<{ subsidiaryId: string | null; updated_at: Date }>(sql`
+        select subsidiary_id as "subsidiaryId", updated_at
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
@@ -409,6 +463,9 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
       const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
       if (denied) return denied
+      if (staleRevision(expectedUpdatedAt, owned.rows[0].updated_at)) {
+        return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+      }
       await deleteDocument(id, user.id, user.orgId)
       return NextResponse.json({ ok: true })
     }).catch((error: unknown) => {
@@ -429,18 +486,23 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     const { id } = await params
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as { targetKind?: string }
+    const body = parsedBody.data as { targetKind?: string; expectedUpdatedAt?: string }
     if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
 
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.
-    const owns = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: Date }>(
+      sql`select subsidiary_id as "subsidiaryId", updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     const source = owns.rows[0]
     if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied
+    // Fence the conversion on the caller's revision before creating the
+    // downstream document from a possibly outdated source view.
+    if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {
+      return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
+    }
 
     try {
       const res = await convertOrder(user.orgId, user.id, id, body.targetKind)
