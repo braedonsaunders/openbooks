@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import {
-  advanceSubscription,
-  monthlyRecurringRevenue,
-  prorate,
-  subscriptionClaimRollback,
-} from "./subscription-billing.ts";
+import { advanceSubscription, monthlyRecurringRevenue, prorate } from "./subscription-billing.ts";
 
 test("advanceSubscription steps by interval × count with month-end clamp", () => {
   assert.equal(advanceSubscription("2026-01-15", "monthly", 1), "2026-02-15");
@@ -37,61 +32,58 @@ test("prorate bills the remaining slice of a period exactly", () => {
   assert.equal(prorate("300", "2026-06-01", "2026-06-01", "2026-06-01"), "0.0000");
 });
 
-test("subscriptionClaimRollback puts the pre-claim schedule back so the next tick retries", () => {
-  const prior = {
-    nextBillOn: "2026-06-01",
-    currentPeriodStart: "2026-05-01",
-    lastBilledAt: new Date("2026-05-15T09:30:00Z"),
-  };
-  const rollback = subscriptionClaimRollback(prior, "2026-07-01");
-  // The restore targets the ORIGINAL values, never the claimed (advanced) ones.
-  assert.deepEqual(rollback, {
-    expectedNextBillOn: "2026-07-01", // guard: only while the row still holds the claim
-    nextBillOn: "2026-06-01",
-    currentPeriodStart: "2026-05-01",
-    lastBilledAt: prior.lastBilledAt,
-  });
-});
-
-test("subscriptionClaimRollback yields nothing when a concurrent writer moved the schedule", () => {
-  const prior = { nextBillOn: "2026-06-01", currentPeriodStart: null, lastBilledAt: null };
-  // The row moved past our claim (e.g. a manual bill won) — the rollback must
-  // not clobber it.
-  assert.equal(subscriptionClaimRollback(prior, "2026-07-01", "2026-07-15"), null);
-  assert.equal(subscriptionClaimRollback(prior, "2026-07-01", "2026-06-01"), null);
-  // Live value unknown → still build the payload; the SQL WHERE decides atomically.
-  assert.ok(subscriptionClaimRollback(prior, "2026-07-01"));
-});
-
-test("a failed billing tick rolls its claim back instead of losing the occurrence", () => {
-  // The runner claims by advancing next_bill_on before billOne runs; if billOne
-  // throws, the catch must restore the pre-claim schedule — pinned structurally,
-  // like fx-revaluation does.
+test("the claim and the billing share one transaction, closing the crash-skip window", () => {
+  // The defect: the tick claimed by committing next_bill_on advancement in its
+  // own transaction BEFORE billOne ran; a process killed between the two
+  // commits stranded an advanced next_bill_on with no invoice — permanently
+  // losing the billable period, because no in-process catch ever runs again.
+  // The fix: claim INSIDE the billing transaction so either both commit or
+  // neither does.
   const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
   const run = source.indexOf("export async function runDueSubscriptions");
-  const claim = source.indexOf("set next_bill_on = ${advanced}", run);
-  const catchBlock = source.indexOf("} catch (e) {", claim);
-  const rollbackCall = source.indexOf("subscriptionClaimRollback(row, advanced)", catchBlock);
-  const restore = source.indexOf("next_bill_on = ${rollback.nextBillOn}", rollbackCall);
-  const restoreGuard = source.indexOf(
-    "next_bill_on = ${rollback.expectedNextBillOn}",
-    rollbackCall,
-  );
-  const lastError = source.indexOf("last_error = ${message}", rollbackCall);
-  assert.ok(claim > run, "the occurrence is claimed by advancing next_bill_on");
-  assert.ok(catchBlock > claim, "billing failures are caught after the claim");
-  assert.ok(rollbackCall > catchBlock, "the catch builds a claim rollback");
-  assert.ok(restore > rollbackCall, "the failed attempt restores the pre-claim next_bill_on");
-  assert.ok(restoreGuard > restore, "the restore is guarded on the claimed value");
-  assert.ok(lastError > restoreGuard, "last_error is still written for observability");
-  // The claim itself stays compare-and-swap: only one tick can win an
-  // occurrence, and the claim is org-scoped (and status-guarded) like every
-  // other subscription write.
+  const loopStart = source.indexOf("for (const row of due.rows)", run);
+  const orgTxn = source.indexOf("await withOrg(row.orgId, async () => {", loopStart);
+  const claim = source.indexOf("set next_bill_on = ${advanced}", orgTxn);
+  const billCall = source.indexOf("return billOne(s, row.nextBillOn", claim);
+  assert.ok(loopStart > run, "the due scan feeds a per-candidate loop");
+  assert.ok(orgTxn > loopStart, "billing runs in one pinned org transaction");
+  assert.ok(claim > orgTxn, "the occurrence is claimed inside that same transaction");
+  assert.ok(billCall > claim, "billOne follows the claim within it");
+  // Nothing between the claim and billOne may open another transaction, and
+  // nothing before the org transaction may advance the schedule: any commit
+  // boundary around the claim alone is exactly the crash window this closes.
+  const inside = source.slice(claim, billCall);
+  assert.doesNotMatch(inside, /withBypass|withOrg\(/,
+    "the claimed unit is not broken by another transaction boundary");
+  const before = source.slice(loopStart, orgTxn);
+  assert.doesNotMatch(before, /next_bill_on\s*=/,
+    "nothing may claim (write next_bill_on) outside the billing transaction");
   const claimSql = source.slice(claim, source.indexOf("returning id", claim));
   assert.match(
     claimSql,
     /where id = \$\{row\.id\} and org_id = \$\{row\.orgId\} and next_bill_on = \$\{row\.nextBillOn\} and status = 'active'/,
+    "the claim stays compare-and-swap and org-scoped (and status-guarded): one tick wins an occurrence",
   );
+  assert.equal(source.indexOf("subscriptionClaimRollback"), -1,
+    "the in-process rollback machinery is gone — atomicity replaced it");
+});
+
+test("a failed billing tick leaves the occurrence due and records why — restoring nothing", () => {
+  // Atomicity makes "rolled back" and "never claimed" indistinguishable from
+  // outside, so the failure path must contain NO next_bill_on writer at all:
+  // only last_error observability. (The success-bookkeeping path below it is
+  // pinned separately to never touch next_bill_on either.)
+  const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runDueSubscriptions");
+  const claim = source.indexOf("set next_bill_on = ${advanced}", run);
+  const catchBlock = source.indexOf("} catch (e) {", claim);
+  const skipBookkeeping = source.indexOf("if (!sub) continue;", catchBlock);
+  const bookkeeping = source.indexOf("set run_count = run_count + 1", catchBlock);
+  assert.ok(catchBlock > claim && skipBookkeeping > catchBlock && bookkeeping > skipBookkeeping,
+    "the failure path sits between the claim and the success bookkeeping");
+  const failurePath = source.slice(catchBlock, skipBookkeeping);
+  assert.match(failurePath, /last_error/, "failures surface through last_error");
+  assert.doesNotMatch(failurePath, /next_bill_on/, "the failure path never writes next_bill_on");
 });
 
 test("changeSubscription and prorateFirstInvoice serialize on the subscription row lock", () => {
