@@ -759,6 +759,123 @@ test("a terminal transition fences a stale payment-run worker before instruction
   }
 });
 
+test("a bank-return transition cannot strand a returned run's pending instructions", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Return resume", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+
+    // A partial release followed by a bank return: the first instruction went
+    // out and came back while the second never left. The settlement writer
+    // stamps the whole run `returned`, which used to wall the unsent
+    // instruction off behind a terminal status forever.
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update payment_instructions
+         set status = 'sent', updated_at = now(), updated_by = ${actorId}
+       where id = ${seeded.instructionIds[0]!} and org_id = ${org.orgId}
+    `));
+    await withOrgContext(org.orgId, () => recordPaymentSettlement({
+      instructionId: seeded.instructionIds[0]!,
+      orgId: org.orgId,
+      userId: actorId,
+      status: "returned",
+      effectiveOn: org.date,
+      returnCode: "R01",
+      returnReason: "stranded pending instruction regression",
+    }));
+    const stranded = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        first_status: string;
+        second_status: string;
+        first_payment_status: string;
+      }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as first_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[1]!}) as second_status,
+               (select status from documents
+                  where id = ${seeded.paymentDocumentIds[0]!}) as first_payment_status
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(stranded, {
+      run_status: "returned",
+      first_status: "returned",
+      second_status: "pending",
+      first_payment_status: "voided",
+    });
+
+    // Posting resumes exactly the outstanding work: the returned instruction
+    // is never touched again, and its sibling finally reaches `sent`.
+    const outcome = await withOrgContext(org.orgId, () =>
+      postPaymentRun(seeded.runId, org.orgId, actorId));
+    assert.deepEqual(outcome, { posted: 1, failures: [] });
+
+    const final = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        first_status: string;
+        second_status: string;
+        second_payment_status: string;
+        started: number;
+        completed: number;
+        failed: number;
+        sent_events: number;
+        claim_token: boolean;
+      }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as first_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[1]!}) as second_status,
+               (select status from documents
+                  where id = ${seeded.paymentDocumentIds[1]!}) as second_payment_status,
+               (select count(*)::int from payment_events event
+                  where event.payment_run_id = run.id and event.org_id = run.org_id
+                    and event.event_type = 'run_posting_started') as started,
+               (select count(*)::int from payment_events event
+                  where event.payment_run_id = run.id and event.org_id = run.org_id
+                    and event.event_type = 'run_posting_completed') as completed,
+               (select count(*)::int from payment_events event
+                  where event.payment_run_id = run.id and event.org_id = run.org_id
+                    and event.event_type = 'run_posting_failed') as failed,
+               (select count(*)::int from payment_events event
+                  where event.payment_run_id = run.id and event.org_id = run.org_id
+                    and event.event_type = 'instruction_sent') as sent_events,
+               run.posting_claim_token is not null as claim_token
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, {
+      // Completing the remainder does not rebrand a run that carries a bank
+      // return as fully confirmed: the aggregate marker survives.
+      run_status: "returned",
+      first_status: "returned",
+      second_status: "sent",
+      second_payment_status: "posted",
+      started: 1,
+      completed: 1,
+      failed: 0,
+      sent_events: 1,
+      claim_token: false,
+    });
+
+    // With nothing left pending the terminal door closes again.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId)),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /run is already posted/);
+        return true;
+      },
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("a recovered stale posting claim resumes the run without double-posting", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {

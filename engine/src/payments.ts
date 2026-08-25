@@ -1855,6 +1855,8 @@ type PostingClaim = { token: string };
  * (no heartbeat within the window) is recovered by replacing its token, so a
  * crashed poster can never wedge the run — and can never double-post either,
  * because instructions already committed as `sent` are not pending anymore.
+ * A run parked in a terminal status by an out-of-band settlement writer is
+ * claimable only while pending instructions remain (see the gate below).
  */
 async function claimPaymentRunForPosting(
   runId: string,
@@ -1909,11 +1911,22 @@ async function claimPaymentRunForPosting(
     }
 
     if (!["generated", "delivered", "partially_failed"].includes(locked.status)) {
-      throw new PaymentError(
-        ["confirmed", "settled", "returned"].includes(locked.status)
-          ? "run is already posted"
-          : "generate and download the EFT file before posting the run",
-      );
+      if (!["confirmed", "settled", "returned"].includes(locked.status)) {
+        throw new PaymentError("generate and download the EFT file before posting the run");
+      }
+      // A bank-return settlement stamps the WHOLE run terminal even while
+      // sibling instructions are still pending — a return racing a mid-flight
+      // poster fences it and leaves the rest unsent behind a status the claim
+      // gate used to treat as "already posted" forever. Completion is judged
+      // by the actual remainder under this lock, never by the label alone:
+      // with nothing pending the refusal stands; with work left, the run is
+      // re-claimed and exactly the outstanding instructions are finished.
+      const pending = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from payment_instructions
+         where payment_run_id = ${runId} and org_id = ${orgId} and status = 'pending'
+      `)).rows[0]!.n;
+      if (pending === 0) throw new PaymentError("run is already posted");
     }
     const claimed = await db.execute<{ token: string }>(sql`
       update payment_runs
@@ -2062,6 +2075,9 @@ async function postClaimedPaymentInstruction(
  * here rather than trusted from the caller's tally: a confirmed verdict is
  * only available when no instruction is left pending, otherwise the run ends
  * partially failed (and retryable) instead of pretending everything sent.
+ * A run whose instructions include bank returns keeps the aggregate
+ * `returned` marker the settlement writer installed — completing the leftover
+ * work must not quietly rebrand a returned run as fully confirmed.
  */
 async function finishPaymentRunPosting(
   runId: string,
@@ -2072,12 +2088,17 @@ async function finishPaymentRunPosting(
   claim: PostingClaim,
 ): Promise<void> {
   await withOrgTransaction(orgId, async () => {
-    const pending = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n
+    const tally = (await db.execute<{ pending: number; returned: number }>(sql`
+      select count(*) filter (where status = 'pending')::int as pending,
+             count(*) filter (where status in ('returned', 'rejected'))::int as returned
         from payment_instructions
-       where payment_run_id = ${runId} and org_id = ${orgId} and status = 'pending'
-    `)).rows[0]!.n;
-    const status = pending > 0 ? "partially_failed" : requestedStatus;
+       where payment_run_id = ${runId} and org_id = ${orgId}
+    `)).rows[0]!;
+    const status = tally.pending > 0
+      ? "partially_failed"
+      : tally.returned > 0 && requestedStatus === "confirmed"
+        ? "returned"
+        : requestedStatus;
     const completed = await db.execute<{ id: string }>(sql`
       update payment_runs
          set status = ${status},
@@ -2095,10 +2116,10 @@ async function finishPaymentRunPosting(
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
-      eventType: status === "confirmed" ? "run_posting_completed" : "run_posting_failed",
+      eventType: status === "partially_failed" ? "run_posting_failed" : "run_posting_completed",
       fromStatus: "processing",
       toStatus: status,
-      details: pending > 0 ? { ...details, incompleteInstructions: pending } : details,
+      details: tally.pending > 0 ? { ...details, incompleteInstructions: tally.pending } : details,
       actorId: userId,
     });
   });
@@ -2154,7 +2175,8 @@ async function releaseFailedPaymentRunPosting(
  * the durable retry, and final status plus its evidence commit together under
  * the same claim. A crashed poster leaves the run resumable — the next
  * attempt recovers the stale claim and completes exactly the still-pending
- * instructions.
+ * instructions; the same holds for a run a bank-return settlement drove to a
+ * terminal label while instructions were still pending.
  */
 export async function postPaymentRun(
   runId: string,
