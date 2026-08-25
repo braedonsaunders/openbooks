@@ -6,6 +6,7 @@ import {
   runAutoElimination,
   runOwnershipConsolidation,
 } from '@openbooks/engine/src/consolidation.ts'
+import { withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 
@@ -39,7 +40,13 @@ export async function POST(req: Request) {
 
   try {
     if (action === 'derive-rates') {
-      const written = await deriveConsolidatedRates(user.orgId, periodId)
+      // Derivation writes one row per currency pair; run it as ONE atomic unit
+      // so a missing spot rate for any needed pair aborts the whole refresh
+      // instead of leaving earlier pairs' derived rows committed over a stale
+      // remainder (a partially refreshed period).
+      const written = await withOrgTransaction(user.orgId, () =>
+        deriveConsolidatedRates(user.orgId, periodId),
+      )
       return NextResponse.json({ ok: true, written })
     }
     if (action === 'ownership') {
@@ -47,7 +54,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...result })
     }
     if (action === 'consolidate') {
-      const ratesWritten = await deriveConsolidatedRates(user.orgId, periodId)
+      const ratesWritten = await withOrgTransaction(user.orgId, () =>
+        deriveConsolidatedRates(user.orgId, periodId),
+      )
       const ownership = await runOwnershipConsolidation(user.orgId, periodId, user.id)
       const elimination = await runAutoElimination(user.orgId, periodId, user.id)
       return NextResponse.json({ ok: true, ratesWritten, ownership, elimination })
