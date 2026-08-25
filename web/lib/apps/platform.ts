@@ -121,6 +121,14 @@ function quoteIdentifier(identifier: string): SQL {
   return sql.raw(`"${identifier.replace(/"/g, '""')}"`)
 }
 
+/** Drizzle binds interpolated JS arrays as scalars, so `any($n::text[])` needs
+ *  an explicit PostgreSQL array-literal text param (see payments/lib.ts). */
+function pgTextArrayLiteral(values: readonly string[]): string {
+  return `{${values
+    .map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
+    .join(',')}}`
+}
+
 function fieldExpression(resolved: ResolvedApiType, field: ApiField | null, name: string): SQL {
   if (resolved.dynamic && !CUSTOM_RECORD_BASE_FIELDS.has(name)) {
     return sql`data ->> ${name}`
@@ -175,7 +183,9 @@ async function listRecords(
   if (filters.length > 20) throw new AppPlatformError('a list call supports at most 20 filters')
 
   const conditions: SQL[] = [sql`org_id = ${ctx.orgId}`]
-  if (resolved.documentKinds) conditions.push(sql`kind = any(${[...resolved.documentKinds]}::text[])`)
+  if (resolved.documentKinds) {
+    conditions.push(sql`kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])`)
+  }
   if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`)
   if (ctx.allowedSubsidiaryIds && typeSchema.fields.some((field) => field.name === 'subsidiary_id')) {
     const ids = [...ctx.allowedSubsidiaryIds]
@@ -233,7 +243,7 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
   const result = (await db.execute<Record<string, unknown>>(sql`
     select *${documentRevisionProjection(resolved.table)} from ${table}
      where id = ${id} and org_id = ${ctx.orgId}
-       ${resolved.documentKinds ? sql`and kind = any(${[...resolved.documentKinds]}::text[])` : sql``}
+       ${resolved.documentKinds ? sql`and kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryScope ? (subsidiaryScope.length > 0 ? sql`and subsidiary_id in ${subsidiaryScope}` : sql`and false`) : sql``}
      limit 1`))
