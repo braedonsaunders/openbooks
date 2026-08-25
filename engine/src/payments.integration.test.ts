@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "./db.ts";
+import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentSettlement,
@@ -440,6 +440,116 @@ test("an open item can be reserved by only one live payment run at a time", { sk
     });
   } finally {
     await dropScratchOrg(org.orgId);
+  }
+});
+
+test("run creation turns a storage source-claim conflict into its domain failure without drafts", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let releaseSequence!: () => void;
+  const sequenceReleased = new Promise<void>((resolve) => { releaseSequence = resolve; });
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+
+    await withOrgContext(org.orgId, async () => {
+      const openLineId = (await db.execute<{ id: string }>(sql`
+        select jl.id as id
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where je.source_document_id = ${options.billId}
+           and je.status = 'posted' and jl.is_open_item and jl.amount < 0
+      `)).rows[0]!.id;
+      const createRun = () =>
+        createPaymentRun({
+          orgId: org.orgId,
+          createdBy: options.actorId,
+          paymentBankProfileId: options.profileId,
+          billDocumentIds: [options.billId],
+          scheduledFor: org.date,
+        });
+
+      // The constructor owns its transaction by contract. A nested caller is
+      // refused before any artifact exists: the conflict translation below is
+      // only sound when it judges failures of the whole atomic unit.
+      await withOrgTransaction(org.orgId, () =>
+        assert.rejects(createRun(), (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /cannot be nested in another database transaction/);
+          return true;
+        }),
+      );
+
+      // Park the changed constructor after its reservation filter read the
+      // bill as unreserved but before it inserts any item: number_sequences
+      // (the run number) is that window's first write.
+      let signalLocked!: (pid: number) => void;
+      const sequenceLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
+      const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+        const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+        await tx.execute(sql`lock table number_sequences in exclusive mode`);
+        signalLocked(pid.rows[0]!.pid);
+        await sequenceReleased;
+      }));
+      const holderPid = await sequenceLocked;
+
+      const creation = createRun();
+      await waitForBlockedBy(holderPid);
+
+      // Inside that window another live run reserves the same open line —
+      // committed state the filter can no longer see, so only PostgreSQL's
+      // partial unique index stands between the run and a double reservation.
+      const ghostRunId = randomUUID();
+      await db.execute(sql`
+        insert into payment_runs
+          (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
+           method, direction, purpose, currency, status, created_by)
+        values (${ghostRunId}, ${org.orgId}, 'RUN-RESERVE-RACER', ${org.accounts.bank},
+                ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
+                'CAD', 'draft', ${options.actorId})`);
+      await db.execute(sql`
+        insert into payment_run_items
+          (org_id, payment_run_id, source_document_id, source_open_line_id, kind,
+           gross_amount, payment_amount, currency, status, created_by)
+        values (${org.orgId}, ${ghostRunId}, ${options.billId}, ${openLineId}, 'bill',
+                '125', '125', 'CAD', 'selected', ${options.actorId})`);
+
+      releaseSequence();
+      await holder;
+      await assert.rejects(creation, (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(
+          error.message,
+          /a selected bill or credit is already reserved by another live payment run/,
+        );
+        return true;
+      });
+
+      // The losing attempt is fully atomic — no draft artifacts survive — and
+      // the winner's reservation stands untouched.
+      const aftermath = (await db.execute<{
+        runs: number; instructions: number; payments: number;
+        items: number; selected: number; sequences: number;
+      }>(sql`
+        select
+          (select count(*)::int from payment_runs where org_id = ${org.orgId}) as runs,
+          (select count(*)::int from payment_instructions where org_id = ${org.orgId}) as instructions,
+          (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'vendor_payment') as payments,
+          (select count(*)::int from payment_run_items where org_id = ${org.orgId}) as items,
+          (select count(*)::int from payment_run_items where org_id = ${org.orgId} and status = 'selected') as selected,
+          (select count(*)::int from number_sequences where org_id = ${org.orgId}
+             and document_kind in ('payment_run', 'vendor_payment')) as sequences
+      `));
+      assert.deepEqual(aftermath.rows[0], {
+        runs: 1,
+        instructions: 0,
+        payments: 0,
+        items: 1,
+        selected: 1,
+        sequences: 0,
+      });
+    });
+  } finally {
+    releaseSequence?.();
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
