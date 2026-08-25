@@ -1,8 +1,9 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { z } from 'zod'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { can, guardPermission } from '../../../../lib/authz'
+import { parseJsonBody } from '../../../../lib/api/json'
 import { getResource } from '../../../../lib/data-io/resources'
 import { guessMapping, parseImportFile } from '../../../../lib/data-io/parse'
 import {
@@ -18,12 +19,36 @@ import {
 export const runtime = 'nodejs'
 
 /**
+ * Field-validated body for every import mode. Absent optional fields keep
+ * their historical defaults (format csv, importMode upsert, no posting), but
+ * ANY present value must match its vocabulary exactly — an unknown format or
+ * importMode, or a truthy-string posting flag, is a 400 rather than a silent
+ * coercion into a different operation than the caller asked for.
+ */
+const importBodySchema = z.object({
+  mode: z
+    .enum(['parse', 'preview', 'commit'], { error: 'mode must be parse, preview or commit' })
+    .default('parse'),
+  resource: z.string().optional(),
+  format: z.enum(IMPORT_FORMATS, { error: 'format must be csv, xlsx or json' }).optional(),
+  text: z.string().optional(),
+  base64: z.string().optional(),
+  rows: z.array(z.record(z.string(), z.unknown())).optional(),
+  mapping: z.record(z.string(), z.string()).optional(),
+  importMode: z.enum(['insert', 'upsert'], { error: 'importMode must be insert or upsert' }).optional(),
+  fileName: z.string().optional(),
+  post: z.boolean({ error: 'post must be a boolean' }).optional(),
+})
+
+/**
  * Generic import with a mode discriminator (mirrors the bank-import route):
  *   parse   — normalize an uploaded file → headers + rows + a guessed mapping.
  *   preview — dry-run: coerce/validate/resolve every mapped row, classify
  *             insert vs update, collect errors. Writes NOTHING.
- *   commit  — persist via the resource's validated write path, record an
- *             import_jobs history row.
+ *   commit  — persist via the resource's validated write path and record an
+ *             import_jobs history row INSIDE ONE org transaction: a history
+ *             failure rolls the imported rows back, so a commit can never
+ *             leave financial data behind without its evidence row.
  *
  * data.import gates the route; the resource's own write permission is enforced
  * on top (e.g. importing accounts also needs admin.setup.manage).
@@ -34,31 +59,13 @@ export async function POST(req: Request) {
   const authz = gate
   const orgId = authz.user.orgId
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, importBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    mode?: 'parse' | 'preview' | 'commit'
-    resource?: string
-    format?: ImportFormat
-    text?: string
-    base64?: string
-    rows?: Record<string, unknown>[]
-    mapping?: Record<string, string>
-    importMode?: ImportMode
-    fileName?: string
-    post?: boolean
-  }
-  const mode = body.mode ?? 'parse'
+  const body = parsedBody.data
+  const mode = body.mode
+  const format: ImportFormat = body.format ?? 'csv'
 
-  if (mode !== 'parse' && mode !== 'preview' && mode !== 'commit') {
-    return NextResponse.json({ error: 'mode must be parse, preview or commit' }, { status: 400 })
-  }
-
-  const format: ImportFormat = IMPORT_FORMATS.includes(body.format as ImportFormat)
-    ? (body.format as ImportFormat)
-    : 'csv'
-
-  const resource = await getResource(orgId, String(body.resource ?? ''))
+  const resource = await getResource(orgId, body.resource ?? '')
   if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
   if (!resource.descriptor.supportsImport) {
     return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
@@ -82,7 +89,7 @@ export async function POST(req: Request) {
   }
 
   // preview / commit both need mapped rows.
-  const rawRows = Array.isArray(body.rows) ? body.rows : []
+  const rawRows = body.rows ?? []
   const mapping = body.mapping ?? {}
   const duplicateTarget = duplicateMappingTarget(mapping)
   if (duplicateTarget) {
@@ -95,7 +102,7 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
-  const importMode: ImportMode = body.importMode === 'insert' ? 'insert' : 'upsert'
+  const importMode: ImportMode = body.importMode ?? 'upsert'
   const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping))
 
   // Transactions can optionally post to the ledger — gate that on the kind's
@@ -109,26 +116,30 @@ export async function POST(req: Request) {
   }
 
   const ctx = { orgId, actorId: authz.user.id, dryRun: mode === 'preview', post }
-  const outcome = await resource.write(mappedRows, importMode, ctx)
 
   if (mode === 'preview') {
+    const outcome = await resource.write(mappedRows, importMode, ctx)
     return NextResponse.json({ outcome, total: mappedRows.length })
   }
 
-  // commit — record history.
-  const inserted = (await db.execute(sql`
-    insert into import_jobs
-      (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
-       total_rows, created_count, updated_count, failed_count, errors, created_by)
-    values (${orgId}, ${resource.descriptor.key}, ${resource.descriptor.label}, ${format},
-            ${body.fileName ?? null}, ${importMode},
-            ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? 'failed' : 'committed'},
-            ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
-            ${outcome.created}, ${outcome.updated}, ${outcome.failed},
-            ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
-    returning id`)) as { rows: { id: string }[] }
+  // commit — the writes and the evidence row are one atomic unit.
+  const committed = await withOrgTransaction(orgId, async () => {
+    const outcome = await resource.write(mappedRows, importMode, ctx)
+    const inserted = (await db.execute(sql`
+      insert into import_jobs
+        (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
+         total_rows, created_count, updated_count, failed_count, errors, created_by)
+      values (${orgId}, ${resource.descriptor.key}, ${resource.descriptor.label}, ${format},
+              ${body.fileName ?? null}, ${importMode},
+              ${outcome.failed > 0 && outcome.created === 0 && outcome.updated === 0 ? 'failed' : 'committed'},
+              ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
+              ${outcome.created}, ${outcome.updated}, ${outcome.failed},
+              ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
+      returning id`)) as { rows: { id: string }[] }
+    return { outcome, jobId: inserted.rows[0]?.id }
+  })
 
-  return NextResponse.json({ outcome, jobId: inserted.rows[0]?.id, total: mappedRows.length })
+  return NextResponse.json({ outcome: committed.outcome, jobId: committed.jobId, total: mappedRows.length })
 }
 
 /**

@@ -17,6 +17,9 @@ interface TransactionImportState {
   rollbacks: number
   outOfTransactionInsertStatements: number
   strandedTransactionWrites: number
+  savepointsOpened: number
+  savepointReleases: number
+  savepointRollbacks: number
   documents: Record<string, unknown>[]
   lines: Record<string, unknown>[]
   attemptedLines: Record<string, unknown>[]
@@ -31,6 +34,9 @@ const importState: TransactionImportState = {
   rollbacks: 0,
   outOfTransactionInsertStatements: 0,
   strandedTransactionWrites: 0,
+  savepointsOpened: 0,
+  savepointReleases: 0,
+  savepointRollbacks: 0,
   documents: [],
   lines: [],
   attemptedLines: [],
@@ -72,7 +78,16 @@ const mockSources = new Map<string, string>([
       }
 
       async function executeOnConnection(query, inTransaction) {
-        if (!inTransaction && isInsertStatement(query)) {
+        // Track row-savepoint lifecycle so the atomicity regression can prove
+        // each row opens one and releases or rolls back to it.
+        const text = Array.isArray(query?.strings) ? query.strings.join('') : String(query)
+        if (/^\\s*savepoint\\s/i.test(text)) {
+          state.savepointsOpened++
+        } else if (/^\\s*release\\s+savepoint\\s/i.test(text)) {
+          state.savepointReleases++
+        } else if (/^\\s*rollback\\s+to\\s+savepoint\\s/i.test(text)) {
+          state.savepointRollbacks++
+        } else if (!inTransaction && isInsertStatement(query)) {
           state.outOfTransactionInsertStatements++
         }
         return { rows: [{ base_currency: 'CAD' }] }
@@ -240,6 +255,9 @@ function resetImportState(failLineInsert: boolean): void {
   importState.rollbacks = 0
   importState.outOfTransactionInsertStatements = 0
   importState.strandedTransactionWrites = 0
+  importState.savepointsOpened = 0
+  importState.savepointReleases = 0
+  importState.savepointRollbacks = 0
   importState.documents.length = 0
   importState.lines.length = 0
   importState.attemptedLines.length = 0
@@ -394,6 +412,11 @@ test('transaction import rolls back its draft when line persistence fails', asyn
   )
   assert.equal(importState.rollbacks, 1)
   assert.equal(importState.attemptedLines[0]?.amount, '999999999999999.1234')
+  // The failed row must undo its own partial writes through the row savepoint,
+  // so a surrounding org transaction cannot commit an orphan draft.
+  assert.equal(importState.savepointsOpened, 1)
+  assert.equal(importState.savepointRollbacks, 1)
+  assert.equal(importState.savepointReleases, 0)
   // The line write itself must have been issued on the import's transaction
   // connection and settled inside it: no root-connection escape hatch (query
   // builder or raw SQL) and no fire-and-forget write may exist.
@@ -424,6 +447,9 @@ test('transaction import commits its draft and lines together', async () => {
     ['documents', 'documentLines'],
   )
   assert.equal(importState.rollbacks, 0)
+  assert.equal(importState.savepointsOpened, 1)
+  assert.equal(importState.savepointReleases, 1)
+  assert.equal(importState.savepointRollbacks, 0)
   // The committed draft and its lines must come from one transaction
   // connection: every attempted line write carries that provenance, nothing
   // was inserted through the root connection (builder or raw SQL), and no
