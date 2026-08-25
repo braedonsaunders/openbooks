@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, inDbTransaction } from "./db.ts";
-import { add, cmp, fromUnits, toUnits } from "./money.ts";
+import { db, withOrg } from "./db.ts";
+import { add, cmp, fromUnits, normalizeMoney, toUnits } from "./money.ts";
+import { canonicalDecimal, isZeroDecimal } from "./exact-decimal.ts";
 
 /**
  * Year-end information returns: 1099-NEC, 1099-MISC and T4A.
@@ -838,42 +839,40 @@ export async function ensureFiling(args: {
  *
  * Only a draft/computed filing may be recomputed: a finalized filing is what
  * was transmitted, and re-deriving it would destroy the evidence of what the
- * recipient was actually sent. Adjustments and exclusions a person entered
- * SURVIVE a recompute — they are decisions about the filing, not derived data —
- * and a recipient who no longer has any cash is voided rather than deleted, so
- * the disappearance is visible.
+ * recipient was actually sent. The whole unit — status check, ledger reads,
+ * recipient writes, transition, audit evidence — runs in one tenant
+ * transaction with the filing row locked, so a concurrent finalize can never
+ * interleave between the check and the write: whoever gets the lock first wins
+ * and the loser is refused without writing anything. Adjustments and
+ * exclusions a person entered SURVIVE a recompute — they are decisions about
+ * the filing, not derived data — and a recipient who no longer has any cash is
+ * voided rather than deleted, so the disappearance is visible.
  */
 export async function recomputeFiling(args: {
   orgId: string;
   filingId: string;
   actorId: string;
 }): Promise<{ filing: FilingRow; computation: FilingComputation }> {
-  const filings = (await db.execute<FilingRow>(sql`
-    select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
-           status, threshold, currency
-      from information_return_filings
-     where org_id = ${args.orgId} and id = ${args.filingId}
-  `));
-  const filing = filings.rows[0];
-  if (!filing) throw new InformationReturnError("information return filing not found");
-  if (filing.status !== "draft" && filing.status !== "computed") {
-    throw new InformationReturnError(
-      `a ${filing.status} filing cannot be recomputed — void it and open a corrected filing instead`,
-    );
-  }
+  return withOrg(args.orgId, async () => {
+    const filing = await lockFilingRow(args.orgId, args.filingId);
+    if (filing.status !== "draft" && filing.status !== "computed") {
+      throw new InformationReturnError(
+        `a ${filing.status} filing cannot be recomputed — void it and open a corrected filing instead`,
+      );
+    }
 
-  const computation = await computeFiling({
-    orgId: args.orgId,
-    taxYear: filing.taxYear,
-    formType: filing.formType,
-    threshold: filing.threshold,
-    currency: filing.currency,
-    subsidiaryId: filing.subsidiaryId,
-  });
-  const form = formDefinition(filing.formType);
-  const withholdingBoxes = new Set(form.boxes.filter((b) => b.isWithholding).map((b) => b.key));
+    const computation = await computeFiling({
+      orgId: args.orgId,
+      taxYear: filing.taxYear,
+      formType: filing.formType,
+      threshold: filing.threshold,
+      currency: filing.currency,
+      subsidiaryId: filing.subsidiaryId,
+      runner: db,
+    });
+    const form = formDefinition(filing.formType);
+    const withholdingBoxes = new Set(form.boxes.filter((b) => b.isWithholding).map((b) => b.key));
 
-  await inDbTransaction(async (tx) => {
     const seen: string[] = [];
     for (const recipient of computation.recipients) {
       seen.push(recipient.profile.partyId);
@@ -883,7 +882,7 @@ export async function recomputeFiling(args: {
       // Below the threshold is an exclusion, not an omission: the row stays so
       // a reviewer can see the vendor was considered and why it is not filed.
       const belowThresholdReason = `below the ${filing.threshold} ${filing.currency} reporting threshold`;
-      await tx.execute(sql`
+      await db.execute(sql`
         insert into information_return_recipients
           (org_id, filing_id, party_id, recipient_snapshot, tin_last4, tin_type,
            computed_amounts, tax_withheld, status, exclusion_reason, created_by, updated_by)
@@ -924,22 +923,61 @@ export async function recomputeFiling(args: {
       `);
     }
     // Recipients that no longer trace to any cash: voided, never deleted.
-    await tx.execute(sql`
+    await db.execute(sql`
       update information_return_recipients
          set status = 'void', updated_at = now(), updated_by = ${args.actorId}
        where org_id = ${args.orgId} and filing_id = ${filing.id}
          and status <> 'void'
          and (${seen.length === 0} or party_id <> all(${`{${seen.join(",")}}`}::uuid[]))
     `);
-    await tx.execute(sql`
+    const moved = (await db.execute<{ id: string }>(sql`
       update information_return_filings
          set status = 'computed', computed_at = now(), computed_by = ${args.actorId},
              updated_at = now(), updated_by = ${args.actorId}
        where org_id = ${args.orgId} and id = ${filing.id}
+         and status in ('draft', 'computed')
+      returning id
+    `));
+    if (!moved.rows[0]) {
+      throw new InformationReturnError(
+        "the filing was frozen while it was being recomputed — open a corrected filing instead",
+      );
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'information_return_filings', ${filing.id}, 'compute',
+              ${JSON.stringify({
+                after: {
+                  status: "computed",
+                  recipients: computation.recipients.length,
+                  tracedCash: computation.tracedCash,
+                },
+              })}::jsonb, ${args.actorId})
     `);
-  });
 
-  return { filing: { ...filing, status: "computed" }, computation };
+    return { filing: { ...filing, status: "computed" }, computation };
+  });
+}
+
+/**
+ * Lock one org's filing row for the duration of the caller's transaction.
+ *
+ * Every lifecycle transition takes this lock first, which makes the
+ * draft → computed → finalized → filed state machine strictly serialized per
+ * filing: two competing transitions queue on the row lock and the second one
+ * re-validates the state it inherited before writing anything.
+ */
+async function lockFilingRow(orgId: string, filingId: string): Promise<FilingRow> {
+  const rows = (await db.execute<FilingRow>(sql`
+    select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
+           status, threshold, currency
+      from information_return_filings
+     where org_id = ${orgId} and id = ${filingId}
+     for update
+  `));
+  const row = rows.rows[0];
+  if (!row) throw new InformationReturnError("information return filing not found");
+  return row;
 }
 
 /**
@@ -947,66 +985,84 @@ export async function recomputeFiling(args: {
  * transmitted forms must remain reproducible after the org record changes, and
  * a filing with unresolved blocking exceptions (a recipient with no TIN) is
  * refused rather than transmitted with a blank.
+ *
+ * The gate counts are read under the row lock AND restated in the transition's
+ * own WHERE clause, so even a writer that does not cooperate with the lock
+ * cannot slip a change between validation and commit: the update simply fails
+ * and nothing — not the freeze, not its audit evidence — is written.
  */
 export async function finalizeFiling(args: {
   orgId: string;
   filingId: string;
   actorId: string;
 }): Promise<void> {
-  const rows = (await db.execute<{
-      status: string;
-      tax_year: number;
-      form_type: string;
-      threshold: string;
-      currency: string;
+  await withOrg(args.orgId, async () => {
+    const filing = await lockFilingRow(args.orgId, args.filingId);
+    if (filing.status !== "computed") {
+      throw new InformationReturnError(
+        filing.status === "draft"
+          ? "compute the filing before finalizing it"
+          : `a ${filing.status} filing cannot be finalized again`,
+      );
+    }
+    const gates = (await db.execute<{
       org_name: string;
       tax_ids: Record<string, string> | null;
       subsidiary_name: string | null;
       included: number;
       missing_tin: number;
     }>(sql`
-    select f.status, f.tax_year, f.form_type, f.threshold, f.currency,
-           o.name as org_name, o.settings->'taxIds' as tax_ids,
-           s.name as subsidiary_name,
-           (select count(*)::int from information_return_recipients r
-             where r.filing_id = f.id and r.status = 'included') as included,
-           (select count(*)::int from information_return_recipients r
-             where r.filing_id = f.id and r.status = 'included' and r.tin_last4 is null) as missing_tin
-      from information_return_filings f
-      join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
-     where f.org_id = ${args.orgId} and f.id = ${args.filingId}
-  `));
-  const filing = rows.rows[0];
-  if (!filing) throw new InformationReturnError("information return filing not found");
-  if (filing.status !== "computed") {
-    throw new InformationReturnError(
-      filing.status === "draft"
-        ? "compute the filing before finalizing it"
-        : `a ${filing.status} filing cannot be finalized again`,
-    );
-  }
-  if (filing.included === 0) throw new InformationReturnError("the filing has no recipients to file");
-  if (filing.missing_tin > 0) {
-    throw new InformationReturnError(
-      `${filing.missing_tin} recipient(s) have no taxpayer identification number — collect a W-9 or exclude them before finalizing`,
-    );
-  }
-  await db.execute(sql`
-    update information_return_filings
-       set status = 'finalized', finalized_at = now(), finalized_by = ${args.actorId},
-           payer_snapshot = ${JSON.stringify({
-             name: filing.subsidiary_name ?? filing.org_name,
-             orgName: filing.org_name,
-             taxIds: filing.tax_ids ?? {},
-             taxYear: filing.tax_year,
-             formType: filing.form_type,
-             threshold: filing.threshold,
-             currency: filing.currency,
-           })}::jsonb,
-           updated_at = now(), updated_by = ${args.actorId}
-     where org_id = ${args.orgId} and id = ${args.filingId}
-  `);
+      select o.name as org_name, o.settings->'taxIds' as tax_ids,
+             s.name as subsidiary_name,
+             (select count(*)::int from information_return_recipients r
+               where r.filing_id = f.id and r.status = 'included') as included,
+             (select count(*)::int from information_return_recipients r
+               where r.filing_id = f.id and r.status = 'included' and r.tin_last4 is null) as missing_tin
+        from information_return_filings f
+        join orgs o on o.id = f.org_id
+        left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
+       where f.org_id = ${args.orgId} and f.id = ${args.filingId}
+    `));
+    const gate = gates.rows[0]!;
+    if (gate.included === 0) throw new InformationReturnError("the filing has no recipients to file");
+    if (gate.missing_tin > 0) {
+      throw new InformationReturnError(
+        `${gate.missing_tin} recipient(s) have no taxpayer identification number — collect a W-9 or exclude them before finalizing`,
+      );
+    }
+    const payerSnapshot = {
+      name: gate.subsidiary_name ?? gate.org_name,
+      orgName: gate.org_name,
+      taxIds: gate.tax_ids ?? {},
+      taxYear: filing.taxYear,
+      formType: filing.formType,
+      threshold: filing.threshold,
+      currency: filing.currency,
+    };
+    const moved = (await db.execute<{ id: string }>(sql`
+      update information_return_filings
+         set status = 'finalized', finalized_at = now(), finalized_by = ${args.actorId},
+             payer_snapshot = ${JSON.stringify(payerSnapshot)}::jsonb,
+             updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and id = ${args.filingId}
+         and status = 'computed'
+         and (select count(*)::int from information_return_recipients r
+               where r.filing_id = information_return_filings.id and r.status = 'included') > 0
+         and (select count(*)::int from information_return_recipients r
+               where r.filing_id = information_return_filings.id
+                 and r.status = 'included' and r.tin_last4 is null) = 0
+      returning id
+    `));
+    if (!moved.rows[0]) {
+      throw new InformationReturnError("the filing changed while it was being finalized");
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'information_return_filings', ${args.filingId}, 'finalize',
+              ${JSON.stringify({ after: { status: "finalized", payerSnapshot } })}::jsonb,
+              ${args.actorId})
+    `);
+  });
 }
 
 /** Record the transmission. Only a finalized filing can be filed. */
@@ -1017,15 +1073,198 @@ export async function markFilingFiled(args: {
   reference?: string | null;
   actorId: string;
 }): Promise<void> {
-  const updated = (await db.execute<{ id: string }>(sql`
-    update information_return_filings
-       set status = 'filed', filed_at = now(), filed_by = ${args.actorId},
-           filing_channel = ${args.channel}, filing_reference = ${args.reference ?? null},
-           updated_at = now(), updated_by = ${args.actorId}
-     where org_id = ${args.orgId} and id = ${args.filingId} and status = 'finalized'
-    returning id
-  `));
-  if (updated.rows.length === 0) {
-    throw new InformationReturnError("only a finalized filing can be recorded as filed");
-  }
+  await withOrg(args.orgId, async () => {
+    const moved = (await db.execute<{ id: string }>(sql`
+      update information_return_filings
+         set status = 'filed', filed_at = now(), filed_by = ${args.actorId},
+             filing_channel = ${args.channel}, filing_reference = ${args.reference ?? null},
+             updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and id = ${args.filingId} and status = 'finalized'
+      returning id
+    `));
+    if (!moved.rows[0]) {
+      throw new InformationReturnError("only a finalized filing can be recorded as filed");
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'information_return_filings', ${args.filingId}, 'file',
+              ${JSON.stringify({
+                after: { status: "filed", channel: args.channel, reference: args.reference ?? null },
+              })}::jsonb, ${args.actorId})
+    `);
+  });
+}
+
+/**
+ * Void the record of a filing.
+ *
+ * A draft/computed/finalized filing can be voided with a mandatory reason —
+ * the void is the internal note that a corrected filing supersedes it. A
+ * FILED return cannot be voided at all: the storage contract pins
+ * `filed_at` to the `filed` status forever, so transmitted evidence is
+ * permanent and correction happens through a corrected filing, never by
+ * reopening the record.
+ */
+export async function voidFiling(args: {
+  orgId: string;
+  filingId: string;
+  actorId: string;
+  reason: string;
+}): Promise<void> {
+  const reason = args.reason.trim();
+  if (!reason) throw new InformationReturnError("voiding a filing needs a reason");
+  await withOrg(args.orgId, async () => {
+    const filing = await lockFilingRow(args.orgId, args.filingId);
+    if (filing.status === "void") {
+      throw new InformationReturnError("the filing is already void");
+    }
+    if (filing.status === "filed") {
+      throw new InformationReturnError(
+        "a filed return is permanent evidence — open a corrected filing instead",
+      );
+    }
+    const moved = (await db.execute<{ id: string }>(sql`
+      update information_return_filings
+         set status = 'void', void_reason = ${reason},
+             updated_at = now(), updated_by = ${args.actorId}
+       where org_id = ${args.orgId} and id = ${args.filingId} and status <> 'void'
+      returning id
+    `));
+    if (!moved.rows[0]) {
+      throw new InformationReturnError("the filing changed while it was being voided");
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'information_return_filings', ${args.filingId}, 'void',
+              ${JSON.stringify({ after: { status: "void", reason } })}::jsonb, ${args.actorId})
+    `);
+  });
+}
+
+/**
+ * Key-order-insensitive JSON form of a box map: jsonb normalizes key order on
+ * storage, so equality between what a caller sent and what is stored must not
+ * depend on it.
+ */
+function stableJson(value: Record<string, string>): string {
+  return JSON.stringify(
+    Object.keys(value)
+      .sort()
+      .map((k) => [k, value[k]]),
+  );
+}
+
+/**
+ * Adjust or exclude one recipient of a filing.
+ *
+ * Adjustments are stored as SIGNED DELTAS against the computed figure, never
+ * as a replacement: the ledger trace stays intact and reviewable, and the
+ * filed number is always computed + adjustment. Every adjustment carries a
+ * reason, and a finalized/filed/void filing refuses both — correct it with a
+ * corrected filing instead.
+ *
+ * The parent filing row is locked for the whole unit, so an edit racing a
+ * finalize either commits before the freeze or is refused after it — it can
+ * never land on a frozen filing. The refusal leaves zero trace: no row change,
+ * no audit evidence.
+ */
+export async function updateFilingRecipient(args: {
+  orgId: string;
+  filingId: string;
+  recipientId: string;
+  actorId: string;
+  adjustments?: Record<string, string>;
+  adjustmentReason?: string | null;
+  status?: "included" | "excluded";
+  exclusionReason?: string | null;
+}): Promise<void> {
+  await withOrg(args.orgId, async () => {
+    const filing = await lockFilingRow(args.orgId, args.filingId);
+    if (filing.status !== "draft" && filing.status !== "computed") {
+      throw new InformationReturnError(
+        `a ${filing.status} filing is frozen — open a corrected filing instead`,
+      );
+    }
+    const rows = (await db.execute<{
+      id: string;
+      status: string;
+      adjustments: Record<string, string>;
+      adjustment_reason: string | null;
+      exclusion_reason: string | null;
+    }>(sql`
+      select r.id, r.status, r.adjustments, r.adjustment_reason, r.exclusion_reason
+        from information_return_recipients r
+       where r.org_id = ${args.orgId} and r.id = ${args.recipientId}
+         and r.filing_id = ${args.filingId}
+    `));
+    const recipient = rows.rows[0];
+    if (!recipient) throw new InformationReturnError("information return recipient not found");
+
+    const form = formDefinition(filing.formType);
+    const validBoxes = new Set(form.boxes.map((b) => b.key));
+    let adjustments = recipient.adjustments ?? {};
+    if (args.adjustments) {
+      const cleaned: Record<string, string> = {};
+      for (const [box, value] of Object.entries(args.adjustments)) {
+        if (!validBoxes.has(box)) {
+          throw new InformationReturnError(`${box} is not a box on ${form.formType}`);
+        }
+        const exact = canonicalDecimal(value, 4);
+        if (exact === null) {
+          throw new InformationReturnError(`${box}: not a valid amount`);
+        }
+        if (!isZeroDecimal(exact)) cleaned[box] = normalizeMoney(exact);
+      }
+      if (Object.keys(cleaned).length > 0 && !(args.adjustmentReason ?? "").trim()) {
+        throw new InformationReturnError("an adjustment needs a reason");
+      }
+      adjustments = cleaned;
+    }
+
+    const status = args.status ?? (recipient.status as "included" | "excluded");
+    if (status === "excluded" && !(args.exclusionReason ?? "").trim()) {
+      throw new InformationReturnError("excluding a recipient needs a reason");
+    }
+    const adjustmentReason =
+      Object.keys(adjustments).length > 0 ? (args.adjustmentReason ?? "").trim() : null;
+    const exclusionReason = status === "excluded" ? (args.exclusionReason ?? "").trim() : null;
+    // An edit that would change nothing is a no-op: no write, no audit row —
+    // evidence stays continuous instead of filling with identical entries.
+    if (
+      status === recipient.status &&
+      exclusionReason === recipient.exclusion_reason &&
+      adjustmentReason === recipient.adjustment_reason &&
+      stableJson(adjustments) === stableJson(recipient.adjustments ?? {})
+    ) {
+      return;
+    }
+    const updated = (await db.execute<{ id: string }>(sql`
+      update information_return_recipients r
+         set adjustments = ${JSON.stringify(adjustments)}::jsonb,
+             adjustment_reason = ${adjustmentReason},
+             status = ${status},
+             exclusion_reason = ${exclusionReason},
+             updated_at = now(), updated_by = ${args.actorId}
+       where r.org_id = ${args.orgId} and r.id = ${args.recipientId}
+         and r.filing_id = ${args.filingId}
+         and (
+           select f.status from information_return_filings f
+            where f.id = r.filing_id and f.org_id = r.org_id
+         ) in ('draft', 'computed')
+      returning id
+    `));
+    if (!updated.rows[0]) {
+      throw new InformationReturnError(
+        `a ${filing.status} filing is frozen — open a corrected filing instead`,
+      );
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${args.orgId}, 'information_return_recipients', ${args.recipientId}, 'update',
+              ${JSON.stringify({
+                before: { status: recipient.status, adjustments: recipient.adjustments },
+                after: { status, adjustments },
+              })}::jsonb, ${args.actorId})
+    `);
+  });
 }
