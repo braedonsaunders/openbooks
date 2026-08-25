@@ -56,5 +56,17 @@
     "test:load": "node scripts/load-smoke.mjs",
     "test": "npm run check:product-neutrality && NODE_ENV=test OPENBOOKS_DATA_KEY=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-concurrency=1 --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/**/*.test.ts' 'schema/**/*.test.ts'",
     "verify:release": "npm run check:dependencies && npm run check:container-security && npm run check:explicit-any && npm run lint && npm run typecheck:e2e && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.5.6": true,
+    "cpu-features@0.0.10": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "fsevents@2.3.2": true,
+    "msgpackr-extract@3.0.4": true,
+    "@swc/core@1.15.43": true,
+    "ssh2@1.17.0": true,
+    "unrs-resolver@1.12.2": true
   }
 }
