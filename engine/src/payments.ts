@@ -2202,6 +2202,17 @@ export async function postPaymentRun(
   orgId: string,
   userId: string,
 ): Promise<{ posted: number; failures: { payee: string; error: string }[] }> {
+  // This command owns a lifecycle that spans several separate transactions:
+  // the claim must commit durably before any instruction work begins, every
+  // instruction commits under the still-live claim, and completion (or
+  // release) commits last. Joined to an ambient transaction, the claim would
+  // stay invisible to other workers until that outer unit ended — inviting a
+  // second poster through the claim gate — the per-step fencing would collapse
+  // into one transaction, and an outer rollback would erase instruction sends
+  // whose post-commit effects already ran. Fail closed instead.
+  if (orgContext.getStore()?.txDb) {
+    throw new PaymentError("payment run posting cannot be nested in another database transaction");
+  }
   const claim = await claimPaymentRunForPosting(runId, orgId, userId);
   try {
     const instructions = await db.execute<{ id: string; payee: string }>(sql`

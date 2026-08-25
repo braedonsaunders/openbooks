@@ -755,6 +755,59 @@ test("run creation turns a storage source-claim conflict into its domain failure
   }
 });
 
+test("posting refuses to hide its durable claim inside an ambient transaction", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Nested poster", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+
+    // The posting lifecycle owns several separate transactions: the claim
+    // must COMMIT before any instruction work starts. Joined to an ambient
+    // transaction it would stay invisible to other posters until that unit
+    // ended and vanish entirely if it rolled back — so the poster refuses
+    // outright instead of silently degrading every fence to a no-op.
+    await withOrgTransaction(org.orgId, () =>
+      assert.rejects(
+        postPaymentRun(seeded.runId, org.orgId, actorId),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /cannot be nested in another database transaction/);
+          return true;
+        },
+      ),
+    );
+
+    // Nothing moved: the run is still unclaimed with its pending instruction,
+    // ready for a legitimate poster.
+    const untouched = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        instruction_status: string;
+        claim_token: boolean;
+        started_events: number;
+      }>(sql`
+        select run.status as run_status,
+               instruction.status as instruction_status,
+               run.posting_claim_token is not null as claim_token,
+               (select count(*)::int from payment_events event
+                 where event.payment_run_id = run.id and event.org_id = run.org_id
+                   and event.event_type in ('run_posting_started', 'run_posting_recovered')) as started_events
+          from payment_runs run
+          join payment_instructions instruction
+            on instruction.payment_run_id = run.id and instruction.org_id = run.org_id
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(untouched, {
+      run_status: "generated",
+      instruction_status: "pending",
+      claim_token: false,
+      started_events: 0,
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("one concurrent payment-run poster owns the processing claim and its evidence", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   let releaseInstruction!: () => void;
