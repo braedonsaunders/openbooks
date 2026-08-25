@@ -13,6 +13,7 @@ import {
   PaymentAcceptanceError,
   PaymentWebhookBatchError,
   publicPaymentPage,
+  resolveSurcharge,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
 import { createPaymentDocument } from "./payments.ts";
@@ -826,6 +827,201 @@ test("pay page shows the stored link surcharge even after surcharge rules change
     assert.equal(page.surchargeAmount, "3.0000", "pay page must show the stored quoted fee");
     assert.equal(page.totalAmount, "103.0000");
     assert.equal(page.invoiceAmount, "100.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * F-payment-method: surcharge rules carry a payment-method dimension
+ * (all / card / bank_debit) and hosted checkout collects cards on Stripe/Adyen
+ * but bank debits on GoCardless. A card-only rule must therefore never price a
+ * bank-debit checkout and vice versa — not when it is global,
+ * provider-specific, or even the provider-configured rule — while precedence
+ * stays deterministic (configured > provider-specific > global, each tier
+ * newest-effective first with a stable tie-break). The quote freezes onto the
+ * link at creation and survives later rule churn.
+ */
+test("surcharge resolution honors the payment method across card and bank-debit providers", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Fee Method Tester", "admin");
+    await enableOnlinePayments(org.orgId);
+    const today = new Date().toISOString().slice(0, 10);
+    const onDate = today;
+
+    await db.execute(sql`
+      insert into psp_provider_configs
+        (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
+      values
+        (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
+         ${sealJson({ apiKey: "sk_test_method", webhookSecret: "whsec_card" })}, ${userId}, ${userId}),
+        (${org.orgId}, 'gocardless', 'GoCardless', true, true, ${org.accounts.bank},
+         ${sealJson({ apiKey: "gc_test_method", webhookSecret: "whsec_debit" })}, ${userId}, ${userId})
+    `);
+
+    // Global rules on each side of the method dimension.
+    const cardRuleId = randomUUID();
+    const bankRuleId = randomUUID();
+    await db.execute(sql`
+      insert into payment_surcharge_rules
+        (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+      values
+        (${cardRuleId}, ${org.orgId}, 'Card fee', 'percent', '3', null, ${org.accounts.revenue}, null, 'card', '2020-01-01', ${userId}, ${userId}),
+        (${bankRuleId}, ${org.orgId}, 'Debit fee', 'fixed', null, '2.0000', ${org.accounts.revenue}, null, 'bank_debit', '2020-01-01', ${userId}, ${userId})
+    `);
+
+    const postedInvoice = async (documentNumber: string): Promise<string> => {
+      const invoiceId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', ${documentNumber},
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+                '100', '0', '100', ${userId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
+      await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      return invoiceId;
+    };
+
+    // Each rail resolves its own dimension: the card rule prices Stripe and
+    // the bank-debit rule prices GoCardless.
+    assert.deepEqual(
+      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate }),
+      { amount: "3.0000", ruleId: cardRuleId, feeIncomeAccountId: org.accounts.revenue },
+    );
+    assert.deepEqual(
+      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate }),
+      { amount: "2.0000", ruleId: bankRuleId, feeIncomeAccountId: org.accounts.revenue },
+    );
+
+    // End-to-end: links freeze the method-correct quote at creation.
+    const stripeLink = await createPaymentLink(org.orgId, userId, {
+      documentId: await postedInvoice("INV-METHOD-STRIPE"),
+      provider: "stripe",
+    });
+    const debitLink = await createPaymentLink(org.orgId, userId, {
+      documentId: await postedInvoice("INV-METHOD-GC"),
+      provider: "gocardless",
+    });
+    assert.equal(stripeLink.surchargeAmount, "3.0000");
+    assert.equal(debitLink.surchargeAmount, "2.0000");
+
+    // Card-only landscape: the bank debit gets no fee — never the card fee.
+    await db.execute(sql`update payment_surcharge_rules set is_active = false where id = ${bankRuleId}`);
+    assert.deepEqual(
+      await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate }),
+      { amount: "0", ruleId: null, feeIncomeAccountId: null },
+    );
+    // And the mirror case: a bank-debit-only landscape never prices the card.
+    await db.execute(sql`update payment_surcharge_rules set is_active = false where id = ${cardRuleId}`);
+    await db.execute(sql`update payment_surcharge_rules set is_active = true where id = ${bankRuleId}`);
+    assert.deepEqual(
+      await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate }),
+      { amount: "0", ruleId: null, feeIncomeAccountId: null },
+    );
+    await db.execute(sql`update payment_surcharge_rules set is_active = true where id = ${cardRuleId}`);
+
+    // Provider-specific rules beat same-method globals; the other rail's
+    // provider-specific rule still never leaks across.
+    const stripeOnlyCardRuleId = randomUUID();
+    const gcOnlyDebitRuleId = randomUUID();
+    await db.execute(sql`
+      insert into payment_surcharge_rules
+        (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+      values
+        (${stripeOnlyCardRuleId}, ${org.orgId}, 'Stripe card fee', 'percent', '4', null, ${org.accounts.revenue}, 'stripe', 'card', '2020-06-01', ${userId}, ${userId}),
+        (${gcOnlyDebitRuleId}, ${org.orgId}, 'GC debit fee', 'fixed', null, '1.5000', ${org.accounts.revenue}, 'gocardless', 'bank_debit', '2020-06-01', ${userId}, ${userId})
+    `);
+    assert.equal(
+      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate })).ruleId,
+      stripeOnlyCardRuleId,
+    );
+    assert.equal(
+      (await resolveSurcharge(org.orgId, { provider: "gocardless", amount: "100.0000", onDate })).amount,
+      "1.5000",
+    );
+
+    // The provider-configured rule wins its tier — but only when its method
+    // matches the checkout. A card-only configured rule is excluded from the
+    // bank-debit rail rather than overriding the matching debit rule.
+    assert.equal(
+      (await resolveSurcharge(org.orgId, {
+        provider: "gocardless",
+        amount: "100.0000",
+        onDate,
+        configuredRuleId: cardRuleId,
+      })).amount,
+      "1.5000",
+    );
+    assert.deepEqual(
+      await resolveSurcharge(org.orgId, {
+        provider: "stripe",
+        amount: "100.0000",
+        onDate,
+        configuredRuleId: cardRuleId,
+      }),
+      { amount: "3.0000", ruleId: cardRuleId, feeIncomeAccountId: org.accounts.revenue },
+      "configured rule beats the provider-specific candidate in its tier",
+    );
+    // The config wiring reaches real link creation too.
+    await db.execute(
+      sql`update psp_provider_configs set surcharge_rule_id = ${cardRuleId} where org_id = ${org.orgId} and provider = 'stripe'`,
+    );
+    const configuredLink = await createPaymentLink(org.orgId, userId, {
+      documentId: await postedInvoice("INV-METHOD-CONFIG"),
+      provider: "stripe",
+    });
+    assert.equal(configuredLink.surchargeAmount, "3.0000");
+
+    // Same-tier ties resolve deterministically: identical effective dates are
+    // broken by id, and repeated resolution answers identically.
+    await db.execute(
+      sql`update psp_provider_configs set surcharge_rule_id = null where org_id = ${org.orgId} and provider = 'stripe'`,
+    );
+    const tieA = randomUUID();
+    const tieB = randomUUID();
+    await db.execute(sql`
+      insert into payment_surcharge_rules
+        (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+      values
+        (${tieA}, ${org.orgId}, 'Tie A', 'percent', '6', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId}),
+        (${tieB}, ${org.orgId}, 'Tie B', 'percent', '7', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId})
+    `);
+    const expectedTie = [tieA, tieB].sort()[1];
+    const tieFirst = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
+    const tieSecond = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
+    assert.equal(tieFirst.ruleId, expectedTie, "same-date ties pick the greatest rule id");
+    assert.equal(tieSecond.ruleId, tieFirst.ruleId);
+
+    // Frozen quote evidence: the rule landscape moves hard after link
+    // creation — every percentage jumps to 10%, a brand-new catch-all
+    // all-method rule joins the pool — yet neither the stored quote nor the
+    // pay page moves.
+    const allMethodsRuleId = randomUUID();
+    await db.execute(sql`
+      insert into payment_surcharge_rules
+        (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+      values (${allMethodsRuleId}, ${org.orgId}, 'Catch-all', 'percent', '25', null, ${org.accounts.revenue}, null, 'all', ${today}, ${userId}, ${userId})
+    `);
+    await db.execute(sql`update payment_surcharge_rules set percent = '10' where org_id = ${org.orgId} and calculation = 'percent'`);
+    assert.equal(
+      (await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate })).amount,
+      "10.0000",
+      "live resolution genuinely follows the churned landscape",
+    );
+    const frozenPage = await publicPaymentPage(stripeLink.token);
+    assert.ok(frozenPage);
+    assert.equal(frozenPage.surchargeAmount, "3.0000", "pay page must keep showing the quoted fee");
+    assert.equal(frozenPage.totalAmount, "103.0000");
+    const frozenLink = (await db.execute<{ surcharge_amount: string }>(sql`
+      select surcharge_amount from payment_links where id = ${stripeLink.id}
+    `)).rows[0]!;
+    assert.equal(frozenLink.surcharge_amount, "3.0000", "the link keeps the fee quoted at creation");
   } finally {
     await dropScratchOrg(org.orgId);
   }
