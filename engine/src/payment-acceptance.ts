@@ -669,8 +669,21 @@ export function computeSurcharge(
   return fee;
 }
 
-/** Effective-dated surcharge resolution: the provider-configured rule first,
- *  else the most specific active rule covering the date/provider. */
+/** The payment method each acceptance provider's hosted checkout collects:
+ *  Stripe and Adyen sessions present cards; GoCardless collects bank debits
+ *  (ACH/SEPA). Surcharge rules carry this dimension, so resolution must match
+ *  it — a card-only fee must never land on a bank debit and vice versa. */
+export function providerPaymentMethod(provider: AcceptanceProvider): "card" | "bank_debit" {
+  return provider === "gocardless" ? "bank_debit" : "card";
+}
+
+/** Effective-dated surcharge resolution for one checkout. Candidates are the
+ *  org's active rules covering `onDate` whose provider and payment-method
+ *  dimensions match (method-scoped rules never leak across card vs bank
+ *  debit, not even when they are the provider-configured rule). Precedence is
+ *  deterministic: the provider-configured rule first, then provider-specific,
+ *  then global — each tier newest-effective first, id breaking any remaining
+ *  tie. */
 export async function resolveSurcharge(
   orgId: string,
   opts: { provider: AcceptanceProvider; amount: string; onDate: string; configuredRuleId?: string | null },
@@ -682,9 +695,11 @@ export async function resolveSurcharge(
        and effective_from <= ${opts.onDate}
        and (effective_to is null or effective_to >= ${opts.onDate})
        and (provider is null or provider = ${opts.provider})
+       and payment_method in ('all', ${providerPaymentMethod(opts.provider)})
      order by case when ${opts.configuredRuleId ?? null}::uuid is not null and id = ${opts.configuredRuleId ?? null}::uuid then 0
                    when provider = ${opts.provider} then 1 else 2 end,
-              effective_from desc
+               effective_from desc,
+               id desc
      limit 1
   `));
   const rule = r.rows[0];

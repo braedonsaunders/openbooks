@@ -7,6 +7,7 @@ import {
   computeSurcharge,
   normalizeAcceptanceProviderSettings,
   PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
+  providerPaymentMethod,
   resolveAcceptanceProviderApiBase,
   testAcceptanceConnection,
   toMinorUnits,
@@ -38,6 +39,12 @@ test("toMinorUnits: cents, zero-decimal currencies, sub-minor rejection", () => 
   assert.equal(toMinorUnits("1500.0000", "JPY"), "1500");
   assert.throws(() => toMinorUnits("10.0050", "USD"), /sub-cent/);
   assert.throws(() => toMinorUnits("100.5000", "JPY"), /whole units/);
+});
+
+test("providerPaymentMethod: hosted checkout takes cards on Stripe/Adyen, debits on GoCardless", () => {
+  assert.equal(providerPaymentMethod("stripe"), "card");
+  assert.equal(providerPaymentMethod("adyen"), "card");
+  assert.equal(providerPaymentMethod("gocardless"), "bank_debit");
 });
 
 function stripeSignature(secret: string, body: string, timestamp?: number): string {
