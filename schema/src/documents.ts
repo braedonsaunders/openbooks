@@ -22,6 +22,13 @@ import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers
  * documents are immutable; corrections are represented by linked reversal
  * entries so the original business record and GL evidence are never rewritten.
  *
+ * Concurrency: `updated_at` is the optimistic-concurrency revision token.
+ * Readers project it through web/lib/documents.ts documentRevisionSql at full
+ * six-digit precision, and migration 0013_document_revision_monotonic forces
+ * every UPDATE to advance it — a write that would repeat the stored revision
+ * is bumped forward at the database boundary, so two committed revisions can
+ * never share a token, whichever driver wrote them.
+ *
  * Kinds (initial set, from actual usage): vendor_bill, vendor_credit,
  * vendor_payment, expense_report, customer_invoice, customer_credit,
  * customer_payment, sales_order, purchase_order, cheque, card_charge,

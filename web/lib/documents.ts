@@ -538,7 +538,19 @@ export function requireDocumentEditRevision(value: unknown): string {
   return value
 }
 
-/** Compare exact PostgreSQL revision text without lossy JavaScript Date parsing. */
+/**
+ * Compare exact PostgreSQL revision text without lossy JavaScript Date parsing.
+ *
+ * Exact string equality is sound end to end because storage guarantees a
+ * document's revision ADVANCES on every update: this module's writers bump
+ * with greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+ * and migration 0013_document_revision_monotonic rewrites any other writer's
+ * byte-identical repeat forward at the database boundary. Two committed
+ * revisions can therefore never serialize to one token, so an equal-string
+ * match really does mean "nothing changed since you read it" — and a
+ * millisecond-truncated token from a lossy reader fails the six-digit
+ * requireDocumentEditRevision format instead of silently comparing equal.
+ */
 export function assertDocumentEditRevision(expected: unknown, actual: unknown): void {
   if (typeof expected !== 'string' || typeof actual !== 'string' || expected !== actual) {
     throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)

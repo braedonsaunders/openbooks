@@ -474,6 +474,91 @@ test(
         assert.equal(retained.updatedAt, '2026-08-24T12:00:00.123999Z')
       })
 
+      await t.test('storage refuses to let two writes share one revision token', async () => {
+        // Regression pin for the audited collapse: writers whose timestamp
+        // source truncates PostgreSQL's microseconds (JavaScript Date) or
+        // repeats `now()` inside one transaction could store an updated_at
+        // byte-identical to the one already on the row. Two distinct
+        // revisions then serialized to one expectedUpdatedAt token and stale
+        // writes evaded detection. The documents_revision_monotonic trigger
+        // rewrites exactly that shape forward; nothing else about an explicit
+        // timestamp write changes.
+        const collapseId = randomUUID()
+        await withBypass(async () => {
+          await db.execute(sql`
+            insert into documents
+              (id, org_id, kind, document_number, subsidiary_id, document_date,
+               currency, status, subtotal, tax_total, total, memo, custom,
+               extra_dims, created_by, created_at, updated_at, updated_by)
+            values
+              (${collapseId}, ${org.orgId}, 'transfer', 'OCC-COLLAPSE',
+               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '0', '0', '0',
+               'collapse probe', '{}'::jsonb, '{}'::jsonb, ${actorId},
+               '2026-08-24T12:00:00.400001Z'::timestamptz,
+               '2026-08-24T12:00:00.400001Z'::timestamptz, null)
+          `)
+        })
+
+        const opened = await loadStoredDocument(org.orgId, collapseId)
+        assert.equal(opened.updatedAt, '2026-08-24T12:00:00.400001Z')
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            update documents
+               set memo = 'repeat attempt',
+                   updated_at = ${opened.updatedAt}::timestamptz
+             where id = ${collapseId} and org_id = ${org.orgId}
+          `)
+        })
+        const afterRepeat = await loadStoredDocument(org.orgId, collapseId)
+        assert.equal(afterRepeat.memo, 'repeat attempt')
+        assert.notEqual(
+          afterRepeat.updatedAt,
+          opened.updatedAt,
+          'a write repeating the stored revision must receive a fresh token',
+        )
+        assert.match(afterRepeat.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+
+        // Two updates inside one transaction share now() by construction;
+        // only the storage rule keeps their committed revisions distinct.
+        await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+          for (const memo of ['same transaction write one', 'same transaction write two']) {
+            await tx.execute(sql`
+              update documents
+                 set memo = ${memo}, updated_at = now()
+               where id = ${collapseId} and org_id = ${org.orgId}
+            `)
+          }
+        }))
+        const afterSameTransaction = await loadStoredDocument(org.orgId, collapseId)
+        assert.equal(afterSameTransaction.memo, 'same transaction write two')
+        assert.notEqual(
+          afterSameTransaction.updatedAt,
+          afterRepeat.updatedAt,
+          'two writes in one transaction may never commit one shared revision token',
+        )
+
+        // A stale holder of the pre-collapse token is rejected against the
+        // advanced revision, proving the tokens really do distinguish the
+        // writes that previously collapsed together.
+        await assert.rejects(
+          withOrgContext(org.orgId, () => applyDocumentEdit(
+            collapseId,
+            {
+              kind: opened.kind,
+              status: opened.status,
+              total: opened.total,
+              taxTotal: opened.taxTotal,
+              partyId: opened.partyId,
+              documentDate: opened.documentDate,
+              updatedAt: opened.updatedAt,
+            },
+            { expectedUpdatedAt: opened.updatedAt, memo: 'stale overwrite' },
+            editContext,
+          )),
+          isConflict,
+        )
+      })
+
       await t.test('SELECT FOR UPDATE serializes two writers from one exact revision', async () => {
         const opened = await loadStoredDocument(org.orgId, serializedId)
         const blocker = await withOrgContext(org.orgId, async () => pool.connect())
@@ -646,7 +731,13 @@ test(
       await t.test('concurrent posted corrections retain exactly one winner', async () => {
         const source = await loadStoredDocument(org.orgId, correctionSourceId)
         assert.equal(source.status, 'posted')
-        assert.equal(source.updatedAt, '2026-08-24T12:00:00.900001Z')
+        // The draft→posted flip is itself a mutation, so storage has advanced
+        // the seeded revision: every committed documents update must move
+        // updated_at forward (documents_revision_monotonic trigger), and this
+        // correction's OCC evidence must be the current exact token, whatever
+        // value the flip produced.
+        assert.match(source.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+        assert.notEqual(source.updatedAt, '2026-08-24T12:00:00.900001Z')
         const correctionBody = {
           expectedUpdatedAt: source.updatedAt,
           amendmentReason: 'Correct duplicated allocation',
