@@ -20,14 +20,19 @@ import { inventoryFeatureEnabled } from "./inventory.ts";
  * Subscription billing engine. Each active subscription is billed when its
  * next_bill_on comes due: the runner generates a customer_invoice for the plan
  * price × quantity, optionally posts it, and advances next_bill_on by the plan
- * interval. Billing is claimed with the scheduler's advance-and-guard trick so
- * it can never double-bill, and a failed attempt rolls its claim back —
- * guarded on the claimed value — so the occurrence is retried, never silently
+ * interval. Claiming uses the scheduler's advance-and-guard trick — the
+ * UPDATE … WHERE next_bill_on = $old lets only one tick win an occurrence — but
+ * it runs INSIDE the billing transaction: the claim and the invoice commit
+ * atomically. An earlier design claimed first in its own transaction and rolled
+ * back on failure, which a hard process kill between the two commits could not
+ * do — the claim stayed advanced with nothing billed, permanently losing the
+ * billable period. Sharing one transaction closes that window: a crash rolls
+ * both back, the schedule stays due, and the next tick retries. Never silently
  * lost. Every billed period — advanced lifecycle or plain plan — commits a
  * `subscription_period_invoices` guard row next to its invoice, so a retried
  * tick replays the committed invoice instead of cutting a second one.
- * Success bookkeeping (run_count/last_invoice_id) runs outside the claim-
- * rollback scope for the same reason. Gated by the org's `subscriptionBilling`
+ * Success bookkeeping (run_count/last_invoice_id) runs outside the billing
+ * transaction for the same reason. Gated by the org's `subscriptionBilling`
  * feature — disabling the feature stops automated billing without touching any
  * data.
  */
@@ -163,46 +168,6 @@ export function prorate(fullAmount: string, periodStart: string, periodEnd: stri
   if (total <= 0) return "0.0000";
   const remaining = Math.max(0, Math.min(total, dayDiff(asOf, periodEnd)));
   return mulRatio(fullAmount, BigInt(remaining), BigInt(total));
-}
-
-export interface SubscriptionClaimRollback {
-  /** Apply the restore only while the row still holds this (claimed) value. */
-  expectedNextBillOn: string;
-  nextBillOn: string;
-  currentPeriodStart: string | null;
-  lastBilledAt: Date | null;
-}
-
-/**
- * Rollback payload for a billing attempt that failed AFTER its occurrence was
- * claimed: the pre-claim schedule fields, so the next tick retries instead of
- * the occurrence being silently lost. The caller must apply it with
- * `where next_bill_on = expectedNextBillOn` — if a concurrent writer has
- * already moved the schedule on (e.g. a manual bill), the guarded update
- * matches nothing and that writer wins. When the live value is known, pass it
- * to skip building a rollback that could no longer apply. Pure — unit-tested.
- */
-export function subscriptionClaimRollback(
-  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
-  claimedNextBillOn: string,
-): SubscriptionClaimRollback;
-export function subscriptionClaimRollback(
-  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
-  claimedNextBillOn: string,
-  currentNextBillOn: string,
-): SubscriptionClaimRollback | null;
-export function subscriptionClaimRollback(
-  prior: { nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null },
-  claimedNextBillOn: string,
-  currentNextBillOn?: string,
-): SubscriptionClaimRollback | null {
-  if (currentNextBillOn !== undefined && currentNextBillOn !== claimedNextBillOn) return null;
-  return {
-    expectedNextBillOn: claimedNextBillOn,
-    nextBillOn: prior.nextBillOn,
-    currentPeriodStart: prior.currentPeriodStart,
-    lastBilledAt: prior.lastBilledAt,
-  };
 }
 
 async function resolveIncomeAccount(orgId: string, incomeAccountId: string | null): Promise<string> {
@@ -464,9 +429,9 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const orgBusinessDates = new Map<string, string>();
 
   const due = await withBypass(async () =>
-    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; lastBilledAt: Date | null; interval: Interval; intervalCount: number }>(sql`
+    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }>(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
-             s.current_period_start as "currentPeriodStart", s.last_billed_at as "lastBilledAt",
+             s.current_period_start as "currentPeriodStart",
              coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -503,51 +468,48 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       continue;
     }
     const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
-    // Claim the occurrence with a compare-and-swap so concurrent ticks can
-    // never double-bill. If billing then fails, the catch rolls this claim
-    // back: a persistently failing subscription stays due and retries every
-    // tick, surfacing through last_error (the operator's signal — there is no
-    // failure counter in the schema). That is preferable to silently losing
-    // the occurrence, which is what leaving the claim advanced would do.
-    const claimed = await withBypass(async () =>
-      (await db.execute<{ id: string }>(sql`
-        update subscriptions
-           set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
-         where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${row.nextBillOn} and status = 'active'
-        returning id
-      `)),
-    );
-    if (!claimed.rows.length) continue;
-
-    let sub: { invoiceId: string; documentNumber: string; posted: boolean };
+    // Claim the occurrence INSIDE the billing transaction: the tick that flips
+    // next_bill_on off its current value and billOne's invoice commit
+    // atomically, so no crash window can strand an advanced next_bill_on with
+    // nothing billed — a killed process rolls back to "still due" and the next
+    // tick retries. Only one tick can win the compare-and-swap: a concurrent
+    // tick blocks on this row lock and, when the winner commits, re-evaluates
+    // the WHERE against the advanced value and claims zero rows.
+    let sub: { invoiceId: string; documentNumber: string; posted: boolean } | null = null;
     try {
       sub = await withOrg(row.orgId, async () => {
+        const claimed = (await db.execute<{ id: string }>(sql`
+          update subscriptions
+             set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
+           where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${row.nextBillOn} and status = 'active'
+          returning id
+        `));
+        if (!claimed.rows.length) return null; // another tick won it
         const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`));
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart);
       });
-      result.billed += 1;
-      if (sub.posted) result.posted += 1;
     } catch (e) {
+      // Billing threw — withOrg already rolled the whole unit back, claim
+      // included, so there is nothing to restore. A persistently failing
+      // subscription stays due and retries every tick, surfacing through
+      // last_error (the operator's signal — there is no failure counter in
+      // the schema). That is preferable to silently losing the occurrence,
+      // which is what a durable claim without an invoice would do.
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
       await withBypass(async () => {
-        // Roll the claim back so the next tick retries the occurrence. The
-        // restore is guarded on the advanced value: a concurrent manual bill
-        // that has legitimately moved the schedule wins over our rollback.
-        const rollback = subscriptionClaimRollback(row, advanced);
-        await db.execute(sql`
-          update subscriptions
-             set next_bill_on = ${rollback.nextBillOn},
-                 current_period_start = ${rollback.currentPeriodStart},
-                 last_billed_at = ${rollback.lastBilledAt}
-           where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${rollback.expectedNextBillOn}
-        `);
         await db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`);
       });
       continue;
     }
+    if (!sub) continue; // another tick won it
+    // Non-null alias for the bookkeeping block below: a mutable let's narrowing
+    // does not survive into callbacks.
+    const gen = sub;
+    result.billed += 1;
+    if (gen.posted) result.posted += 1;
     // Success bookkeeping deliberately lives OUTSIDE the catch above. By this
     // point billOne durably committed exactly one invoice for this period —
     // together with its subscription_period_invoices guard row — so a transient
@@ -557,7 +519,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     try {
       await withBypass(async () => {
         await db.execute(sql`
-          update subscriptions set run_count = run_count + 1, last_invoice_id = ${sub.invoiceId}, last_error = null
+          update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_error = null
            where id = ${row.id} and org_id = ${row.orgId}
         `);
       });
@@ -566,7 +528,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       console.error(`[subscriptions] success bookkeeping failed for subscription ${row.id}:`, message);
       await withBypass(async () => {
         await db.execute(sql`
-          update subscriptions set last_error = ${`invoiced ${sub.documentNumber} but bookkeeping failed: ${message}`}
+          update subscriptions set last_error = ${`invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`}
            where id = ${row.id} and org_id = ${row.orgId}
         `);
       });

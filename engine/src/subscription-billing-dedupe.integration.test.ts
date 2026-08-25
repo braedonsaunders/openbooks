@@ -126,6 +126,108 @@ test(
 );
 
 test(
+  "an interrupted billing tick consumes nothing — the next tick retries and completes it",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Scheduler", "admin");
+      const subscriptionId = await seedPlainSubscription(org, actorId);
+
+      // Force a mid-billing failure AFTER the claim: posting refuses an org
+      // whose control accounts are unconfigured, which createSubscriptionInvoice
+      // hits only once the draft document and its lines are already inserted.
+      // Atomicity makes that indistinguishable from a hard process kill between
+      // claiming and billing — nothing about the claim may become durable,
+      // or a crash would strand an advanced next_bill_on with no invoice and
+      // permanently lose this billable period.
+      const settings = (await db.execute<{ s: Record<string, unknown> }>(sql`
+        select settings as s from orgs where id = ${org.orgId}
+      `)).rows[0]!.s;
+      await db.execute(sql`
+        update orgs set settings = settings - 'controlAccounts' where id = ${org.orgId}
+      `);
+
+      const run = await runDueSubscriptions(org.date);
+      assert.equal(run.failed, 1);
+      const state = (await db.execute<{
+        nextBillOn: string;
+        currentPeriodStart: string | null;
+        lastError: string | null;
+        runCount: number;
+        lastInvoiceId: string | null;
+      }>(sql`
+        select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart",
+               last_error as "lastError", run_count as "runCount", last_invoice_id as "lastInvoiceId"
+          from subscriptions where id = ${subscriptionId}
+      `));
+      assert.equal(state.rows[0]!.nextBillOn, org.date, "the occurrence stays due for the next tick");
+      assert.equal(state.rows[0]!.currentPeriodStart, null, "the period pointer was never moved");
+      assert.ok(state.rows[0]!.lastError, "last_error names the failure");
+      assert.equal(state.rows[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
+      assert.equal(state.rows[0]!.lastInvoiceId, null);
+      assert.equal(await postedInvoiceCount(org.orgId), 0);
+      assert.equal(await journalEntryCount(org.orgId), 0);
+      assert.equal((await guardRows(org.orgId, subscriptionId)).length, 0,
+        "a failed attempt never consumes the period");
+
+      // The crash-window regression: whatever killed the first attempt (here a
+      // mid-billing throw; equally a SIGKILL — no durable claim exists to
+      // strand), the next tick must complete the SAME occurrence exactly once.
+      await db.execute(sql`
+        update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${org.orgId}
+      `);
+      await db.execute(sql`update subscriptions set last_error = null where id = ${subscriptionId}`);
+      const retry = await runDueSubscriptions(org.date);
+      assert.equal(retry.failed, 0);
+      assert.equal(retry.billed, 1, "the retried tick bills the missed occurrence");
+      assert.equal(retry.posted, 1);
+      assert.equal(await postedInvoiceCount(org.orgId), 1, "exactly one invoice ever exists");
+      assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
+      const guard = await guardRows(org.orgId, subscriptionId);
+      assert.equal(guard.length, 1);
+      assert.equal(guard[0]!.startsOn, org.date);
+      assert.equal(guard[0]!.endsOn, "2026-08-15");
+      const retriedState = (await db.execute<{ nextBillOn: string; runCount: number }>(sql`
+        select next_bill_on as "nextBillOn", run_count as "runCount" from subscriptions where id = ${subscriptionId}
+      `));
+      assert.notEqual(retriedState.rows[0]!.nextBillOn, org.date, "the claim now advances");
+      assert.equal(retriedState.rows[0]!.runCount, 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "concurrent scheduler ticks converge on exactly one invoice for the due period",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      const subscriptionId = await seedPlainSubscription(org, actorId);
+
+      // Two scheduler instances race the same due occurrence: both pass the
+      // scan, but only one can win the compare-and-swap claim inside the
+      // billing transaction — the loser re-evaluates the claim against the
+      // committed schedule and claims zero rows.
+      const [a, b] = await Promise.all([
+        runDueSubscriptions(org.date),
+        runDueSubscriptions(org.date),
+      ]);
+      assert.equal(a.billed + b.billed, 1, "exactly one tick bills the occurrence");
+      for (const run of [a, b]) assert.equal(run.failed, 0);
+      assert.equal(await postedInvoiceCount(org.orgId), 1);
+      assert.equal(await journalEntryCount(org.orgId), 1);
+      assert.equal((await guardRows(org.orgId, subscriptionId)).length, 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
   "concurrent bill-now attempts for the same period converge on one invoice",
   { skip: !DB },
   async () => {
