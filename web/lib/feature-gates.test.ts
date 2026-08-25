@@ -2398,8 +2398,13 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('app/api/labor-rate-cards/[id]/route.ts'),
-    /currency = case when \$\{body\.currency === undefined\} then currency/,
+    /body\.currency === undefined\s*\?\s*sql`update item_rate_books set name=\$\{cardName\},code=\$\{cardCode\},updated_at=now\(\)/,
     'labor-rate-card update must keep the stored currency when Multi-currency is off and the field is omitted',
+  )
+  assert.match(
+    read('app/api/labor-rate-cards/[id]/route.ts'),
+    /:\s*sql`update item_rate_books set name=\$\{cardName\},code=\$\{cardCode\},currency=\$\{body\.currency\}/,
+    'labor-rate-card update must overwrite the stored currency only when the field is sent',
   )
   assert.match(
     read('app/(app)/admin/setup/labor-costing/LaborBillRateCards.tsx'),
