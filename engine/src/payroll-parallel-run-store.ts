@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "./exact-decimal.ts";
-import { db } from "./db.ts";
+import { db, inDbTransaction } from "./db.ts";
 import { cmp, isZero, normalizeMoney } from "./money.ts";
 import { PayrollError } from "./payroll-error.ts";
 import {
@@ -42,6 +42,15 @@ import {
  *     (kind, component), because a job-costed wage or employer burden is
  *     legitimately several lines for one component. Comparing line by line
  *     would manufacture differences that are not there.
+ *
+ * And one rule it shares with every other financial writer in this engine:
+ *
+ *  3. Every evidence mutation is ONE transaction (`inDbTransaction`, which
+ *     joins the caller's pinned unit when there is one). A prior stub and its
+ *     amounts, a register deletion, a tolerance and its audit row, a filed
+ *     comparison with its findings — they land together or not at all. Half a
+ *     mutation is worse than none: unaudited rows are exactly the evidence a
+ *     parallel run exists to prevent.
  */
 
 const MAX_REGISTER_ROWS = 50_000;
@@ -243,27 +252,36 @@ export async function upsertPriorRegister(
  * pass erase what the first one noticed. The count is the higher of the two,
  * because "this column carried a value in four rows" is a floor on how much
  * money is unaccounted for.
+ *
+ * The read-merge-write runs in one transaction with the register row locked:
+ * two imports landing concurrently would otherwise interleave their reads and
+ * silently drop a column one of them saw.
  */
 export async function recordUnmappedColumns(
   orgId: string,
   registerId: string,
   columns: readonly UnmappedSourceColumn[],
-  runner: Pick<typeof db, "execute"> = db,
 ): Promise<void> {
-  const existing = await priorRegisterUnmappedColumns(orgId, registerId, runner);
-  const merged = new Map(existing.map((column) => [column.column, column.valuedRows]));
-  for (const column of columns) {
-    const name = column.column.trim();
-    if (!name) continue;
-    merged.set(name, Math.max(merged.get(name) ?? 0, column.valuedRows));
-  }
-  const payload = [...merged.entries()]
-    .map(([column, valuedRows]) => ({ column, valuedRows }))
-    .sort((a, b) => a.column.localeCompare(b.column));
-  await runner.execute(sql`
-    update payroll_prior_registers
-       set unmapped_columns = ${JSON.stringify(payload)}::jsonb, updated_at = now()
-     where org_id = ${orgId} and id = ${registerId}`);
+  await inDbTransaction(async (tx) => {
+    await tx.execute(sql`
+      select id from payroll_prior_registers
+       where org_id = ${orgId} and id = ${registerId}
+       for update`);
+    const existing = await priorRegisterUnmappedColumns(orgId, registerId, tx);
+    const merged = new Map(existing.map((column) => [column.column, column.valuedRows]));
+    for (const column of columns) {
+      const name = column.column.trim();
+      if (!name) continue;
+      merged.set(name, Math.max(merged.get(name) ?? 0, column.valuedRows));
+    }
+    const payload = [...merged.entries()]
+      .map(([column, valuedRows]) => ({ column, valuedRows }))
+      .sort((a, b) => a.column.localeCompare(b.column));
+    await tx.execute(sql`
+      update payroll_prior_registers
+         set unmapped_columns = ${JSON.stringify(payload)}::jsonb, updated_at = now()
+       where org_id = ${orgId} and id = ${registerId}`);
+  });
 }
 
 async function priorRegisterUnmappedColumns(
@@ -317,11 +335,15 @@ export interface PriorStubWrite {
  * that employee's amounts wholesale rather than merging two versions of the
  * truth. A slot that vanished from the corrected file must vanish here, or the
  * comparison would keep reporting an amount nobody claims any more.
+ *
+ * Everything is validated BEFORE the transaction opens, and the stub upsert,
+ * the amount replacement, and the audit row commit together: a failure part
+ * way through must never leave a mutated stub whose old amounts are gone and
+ * whose rewrite nobody can audit.
  */
 export async function savePriorStub(
   input: { orgId: string; actorId: string; registerId: string; row: PriorStubWrite },
   slots: readonly ComparableSlot[],
-  runner: Pick<typeof db, "execute"> = db,
 ): Promise<{ created: boolean }> {
   const bySlotField = new Map(slots.map((slot) => [slot.fieldKey, slot]));
   const label = input.row.employeeLabel.trim() || input.row.employeePartyId;
@@ -337,35 +359,16 @@ export async function savePriorStub(
     }
   };
 
-  const existing = (await runner.execute<{ id: string }>(sql`
-    select id from payroll_prior_stubs
-     where org_id = ${input.orgId} and register_id = ${input.registerId}
-       and employee_party_id = ${input.row.employeePartyId}`));
-  const created = existing.rows.length === 0;
+  const gross = money(input.row.gross, "gross");
+  const netPay = money(input.row.netPay, "netPay");
+  const employerCost = money(input.row.employerCost, "employerCost");
 
-  const upserted = (await runner.execute<{ id: string }>(sql`
-    insert into payroll_prior_stubs
-      (org_id, register_id, employee_party_id, employee_label, gross, net_pay,
-       employer_cost, created_by, updated_by)
-    values (${input.orgId}, ${input.registerId}, ${input.row.employeePartyId}, ${label},
-            ${money(input.row.gross, "gross")}, ${money(input.row.netPay, "netPay")},
-            ${money(input.row.employerCost, "employerCost")},
-            ${input.actorId}, ${input.actorId})
-    on conflict (register_id, employee_party_id) do update set
-      employee_label = excluded.employee_label,
-      gross = excluded.gross,
-      net_pay = excluded.net_pay,
-      employer_cost = excluded.employer_cost,
-      updated_at = now(),
-      updated_by = excluded.updated_by
-    where payroll_prior_stubs.org_id = ${input.orgId}
-    returning id`));
-  const stubId = upserted.rows[0]!.id;
-
-  await runner.execute(sql`
-    delete from payroll_prior_amounts
-     where org_id = ${input.orgId} and prior_stub_id = ${stubId}`);
-
+  // Last amount per slot wins, matching what the per-row upsert this replaces
+  // did when one file mapped two columns onto one component.
+  const amounts = new Map<
+    string,
+    { slot: ComparableSlot; value: string; sourceColumn: string | null }
+  >();
   for (const amount of input.row.amounts) {
     const slot = bySlotField.get(amount.fieldKey);
     if (!slot) {
@@ -374,34 +377,74 @@ export async function savePriorStub(
     if (slot.kind === "total") continue;
     const value = money(amount.amount, amount.fieldKey);
     if (value === null) continue;
-    await runner.execute(sql`
-      insert into payroll_prior_amounts
-        (org_id, prior_stub_id, component_id, kind, slot, source_column, amount,
-         created_by, updated_by)
-      values (${input.orgId}, ${stubId}, ${slot.componentId}, ${slot.kind}, ${slot.slot},
-              ${amount.sourceColumn}, ${value}, ${input.actorId}, ${input.actorId})
-      on conflict (prior_stub_id, kind, slot) do update set
-        amount = excluded.amount,
-        component_id = excluded.component_id,
-        source_column = excluded.source_column,
-        updated_at = now(),
-        updated_by = excluded.updated_by
-      where payroll_prior_amounts.org_id = ${input.orgId}`);
+    amounts.set(slotKey(slot.kind, slot.slot), { slot, value, sourceColumn: amount.sourceColumn });
   }
 
-  await runner.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${input.orgId}, 'payroll_prior_stubs', ${stubId}, ${created ? "insert" : "update"},
-            ${JSON.stringify({
-              registerId: input.registerId,
-              employeeLabel: label,
-              gross: input.row.gross,
-              netPay: input.row.netPay,
-              amounts: input.row.amounts.length,
-              source: "parallel-run import",
-            })}, ${input.actorId})`);
+  return inDbTransaction(async (tx) => {
+    const existing = (await tx.execute<{ id: string }>(sql`
+      select id from payroll_prior_stubs
+       where org_id = ${input.orgId} and register_id = ${input.registerId}
+         and employee_party_id = ${input.row.employeePartyId}`));
+    const created = existing.rows.length === 0;
 
-  return { created };
+    const upserted = (await tx.execute<{ id: string }>(sql`
+      insert into payroll_prior_stubs
+        (org_id, register_id, employee_party_id, employee_label, gross, net_pay,
+         employer_cost, created_by, updated_by)
+      values (${input.orgId}, ${input.registerId}, ${input.row.employeePartyId}, ${label},
+              ${gross}, ${netPay}, ${employerCost},
+              ${input.actorId}, ${input.actorId})
+      on conflict (register_id, employee_party_id) do update set
+        employee_label = excluded.employee_label,
+        gross = excluded.gross,
+        net_pay = excluded.net_pay,
+        employer_cost = excluded.employer_cost,
+        updated_at = now(),
+        updated_by = excluded.updated_by
+      where payroll_prior_stubs.org_id = ${input.orgId}
+      returning id`));
+    const stubId = upserted.rows[0]!.id;
+
+    await tx.execute(sql`
+      delete from payroll_prior_amounts
+       where org_id = ${input.orgId} and prior_stub_id = ${stubId}`);
+
+    const rows = [...amounts.values()];
+    if (rows.length > 0) {
+      await tx.execute(sql`
+        insert into payroll_prior_amounts
+          (org_id, prior_stub_id, component_id, kind, slot, source_column, amount,
+           created_by, updated_by)
+        values ${sql.join(
+          rows.map((row) => sql`(
+            ${input.orgId}, ${stubId}, ${row.slot.componentId}, ${row.slot.kind},
+            ${row.slot.slot}, ${row.sourceColumn}, ${row.value},
+            ${input.actorId}, ${input.actorId})`),
+          sql`, `,
+        )}
+        on conflict (prior_stub_id, kind, slot) do update set
+          amount = excluded.amount,
+          component_id = excluded.component_id,
+          source_column = excluded.source_column,
+          updated_at = now(),
+          updated_by = excluded.updated_by
+        where payroll_prior_amounts.org_id = ${input.orgId}`);
+    }
+
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${input.orgId}, 'payroll_prior_stubs', ${stubId}, ${created ? "insert" : "update"},
+              ${JSON.stringify({
+                registerId: input.registerId,
+                employeeLabel: label,
+                gross: input.row.gross,
+                netPay: input.row.netPay,
+                amounts: input.row.amounts.length,
+                source: "parallel-run import",
+              })}, ${input.actorId})`);
+
+    return { created };
+  });
 }
 
 /** Every imported register, newest period first, with what it actually holds. */
@@ -448,32 +491,39 @@ function asCount(raw: unknown): number {
   return Number.isFinite(value) ? Math.trunc(value) : 0;
 }
 
+/**
+ * Discard an imported register and every trace of it — comparisons, findings,
+ * stubs, amounts — in one transaction with the deletion's own audit row, so a
+ * discarded register can never survive as half-removed evidence.
+ */
 export async function deletePriorRegister(
   orgId: string,
   registerId: string,
   actorId: string,
 ): Promise<void> {
-  await db.execute(sql`
-    delete from payroll_parallel_findings
-     where org_id = ${orgId} and comparison_id in (
-       select id from payroll_parallel_comparisons
-        where org_id = ${orgId} and register_id = ${registerId})`);
-  await db.execute(sql`
-    delete from payroll_parallel_comparisons
-     where org_id = ${orgId} and register_id = ${registerId}`);
-  await db.execute(sql`
-    delete from payroll_prior_amounts
-     where org_id = ${orgId} and prior_stub_id in (
-       select id from payroll_prior_stubs
-        where org_id = ${orgId} and register_id = ${registerId})`);
-  await db.execute(sql`
-    delete from payroll_prior_stubs where org_id = ${orgId} and register_id = ${registerId}`);
-  await db.execute(sql`
-    delete from payroll_prior_registers where org_id = ${orgId} and id = ${registerId}`);
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'payroll_prior_registers', ${registerId}, 'delete',
-            ${JSON.stringify({ reason: "operator discarded the imported register" })}, ${actorId})`);
+  await inDbTransaction(async (tx) => {
+    await tx.execute(sql`
+      delete from payroll_parallel_findings
+       where org_id = ${orgId} and comparison_id in (
+         select id from payroll_parallel_comparisons
+          where org_id = ${orgId} and register_id = ${registerId})`);
+    await tx.execute(sql`
+      delete from payroll_parallel_comparisons
+       where org_id = ${orgId} and register_id = ${registerId}`);
+    await tx.execute(sql`
+      delete from payroll_prior_amounts
+       where org_id = ${orgId} and prior_stub_id in (
+         select id from payroll_prior_stubs
+          where org_id = ${orgId} and register_id = ${registerId})`);
+    await tx.execute(sql`
+      delete from payroll_prior_stubs where org_id = ${orgId} and register_id = ${registerId}`);
+    await tx.execute(sql`
+      delete from payroll_prior_registers where org_id = ${orgId} and id = ${registerId}`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'payroll_prior_registers', ${registerId}, 'delete',
+              ${JSON.stringify({ reason: "operator discarded the imported register" })}, ${actorId})`);
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -632,6 +682,32 @@ export async function parallelTolerances(
   }));
 }
 
+/**
+ * Remove one tolerance and write its audit row on the caller's executor.
+ *
+ * Both public tolerance mutators run this inside their own transaction, so the
+ * removal can never commit without its audit row beside it. A tolerance that
+ * is not there deletes nothing and writes nothing.
+ */
+async function removeParallelToleranceOn(
+  runner: Pick<typeof db, "execute">,
+  orgId: string,
+  kind: ParallelFindingKind,
+  slot: string,
+  actorId: string,
+): Promise<void> {
+  const removed = (await runner.execute<{ id: string }>(sql`
+    delete from payroll_parallel_tolerances
+     where org_id = ${orgId} and kind = ${kind} and slot = ${slot}
+    returning id`));
+  const id = removed.rows[0]?.id;
+  if (!id) return;
+  await runner.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'payroll_parallel_tolerances', ${id}, 'delete',
+            ${JSON.stringify({ kind, slot, effect: "this slot now compares exactly" })}, ${actorId})`);
+}
+
 export async function saveParallelTolerance(input: {
   orgId: string;
   actorId: string;
@@ -662,26 +738,32 @@ export async function saveParallelTolerance(input: {
   // Zero is the default, so storing a zero row is storing nothing. Remove it
   // instead, and keep the disclosure list free of entries that do nothing.
   if (isZero(tolerance)) {
-    await deleteParallelTolerance(input.orgId, input.kind, input.slot, input.actorId);
+    await inDbTransaction((tx) =>
+      removeParallelToleranceOn(tx, input.orgId, input.kind, input.slot, input.actorId),
+    );
     return;
   }
 
-  const row = (await db.execute<{ id: string }>(sql`
-    insert into payroll_parallel_tolerances
-      (org_id, kind, slot, tolerance, reason, created_by, updated_by)
-    values (${input.orgId}, ${input.kind}, ${input.slot}, ${tolerance}, ${reason},
-            ${input.actorId}, ${input.actorId})
-    on conflict (org_id, kind, slot) do update set
-      tolerance = excluded.tolerance, reason = excluded.reason,
-      updated_at = now(), updated_by = excluded.updated_by
-    where payroll_parallel_tolerances.org_id = ${input.orgId}
-    returning id`));
+  // The upsert and the audit row land together: a tolerance change whose
+  // attribution went missing would be an allowance nobody agreed to.
+  await inDbTransaction(async (tx) => {
+    const row = (await tx.execute<{ id: string }>(sql`
+      insert into payroll_parallel_tolerances
+        (org_id, kind, slot, tolerance, reason, created_by, updated_by)
+      values (${input.orgId}, ${input.kind}, ${input.slot}, ${tolerance}, ${reason},
+              ${input.actorId}, ${input.actorId})
+      on conflict (org_id, kind, slot) do update set
+        tolerance = excluded.tolerance, reason = excluded.reason,
+        updated_at = now(), updated_by = excluded.updated_by
+      where payroll_parallel_tolerances.org_id = ${input.orgId}
+      returning id`));
 
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${input.orgId}, 'payroll_parallel_tolerances', ${row.rows[0]!.id}, 'update',
-            ${JSON.stringify({ kind: input.kind, slot: input.slot, tolerance, reason })},
-            ${input.actorId})`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${input.orgId}, 'payroll_parallel_tolerances', ${row.rows[0]!.id}, 'update',
+              ${JSON.stringify({ kind: input.kind, slot: input.slot, tolerance, reason })},
+              ${input.actorId})`);
+  });
 }
 
 export async function deleteParallelTolerance(
@@ -690,16 +772,7 @@ export async function deleteParallelTolerance(
   slot: string,
   actorId: string,
 ): Promise<void> {
-  const removed = (await db.execute<{ id: string }>(sql`
-    delete from payroll_parallel_tolerances
-     where org_id = ${orgId} and kind = ${kind} and slot = ${slot}
-    returning id`));
-  const id = removed.rows[0]?.id;
-  if (!id) return;
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'payroll_parallel_tolerances', ${id}, 'delete',
-            ${JSON.stringify({ kind, slot, effect: "this slot now compares exactly" })}, ${actorId})`);
+  await inDbTransaction((tx) => removeParallelToleranceOn(tx, orgId, kind, slot, actorId));
 }
 
 /* ------------------------------------------------------------------ */
@@ -725,6 +798,11 @@ export interface FiledComparison {
  * cannot vouch for its own arithmetic or that would report a clean result off
  * an empty population is a defect in this module, and the correct behaviour is
  * to refuse to produce evidence rather than to produce misleading evidence.
+ *
+ * The filing itself is one transaction: a comparison header with only some of
+ * its findings — or without its audit row — is exactly the partial,
+ * unaudited evidence this store must never produce. Any failure rolls the
+ * whole filing back.
  */
 export async function runParallelComparison(
   input: RunParallelComparisonInput,
@@ -754,66 +832,70 @@ export async function runParallelComparison(
     );
   }
 
-  const header = (await db.execute<{ id: string }>(sql`
-    insert into payroll_parallel_comparisons
-      (org_id, register_id, pay_run_document_id, status,
-       prior_employee_count, our_employee_count, compared_employee_count,
-       prior_only_employee_count, our_only_employee_count,
-       match_count, within_tolerance_count, difference_count, one_sided_count,
-       prior_gross, our_gross, prior_net, our_net,
-       prior_employer_cost, our_employer_cost,
-       unattributed_gross, unattributed_net, unattributed_employer_cost,
-       tolerances_applied, unmapped_columns, blocked_reason, created_by, updated_by)
-    values (${input.orgId}, ${input.registerId}, ${input.payRunDocumentId}, ${comparison.status},
-            ${comparison.populations.prior}, ${comparison.populations.ours},
-            ${comparison.populations.compared}, ${comparison.populations.priorOnly},
-            ${comparison.populations.ourOnly},
-            ${comparison.counts.match}, ${comparison.counts.within_tolerance},
-            ${comparison.counts.difference},
-            ${comparison.counts.prior_only + comparison.counts.our_only +
-              comparison.counts.employee_prior_only + comparison.counts.employee_our_only},
-            ${comparison.totals.gross.prior}, ${comparison.totals.gross.ours},
-            ${comparison.totals.netPay.prior}, ${comparison.totals.netPay.ours},
-            ${comparison.totals.employerCost.prior}, ${comparison.totals.employerCost.ours},
-            ${comparison.totals.gross.unattributed}, ${comparison.totals.netPay.unattributed},
-            ${comparison.totals.employerCost.unattributed},
-            ${JSON.stringify(comparison.tolerancesApplied)}::jsonb,
-            ${JSON.stringify(comparison.unmappedColumns)}::jsonb,
-            ${comparison.blockedReason}, ${input.actorId}, ${input.actorId})
-    returning id`));
-  const comparisonId = header.rows[0]!.id;
+  const comparisonId = await inDbTransaction(async (tx) => {
+    const header = (await tx.execute<{ id: string }>(sql`
+      insert into payroll_parallel_comparisons
+        (org_id, register_id, pay_run_document_id, status,
+         prior_employee_count, our_employee_count, compared_employee_count,
+         prior_only_employee_count, our_only_employee_count,
+         match_count, within_tolerance_count, difference_count, one_sided_count,
+         prior_gross, our_gross, prior_net, our_net,
+         prior_employer_cost, our_employer_cost,
+         unattributed_gross, unattributed_net, unattributed_employer_cost,
+         tolerances_applied, unmapped_columns, blocked_reason, created_by, updated_by)
+       values (${input.orgId}, ${input.registerId}, ${input.payRunDocumentId}, ${comparison.status},
+               ${comparison.populations.prior}, ${comparison.populations.ours},
+               ${comparison.populations.compared}, ${comparison.populations.priorOnly},
+               ${comparison.populations.ourOnly},
+               ${comparison.counts.match}, ${comparison.counts.within_tolerance},
+               ${comparison.counts.difference},
+               ${comparison.counts.prior_only + comparison.counts.our_only +
+                 comparison.counts.employee_prior_only + comparison.counts.employee_our_only},
+               ${comparison.totals.gross.prior}, ${comparison.totals.gross.ours},
+               ${comparison.totals.netPay.prior}, ${comparison.totals.netPay.ours},
+               ${comparison.totals.employerCost.prior}, ${comparison.totals.employerCost.ours},
+               ${comparison.totals.gross.unattributed}, ${comparison.totals.netPay.unattributed},
+               ${comparison.totals.employerCost.unattributed},
+               ${JSON.stringify(comparison.tolerancesApplied)}::jsonb,
+               ${JSON.stringify(comparison.unmappedColumns)}::jsonb,
+               ${comparison.blockedReason}, ${input.actorId}, ${input.actorId})
+      returning id`));
+    const id = header.rows[0]!.id;
 
-  // Findings in one multi-row insert. A per-row loop over a 400-employee
-  // register is 4,000 round trips.
-  const values = comparison.findings.map(
-    (finding) => sql`(
-      ${input.orgId}, ${comparisonId}, ${finding.employeePartyId}, ${finding.employeeName},
-      ${finding.kind}, ${finding.slot}, ${finding.slotLabel}, ${finding.classification},
-      ${finding.priorAmount}, ${finding.ourAmount}, ${finding.difference},
-      ${finding.toleranceApplied}, ${finding.sourceColumn}, ${finding.sequence},
-      ${input.actorId}, ${input.actorId})`,
-  );
-  for (let index = 0; index < values.length; index += 500) {
-    const chunk = values.slice(index, index + 500);
-    await db.execute(sql`
-      insert into payroll_parallel_findings
-        (org_id, comparison_id, employee_party_id, employee_name, kind, slot, slot_label,
-         classification, prior_amount, our_amount, difference, tolerance_applied,
-         source_column, sequence, created_by, updated_by)
-      values ${sql.join(chunk, sql`, `)}`);
-  }
+    // Findings in multi-row inserts. A per-row loop over a 400-employee
+    // register is 4,000 round trips.
+    const values = comparison.findings.map(
+      (finding) => sql`(
+        ${input.orgId}, ${id}, ${finding.employeePartyId}, ${finding.employeeName},
+        ${finding.kind}, ${finding.slot}, ${finding.slotLabel}, ${finding.classification},
+        ${finding.priorAmount}, ${finding.ourAmount}, ${finding.difference},
+        ${finding.toleranceApplied}, ${finding.sourceColumn}, ${finding.sequence},
+        ${input.actorId}, ${input.actorId})`,
+    );
+    for (let index = 0; index < values.length; index += 500) {
+      const chunk = values.slice(index, index + 500);
+      await tx.execute(sql`
+        insert into payroll_parallel_findings
+          (org_id, comparison_id, employee_party_id, employee_name, kind, slot, slot_label,
+           classification, prior_amount, our_amount, difference, tolerance_applied,
+           source_column, sequence, created_by, updated_by)
+        values ${sql.join(chunk, sql`, `)}`);
+    }
 
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${input.orgId}, 'payroll_parallel_comparisons', ${comparisonId}, 'insert',
-            ${JSON.stringify({
-              registerId: input.registerId,
-              payRunDocumentId: input.payRunDocumentId,
-              status: comparison.status,
-              compared: comparison.populations.compared,
-              differences: comparison.counts.difference,
-              tolerances: comparison.tolerancesApplied.length,
-            })}, ${input.actorId})`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${input.orgId}, 'payroll_parallel_comparisons', ${id}, 'insert',
+              ${JSON.stringify({
+                registerId: input.registerId,
+                payRunDocumentId: input.payRunDocumentId,
+                status: comparison.status,
+                compared: comparison.populations.compared,
+                differences: comparison.counts.difference,
+                tolerances: comparison.tolerancesApplied.length,
+              })}, ${input.actorId})`);
+
+    return id;
+  });
 
   return { comparisonId, comparison };
 }
