@@ -1593,19 +1593,46 @@ async function createPaymentRunWithinTransaction(
   return run;
 }
 
-/** Cancel a draft run: void nothing — drafts are deleted, instructions cancelled. */
+/** The only run statuses a cancellation may consume. */
+const CANCELLABLE_RUN_STATUSES = ["draft", "rejected", "rolled_back"];
+
+/**
+ * Cancel a draft run: void nothing — drafts are deleted, instructions cancelled.
+ *
+ * Cancellability is judged twice: the caller-facing preflight refuses obvious
+ * non-candidates fast, and the transaction re-judges under the run row lock
+ * before any child row moves. A run that leaves the cancellable set after the
+ * preflight (submitted, approved, its file regenerated, or posted by a
+ * concurrent operator) can therefore never be stamped `cancelled` over the
+ * state another lifecycle path installed — the predicated final write proves
+ * the predicate held at write time or the whole cancellation rolls back.
+ */
 export async function cancelPaymentRun(runId: string, orgId: string): Promise<void> {
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
-  if (run.status !== "draft" && run.status !== "rejected" && run.status !== "rolled_back") {
+  if (!CANCELLABLE_RUN_STATUSES.includes(run.status)) {
     throw new PaymentError(`a ${run.status} run cannot be cancelled`);
   }
-  const instructions = await db
-    .select()
-    .from(schema.paymentInstructions)
-    .where(and(eq(schema.paymentInstructions.paymentRunId, runId), eq(schema.paymentInstructions.orgId, orgId)));
 
   await db.transaction(async (tx) => {
+    // The run row is the cancellation claim: lock it before judging or
+    // mutating anything, serializing against posters, generators, and
+    // settlement writers in their shared lock order.
+    const locked = (await tx.execute<{ status: string }>(sql`
+      select status
+        from payment_runs
+       where id = ${runId} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!locked) throw new PaymentError("payment run not found");
+    if (!CANCELLABLE_RUN_STATUSES.includes(locked.status)) {
+      throw new PaymentError(`a ${locked.status} run cannot be cancelled`);
+    }
+    const instructions = await tx
+      .select()
+      .from(schema.paymentInstructions)
+      .where(and(eq(schema.paymentInstructions.paymentRunId, runId), eq(schema.paymentInstructions.orgId, orgId)));
+
     for (const ins of instructions) {
       // Release the FK to the draft payment before deleting it.
       await tx
@@ -1624,10 +1651,18 @@ export async function cancelPaymentRun(runId: string, orgId: string): Promise<vo
         await tx.execute(sql`delete from documents where id = ${ins.paymentDocumentId} and org_id = ${orgId}`);
       }
     }
-    await tx
-      .update(schema.paymentRuns)
-      .set({ status: "cancelled", updatedAt: new Date() })
-      .where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
+    // Predicated on the same statuses judged under the lock above: a run that
+    // changed state while this transaction worked cannot become `cancelled`.
+    const cancelled = await tx.execute<{ id: string }>(sql`
+      update payment_runs
+         set status = 'cancelled', updated_at = now()
+       where id = ${runId} and org_id = ${orgId}
+         and status in ('draft', 'rejected', 'rolled_back')
+       returning id
+    `);
+    if (!cancelled.rows[0]) {
+      throw new PaymentError("the run changed state while it was being cancelled");
+    }
   });
 }
 

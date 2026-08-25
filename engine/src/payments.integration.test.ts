@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "./db.ts";
-import { recordPaymentSettlement } from "./payment-operations.ts";
+import {
+  generatePaymentFileArtifact,
+  recordPaymentSettlement,
+} from "./payment-operations.ts";
 import {
   cancelPaymentRun,
   createPaymentDocument,
@@ -735,6 +738,332 @@ test("a recovered stale posting claim resumes the run without double-posting", {
       claim_token: false,
     });
   } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("concurrent payment-file reprocessing cannot clobber an in-flight posting or its terminal result", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let releaseSecondInstruction!: () => void;
+  const secondInstructionReleased = new Promise<void>((resolve) => { releaseSecondInstruction = resolve; });
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Reprocess racer", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+    let signalLocked!: () => void;
+    const secondInstructionLocked = new Promise<void>((resolve) => { signalLocked = resolve; });
+    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      // Parking the poster on the second instruction's row lock holds the run
+      // mid-flight (`processing`, one instruction sent) so the reprocess
+      // attempts land in a real causal window without starving any reader.
+      await tx.execute(sql`
+        select id from payment_instructions
+         where id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
+         for update
+      `);
+      signalLocked();
+      await secondInstructionReleased;
+    }));
+    await secondInstructionLocked;
+
+    const poster = withOrgContext(org.orgId, () =>
+      postPaymentRun(seeded.runId, org.orgId, actorId));
+    await waitForState(async () =>
+      withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          run_status: string;
+          first_status: string;
+          second_status: string;
+        }>(sql`
+          select run.status as run_status,
+                 (select status from payment_instructions where id = ${seeded.instructionIds[0]!}) as first_status,
+                 (select status from payment_instructions where id = ${seeded.instructionIds[1]!}) as second_status
+            from payment_runs run
+           where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+        `)).rows[0]), {
+      run_status: "processing",
+      first_status: "sent",
+      second_status: "pending",
+    });
+
+    // Both reprocessing entry points refuse while a posting claim owns the
+    // lifecycle: neither may drag the run back to `generated` mid-posting.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /approve the payment run before generating its file/);
+        return true;
+      },
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () => generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /approve the payment run before generating its file/);
+        return true;
+      },
+    );
+    const duringPosting = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ run_status: string; artifacts: number }>(sql`
+        select run.status as run_status,
+               (select count(*)::int from payment_files f
+                 where f.payment_run_id = run.id and f.org_id = run.org_id) as artifacts
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(duringPosting, { run_status: "processing", artifacts: 0 });
+
+    releaseSecondInstruction();
+    await blocker;
+    const outcome = await poster;
+    assert.deepEqual(outcome, { posted: 2, failures: [] });
+
+    // The terminal result stands and no artifact was written behind it.
+    const final = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        claim_token: boolean;
+        artifacts: number;
+        file_events: number;
+        completed: number;
+      }>(sql`
+        select run.status as run_status,
+               run.posting_claim_token is not null as claim_token,
+               (select count(*)::int from payment_files f
+                 where f.payment_run_id = run.id and f.org_id = run.org_id) as artifacts,
+               (select count(*)::int from payment_events e
+                 where e.payment_run_id = run.id and e.org_id = run.org_id
+                   and e.event_type in ('file_generated', 'file_reprocessed')) as file_events,
+               (select count(*)::int from payment_events e
+                 where e.payment_run_id = run.id and e.org_id = run.org_id
+                   and e.event_type = 'run_posting_completed') as completed
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, {
+      run_status: "confirmed",
+      claim_token: false,
+      artifacts: 0,
+      file_events: 0,
+      completed: 1,
+    });
+  } finally {
+    releaseSecondInstruction?.();
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("payment-file reprocessing cannot drag a settled or returned run out of its terminal state", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Terminal guard", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+    await withOrgContext(org.orgId, () => postPaymentRun(seeded.runId, org.orgId, actorId));
+
+    // The bank confirms settlement: another lifecycle path has preserved the
+    // instruction and driven the run into its terminal `settled` state.
+    await withOrgContext(org.orgId, () => recordPaymentSettlement({
+      instructionId: seeded.instructionId,
+      orgId: org.orgId,
+      userId: actorId,
+      status: "settled",
+      effectiveOn: org.date,
+      bankReference: "BANK-SETTLE-1",
+    }));
+    const expectGenerationRefused = (attempt: Promise<unknown>) =>
+      assert.rejects(attempt, (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /approve the payment run before generating its file/);
+        return true;
+      });
+    const terminalState = async () => withOrgContext(org.orgId, async () =>
+      (await db.execute<{ run_status: string; artifacts: number }>(sql`
+        select run.status as run_status,
+               (select count(*)::int from payment_files f
+                 where f.payment_run_id = run.id and f.org_id = run.org_id) as artifacts
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+
+    await expectGenerationRefused(withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId)));
+    await expectGenerationRefused(withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })));
+    assert.deepEqual(await terminalState(), { run_status: "settled", artifacts: 0 });
+
+    // A late bank return moves the run to its other terminal state; the same
+    // refusals hold there and nothing regresses.
+    await withOrgContext(org.orgId, () => recordPaymentSettlement({
+      instructionId: seeded.instructionId,
+      orgId: org.orgId,
+      userId: actorId,
+      status: "returned",
+      effectiveOn: org.date,
+      returnCode: "R01",
+      returnReason: "terminal-state regression coverage",
+    }));
+    await expectGenerationRefused(withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: randomUUID() })));
+    assert.deepEqual(await terminalState(), { run_status: "returned", artifacts: 0 });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a partially failed run still accepts legitimate file regeneration and reprocessing lineage", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Regen operator", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+    // A prior posting attempt left the run retryable.
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update payment_runs set status = 'partially_failed', updated_by = ${actorId}
+       where id = ${seeded.runId} and org_id = ${org.orgId}
+    `));
+
+    const first = await withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId));
+    assert.match(first.filename, /\.csv$/);
+    const firstState = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ run_status: string; file_status: string; sequence: number }>(sql`
+        select run.status as run_status, f.status as file_status, f.sequence_number as sequence
+          from payment_runs run join payment_files f
+            on f.payment_run_id = run.id and f.org_id = run.org_id
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(firstState, { run_status: "generated", file_status: "approved", sequence: 1 });
+
+    // Reprocessing supersedes the prior artifact and keeps the run generable.
+    const second = await withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: first.id }));
+    assert.notEqual(second.id, first.id);
+    const lineage = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ statuses: string[]; sequences: number[]; parents: (string | null)[] }>(sql`
+        select array_agg(status order by sequence_number) as statuses,
+               array_agg(sequence_number order by sequence_number) as sequences,
+               array_agg(parent_payment_file_id order by sequence_number) as parents
+          from payment_files
+         where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(lineage, {
+      statuses: ["superseded", "approved"],
+      sequences: [1, 2],
+      parents: [null, first.id],
+    });
+  } finally {
+    // The scratch-org teardown does not know about payment artifacts; drop
+    // them under the same teardown grants (the append-only evidence guards
+    // require the sandbox flag), evidence first.
+    await withBypass(() => db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select set_config('openbooks.amend', 'on', true),
+               set_config('openbooks.sandbox_wipe', 'on', true),
+               set_config('app.bypass_rls', 'on', true)`);
+      await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
+      await tx.execute(sql`delete from payment_events where org_id = ${org.orgId} and payment_file_id is not null`);
+      await tx.execute(sql`delete from payment_files where org_id = ${org.orgId}`);
+    }));
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("cancellation judges the run under its row lock, not the caller's stale read", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let releaseHolder!: (() => void) | undefined;
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Cancel racer", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
+    // The caller's preflight sees a cancellable draft whose payments are
+    // still drafts — nothing but the lifecycle gate itself may stop it. The
+    // wire-fixture payments are demoted to plain draft documents (their
+    // posting evidence removed under the amend kernel bypass) so every child
+    // mutation a stale cancellation attempts is actually available to it.
+    await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select set_config('openbooks.amend', 'on', true),
+               set_config('app.bypass_rls', 'on', true)`);
+      await tx.execute(sql`
+        update documents set status = 'draft', posted_entry_id = null
+         where org_id = ${org.orgId}
+           and id in (select payment_document_id from payment_instructions
+                      where payment_run_id = ${seeded.runId} and org_id = ${org.orgId})
+      `);
+      await tx.execute(sql`
+        delete from journal_lines
+         where org_id = ${org.orgId}
+           and entry_id in (
+             select id from journal_entries
+              where org_id = ${org.orgId}
+                and source_document_id in (
+                  select payment_document_id from payment_instructions
+                   where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+                )
+           )
+      `);
+      await tx.execute(sql`
+        delete from journal_entries
+         where org_id = ${org.orgId}
+           and source_document_id in (
+             select payment_document_id from payment_instructions
+              where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+           )
+      `);
+    }));
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update payment_runs set status = 'draft', updated_by = ${actorId}
+       where id = ${seeded.runId} and org_id = ${org.orgId}
+    `));
+
+    let signalLocked!: (pid: number) => void;
+    const runRowLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
+    const raceObserved = new Promise<void>((resolve) => { releaseHolder = resolve; });
+    const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+      await tx.execute(sql`
+        select id from payment_runs
+         where id = ${seeded.runId} and org_id = ${org.orgId}
+         for update
+      `);
+      signalLocked(pid.rows[0]!.pid);
+      await raceObserved;
+      // While the cancellation is fenced out on the row lock, another
+      // lifecycle path installs a non-cancellable state — exactly the
+      // overwrite window this control owns.
+      await tx.execute(sql`
+        update payment_runs set status = 'generated', updated_at = now(), updated_by = ${actorId}
+         where id = ${seeded.runId} and org_id = ${org.orgId}
+      `);
+    }));
+    const holderPid = await runRowLocked;
+
+    const cancellation = withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId));
+    // The cancellation must contend on the run row before mutating anything.
+    await waitForBlockedBy(holderPid);
+    releaseHolder?.();
+    await holder;
+
+    await assert.rejects(cancellation, (error: unknown) => {
+      assert.ok(error instanceof PaymentError);
+      assert.match(error.message, /cannot be cancelled/);
+      return true;
+    });
+    const final = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ run_status: string; pending: number; documents: number }>(sql`
+        select run.status as run_status,
+               (select count(*)::int from payment_instructions i
+                 where i.payment_run_id = run.id and i.org_id = run.org_id
+                   and i.status = 'pending') as pending,
+               (select count(*)::int from documents d
+                where d.id in (
+                  select i.payment_document_id from payment_instructions i
+                   where i.payment_run_id = run.id and i.org_id = run.org_id
+                )) as documents
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, { run_status: "generated", pending: 2, documents: 2 });
+  } finally {
+    releaseHolder?.();
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
