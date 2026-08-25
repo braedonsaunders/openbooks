@@ -8,6 +8,8 @@ const bankStatementSourceEvidenceMigrationPath =
   "schema/migrations/generated/0010_bank_statement_source_evidence.sql";
 const paymentRunPostingRecoveryMigrationPath =
   "schema/migrations/generated/0012_payment_run_posting_recovery.sql";
+const documentRevisionMonotonicMigrationPath =
+  "schema/migrations/generated/0013_document_revision_monotonic.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -30,6 +32,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0010_bank_statement_source_idempotency.sql",
     "0011_payment_run_live_selection.sql",
     "0012_payment_run_posting_recovery.sql",
+    "0013_document_revision_monotonic.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -61,6 +64,22 @@ test("payment-run posting claims are leased and stranded claims are released on 
   // unreachable state for the resumable one, with run-scoped evidence.
   assert.match(migration, /WHERE status = 'processing'/);
   assert.match(migration, /'run_posting_recovered'/);
+});
+
+test("document revisions can never repeat: storage forces every update to advance updated_at", () => {
+  const migration = readFileSync(documentRevisionMonotonicMigrationPath, "utf8");
+  // The guard intervenes only on the collapse shape — an update whose stored
+  // revision is byte-identical to the previous one — and forces strictly
+  // forward motion. Explicit advancing or backdating writes stay untouched.
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.documents_revision_monotonic\(\)/);
+  assert.match(migration, /IF NEW\.updated_at = OLD\.updated_at THEN/);
+  assert.match(
+    migration,
+    /NEW\.updated_at := greatest\(\s*clock_timestamp\(\),\s*OLD\.updated_at \+ interval '1 microsecond'\s*\)/,
+  );
+  assert.match(migration, /BEFORE UPDATE ON public\.documents/);
+  assert.match(migration, /CREATE TRIGGER documents_revision_monotonic/);
+  assert.match(migration, /COMMENT ON FUNCTION public\.documents_revision_monotonic\(\) IS/);
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
