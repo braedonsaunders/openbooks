@@ -556,6 +556,14 @@ export function assertNoExistingDocumentCorrection(existingDocumentNumber: strin
  * transaction callback. The injected shape is intentionally tiny; production
  * supplies Drizzle's transaction + `select … for update`, and PostgreSQL-backed
  * regressions exercise this exact orchestration under competing connections.
+ *
+ * The locked row's revision must itself carry the exact canonical wire token
+ * the documentRevisionSql projection guarantees. String equality between two
+ * equally lossy values — a driver-mapped Date coerced back to text,
+ * PostgreSQL's default timestamp rendering, a truncated fractional part —
+ * would otherwise authorize a write against a revision this system can never
+ * have handed out, so a lock without an exact token fails closed before any
+ * comparison runs.
  */
 export async function runDocumentVersionedTransaction<
   Transaction,
@@ -570,6 +578,9 @@ export async function runDocumentVersionedTransaction<
   return args.transaction(async (tx) => {
     const locked = await args.lock(tx)
     if (!locked) throw new DocumentEditError(404, 'not found')
+    if (!isDocumentRevisionToken(locked.updatedAt)) {
+      throw new Error('document lock did not return an exact persisted revision')
+    }
     assertDocumentEditRevision(args.expectedRevision, locked.updatedAt)
     return args.mutate(tx, locked)
   })

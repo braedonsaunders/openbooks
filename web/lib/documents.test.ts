@@ -813,6 +813,61 @@ test('load and lock SQL preserve the exact revision token end to end', () => {
   )
 })
 
+type VersionedLockRow = { status: string; updatedAt: unknown }
+
+/** Drive runDocumentVersionedTransaction against a stubbed lock + mutation. */
+function versionedRun(lockedRow: VersionedLockRow | null, expectedRevision: string): {
+  run: Promise<number>
+  mutations: () => number
+} {
+  let writes = 0
+  const run = runDocumentVersionedTransaction<{ handle: number }, VersionedLockRow, number>({
+    expectedRevision,
+    transaction: async (work) => work({ handle: 1 }),
+    lock: async () => lockedRow,
+    mutate: async () => {
+      writes += 1
+      return writes
+    },
+  })
+  return { run, mutations: () => writes }
+}
+
+test('the locked revision must itself be an exact persisted token before any write', async () => {
+  const exact = '2026-08-24T12:00:00.123001Z'
+  // A lock projection that regresses away documentRevisionSql hands back
+  // whatever the driver or PostgreSQL defaults produce — a mapped Date, a
+  // second-granularity timestamp, default text rendering, an empty value.
+  // String equality between two equally lossy values would authorize a write
+  // against a revision this system never issued, so each must fail closed
+  // before any comparison runs — even when the caller echoes the same lossy
+  // value back verbatim.
+  for (const [lossy, echoed] of [
+    [new Date('2026-08-24T12:00:00.123001Z'), exact],
+    ['2026-08-24T12:00:00Z', '2026-08-24T12:00:00Z'],
+    ['2026-08-24 12:00:00.123001+00', '2026-08-24 12:00:00.123001+00'],
+    ['', ''],
+    [null, exact],
+  ] as const) {
+    const attempt = versionedRun({ status: 'draft', updatedAt: lossy }, echoed)
+    await assert.rejects(attempt.run, /exact persisted revision/)
+    assert.equal(attempt.mutations(), 0, `no mutation may follow a ${typeof lossy} lock revision`)
+  }
+
+  const matched = versionedRun({ status: 'draft', updatedAt: exact }, exact)
+  assert.equal(await matched.run, 1)
+  assert.equal(matched.mutations(), 1)
+
+  await assert.rejects(
+    versionedRun({ status: 'draft', updatedAt: '2026-08-24T12:00:00.999999Z' }, exact).run,
+    isConflict,
+  )
+  await assert.rejects(
+    versionedRun(null, exact).run,
+    (e: unknown) => e instanceof DocumentEditError && e.status === 404,
+  )
+})
+
 test('reversal link evidence carries the full mandatory audit contract', () => {
   const before = new Date('2026-08-24T00:00:00Z')
   const link = buildReversalLinkEvidence({
