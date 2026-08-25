@@ -977,6 +977,24 @@ export async function recordPaymentSettlement(opts: {
   // The document-void helper participates in this tenant transaction, so its
   // journal reversal cannot commit unless the settlement projection does too.
   await withOrgTransaction(opts.orgId, async () => {
+    const candidate = await db.execute<{ payment_run_id: string }>(sql`
+      select payment_run_id
+        from payment_instructions
+       where id = ${opts.instructionId} and org_id = ${opts.orgId}
+    `);
+    const paymentRunId = candidate.rows[0]?.payment_run_id;
+    if (!paymentRunId) throw new PaymentError("payment instruction not found");
+    // Keep the aggregate lock order identical to posting: run first, then the
+    // instruction, then the payment document/reversal work. Opposite ordering
+    // lets a return and a poster deadlock while each holds the row the other
+    // needs to establish the terminal boundary.
+    const lockedRun = await db.execute<{ status: string }>(sql`
+      select status
+        from payment_runs
+       where id = ${paymentRunId} and org_id = ${opts.orgId}
+       for update
+    `);
+    if (!lockedRun.rows[0]) throw new PaymentError("payment run not found");
     const row = (await db.execute<{
       payment_run_id: string;
       payment_document_id: string | null;
@@ -986,9 +1004,9 @@ export async function recordPaymentSettlement(opts: {
     }>(sql`
       select i.payment_run_id, i.payment_document_id, i.amount, i.currency, i.status
         from payment_instructions i
-        join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
        where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
-       for update of i, r
+         and i.payment_run_id = ${paymentRunId}
+       for update of i
     `));
     const instruction = row.rows[0];
     if (!instruction) throw new PaymentError("payment instruction not found");
@@ -1032,6 +1050,9 @@ export async function recordPaymentSettlement(opts: {
           when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status not in ('settled', 'cancelled')) then 'settled'
           else r.status end,
         settled_at = case when not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status not in ('settled', 'cancelled')) then now() else settled_at end,
+        posting_claim_token = case when r.status = 'processing' then null else posting_claim_token end,
+        posting_claimed_at = case when r.status = 'processing' then null else posting_claimed_at end,
+        posting_claimed_by = case when r.status = 'processing' then null else posting_claimed_by end,
         updated_at = now(), updated_by = ${opts.userId}
       where r.id = ${instruction.payment_run_id} and r.org_id = ${opts.orgId}
     `);

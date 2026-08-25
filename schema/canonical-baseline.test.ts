@@ -6,6 +6,8 @@ const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
 const bankStatementSourceEvidenceMigrationPath =
   "schema/migrations/generated/0010_bank_statement_source_evidence.sql";
+const paymentRunPostingRecoveryMigrationPath =
+  "schema/migrations/generated/0012_payment_run_posting_recovery.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -27,6 +29,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0010_bank_statement_source_evidence.sql",
     "0010_bank_statement_source_idempotency.sql",
     "0011_payment_run_live_selection.sql",
+    "0012_payment_run_posting_recovery.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -46,6 +49,18 @@ test("bank statement source evidence is mandatory after forward migrations", () 
     migration,
     /ALTER COLUMN raw_file_ref SET NOT NULL/,
   );
+});
+
+test("payment-run posting claims are leased and stranded claims are released on rollout", () => {
+  const migration = readFileSync(paymentRunPostingRecoveryMigrationPath, "utf8");
+  for (const column of ["posting_claim_token", "posting_claimed_at", "posting_claimed_by"]) {
+    assert.match(migration, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`));
+    assert.match(migration, new RegExp(`COMMENT ON COLUMN public\\.payment_runs\\.${column}`));
+  }
+  // A pre-token `processing` row has no live owner: it must leave the
+  // unreachable state for the resumable one, with run-scoped evidence.
+  assert.match(migration, /WHERE status = 'processing'/);
+  assert.match(migration, /'run_posting_recovered'/);
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
