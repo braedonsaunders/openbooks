@@ -21,6 +21,12 @@ import { executeFlowPlan } from "./execute.ts";
  * is recorded on the flow_runs row + console.error, and the caller gets
  * aggregate stats back (on_submit uses gatesCreated to decide the document's
  * pending_approval status).
+ *
+ * Transactional hook sites (void reservation, posting commands) get matching
+ * email semantics for free: every flow email is written into the durable
+ * scheduler_outbox through the caller's own transaction, so a rollback
+ * discards the pending send together with the flow's other effects and only
+ * a committed unit ever delivers mail (see flows/execute.ts).
  */
 
 export interface RecordFlowsResult {

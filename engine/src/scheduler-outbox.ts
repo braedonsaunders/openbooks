@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { EmailJobData } from "@openbooks/jobs";
 import { db, withBypassContext } from "./db.ts";
 import {
   logTerminalFailure,
@@ -17,6 +18,13 @@ import {
  * Durable scheduler/approval-escalation outbox — same claim/run/fail/retry
  * contract as report_runs / report_delivery_outbox. Redis queues are optional
  * and rebuildable; this table is the source of truth after a crash.
+ *
+ * `flow_email` rows are how transactional flows defer mail past their caller's
+ * commit: the rendered delivery is inserted through the caller's own
+ * transaction (a rollback discards it together with the flow's other
+ * effects), and this worker delivers it later through the Redis queue. A
+ * deterministic occurrence key makes replays of one effect collapse onto a
+ * single row instead of duplicating sends.
  *
  * Terminal failures are not silent: the single attempt whose failure reaches
  * MAX_SCHEDULER_OUTBOX_ATTEMPTS stamps terminal_failed_at / terminal_failed_by
@@ -44,7 +52,10 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
-export type SchedulerOutboxKind = SchedulerOutboxScanKind | "approval_escalation";
+export type SchedulerOutboxKind =
+  | SchedulerOutboxScanKind
+  | "approval_escalation"
+  | "flow_email";
 
 export const MAX_SCHEDULER_OUTBOX_ATTEMPTS = 8;
 export const STALE_SCHEDULER_OUTBOX_MS = 15 * 60_000;
@@ -58,7 +69,113 @@ export type OutboxRow = {
   occurrence_key: string;
   attempt_count: number;
   lease_token: string;
+  payload: unknown;
 };
+
+/**
+ * The rendered delivery a flow produced at execution time. Persisted verbatim
+ * on the outbox row: the eventual send must not depend on the record's later
+ * state (template values, recipients, or PDFs can all change before the
+ * worker drains).
+ */
+export interface FlowEmailPayload {
+  to: string[];
+  subject: string;
+  html: string;
+  text: string;
+  attachments?: EmailJobData["attachments"];
+  meta?: EmailJobData["meta"];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function malformed(detail: string): Error {
+  return new Error(`flow email payload is malformed: ${detail}`);
+}
+
+/**
+ * Fail-closed validation for flow_email deliveries. Runs at enqueue time (so
+ * a bad payload never becomes durable) and again at drain time (so storage
+ * tampering or an older writer surfaces as a retryable, operator-visible
+ * failure instead of a garbage send).
+ */
+export function parseFlowEmailPayload(raw: unknown): FlowEmailPayload {
+  if (!isPlainObject(raw)) throw malformed("expected an object");
+  const { to, subject, html, text } = raw;
+  if (!Array.isArray(to) || to.length === 0) throw malformed("`to` must be a non-empty array");
+  for (const recipient of to) {
+    if (typeof recipient !== "string" || !recipient.includes("@")) {
+      throw malformed("`to` entries must be email addresses");
+    }
+  }
+  if (typeof subject !== "string") throw malformed("`subject` must be a string");
+  if (typeof html !== "string") throw malformed("`html` must be a string");
+  if (typeof text !== "string") throw malformed("`text` must be a string");
+  let attachments: FlowEmailPayload["attachments"];
+  if (raw.attachments !== undefined) {
+    if (!Array.isArray(raw.attachments)) throw malformed("`attachments` must be an array");
+    attachments = raw.attachments.map((attachment) => {
+      if (!isPlainObject(attachment)) throw malformed("attachments must be objects");
+      if (typeof attachment.filename !== "string" || attachment.filename.length === 0) {
+        throw malformed("attachment filename is required");
+      }
+      if (typeof attachment.content !== "string") {
+        throw malformed("attachment content must be base64 text");
+      }
+      if (attachment.contentType !== undefined && typeof attachment.contentType !== "string") {
+        throw malformed("attachment contentType must be a string");
+      }
+      return {
+        filename: attachment.filename,
+        content: attachment.content,
+        ...(attachment.contentType === undefined ? {} : { contentType: attachment.contentType }),
+      };
+    });
+  }
+  let meta: FlowEmailPayload["meta"];
+  if (raw.meta !== undefined) {
+    if (!isPlainObject(raw.meta)) throw malformed("`meta` must be an object");
+    for (const [key, value] of Object.entries(raw.meta)) {
+      if (typeof value !== "string") throw malformed(`\`meta.${key}\` must be a string`);
+    }
+    meta = raw.meta as EmailJobData["meta"];
+  }
+  return { to, subject, html, text, ...(attachments ? { attachments } : {}), ...(meta ? { meta } : {}) };
+}
+
+/**
+ * Defer one rendered flow email through the durable outbox. The insert rides
+ * whatever database transaction the caller owns (`db` routes to the ambient
+ * pinned transaction), so a rolled-back business operation discards the
+ * pending send instead of delivering mail for effects that never committed.
+ *
+ * Returns true when this call won the right to deliver — replays carrying the
+ * same occurrence key collapse onto the existing row and return false.
+ */
+export async function enqueueFlowEmail(input: {
+  orgId: string;
+  /** Owning flow run; kept on subject_id so operators can trace failures. */
+  runId: string;
+  /** Deterministic per-effect key; retries of one effect share it. */
+  occurrenceKey: string;
+  payload: FlowEmailPayload;
+}): Promise<boolean> {
+  if (!input.orgId) throw new Error("flow email requires its organization");
+  if (!input.runId) throw new Error("flow email requires its flow run");
+  if (!input.occurrenceKey) throw new Error("flow email requires an occurrence key");
+  parseFlowEmailPayload(input.payload);
+  const inserted = (await db.execute<{ id: string }>(sql`
+    insert into scheduler_outbox
+      (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
+    values (${input.orgId}, 'flow_email', ${input.runId}, ${input.occurrenceKey}, 'pending', now(),
+            ${JSON.stringify(input.payload)}::jsonb)
+    on conflict (kind, occurrence_key) do nothing
+    returning id
+  `));
+  return inserted.rows.length > 0;
+}
 
 export class SchedulerOutboxLeaseFencedError extends Error {
   constructor(id: string) {
@@ -154,6 +271,24 @@ export async function recoverStaleSchedulerOutbox(now = new Date()): Promise<num
 }
 
 async function runOutboxWork(row: OutboxRow): Promise<void> {
+  if (row.kind === "flow_email") {
+    if (!row.org_id) throw new Error("flow email is missing its organization");
+    // Validate again at the boundary: a payload that cannot be delivered as
+    // authored must fail this attempt loudly (retry → terminal failure with
+    // operator visibility), never send garbage.
+    const delivery = parseFlowEmailPayload(row.payload);
+    const { enqueueEmail } = await import("@openbooks/jobs");
+    await enqueueEmail({
+      orgId: row.org_id,
+      to: delivery.to,
+      subject: delivery.subject,
+      html: delivery.html,
+      text: delivery.text,
+      ...(delivery.attachments?.length ? { attachments: delivery.attachments } : {}),
+      ...(delivery.meta ? { meta: delivery.meta } : {}),
+    });
+    return;
+  }
   if (row.kind === "dunning") {
     const { runDunning } = await import("./dunning.ts");
     await runDunning();
@@ -180,7 +315,9 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
 }
 
 async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
-  if (row.kind === "approval_escalation") {
+  // Escalations and flow emails are one-shot work: a delivered send is
+  // terminal, never re-armed by a later tick.
+  if (row.kind === "approval_escalation" || row.kind === "flow_email") {
     const completed = await db.execute(sql`
       update scheduler_outbox
          set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},
@@ -279,10 +416,10 @@ export async function processDueSchedulerOutbox(
              error=null,
              updated_at=now()
        where id=${candidate.id}
-         and status in ('pending','failed')
-         and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
-       returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token
-    `));
+          and status in ('pending','failed')
+          and attempt_count < ${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
+        returning id, org_id, kind, subject_id, occurrence_key, attempt_count, lease_token, payload
+     `));
     const row = claimed.rows[0];
     if (!row) continue;
     processed++;

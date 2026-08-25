@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -22,6 +23,7 @@ export const SCHEDULER_OUTBOX_KINDS = [
   "property_billing",
   "fx_providers",
   "approval_escalation",
+  "flow_email",
 ] as const;
 export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "dunning",
@@ -38,8 +40,14 @@ export const schedulerOutbox = pgTable(
     /** Null for platform-wide scans; required for per-gate escalations. */
     orgId: uuid("org_id"),
     kind: text("kind", { enum: SCHEDULER_OUTBOX_KINDS }).notNull(),
-    /** Gate id for approval_escalation; null for scans. */
+    /** Gate id for approval_escalation; flow-run id for flow_email; null for scans. */
     subjectId: uuid("subject_id"),
+    /**
+     * Rendered email delivery for flow_email: recipients, subject, body and
+     * attachments exactly as the flow produced them, so the eventual send is
+     * independent of later record mutations. Null for every other kind.
+     */
+    payload: jsonb("payload"),
     /** Singleton scan key (`dunning`) or the gate id for an escalation. */
     occurrenceKey: text("occurrence_key").notNull(),
     status: text("status", { enum: SCHEDULER_OUTBOX_STATUSES }).notNull().default("pending"),
@@ -71,7 +79,7 @@ export const schedulerOutbox = pgTable(
       .where(sql`${t.terminalFailedAt} is not null`),
     check(
       "scheduler_outbox_kind",
-      sql`${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers','approval_escalation')`,
+      sql`${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers','approval_escalation','flow_email')`,
     ),
     check("scheduler_outbox_status", sql`${t.status} in ('pending','running','succeeded','failed')`),
     check("scheduler_outbox_nonnegative_attempts", sql`${t.attemptCount} >= 0`),
@@ -82,6 +90,10 @@ export const schedulerOutbox = pgTable(
         or (
           ${t.kind} in ('dunning','subscription_billing','property_billing','fx_providers')
           and ${t.orgId} is null and ${t.subjectId} is null
+        )
+        or (
+          ${t.kind} = 'flow_email'
+          and ${t.orgId} is not null and ${t.subjectId} is not null and ${t.payload} is not null
         )
       )`,
     ),
