@@ -45,9 +45,9 @@ The controls an auditor most cares about — balance, period cutoff, tenant
 ownership, and audit-trail immutability — are enforced at the **database**
 layer.
 
-As of this revision the schema carries **117 triggers**, **116 PL/pgSQL guard
-functions**, **336 row-level-security policies**, and row-level security
-enabled on **327 tables**.
+As of this revision the schema carries **141 triggers**, **124 PL/pgSQL guard
+functions**, **380 row-level-security policies**, and row-level security
+enabled on **371 tables**.
 
 ---
 
@@ -142,7 +142,7 @@ enabled on **327 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| R1 | **Tenant isolation is enforced by the database.** Row-level security is enabled on 327 tables with 336 policies; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/db-rls.integration.test.ts`, verified at bootstrap |
+| R1 | **Tenant isolation is enforced by the database.** Row-level security is enabled on 371 tables with 380 policies; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/db-rls.integration.test.ts`, verified at bootstrap |
 | R2 | Payment applications cannot exceed the document amount; over-application is refused. | Database + Service | `application_open_balance`, `engine/src/payments.integration.test.ts` |
 | R3 | Applications are idempotent under retry, so a repeated request cannot settle the same open item twice. | Database | `application_idempotency_guard` |
 | R4 | Vendor payment release can be gated on compliance evidence — insurance certificates and lien waivers — so an obligation is not discharged before conditions are met. | Service | `engine/src/subcontracts.ts` |
