@@ -826,7 +826,7 @@ export async function decidePaymentFile(
   userId: string,
   decision: "approve" | "reject",
   reason?: string | null,
-  opts?: { runId?: string | null } = {},
+  opts: { runId?: string | null } = {},
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const eventType = decision === "approve" ? "file_approved" : "file_rejected";
