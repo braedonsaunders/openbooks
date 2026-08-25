@@ -36,6 +36,19 @@ function isLiveSourceConflict(error: unknown): boolean {
   return false;
 }
 
+/** The storage-enforced cross-run-instruction-reference violation, anywhere in a cause chain. */
+function isCrossRunInstructionConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
+    if (candidate.code === "23503" && candidate.constraint === "payment_run_items_instruction_run") {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
 /** Poll until some session is blocked by the given backend, proving the two
  *  writers really contend instead of merely running near each other. */
 async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<void> {
@@ -497,6 +510,135 @@ test("an open item can be reserved by only one live payment run at a time", { sk
       const secondRun = await createRun();
       assert.notEqual(secondRun.id, firstRun.id);
       assert.deepEqual((await itemStatuses(secondRun.id)).rows, [{ status: "selected", n: 1 }]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("one run's instruction lifecycle cannot release another run's live reservation", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const options = await seedPaymentRunSelectionFixture(org);
+
+    await withOrgContext(org.orgId, async () => {
+      const openLineId = (await db.execute<{ id: string }>(sql`
+        select jl.id as id
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+         where je.source_document_id = ${options.billId}
+           and je.status = 'posted' and jl.is_open_item and jl.amount < 0
+      `)).rows[0]!.id;
+
+      const createRun = () =>
+        createPaymentRun({
+          orgId: org.orgId,
+          createdBy: options.actorId,
+          paymentBankProfileId: options.profileId,
+          billDocumentIds: [options.billId],
+          scheduledFor: org.date,
+        });
+      const liveReservation = () =>
+        db.execute<{ status: string; n: number }>(sql`
+          select status, count(*)::int as n
+            from payment_run_items
+           where org_id = ${org.orgId} and source_open_line_id = ${openLineId}
+           group by status`);
+
+      // The live run reserves the bill's payable line.
+      const liveRun = await createRun();
+      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+      const liveInstructionId = (await db.execute<{ id: string }>(sql`
+        select id from payment_instructions
+         where payment_run_id = ${liveRun.id} and org_id = ${org.orgId}
+      `)).rows[0]!.id;
+      const liveItemId = (await db.execute<{ id: string }>(sql`
+        select id from payment_run_items
+         where payment_run_id = ${liveRun.id} and org_id = ${org.orgId}
+           and source_open_line_id = ${openLineId}
+      `)).rows[0]!.id;
+
+      // A second run with its own instruction must never touch the first
+      // run's reservation, however its lifecycle advances.
+      const otherRunId = randomUUID();
+      await db.execute(sql`
+        insert into payment_runs
+          (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
+           method, direction, purpose, currency, status, created_by)
+        values (${otherRunId}, ${org.orgId}, 'RUN-RESERVE-OTHER', ${org.accounts.bank},
+                ${options.profileId}, 'eft', 'outbound', 'vendor_payments',
+                'CAD', 'draft', ${options.actorId})`);
+      const otherInstructionId = randomUUID();
+      await db.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency,
+           status, created_by)
+        values (${otherInstructionId}, ${org.orgId}, ${otherRunId}, ${org.vendorId},
+                '125', 'CAD', 'pending', ${options.actorId})`);
+
+      // Even with the corrupt legacy shape physically present — planted here
+      // inside a deferred-constraint probe that always rolls back — cancelling
+      // the foreign instruction leaves the live reservation standing. The old
+      // instruction-id-only fan-out released it right here.
+      class ProbeComplete extends Error {}
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set constraints payment_run_items_instruction_run deferred`);
+          await tx.execute(sql`
+            update payment_run_items
+               set payment_instruction_id = ${otherInstructionId}, updated_at = now(),
+                   updated_by = ${options.actorId}
+             where id = ${liveItemId} and org_id = ${org.orgId}
+          `);
+          await tx.execute(sql`
+            update payment_instructions
+               set status = 'cancelled', updated_at = now(), updated_by = ${options.actorId}
+             where id = ${otherInstructionId} and org_id = ${org.orgId}
+          `);
+          const probed = await tx.execute<{ status: string; n: number }>(sql`
+            select status, count(*)::int as n
+              from payment_run_items
+             where id = ${liveItemId} and org_id = ${org.orgId}
+            group by status`);
+          assert.deepEqual(probed.rows, [{ status: "selected", n: 1 }]);
+          throw new ProbeComplete("probe observed — roll the corruption back");
+        }),
+        ProbeComplete,
+      );
+      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+
+      // Storage makes the corruption unrepresentable for committed data: no
+      // writer can wire one run's item to another run's instruction.
+      await assert.rejects(
+        db.execute(sql`
+          update payment_run_items
+             set payment_instruction_id = ${otherInstructionId}, updated_at = now(),
+                 updated_by = ${options.actorId}
+           where id = ${liveItemId} and org_id = ${org.orgId}
+        `),
+        isCrossRunInstructionConflict,
+      );
+      await assert.rejects(
+        db.execute(sql`
+          insert into payment_run_items
+            (org_id, payment_run_id, payment_instruction_id, source_document_id,
+             source_open_line_id, kind, gross_amount, discount_amount, credit_amount,
+             payment_amount, currency, status, created_by)
+          values (${org.orgId}, ${otherRunId}, ${liveInstructionId}, ${options.billId},
+                  ${openLineId}, 'bill', '125', '0', '0', '125', 'CAD',
+                  'excluded', ${options.actorId})
+        `),
+        isCrossRunInstructionConflict,
+      );
+
+      // The other run going terminal releases only its own items — the live
+      // reservation survives to be paid by its own run's lifecycle.
+      await cancelPaymentRun(otherRunId, org.orgId);
+      assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
+
+      // And the owning run's own cancellation still releases normally.
+      await cancelPaymentRun(liveRun.id, org.orgId);
+      assert.deepEqual((await liveReservation()).rows, [{ status: "excluded", n: 1 }]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
