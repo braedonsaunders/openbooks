@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { after } from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
 import {
@@ -24,6 +24,16 @@ import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+// Remittance scenarios open the durable email queue; its idle Redis socket
+// must not keep the runner alive after the suite has finished.
+after(async () => {
+  const { getEmailQueue, getConnection } = await import("@openbooks/jobs");
+  await getEmailQueue().close().catch(() => {});
+  // BullMQ does not close a caller-provided connection instance; drop the
+  // package's memoized Redis client so the runner can drain.
+  (getConnection() as unknown as { disconnect(): void }).disconnect();
+});
 
 /** The storage-enforced duplicate-live-reservation violation, anywhere in a cause chain. */
 function isLiveSourceConflict(error: unknown): boolean {
@@ -1192,6 +1202,108 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
     });
   } finally {
     releaseInstruction?.();
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("an in-flight automatic remittance decision holds the run against a concurrent bank return", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let releaseProfileTable!: () => void;
+  const profileTableReleased = new Promise<void>((resolve) => { releaseProfileTable = resolve; });
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Tail serializer", "admin"));
+    const seeded = await withOrgContext(org.orgId, () =>
+      seedPostingClaimRun(org, actorId, 1, { autoRemittance: true }));
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      insert into vendor_roles (org_id, party_id, eft_notification_email, created_by, updated_by)
+      values (${org.orgId}, ${org.vendorId}, 'ap@vendor.example', ${actorId}, ${actorId})
+    `));
+
+    // Park the worker inside its remittance staging transaction, after it
+    // committed the first instruction as `sent`: holding this table stops the
+    // tail's context read at the exact point where a bank return could
+    // otherwise interleave.
+    let signalLocked!: (pid: number) => void;
+    const profileTableLocked = new Promise<number>((resolve) => { signalLocked = resolve; });
+    const blocker = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+      const pid = await tx.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`);
+      await tx.execute(sql`lock table payment_bank_profiles in access exclusive mode`);
+      signalLocked(pid.rows[0]!.pid);
+      await profileTableReleased;
+    }));
+    const blockerPid = await profileTableLocked;
+
+    const worker = withOrgContext(org.orgId, () =>
+      postPaymentRun(seeded.runId, org.orgId, actorId));
+    await waitForState(async () =>
+      withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          run_status: string;
+          instruction_status: string;
+        }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as instruction_status
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]), {
+        run_status: "processing",
+        instruction_status: "sent",
+      });
+    await waitForBlockedBy(blockerPid);
+
+    // The parked staging transaction owns the aggregate: it holds the run row
+    // for its whole decision, so a concurrent bank return can only choose one
+    // side of the commit — before it (fencing the worker) or after it (a
+    // legitimately advised payment). A NOWAIT probe proves the row really is
+    // held while the tail is parked; an unfenced tail that merely reads holds
+    // nothing and the probe would sail through.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+        await tx.execute(sql`
+          select id from payment_runs
+           where id = ${seeded.runId} and org_id = ${org.orgId}
+           for update nowait
+        `);
+      })),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /could not obtain the lock|nowait|55006/i);
+        return true;
+      },
+    );
+
+    releaseProfileTable();
+    await blocker;
+    assert.deepEqual(await worker, { posted: 1, failures: [] });
+
+    // The advice legitimately went out for a still-sent instruction under the
+    // live claim, exactly once, and the run completed under the same claim.
+    const final = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{
+        run_status: string;
+        instruction_status: string;
+        claim_token: boolean;
+        remittances: number;
+      }>(sql`
+        select run.status as run_status,
+               (select status from payment_instructions
+                  where id = ${seeded.instructionIds[0]!}) as instruction_status,
+               run.posting_claim_token is not null as claim_token,
+               (select count(*)::int from payment_remittances remittance
+                  where remittance.payment_instruction_id = ${seeded.instructionIds[0]!}
+                    and remittance.org_id = ${org.orgId}) as remittances
+          from payment_runs run
+         where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(final, {
+      run_status: "confirmed",
+      instruction_status: "sent",
+      claim_token: false,
+      remittances: 1,
+    });
+  } finally {
+    releaseProfileTable?.();
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
