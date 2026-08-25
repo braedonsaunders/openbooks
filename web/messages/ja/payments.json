@@ -237,11 +237,11 @@
       "run_created": "支払処理を作成しました", "run_submitted": "支払処理を申請しました", "run_approved": "支払処理を承認しました", "run_rejected": "支払処理を却下しました",
       "file_generated": "支払ファイルを生成しました", "file_reprocessed": "支払ファイルを再処理しました", "file_approved": "支払ファイルを承認しました", "file_rejected": "支払ファイルを却下しました",
       "file_downloaded": "支払ファイルをダウンロードしました", "file_delivered_sftp": "支払ファイルを SFTP で送付しました", "run_rolled_back": "支払処理をロールバックしました",
+      "run_cancelled": "支払処理を取り消しました",
       "file_delivery_failed": "支払ファイルの送付に失敗しました",
       "instruction_settled": "支払を決済しました", "instruction_returned": "支払が返却されました", "instruction_rejected": "支払が却下されました"
     },
     "confirmPost": "{count, plural, one {# 件の支払} other {# 件の支払}}（合計 {total}）を総勘定元帳に記帳し、選択した仕入請求書に適用しますか？",
-    "confirmCancel": "処理 {number} を取り消しますか？下書きの支払は削除されます。まだ何も記帳されていません。",
     "toasts": {
       "postFailed": "記帳に失敗しました",
       "postedWithFailures": "{count} 件を記帳しました。失敗：{failures}",

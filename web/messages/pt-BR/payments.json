@@ -237,11 +237,11 @@
       "run_created": "Remessa de pagamento criada", "run_submitted": "Remessa de pagamento enviada", "run_approved": "Remessa de pagamento aprovada", "run_rejected": "Remessa de pagamento rejeitada",
       "file_generated": "Arquivo de pagamento gerado", "file_reprocessed": "Arquivo de pagamento reprocessado", "file_approved": "Arquivo de pagamento aprovado", "file_rejected": "Arquivo de pagamento rejeitado",
       "file_downloaded": "Arquivo de pagamento baixado", "file_delivered_sftp": "Arquivo de pagamento entregue por SFTP", "run_rolled_back": "Remessa de pagamento revertida",
+      "run_cancelled": "Remessa de pagamento cancelada",
       "file_delivery_failed": "Falha na entrega do arquivo de pagamento",
       "instruction_settled": "Pagamento liquidado", "instruction_returned": "Pagamento devolvido", "instruction_rejected": "Pagamento rejeitado"
     },
     "confirmPost": "{count, plural, one {Lançar # pagamento} other {Lançar # pagamentos}} totalizando {total} no razão e aplicá-los às contas a pagar selecionadas?",
-    "confirmCancel": "Cancelar a remessa {number}? Seus pagamentos rascunho são excluídos; nada foi lançado.",
     "toasts": {
       "postFailed": "O lançamento falhou",
       "postedWithFailures": "{count} lançados; falhas: {failures}",

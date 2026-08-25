@@ -237,11 +237,11 @@
       "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
       "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
       "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
+      "run_cancelled": "Payment run cancelled",
       "file_delivery_failed": "Payment file delivery failed",
       "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
     },
     "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
-    "confirmCancel": "Cancel run {number}? Its draft payments are deleted; nothing has posted.",
     "toasts": {
       "postFailed": "Posting failed",
       "postedWithFailures": "{count} posted; failed: {failures}",
