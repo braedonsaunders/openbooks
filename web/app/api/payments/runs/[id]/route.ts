@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cancelPaymentRun, paymentRunReadiness } from '@openbooks/engine/src/payments.ts'
 import { isUuid } from '../../../../../lib/list-params'
+import { parseJsonBody } from '../../../../../lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../lib'
 
 export const runtime = 'nodejs'
+
+const cancelBody = z.object({
+  reason: z.string().trim().min(1, 'a cancellation reason is required'),
+})
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -44,14 +50,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Cancel a draft/exported run: deletes its draft payments, keeps the audit row. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
+  const parsed = await parseJsonBody(req, cancelBody)
+  if (!parsed.ok) return parsed.response
 
   try {
-    await cancelPaymentRun(id, gate.user.orgId)
+    await cancelPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason)
     return NextResponse.json({ ok: true })
   } catch (e) {
     return paymentErrorResponse(e)

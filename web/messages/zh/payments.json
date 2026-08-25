@@ -237,11 +237,11 @@
       "run_created": "付款批次已创建", "run_submitted": "付款批次已提交", "run_approved": "付款批次已批准", "run_rejected": "付款批次已拒绝",
       "file_generated": "付款文件已生成", "file_reprocessed": "付款文件已重新处理", "file_approved": "付款文件已批准", "file_rejected": "付款文件已拒绝",
       "file_downloaded": "付款文件已下载", "file_delivered_sftp": "付款文件已通过 SFTP 投递", "run_rolled_back": "付款批次已回滚",
+      "run_cancelled": "付款批次已取消",
       "file_delivery_failed": "付款文件投递失败",
       "instruction_settled": "付款已结算", "instruction_returned": "付款已退回", "instruction_rejected": "付款已拒绝"
     },
     "confirmPost": "将 {count, plural, one {# 笔付款} other {# 笔付款}}（合计 {total}）过账至总账并核销到所选应付账单？",
-    "confirmCancel": "取消批次 {number}？其草稿付款将被删除；尚无任何过账。",
     "toasts": {
       "postFailed": "过账失败",
       "postedWithFailures": "{count} 笔已过账；失败：{failures}",

@@ -2,7 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { businessToday } from "./business-date.ts";
 import { db, schema } from "./db.ts";
 import { sum } from "./money.ts";
-import { cancelPaymentRun, createPaymentDocument, isPaymentRunSourceClaimConflict, nextNumber, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
+import { cancelPaymentRun, createPaymentDocument, isPaymentRunSourceClaimConflict, nextNumber, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID, PaymentError, sameCurrencyAllocation, updateDraftPayment, type AllocationInput } from "./payments.ts";
 
 const DIRECT_DEBIT_SOURCE_CONFLICT =
   "a selected invoice is already reserved by another live payment run";
@@ -97,7 +97,9 @@ export async function createDirectDebitRun(opts: {
     const failure = isPaymentRunSourceClaimConflict(error)
       ? new PaymentError(DIRECT_DEBIT_SOURCE_CONFLICT)
       : error;
-    await cancelPaymentRun(run.id, opts.orgId);
+    // Engine-initiated cleanup: the system sentinel and the internal reason
+    // code keep this cancellation attributable without inventing a user.
+    await cancelPaymentRun(run.id, opts.orgId, PAYMENT_RUN_SYSTEM_ACTOR_ID, PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed);
     if (createdReceiptIds.length > 0) {
       await db.transaction(async (tx) => {
         await tx.execute(sql`delete from document_lines dl using documents d where dl.document_id = d.id and dl.org_id = d.org_id and d.id in ${createdReceiptIds} and d.org_id = ${opts.orgId} and d.status = 'draft'`);

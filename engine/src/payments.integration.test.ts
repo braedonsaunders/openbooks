@@ -11,6 +11,8 @@ import {
   cancelPaymentRun,
   createPaymentDocument,
   createPaymentRun,
+  PAYMENT_RUN_INTERNAL_CANCEL_REASONS,
+  PAYMENT_RUN_SYSTEM_ACTOR_ID,
   PaymentError,
   PaymentRevisionConflictError,
   postPaymentRun,
@@ -501,7 +503,7 @@ test("an open item can be reserved by only one live payment run at a time", { sk
 
       // Cancelling the live run releases the reservation through the
       // lifecycle triggers...
-      await cancelPaymentRun(firstRun.id, org.orgId);
+      await cancelPaymentRun(firstRun.id, org.orgId, options.actorId, "release the reservation");
       assert.deepEqual((await itemStatuses(firstRun.id)).rows, [{ status: "excluded", n: 1 }]);
 
       // ...and only a live (`selected`) item reserves its source line, so a
@@ -633,15 +635,306 @@ test("one run's instruction lifecycle cannot release another run's live reservat
 
       // The other run going terminal releases only its own items — the live
       // reservation survives to be paid by its own run's lifecycle.
-      await cancelPaymentRun(otherRunId, org.orgId);
+      await cancelPaymentRun(otherRunId, org.orgId, options.actorId, "release only its own items");
       assert.deepEqual((await liveReservation()).rows, [{ status: "selected", n: 1 }]);
 
       // And the owning run's own cancellation still releases normally.
-      await cancelPaymentRun(liveRun.id, org.orgId);
+      await cancelPaymentRun(liveRun.id, org.orgId, options.actorId, "owning run cancellation");
       assert.deepEqual((await liveReservation()).rows, [{ status: "excluded", n: 1 }]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
+  }
+});
+
+/**
+ * A minimal cancellable run: `instructionCount` pending instructions whose
+ * payment documents are still drafts — exactly the population
+ * cancelPaymentRun consumes.
+ */
+async function seedCancellableRun(
+  org: Awaited<ReturnType<typeof createScratchOrg>>,
+  actorId: string,
+  instructionCount = 2,
+): Promise<{ runId: string; instructionIds: string[]; paymentDocumentIds: string[] }> {
+  const runId = randomUUID();
+  const formatId = randomUUID();
+  const profileId = randomUUID();
+  const instructionIds = Array.from({ length: instructionCount }, () => randomUUID()).sort();
+  const paymentDocumentIds = Array.from({ length: instructionCount }, () => randomUUID());
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      insert into payment_formats
+        (id, org_id, code, name, rail, direction, file_extension, content_type,
+         created_by, updated_by)
+      values
+        (${formatId}, ${org.orgId}, ${`CANCEL-${formatId.slice(0, 8)}`},
+         'Cancellation wire', 'wire', 'credit', 'csv', 'text/csv',
+         ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into payment_bank_profiles
+        (id, org_id, name, bank_account_id, payment_format_id, currency,
+         created_by, updated_by)
+      values
+        (${profileId}, ${org.orgId}, ${`Cancellation ${profileId}`},
+         ${org.accounts.bank}, ${formatId}, 'CAD', ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into payment_runs
+        (id, org_id, run_number, bank_account_id, payment_bank_profile_id,
+         subsidiary_id, method, direction, purpose, currency, status,
+         payment_count, total_amount, created_by, updated_by)
+      values
+        (${runId}, ${org.orgId}, ${`CANCEL-RUN-${runId}`}, ${org.accounts.bank},
+         ${profileId}, ${org.subsidiaryId}, 'wire', 'outbound', 'vendor_payments',
+         'CAD', 'draft', ${instructionCount}, ${String(25 * instructionCount)},
+         ${actorId}, ${actorId})
+    `);
+    for (let index = 0; index < instructionIds.length; index += 1) {
+      const paymentDocumentId = paymentDocumentIds[index]!;
+      await tx.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, currency, subtotal, tax_total, total, created_by, updated_by)
+        values
+          (${paymentDocumentId}, ${org.orgId}, 'vendor_payment', 'draft',
+           ${`CANCEL-PAY-${paymentDocumentId}`}, ${org.subsidiaryId}, ${org.vendorId},
+           ${org.date}, 'CAD', '25', '0', '25', ${actorId}, ${actorId})
+      `);
+      await tx.execute(sql`
+        insert into payment_instructions
+          (id, org_id, payment_run_id, payee_party_id, amount, currency,
+           payment_document_id, status, created_by, updated_by)
+        values
+          (${instructionIds[index]!}, ${org.orgId}, ${runId}, ${org.vendorId},
+           '25', 'CAD', ${paymentDocumentId}, 'pending', ${actorId}, ${actorId})
+      `);
+    }
+  });
+  return { runId, instructionIds, paymentDocumentIds };
+}
+
+test("cancellation commits attributable canonical evidence atomically with the mutation", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Cancel Attributor", "admin"));
+    const seeded = await seedCancellableRun(org, userId);
+
+    // Fail-closed contract: no actor or no reason, no cancellation at all.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "   ")),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /a cancellation reason is required/);
+        return true;
+      },
+    );
+
+    await withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "duplicate batch"));
+
+    const state = (await db.execute<{
+      run_status: string;
+      updated_by: string | null;
+      event_count: number;
+      event_from_status: string | null;
+      event_to_status: string | null;
+      event_actor: string | null;
+      event_reason: string | null;
+      event_source: string | null;
+      audit_count: number;
+      audit_action: string | null;
+      audit_actor: string | null;
+      audit_after_status: string | null;
+      audit_reason: string | null;
+      cancelled_instructions: number;
+      surviving_documents: number;
+    }>(sql`
+      select run.status as run_status, run.updated_by::text as updated_by,
+             (select count(*)::int from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_count,
+             (select e.from_status from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_from_status,
+             (select e.to_status from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_to_status,
+             (select e.actor_id::text from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_actor,
+             (select e.details->>'reason' from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_reason,
+             (select e.details->>'source' from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_source,
+             (select count(*)::int from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_count,
+             (select a.action from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_action,
+             (select a.actor_id::text from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_actor,
+             (select a.changes->'after'->>'status' from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_after_status,
+             (select a.changes->>'reason' from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_reason,
+             (select count(*)::int from payment_instructions i
+               where i.org_id = run.org_id and i.payment_run_id = run.id
+                 and i.status = 'cancelled') as cancelled_instructions,
+             (select count(*)::int from documents d
+               where d.org_id = run.org_id
+                 and d.id in (select i.payment_document_id from payment_instructions i
+                               where i.org_id = run.org_id and i.payment_run_id = run.id)) as surviving_documents
+        from payment_runs run
+       where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+    `)).rows[0];
+    assert.deepEqual(state, {
+      run_status: "cancelled",
+      updated_by: userId,
+      event_count: 1,
+      event_from_status: "draft",
+      event_to_status: "cancelled",
+      event_actor: userId,
+      event_reason: "duplicate batch",
+      event_source: "user",
+      audit_count: 1,
+      audit_action: "void",
+      audit_actor: userId,
+      audit_after_status: "cancelled",
+      audit_reason: "duplicate batch",
+      cancelled_instructions: seeded.instructionIds.length,
+      surviving_documents: 0,
+    });
+
+    // A second cancellation is refused and writes nothing further.
+    await assert.rejects(
+      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "again")),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /a cancelled run cannot be cancelled/);
+        return true;
+      },
+    );
+    const recount = (await db.execute<{ events: number; audits: number }>(sql`
+      select (select count(*)::int from payment_events
+               where org_id = ${org.orgId} and payment_run_id = ${seeded.runId}) as events,
+             (select count(*)::int from audit_log
+               where org_id = ${org.orgId} and table_name = 'payment_runs'
+                 and row_id = ${seeded.runId}) as audits
+    `)).rows[0];
+    assert.deepEqual(recount, { events: 1, audits: 1 });
+
+    // The engine-initiated path records the same evidence under the system
+    // identity: sentinel on the mutated row, null actor on user-keyed tables.
+    const systemRun = await seedCancellableRun(org, userId);
+    await withOrgContext(org.orgId, () =>
+      cancelPaymentRun(systemRun.runId, org.orgId, PAYMENT_RUN_SYSTEM_ACTOR_ID, PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed));
+    const systemState = (await db.execute<{
+      updated_by: string;
+      event_actor: string | null;
+      event_reason: string;
+      event_source: string;
+      audit_actor: string | null;
+      audit_source: string;
+    }>(sql`
+      select run.updated_by::text as updated_by,
+             (select e.actor_id::text from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_actor,
+             (select e.details->>'reason' from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_reason,
+             (select e.details->>'source' from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id
+                 and e.event_type = 'run_cancelled') as event_source,
+             (select a.actor_id::text from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_actor,
+             (select a.changes->>'source' from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_source
+        from payment_runs run
+       where run.id = ${systemRun.runId} and run.org_id = ${org.orgId}
+    `)).rows[0];
+    assert.deepEqual(systemState, {
+      updated_by: PAYMENT_RUN_SYSTEM_ACTOR_ID,
+      event_actor: null,
+      event_reason: PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
+      event_source: "system",
+      audit_actor: null,
+      audit_source: "system",
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a refused cancellation rolls back mutations and leaves no orphaned evidence", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Cancel Refuser", "admin"));
+    const seeded = await seedCancellableRun(org, userId);
+
+    // One payment stops being a draft while the run is being assembled:
+    // the mid-flight refusal must discard everything, including the draft
+    // deletion already performed for the earlier instruction.
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now()
+       where id = ${seeded.paymentDocumentIds[1]} and org_id = ${org.orgId}
+    `);
+
+    await assert.rejects(
+      withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, userId, "should not land")),
+      (error: unknown) => {
+        assert.ok(error instanceof PaymentError);
+        assert.match(error.message, /no longer drafts/);
+        return true;
+      },
+    );
+
+    const state = (await db.execute<{
+      run_status: string;
+      pending_instructions: number;
+      linked_documents: number;
+      live_documents: number;
+      event_count: number;
+      audit_count: number;
+    }>(sql`
+      select run.status as run_status,
+             (select count(*)::int from payment_instructions i
+               where i.org_id = run.org_id and i.payment_run_id = run.id
+                 and i.status = 'pending') as pending_instructions,
+             (select count(*)::int from payment_instructions i
+               where i.org_id = run.org_id and i.payment_run_id = run.id
+                 and i.payment_document_id is not null) as linked_documents,
+             (select count(*)::int from documents d
+               where d.org_id = run.org_id
+                 and d.id in (select i.payment_document_id from payment_instructions i
+                               where i.org_id = run.org_id and i.payment_run_id = run.id)) as live_documents,
+             (select count(*)::int from payment_events e
+               where e.org_id = run.org_id and e.payment_run_id = run.id) as event_count,
+             (select count(*)::int from audit_log a
+               where a.org_id = run.org_id and a.table_name = 'payment_runs'
+                 and a.row_id = run.id) as audit_count
+        from payment_runs run
+       where run.id = ${seeded.runId} and run.org_id = ${org.orgId}
+    `)).rows[0];
+    assert.deepEqual(state, {
+      run_status: "draft",
+      pending_instructions: seeded.instructionIds.length,
+      linked_documents: seeded.instructionIds.length,
+      live_documents: seeded.paymentDocumentIds.length,
+      event_count: 0,
+      audit_count: 0,
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -1627,7 +1920,7 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
     }));
     const holderPid = await runRowLocked;
 
-    const cancellation = withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId));
+    const cancellation = withOrgContext(org.orgId, () => cancelPaymentRun(seeded.runId, org.orgId, actorId, "concurrency regression"));
     // The cancellation must contend on the run row before mutating anything.
     await waitForBlockedBy(holderPid);
     releaseHolder?.();

@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { createDirectDebitRun } from "./direct-debit.ts";
 import { db } from "./db.ts";
-import { cancelPaymentRun, isPaymentRunSourceClaimConflict, PaymentError } from "./payments.ts";
+import { cancelPaymentRun, isPaymentRunSourceClaimConflict, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYSTEM_ACTOR_ID, PaymentError } from "./payments.ts";
 import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
@@ -166,9 +166,35 @@ test("direct-debit source contention is a domain failure with durable evidence",
       failure_message: null,
     });
 
+    // The engine's own cleanup is attributable to the system actor with an
+    // internal reason code — never to a user, never anonymous: the run row
+    // carries the nil-UUID sentinel in updated_by, while the user-keyed
+    // evidence surfaces record the null "system" actor.
+    const cancelledRunActor = (await db.execute<{ updated_by: string | null }>(sql`
+      select updated_by::text as updated_by
+        from payment_runs
+       where org_id = ${org.orgId} and id = ${cancelled.id}
+    `)).rows[0]!.updated_by;
+    assert.equal(cancelledRunActor, PAYMENT_RUN_SYSTEM_ACTOR_ID);
+    const cleanupEvidence = (await db.execute<{ actor_id: string | null; from_status: string; to_status: string; details: Record<string, unknown> }>(sql`
+      select actor_id::text as actor_id, from_status, to_status, details
+        from payment_events
+       where org_id = ${org.orgId} and payment_run_id = ${cancelled.id}
+         and event_type = 'run_cancelled'
+    `)).rows;
+    assert.deepEqual(cleanupEvidence, [{
+      actor_id: null,
+      from_status: "draft",
+      to_status: "cancelled",
+      details: {
+        reason: PAYMENT_RUN_INTERNAL_CANCEL_REASONS.directDebitCreationFailed,
+        source: "system",
+      },
+    }]);
+
     // Cancellation is the reservation-release boundary. The same invoice can
     // be claimed again only after the winning draft is cancelled.
-    await cancelPaymentRun(successes[0]!.value.id, org.orgId);
+    await cancelPaymentRun(successes[0]!.value.id, org.orgId, actorId, "release for re-collection");
     const replacement = await createDirectDebitRun(options);
     const sourceLifecycle = (await db.execute<{ run_id: string; status: string }>(sql`
       select payment_run_id as run_id, status

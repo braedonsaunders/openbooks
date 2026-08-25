@@ -237,11 +237,11 @@
       "run_created": "Zahlungslauf erstellt", "run_submitted": "Zahlungslauf eingereicht", "run_approved": "Zahlungslauf genehmigt", "run_rejected": "Zahlungslauf abgelehnt",
       "file_generated": "Zahlungsdatei erzeugt", "file_reprocessed": "Zahlungsdatei erneut verarbeitet", "file_approved": "Zahlungsdatei genehmigt", "file_rejected": "Zahlungsdatei abgelehnt",
       "file_downloaded": "Zahlungsdatei heruntergeladen", "file_delivered_sftp": "Zahlungsdatei per SFTP übermittelt", "run_rolled_back": "Zahlungslauf zurückgerollt",
+      "run_cancelled": "Zahlungslauf abgebrochen",
       "file_delivery_failed": "Übermittlung der Zahlungsdatei fehlgeschlagen",
       "instruction_settled": "Zahlung abgewickelt", "instruction_returned": "Zahlung zurückgegeben", "instruction_rejected": "Zahlung abgelehnt"
     },
     "confirmPost": "{count, plural, one {# Zahlung} other {# Zahlungen}} über insgesamt {total} in das Hauptbuch buchen und den ausgewählten Eingangsrechnungen zuordnen?",
-    "confirmCancel": "Lauf {number} abbrechen? Seine Entwurfszahlungen werden gelöscht; es wurde nichts gebucht.",
     "toasts": {
       "postFailed": "Buchung fehlgeschlagen",
       "postedWithFailures": "{count} gebucht; fehlgeschlagen: {failures}",
