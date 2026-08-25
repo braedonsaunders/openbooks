@@ -27,3 +27,11 @@ test('source importer cannot infer ticket lineage from matching time values', ()
   assert.doesNotMatch(source, /abs\s*\(\s*te\.hours/i)
   assert.match(source, /link-field-ticket-time-by-source\.ts/)
 })
+
+test('customer-sign endpoint keeps signature capture causally atomic', () => {
+  const source = readFileSync('web/app/api/sign/field-tickets/route.ts', 'utf8')
+  assert.match(source, /withOrgTransaction\s*\(/, 'signing must stay inside one org transaction')
+  assert.match(source, /pg_advisory_xact_lock/, 'concurrent signers are serialized')
+  assert.match(source, /uploadAndAttach\s*\(/, 'signature evidence uses cabinet primitives')
+  assert.match(source, /validateSigningRequest\(/, 'the persisted request is revalidated inside the transaction')
+})
