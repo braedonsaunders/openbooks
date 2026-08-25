@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
+import { assertPayRunNotStale } from '@openbooks/engine/src/payroll-readiness.ts'
 import {
   assertPayRunApprovalReleased, payRunApprovalState,
 } from '@openbooks/engine/src/payroll-approval.ts'
@@ -268,7 +269,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (body.action === 'commit') {
       // Money must not move before approval: commit materializes the GL
-      // projection and claims the period's time entries.
+      // projection and claims the period's time entries. Nor may it move on
+      // figures the operator edited past: the wizard's stale banner is only
+      // the rendering of the engine check — this boundary enforces it, so a
+      // stale tab or a scripted call cannot commit a calculation its inputs
+      // outlived. (The wizard reads the same `payRunStaleness`; one source of
+      // truth, two consumers — render and refuse.)
+      await assertPayRunNotStale(gate.user.orgId, id)
       await assertPayRunApprovalReleased(gate.user.orgId, id)
       const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
       return NextResponse.json({ ok: true, ...result })

@@ -11,6 +11,7 @@ import { payRunBankFileEntitlement } from "./payroll-bank-file-artifact.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
+import { assertPayRunNotStale, payRunStaleness } from "./payroll-readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./payroll-union.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
@@ -775,6 +776,151 @@ test(
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
       `))).rows[0]!;
       assert.equal(stubCount.n, 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "commit refuses a run whose inputs changed after calculate — staleness is enforced at the boundary",
+  { skip: !DB },
+  async () => {
+    // The wizard disables its commit button while `payRunStaleness` reports the
+    // stubs stale — but that disabled button was the ONLY place the control
+    // lived. The runs API drove `commitPayRun` straight past it, so a stale
+    // tab, a retried request or a scripted POST could move money on figures
+    // the operator had already edited past. The commit boundary now asks the
+    // same question the UI does and refuses; this test is that refusal.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable,
+            taxPayableAccountId: craPayable,
+            vacationPayableAccountId: vacationPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Stale Sally', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+      for (const workedOn of ["2026-07-06", "2026-07-08"]) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                    billing_status, costing_basis, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
+                  'unbilled', 'actual', ${actorId}, ${actorId})`);
+      }
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      // Fresh immediately after calculate — the gate must not block a clean run.
+      await assertPayRunNotStale(org.orgId, run.documentId);
+      assert.deepEqual((await payRunStaleness(org.orgId, run.documentId)).reasons, []);
+
+      // A wage row edited past the calculation, bumped deterministically one
+      // millisecond beyond calculated_at so the test cannot race the clock.
+      await db.execute(sql`
+        update labor_cost_rates
+           set updated_at = (select calculated_at from pay_runs
+                              where org_id = ${org.orgId} and document_id = ${run.documentId})
+                             + interval '1 millisecond'
+         where org_id = ${org.orgId}`);
+      assert.deepEqual(
+        (await payRunStaleness(org.orgId, run.documentId)).reasons,
+        ["wages"],
+        "the edited wage must register as staleness before the boundary check runs",
+      );
+
+      // The route's exact sequence — freshness gate, then commit — refuses.
+      await assert.rejects(
+        (async () => {
+          await assertPayRunNotStale(org.orgId, run.documentId);
+          return commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        })(),
+        /inputs changed after it was last calculated \(wages\)/,
+      );
+      // And nothing was written: the run is still calculated, still empty of GL legs.
+      const refusedStatus = ((await db.execute<{ run_status: string }>(sql`
+        select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.run_status;
+      assert.equal(refusedStatus, "calculated");
+      const refusedLines = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.n;
+      assert.equal(refusedLines, 0);
+
+      // Recalculate and the SAME sequence commits: the gate tracks the inputs,
+      // it does not leak into a permanent blocker.
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      await assertPayRunNotStale(org.orgId, run.documentId);
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const committedStatus = ((await db.execute<{ run_status: string }>(sql`
+        select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.run_status;
+      assert.equal(committedStatus, "committed");
+
+      // Division of labour with the commit engine's own guards: a
+      // never-calculated run has nothing to be stale, so the freshness gate
+      // defers and `commitPayRun`'s state guard names the real problem.
+      const uncalculated = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+      });
+      await assertPayRunNotStale(org.orgId, uncalculated.documentId);
+      await assert.rejects(
+        commitPayRun({ orgId: org.orgId, documentId: uncalculated.documentId, actorId }),
+        /calculate the pay run before committing/,
+      );
+
+      // Same deferral for a run that does not exist: "pay run not found" is
+      // the commit engine's answer, not a staleness one.
+      await assertPayRunNotStale(randomUUID(), randomUUID());
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
