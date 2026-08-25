@@ -131,6 +131,14 @@ type CardInput = {
 function error(errorCode: string, status = 422) {
   return NextResponse.json({ errorCode }, { status });
 }
+// Bind uuid collections as a PostgreSQL array literal ("{a,b}") instead of a
+// bare JS array: drizzle serializes an array chunk as a row constructor
+// "( $1, $2 )" which any(...::uuid[]) rejects with
+// "cannot cast type record to uuid[]" once it holds more than one element.
+// Elements are isUuid-validated upstream, so the literal needs no escaping.
+function uuidArray(ids: string[]) {
+  return `{${[...new Set(ids)].join(",")}}`;
+}
 function date(value: unknown) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -362,7 +370,7 @@ export async function PUT(
 
       if (itemIds.size) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select id from items where org_id=${orgId} and is_active and id=any(${[...itemIds]}::uuid[])`,
+          sql`select id from items where org_id=${orgId} and is_active and id=any(${uuidArray([...itemIds])}::uuid[])`,
         ));
         if (found.rows.length !== itemIds.size) throw new Error("item");
       }
@@ -383,7 +391,7 @@ export async function PUT(
         ].filter(Boolean);
         if (!ids.length) continue;
         const found = (await tx.execute<{ id: string }>(
-          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${ids}::uuid[])`,
+          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])`,
         ));
         if (found.rows.length !== ids.length)
           throw new Error(type === "item" ? "item" : "target");
@@ -399,16 +407,17 @@ export async function PUT(
       ].filter(Boolean);
       if (customerIds.length) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${customerIds}::uuid[])`,
+          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
         ));
         if (found.rows.length !== customerIds.length) throw new Error("target");
       }
 
+      // An undefined currency splices as empty text inside a sql template,
+      // so the keep-vs-overwrite branch must select whole statements.
       await tx.execute(
-        sql`update item_rate_books set name=${cardName},code=${cardCode},currency = case when ${body.currency === undefined} then currency else ${body.currency} end,updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
-      );
-      await tx.execute(
-        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId}`,
+        body.currency === undefined
+          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`
+          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId}`,
       );
       await tx.execute(
         sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId}`,
@@ -424,7 +433,7 @@ export async function PUT(
 
       if (lineIds.size)
         await tx.execute(
-          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId} and not(id=any(${[...lineIds]}::uuid[]))`,
+          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId} and not(id=any(${uuidArray([...lineIds])}::uuid[]))`,
         );
       else
         await tx.execute(
@@ -476,6 +485,13 @@ export async function PUT(
         await tx.execute(
           sql`insert into labor_rate_terms(org_id,version_id,code,label,content,placement,sort_order,created_by,updated_by) values(${orgId},${id},${term.code!.trim().toLowerCase()},${term.label!.trim()},${term.content!.trim()},${term.placement},${sortOrder},${gate.user.id},${gate.user.id})`,
         );
+
+      // The version row moves last: rate_version_child_guard only allows
+      // child writes while the stored status is still draft, so a save that
+      // activates the card must finish rewriting children first.
+      await tx.execute(
+        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId}`,
+      );
 
       await tx.execute(
         sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id})`,
