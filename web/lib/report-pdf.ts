@@ -13,7 +13,7 @@ import {
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import type { StatementView } from './statement-matrix'
-import { decimalIsMaterial, decimalScale, decimalSum, type ExactDecimal } from './statement-format'
+import { decimalIsMaterial, decimalIsZero, decimalScale, decimalSum, type ExactDecimal } from './statement-format'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -29,6 +29,7 @@ import type {
 import { resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
+import { isExactDecimalText, pdfMoney } from './report-pdf-detail'
 export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
@@ -36,17 +37,25 @@ export { generalLedgerExportData } from './report-pdf-detail'
  * PDF, Excel and CSV. Custom reports arrive as a ReportRunResult (numbers
  * preserved for Excel); financial statements are shaped by the adapters below.
  *
- * PDF numbers are formatted (thousands separators); Excel/CSV keep raw numbers
- * so Excel can apply its own number formatting and right-align them.
+ * Money columns carry the ledger's exact decimal STRINGS and are marked with
+ * per-group `money` flags (mirroring ReportGroup.money). The PDF formats them
+ * through Intl mathematical values — never IEEE-754, which loses precision
+ * past 2^53; see report-pdf-detail.ts. Excel/CSV receive doubles produced once
+ * at the spreadsheet boundary (exportDataToRunResult), because .xlsx stores
+ * binary floats natively. Counts stay plain numbers.
  */
 
 export type Translator = (key: string, values?: Record<string, string | number>) => string
+
+/** PdfTableGroup plus per-column currency markers: flagged columns hold exact
+ *  ledger decimal strings that must reach print without an IEEE-754 round-trip. */
+export type ExportTableGroup = PdfTableGroup & { money?: boolean[] }
 
 export type ExportData = {
   title: string
   dateRangeLabel: string
   summary: ReportSummaryItem[]
-  groups: PdfTableGroup[]
+  groups: ExportTableGroup[]
 }
 
 // --- branding ---------------------------------------------------------------
@@ -94,16 +103,22 @@ export function pdfNum(v: number, locale = 'en'): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 }).format(v)
 }
 
-function pdfCell(v: string | number | null | undefined, locale: string): string {
+function pdfCell(v: string | number | null | undefined, locale: string, isMoney = false): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'number') return pdfNum(v, locale)
+  // pdfMoney self-guards: non-numeric text in a flagged column renders raw.
+  if (isMoney) return pdfMoney(v, locale)
   return String(v)
 }
 
 function pdfSummary(s: ReportSummaryItem, locale: string): { label: string; value: string } {
   return {
     label: s.label,
-    value: typeof s.value === 'number' ? pdfNum(s.value, locale) : String(s.value),
+    value: typeof s.value === 'number'
+      ? pdfNum(s.value, locale)
+      : s.money === true
+        ? pdfMoney(s.value, locale)
+        : String(s.value),
   }
 }
 
@@ -122,20 +137,26 @@ export function runResultToExportData(
       subtitle: g.subtitle,
       columns: g.columns,
       rows: g.rows,
+      ...(g.money ? { money: g.money } : {}),
       align: undefined,
       isEmpty: g.isEmpty,
     })),
   }
 }
 
-/** ExportData → ReportRunResult (numbers preserved) for Excel/CSV. */
+/** ExportData → ReportRunResult for Excel/CSV. Flagged money columns hold the
+ *  ledger's exact decimal strings; this boundary is where they become doubles
+ *  (once per cell), because spreadsheet files store IEEE-754 natively — the
+ *  same single conversion statementSheetToXlsx performs. */
 export function exportDataToRunResult(data: ExportData): ReportRunResult {
   const groups: ReportGroup[] = data.groups.map((g) => ({
     kind: g.kind,
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows,
+    rows: g.rows.map((row) => row.map((cell, i) =>
+      g.money?.[i] === true && typeof cell === 'string' && isExactDecimalText(cell) ? Number(cell) : cell,
+    )),
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)
@@ -155,7 +176,7 @@ export function exportDataToPdfInput(
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map((cell) => pdfCell(cell, locale))),
+    rows: g.rows.map((row) => row.map((cell, i) => pdfCell(cell, locale, g.money?.[i] === true))),
     align: g.align,
     isEmpty: g.isEmpty,
   }))
@@ -213,17 +234,18 @@ function statementGroup(
   items: StatementRow[],
   types: string[],
   total: ExactDecimal,
-): PdfTableGroup {
+): ExportTableGroup {
   const rows = items
     .filter((r) => types.includes(r.type))
-    .map((r) => [r.number ?? '', `${indent(r.depth)}${r.name}`, Number(r.balance)] as (string | number)[])
-  rows.push(['', t('statement.sectionTotal', { section: sectionTitle }), Number(total)])
+    .map((r) => [r.number ?? '', `${indent(r.depth)}${r.name}`, r.balance] as (string | number)[])
+  rows.push(['', t('statement.sectionTotal', { section: sectionTitle }), total])
   return {
     kind: 'section',
     title: sectionTitle,
     columns: [t('export.columns.accountNumber'), t('export.columns.accountName'), t('export.columns.amount')],
     rows,
     align: MONEY_ALIGN,
+    money: [false, false, true],
   }
 }
 
@@ -240,9 +262,9 @@ export function pnlExportData(
     title: t('pnl.title'),
     dateRangeLabel: t('pnl.dateRange', { from, to }),
     summary: [
-      { label: revenueTitle, value: Number(pl.revenue) },
-      { label: t('pnl.grossProfit'), value: Number(pl.grossProfit) },
-      { label: t('pnl.netIncome'), value: Number(pl.netIncome) },
+      { label: revenueTitle, value: pl.revenue, money: true },
+      { label: t('pnl.grossProfit'), value: pl.grossProfit, money: true },
+      { label: t('pnl.netIncome'), value: pl.netIncome, money: true },
     ],
     groups: [
       statementGroup(t, 'revenue', revenueTitle, pl.items, ['income', 'income_other'], pl.revenue),
@@ -252,8 +274,9 @@ export function pnlExportData(
         kind: 'summary',
         title: t('pnl.netIncome'),
         columns: [t('export.columns.accountName'), t('export.columns.amount')],
-        rows: [[t('pnl.netIncome'), Number(pl.netIncome)]],
+        rows: [[t('pnl.netIncome'), pl.netIncome]],
         align: ['left', 'right'],
+        money: [false, true],
       },
     ],
   }
@@ -273,9 +296,9 @@ export function balanceSheetExportData(
     title: t('balanceSheet.title'),
     dateRangeLabel: t('balanceSheet.asOf', { date: asOf }),
     summary: [
-      { label: assetsTitle, value: Number(bs.totalAssets) },
-      { label: liabTitle, value: Number(bs.totalLiabilities) },
-      { label: equityTitle, value: Number(bs.totalEquity) },
+      { label: assetsTitle, value: bs.totalAssets, money: true },
+      { label: liabTitle, value: bs.totalLiabilities, money: true },
+      { label: equityTitle, value: bs.totalEquity, money: true },
     ],
     groups: [
       groupFor(assetsTitle, bs.assets, bs.totalAssets),
@@ -306,7 +329,6 @@ export function projectProfitabilityExportData(
   t: Translator,
 ): ExportData {
   const pct = (m: ExactDecimal | null) => (m === null ? '' : `${(Number(m) * 100).toFixed(1)}%`)
-  const amountCells = (values: readonly ExactDecimal[]) => values.map(Number)
   const cols = [
     t('projectProfitability.columns.customerJob'),
     t('projectProfitability.columns.revenue'),
@@ -320,25 +342,25 @@ export function projectProfitabilityExportData(
   const data = result.customers.flatMap((customer) => [
     [
       customer.customerName ?? t('projectProfitability.noCustomer'),
-      ...amountCells([customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
-        customer.totals.expenses, customer.totals.net]), pct(customer.totals.margin), customer.totals.hours,
+      customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
+      customer.totals.expenses, customer.totals.net, pct(customer.totals.margin), customer.totals.hours,
     ],
     ...customer.rows.map((row) => [
       `  ${row.projectName}`,
-      ...amountCells([row.revenue, row.cogs, row.grossProfit, row.expenses, row.net]), pct(row.margin), row.hours,
+      row.revenue, row.cogs, row.grossProfit, row.expenses, row.net, pct(row.margin), row.hours,
     ]),
   ] as (string | number)[][])
   data.push([
     t('trialBalance.totals'),
-    ...amountCells([result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
-      result.totals.expenses, result.totals.net]), pct(result.totals.margin), result.totals.hours,
+    result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
+    result.totals.expenses, result.totals.net, pct(result.totals.margin), result.totals.hours,
   ])
   return {
     title: t('projectProfitability.title'),
     dateRangeLabel: t('pnl.dateRange', { from: result.from, to: result.to }),
     summary: [
-      { label: t('projectProfitability.columns.revenue'), value: Number(result.totals.revenue) },
-      { label: t('projectProfitability.columns.net'), value: Number(result.totals.net) },
+      { label: t('projectProfitability.columns.revenue'), value: result.totals.revenue, money: true },
+      { label: t('projectProfitability.columns.net'), value: result.totals.net, money: true },
     ],
     groups: [
       {
@@ -347,6 +369,7 @@ export function projectProfitabilityExportData(
         columns: cols,
         rows: data,
         align: ['left', 'right', 'right', 'right', 'right', 'right', 'right', 'right'],
+        money: [false, true, true, true, true, true, false, false],
       },
     ],
   }
@@ -357,18 +380,17 @@ export function trialBalanceExportData(
   asOf: string,
   t: Translator,
 ): ExportData {
-  const num = (s: string) => Number(s)
-  const data = rows.map((r) => [r.number ?? '', r.name, num(r.debits), num(r.credits), num(r.balance)] as (string | number)[])
+  const data = rows.map((r) => [r.number ?? '', r.name, r.debits, r.credits, r.balance] as (string | number)[])
   const totalDebits = decimalSum(rows.map((row) => row.debits))
   const totalCredits = decimalSum(rows.map((row) => row.credits))
   const totalBalance = decimalSum(rows.map((row) => row.balance))
-  data.push(['', t('trialBalance.totals'), num(totalDebits), num(totalCredits), num(totalBalance)])
+  data.push(['', t('trialBalance.totals'), totalDebits, totalCredits, totalBalance])
   return {
     title: t('trialBalance.title'),
     dateRangeLabel: t('trialBalance.description', { date: asOf, count: rows.length }),
     summary: [
-      { label: t('trialBalance.columns.debits'), value: num(totalDebits) },
-      { label: t('trialBalance.columns.credits'), value: num(totalCredits) },
+      { label: t('trialBalance.columns.debits'), value: totalDebits, money: true },
+      { label: t('trialBalance.columns.credits'), value: totalCredits, money: true },
     ],
     groups: [
       {
@@ -383,6 +405,7 @@ export function trialBalanceExportData(
         ],
         rows: data,
         align: ['left', 'left', 'right', 'right', 'right'],
+        money: [false, false, true, true, true],
       },
     ],
   }
@@ -397,7 +420,7 @@ export function partnersExportData(
   const total = decimalSum(rows.map((row) => row.balance))
   const data = rows.map((r) => [
     r.display_name ?? t('partners.noPartyOnLines'),
-    Number(r.balance),
+    r.balance,
     Number(r.line_count),
     r.latest_due ?? '',
   ] as (string | number)[])
@@ -405,7 +428,7 @@ export function partnersExportData(
     title,
     dateRangeLabel: t('partners.description'),
     summary: [
-      { label: t('partners.totalOutstanding'), value: Number(total) },
+      { label: t('partners.totalOutstanding'), value: total, money: true },
       { label: t('partners.partiesWithBalance'), value: rows.length },
     ],
     groups: [
@@ -415,6 +438,7 @@ export function partnersExportData(
         columns: [t('export.columns.party'), t('partners.columns.outstanding'), t('partners.columns.glLines'), t('export.columns.latestDue')],
         rows: data,
         align: ['left', 'right', 'right', 'left'],
+        money: [false, true, false, false],
       },
     ],
   }
@@ -441,16 +465,16 @@ export function agingExportData(
   ]
   const data = result.rows.map((r) => [
     r.partyName ?? t('aging.noParty'),
-    ...[r.current, r.b1, r.b2, r.b3, r.b4, r.total].map(Number),
+    r.current, r.b1, r.b2, r.b3, r.b4, r.total,
   ] as (string | number)[])
   data.push([
     t('trialBalance.totals'),
-    ...[result.totals.current, result.totals.b1, result.totals.b2, result.totals.b3, result.totals.b4, result.totals.total].map(Number),
+    result.totals.current, result.totals.b1, result.totals.b2, result.totals.b3, result.totals.b4, result.totals.total,
   ])
   return {
     title,
     dateRangeLabel: t('aging.asOf', { date: result.asOf }),
-    summary: [{ label: t('aging.columns.total'), value: Number(result.totals.total) }],
+    summary: [{ label: t('aging.columns.total'), value: result.totals.total, money: true }],
     groups: [
       {
         kind: 'results',
@@ -458,6 +482,7 @@ export function agingExportData(
         columns: cols,
         rows: data,
         align: ['left', 'right', 'right', 'right', 'right', 'right', 'right'],
+        money: [false, true, true, true, true, true, true],
       },
     ],
   }
@@ -476,26 +501,27 @@ export function cashFlowExportData(
 ): ExportData {
   const sectionLabel = (s: string) =>
     t(`cashFlow.sections.${s}`)
-  const groups: PdfTableGroup[] = cf.sections.map((s) => {
+  const groups: ExportTableGroup[] = cf.sections.map((s) => {
     const label = sectionLabel(s.section)
     return {
       kind: 'section',
       title: label,
       columns: [t('export.columns.type'), t('export.columns.amount')],
       rows: [
-        ...s.lines.map((l) => [l.label, Number(l.amount)] as (string | number)[]),
-        [t('cashFlow.subtotal', { section: label }), Number(s.subtotal)] as (string | number)[],
+        ...s.lines.map((l) => [l.label, l.amount] as (string | number)[]),
+        [t('cashFlow.subtotal', { section: label }), s.subtotal] as (string | number)[],
       ],
       align: ['left', 'right'],
+      money: [false, true],
     }
   })
   return {
     title: t('cashFlow.title'),
     dateRangeLabel: t('cashFlow.dateRange', { from, to }),
     summary: [
-      { label: t('cashFlow.openingCash'), value: Number(cf.openingCash) },
-      { label: t('cashFlow.netChange'), value: Number(cf.netChange) },
-      { label: t('cashFlow.closingCash'), value: Number(cf.closingCash) },
+      { label: t('cashFlow.openingCash'), value: cf.openingCash, money: true },
+      { label: t('cashFlow.netChange'), value: cf.netChange, money: true },
+      { label: t('cashFlow.closingCash'), value: cf.closingCash, money: true },
     ],
     groups,
   }
@@ -521,26 +547,28 @@ export function cashFlowIndirectExportData(
   t: Translator,
 ): ExportData {
   const line = (l: { name: string; number: string | null; amount: ExactDecimal }) =>
-    [`${l.number ? `${l.number} · ` : ''}${l.name}`, Number(l.amount)] as (string | number)[]
-  const groups: PdfTableGroup[] = [
+    [`${l.number ? `${l.number} · ` : ''}${l.name}`, l.amount] as (string | number)[]
+  const groups: ExportTableGroup[] = [
     {
       kind: 'section',
       title: t('cashFlowIndirect.sections.operating'),
       columns: [t('export.columns.accountName'), t('export.columns.amount')],
       rows: [
-        [t('cashFlowIndirect.netIncome'), Number(cf.netIncome)],
-        ...cf.adjustments.map((a) => [a.label ?? t(`cashFlowIndirect.adjustments.${a.key}`), Number(a.amount)] as (string | number)[]),
+        [t('cashFlowIndirect.netIncome'), cf.netIncome],
+        ...cf.adjustments.map((a) => [a.label ?? t(`cashFlowIndirect.adjustments.${a.key}`), a.amount] as (string | number)[]),
         ...cf.workingCapital.map(line),
-        [t('cashFlowIndirect.subtotals.operating'), Number(cf.operating)],
+        [t('cashFlowIndirect.subtotals.operating'), cf.operating],
       ],
       align: ['left', 'right'],
+      money: [false, true],
     },
     {
       kind: 'section',
       title: t('cashFlowIndirect.sections.investing'),
       columns: [t('export.columns.accountName'), t('export.columns.amount')],
-      rows: [...cf.investing.map(line), [t('cashFlowIndirect.subtotals.investing'), Number(cf.investingTotal)]],
+      rows: [...cf.investing.map(line), [t('cashFlowIndirect.subtotals.investing'), cf.investingTotal]],
       align: ['left', 'right'],
+      money: [false, true],
     },
     {
       kind: 'section',
@@ -549,20 +577,21 @@ export function cashFlowIndirectExportData(
       rows: [
         ...cf.financing.map(line),
         ...(decimalIsMaterial(cf.fxEffectOnCash)
-          ? [[t('cashFlowIndirect.fxEffect'), Number(cf.fxEffectOnCash)] as (string | number)[]]
+          ? [[t('cashFlowIndirect.fxEffect'), cf.fxEffectOnCash] as (string | number)[]]
           : []),
-        [t('cashFlowIndirect.subtotals.financing'), Number(cf.financingTotal)],
+        [t('cashFlowIndirect.subtotals.financing'), cf.financingTotal],
       ],
       align: ['left', 'right'],
+      money: [false, true],
     },
   ]
   return {
     title: t('cashFlowIndirect.title'),
     dateRangeLabel: t('cashFlowIndirect.dateRange', { from, to }),
     summary: [
-      { label: t('cashFlowIndirect.openingCash'), value: Number(cf.openingCash) },
-      { label: t('cashFlowIndirect.netChange'), value: Number(cf.netChange) },
-      { label: t('cashFlowIndirect.closingCash'), value: Number(cf.closingCash) },
+      { label: t('cashFlowIndirect.openingCash'), value: cf.openingCash, money: true },
+      { label: t('cashFlowIndirect.netChange'), value: cf.netChange, money: true },
+      { label: t('cashFlowIndirect.closingCash'), value: cf.closingCash, money: true },
     ],
     groups,
   }
@@ -639,8 +668,9 @@ export async function statementViewToXlsx(
   }, { generatedAt: opts.generatedAt })
 }
 
-/** Flatten a StatementView into ExportData (one table) for XLSX/CSV. Amounts
- *  stay numeric; the account column is indented to preserve hierarchy. */
+/** Flatten a StatementView into ExportData (one table) for XLSX/CSV. Amount
+ *  columns are flagged money and keep their exact decimal strings; the account
+ *  column is indented to preserve hierarchy. */
 export function statementViewToExportData(
   view: StatementView,
   opts: { title: string; dateRangeLabel: string; accountLabel: string },
@@ -662,6 +692,7 @@ export function statementViewToExportData(
         columns,
         rows,
         align: ['left', ...view.columns.map(() => 'right' as PdfColumnAlign)],
+        money: [false, ...view.columns.map((c) => c.kind !== 'variance_pct')],
       },
     ],
   }
@@ -687,10 +718,10 @@ export function journalExportData(j: JournalReportResult, title: string, t: Tran
   const rows: (string | number | null)[][] = []
   for (const e of j.entries) {
     for (const l of e.lines) {
-      rows.push([e.entryNumber ?? '', e.date, `${l.accountNumber ?? ''} ${l.accountName}`.trim(), [l.party, l.memo].filter(Boolean).join(' · '), l.debit || null, l.credit || null])
+      rows.push([e.entryNumber ?? '', e.date, `${l.accountNumber ?? ''} ${l.accountName}`.trim(), [l.party, l.memo].filter(Boolean).join(' · '), decimalIsZero(l.debit) ? null : l.debit, decimalIsZero(l.credit) ? null : l.credit])
     }
   }
-  return { title, dateRangeLabel: t('pnl.dateRange', { from: j.from, to: j.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'left', 'right', 'right'] }] }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: j.from, to: j.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'left', 'right', 'right'], money: [false, false, false, false, true, true] }] }
 }
 
 export function registerExportData(reg: RegisterResult, title: string, t: Translator): ExportData {
@@ -706,10 +737,10 @@ export function registerExportData(reg: RegisterResult, title: string, t: Transl
   for (const pt of reg.parties) {
     const name = pt.partyName ?? '—'
     rows.push([name, '', t('generalLedger.opening'), null, null, pt.opening])
-    for (const l of pt.lines) rows.push([name, l.date, l.entryNumber ?? '', l.debit || null, l.credit || null, l.balance])
+    for (const l of pt.lines) rows.push([name, l.date, l.entryNumber ?? '', decimalIsZero(l.debit) ? null : l.debit, decimalIsZero(l.credit) ? null : l.credit, l.balance])
     rows.push([name, '', t('registers.closing'), null, null, pt.closing])
   }
-  return { title, dateRangeLabel: t('pnl.dateRange', { from: reg.from, to: reg.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'right', 'right', 'right'] }] }
+  return { title, dateRangeLabel: t('pnl.dateRange', { from: reg.from, to: reg.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'left', 'right', 'right', 'right'], money: [false, false, false, true, true, true] }] }
 }
 
 export function partnerStatementExportData(st: PartnerStatementResult, t: Translator): ExportData {
@@ -722,20 +753,20 @@ export function partnerStatementExportData(st: PartnerStatementResult, t: Transl
     t('export.columns.balance'),
   ]
   const rows: (string | number | null)[][] = [['', t('statements.opening'), null, null, st.opening]]
-  for (const l of st.lines) rows.push([l.date, l.entryNumber ?? '', l.debit || null, l.credit || null, l.balance])
+  for (const l of st.lines) rows.push([l.date, l.entryNumber ?? '', decimalIsZero(l.debit) ? null : l.debit, decimalIsZero(l.credit) ? null : l.credit, l.balance])
   rows.push(['', t('statements.closing'), null, null, st.closing])
   return {
     title,
     dateRangeLabel: t('pnl.dateRange', { from: st.from, to: st.to }),
     summary: [
-      { label: t('aging.buckets.current'), value: st.aging.current },
-      { label: t('aging.buckets.b1'), value: st.aging.b1 },
-      { label: t('aging.buckets.b2'), value: st.aging.b2 },
-      { label: t('aging.buckets.b3'), value: st.aging.b3 },
-      { label: t('aging.buckets.b4'), value: st.aging.b4 },
-      { label: t('aging.columns.total'), value: st.aging.total },
+      { label: t('aging.buckets.current'), value: st.aging.current, money: true },
+      { label: t('aging.buckets.b1'), value: st.aging.b1, money: true },
+      { label: t('aging.buckets.b2'), value: st.aging.b2, money: true },
+      { label: t('aging.buckets.b3'), value: st.aging.b3, money: true },
+      { label: t('aging.buckets.b4'), value: st.aging.b4, money: true },
+      { label: t('aging.columns.total'), value: st.aging.total, money: true },
     ],
-    groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'right', 'right', 'right'] }],
+    groups: [{ kind: 'results', title, columns, rows, align: ['left', 'left', 'right', 'right', 'right'], money: [false, false, true, true, true] }],
   }
 }
 
