@@ -826,9 +826,11 @@ export async function decidePaymentFile(
   userId: string,
   decision: "approve" | "reject",
   reason?: string | null,
+  opts?: { runId?: string | null } = {},
 ): Promise<void> {
   if (decision === "reject" && !reason?.trim()) throw new PaymentError("a rejection reason is required");
   const eventType = decision === "approve" ? "file_approved" : "file_rejected";
+  const runPredicate = opts.runId ? sql`payment_run_id = ${opts.runId}` : undefined;
   await withOrgTransaction(orgId, async () => {
     const result = (await db.execute<{ payment_run_id: string }>(sql`
       update payment_files set
@@ -840,6 +842,7 @@ export async function decidePaymentFile(
         rejection_reason = case when ${decision} = 'reject' then ${reason?.trim() ?? null} else null end,
         updated_at = now(), updated_by = ${userId}
       where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+        ${runPredicate ? sql`and ${runPredicate}` : sql``}
         and (
           ${decision} = 'reject'
           or (generated_by is not null and generated_by <> ${userId})
@@ -852,6 +855,7 @@ export async function decidePaymentFile(
           select generated_by
             from payment_files
            where id = ${fileId} and org_id = ${orgId} and status = 'pending_approval'
+             ${runPredicate ? sql`and ${runPredicate}` : sql``}
         `)).rows[0];
         if (pending) assertIndependentPaymentApprover("file", pending.generated_by, userId);
       }
