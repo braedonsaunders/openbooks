@@ -4,12 +4,18 @@ import { z } from 'zod'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   loadPaymentDocument,
+  PaymentRevisionConflictError,
   updateDraftPayment,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import {
+  documentRevisionSql,
+  DocumentEditError,
+  requireDocumentEditRevision,
+} from '../../../../lib/documents'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
@@ -33,6 +39,8 @@ const allocationInput = z.object({
 })
 
 const paymentPatchBody = z.object({
+  /** Optimistic concurrency token from documents.updated_at (exact form). */
+  expectedUpdatedAt: z.string().optional(),
   partyId: nullableUuidId.optional(),
   bankAccountId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
@@ -94,16 +102,37 @@ async function assertAllocationTargetsInScope(
   return null
 }
 
+/**
+ * Replace the lossy JavaScript Date `updated_at` with the exact canonical OCC
+ * token, mirroring loadDocument: node-postgres maps timestamptz to Date, which
+ * discards the microseconds PostgreSQL retains, so a caller that echoes the
+ * raw value back as its expected revision could never match under lock.
+ */
+async function loadExactPaymentRevision(id: string, orgId: string): Promise<string | null> {
+  const row = (await db.execute<{ updatedAt: string }>(sql`
+    select ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
+      from documents where id = ${id} and org_id = ${orgId}
+  `))
+  return row.rows[0]?.updatedAt ?? null
+}
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
   const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
   if (!payment) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const revision = await loadExactPaymentRevision(id, gate.authz.user.orgId)
+  if (revision) payment.doc = { ...payment.doc, updated_at: revision }
   return NextResponse.json(payment)
 }
 
-/** Autosave for draft payments: header fields + open-item allocations. */
+/** Autosave for draft payments: header fields + open-item allocations.
+ *
+ * Saves are fenced by the document's exact revision: the caller echoes the
+ * `updated_at` token it loaded, and the engine writes only when that token
+ * still matches the row locked FOR UPDATE inside the write transaction — so
+ * two concurrent saves can never silently overwrite one another. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
@@ -112,6 +141,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsed = await parseJsonBody(req, paymentPatchBody, { status: 422 })
   if (!parsed.ok) return parsed.response
   const body = parsed.data
+  // Mandatory optimistic-concurrency evidence — same contract as /api/documents/[id].
+  let expectedRevision: string
+  try {
+    expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
+  } catch (e) {
+    if (e instanceof DocumentEditError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
+    throw e
+  }
   const allocationTargetsDenied = await assertAllocationTargetsInScope(
     gate.authz,
     (body.allocations ?? []).map((a) => a.openLineId),
@@ -119,10 +158,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (allocationTargetsDenied) return allocationTargetsDenied
 
   try {
-    await updateDraftPayment(id, body, gate.authz.user.id, gate.authz.user.orgId)
+    await updateDraftPayment(
+      id,
+      {
+        partyId: body.partyId,
+        bankAccountId: body.bankAccountId,
+        documentDate: body.documentDate,
+        referenceNumber: body.referenceNumber,
+        memo: body.memo,
+        allocations: body.allocations,
+      },
+      gate.authz.user.id,
+      gate.authz.user.orgId,
+      // The OCC token is route-level evidence; it never enters the engine's
+      // financial patch shape.
+      { expectedRevision },
+    )
     const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
+    const revision = await loadExactPaymentRevision(id, gate.authz.user.orgId)
+    if (payment && revision) payment.doc = { ...payment.doc, updated_at: revision }
     return NextResponse.json(payment)
   } catch (e) {
+    // The engine fence fired under the row lock: someone saved first.
+    if (e instanceof PaymentRevisionConflictError) {
+      return NextResponse.json({ error: e.message }, { status: 409 })
+    }
     return paymentErrorResponse(e)
   }
 }
