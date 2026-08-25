@@ -480,6 +480,58 @@ test('transaction import preserves an exact decimal string inside JSON lines', a
   assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
 })
 
+test('transaction import keeps unquoted number tokens in JSON lines exact', async (t) => {
+  await t.test('does not let an integer-valued double silently round .99 away', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      // Unquoted on purpose: JSON.parse would hand back the safe integer
+      // 999999999999999 and the ledger would store ...999.0000.
+      lines: '[{"account":"5000","amount":999999999999998.99}]',
+    })
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.lines[0]?.amount, '999999999999998.9900')
+  })
+
+  await t.test('accepts an exactly representable unquoted fraction', async () => {
+    resetImportState(false)
+
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      lines: '[{"account":"5000","amount":100.25}]',
+    })
+
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.lines[0]?.amount, '100.2500')
+  })
+
+  await t.test('rejects a scientific-notation token like quoted text', async () => {
+    resetImportState(false)
+
+    const amount = '1e3'
+    const outcome = await importCardCharge({
+      documentDate: '2026-08-24',
+      lines: `[{"account":"5000","amount":${amount}}]`,
+    })
+
+    assert.equal(outcome.created, 0)
+    assert.equal(outcome.failed, 1)
+    assert.deepEqual(outcome.errors, [
+      {
+        row: 1,
+        message:
+          'line amount "' +
+          String(amount) +
+          '" must be an exact decimal string with at most 4 decimal places',
+      },
+    ])
+    assert.equal(importState.transactionCalls, 0)
+    assert.deepEqual(importState.attemptedLines, [])
+  })
+})
+
 test('transaction import line amounts hold exact decimal values at the boundary', async (t) => {
   const rejectAmount = async (amount: unknown) => {
     resetImportState(false)
