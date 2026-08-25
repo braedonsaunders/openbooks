@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { DOC_KIND_FEATURE } from './document-kinds'
 import { MODULE_BY_KEY } from './nav/registry'
@@ -28,18 +31,31 @@ interface SearchFixture {
   project_id: string | null
 }
 
+interface ProjectFixture {
+  id: string
+  code: string | null
+  name: string
+}
+
 interface SearchTestState {
   disabledKinds: string[]
   documents: SearchFixture[]
   featureChecks: string[]
   features: Record<string, boolean>
   kindFeatures: Record<string, string>
+  projectRows: ProjectFixture[]
   queries: CapturedQuery[]
 }
 
 const ALLOWED_SUBSIDIARY = '00000000-0000-0000-0000-000000000001'
 const DENIED_SUBSIDIARY = '00000000-0000-0000-0000-000000000002'
 const PROJECT_ID = '00000000-0000-0000-0000-000000000003'
+
+const PROJECT_FIXTURE: ProjectFixture = {
+  id: PROJECT_ID,
+  code: 'PRJ-001',
+  name: 'Headquarters Build-out',
+}
 
 const TRANSACTION_PERMISSIONS = [...new Set(TRANSACTION_KINDS.flatMap((kind) => {
   const permission = transactionModule(kind)?.requiredPermission
@@ -86,6 +102,7 @@ const state: SearchTestState = {
   featureChecks: [],
   features: { banking: true, fieldTickets: true, projects: true },
   kindFeatures: { ...DOC_KIND_FEATURE } as Record<string, string>,
+  projectRows: [PROJECT_FIXTURE],
   queries: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -136,6 +153,9 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute(query) {
           state.queries.push({ text: query.text, values: [...query.values] })
+          if (query.text.includes('select id, code, name from projects')) {
+            return { rows: state.projectRows }
+          }
           if (!query.text.includes('with cand as')) return { rows: [] }
 
           const knownKinds = new Set(state.documents.map((row) => row.kind))
@@ -251,16 +271,19 @@ function reset({
   disabledKinds = [],
   documents = [...BASE_DOCUMENTS, UNMAPPED_DOCUMENT],
   features = {},
+  projects = [PROJECT_FIXTURE],
 }: {
   disabledKinds?: string[]
   documents?: SearchFixture[]
   features?: Record<string, boolean>
+  projects?: ProjectFixture[]
 } = {}): void {
   state.disabledKinds = disabledKinds
   state.documents = documents
   state.featureChecks.length = 0
   state.features = { banking: true, fieldTickets: true, projects: true, ...features }
   state.kindFeatures = { ...DOC_KIND_FEATURE } as Record<string, string>
+  state.projectRows = projects
   state.queries.length = 0
 }
 
@@ -553,4 +576,64 @@ test('subsidiary-aware contacts, accounts, and projects use their canonical scop
   assert.match(accounts.text, /subsidiary_id is null or subsidiary_id = any/)
   assert.match(projects.text, /subsidiary_id = any/)
   assert.doesNotMatch(projects.text, /subsidiary_id is null/)
+})
+
+const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+function source(relativePath: string): string {
+  return readFileSync(join(webRoot, relativePath), 'utf8')
+}
+
+function projectGroup(response: Awaited<ReturnType<typeof globalSearch>>) {
+  return response.groups.find((group) => group.type === 'project')
+}
+
+test('project hits open the native projects drawer through the query-parameter record target', async () => {
+  reset()
+  const response = await globalSearch(authz('projects.read'), 'headquarters')
+  const hit = projectGroup(response)?.hits[0]
+  assert.ok(hit, 'an authorized project search must surface the project group')
+  assert.deepEqual(hit, {
+    id: PROJECT_ID,
+    type: 'project',
+    title: PROJECT_FIXTURE.name,
+    subtitle: PROJECT_FIXTURE.code,
+    href: `/projects?project=${PROJECT_ID}`,
+    iconKey: 'timer',
+  })
+
+  // The drawer contract is a query parameter on the module list route; a
+  // deep path (/projects/<id>) has no page and strands the user on a 404.
+  assert.equal(new URL(hit.href, 'https://openbooks.example').pathname, '/projects')
+  assert.doesNotMatch(hit.href, /^\/projects\//)
+})
+
+test('project hits stay gated by permission and the projects feature flag', async () => {
+  reset()
+  const denied = await globalSearch(authz(), 'needle')
+  assert.ok(!projectGroup(denied))
+  assert.ok(!state.queries.some((query) => query.text.includes('select id, code, name from projects')))
+
+  reset({ features: { projects: false } })
+  const featureOff = await globalSearch(authz('projects.read'), 'needle')
+  assert.ok(!projectGroup(featureOff))
+  assert.ok(state.featureChecks.includes('projects'))
+  assert.ok(!state.queries.some((query) => query.text.includes('select id, code, name from projects')))
+})
+
+test('repaired project and recall record links never regress to legacy destinations', () => {
+  // Search and assistant tools address project records with the native
+  // drawer's query-parameter target — never the dead /projects/<id> path.
+  for (const repaired of ['lib/search.ts', 'lib/assistant/tools.ts']) {
+    const sourceText = source(repaired)
+    assert.match(sourceText, /\/projects\?project=/, `${repaired}: canonical drawer target`)
+    assert.doesNotMatch(sourceText, /\/projects\/\$\{/, `${repaired}: no legacy deep path`)
+  }
+
+  // The lot-recall entry routes recall records through the shared report
+  // engine's native drill-downs — it must never render its own generic
+  // /documents/<id> anchors.
+  const recallEntry = source('app/(app)/reports/lot-recall/page.tsx')
+  assert.match(recallEntry, /redirect\(`\/reports\/custom\/run\//, 'must forward to the shared engine runner')
+  assert.doesNotMatch(recallEntry, /\/documents\//, 'no generic document links')
 })
