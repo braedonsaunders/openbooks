@@ -223,6 +223,30 @@ test("webhook claims: only pre-terminal states are claimable so redeliveries ded
   }
 });
 
+test("adyen webhook: signature-valid eventCode/success arrays normalize", () => {
+  const keyBytes = Buffer.alloc(32, 7);
+  const hmacKey = keyBytes.toString("base64");
+  const { body } = signedAdyenDelivery(keyBytes, [
+    { eventCode: ["IGNORED"], success: ["true"], pspReference: "PSP-ARRAY" },
+    {
+      pspReference: "PSP-ARRAY-AUTH",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_array",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: ["IGNORED", "AUTHORISATION"],
+      success: ["false", "true"],
+    },
+  ]);
+  const verified = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+  assert.equal(verified.signatureValid, true);
+  assert.deepEqual(
+    verified.events.map((event) => ({ externalRef: event.externalRef, status: event.status })),
+    [{ externalRef: "PSP-ARRAY-AUTH", status: "succeeded" }],
+    "array values keep scanning until a string event code/success pair normalizes",
+  );
+});
+
 test("adyen webhook: per-item HMAC verified", () => {
   const keyBytes = Buffer.alloc(32, 7);
   const hmacKey = keyBytes.toString("base64");
