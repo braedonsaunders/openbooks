@@ -57,6 +57,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install qpdf
+        # Payroll ciphertext certification shells out to the real qpdf binary;
+        # without it the sender fail-closes on spawn ENOENT and the suite can
+        # never exercise the verified-ciphertext contract.
+        run: sudo apt-get update && sudo apt-get install -y qpdf
       - name: Unit tests (no database)
         # OPENBOOKS_DB_URL deliberately unset/empty: *.integration.test.ts
         # files self-skip, everything else must pass. Keep file-level fan-out
@@ -99,6 +104,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install qpdf
+        # Payroll ciphertext certification shells out to the real qpdf binary;
+        # without it the sender fail-closes on spawn ENOENT and the suite can
+        # never exercise the verified-ciphertext contract.
+        run: sudo apt-get update && sudo apt-get install -y qpdf
 
       - name: Load schema
         # The production bootstrap is the authoritative provisioner: tracked
@@ -189,6 +199,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Install qpdf
+        # Payroll ciphertext certification shells out to the real qpdf binary;
+        # without it the sender fail-closes on spawn ENOENT and the suite can
+        # never exercise the verified-ciphertext contract.
+        run: sudo apt-get update && sudo apt-get install -y qpdf
 
       - name: Load schema
         run: npx tsx scripts/bootstrap.ts
