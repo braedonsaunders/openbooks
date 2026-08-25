@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import {
   PAYROLL_PAYMENT_METHODS,
@@ -1056,6 +1057,35 @@ export async function payRunStaleness(
       ? row.calculated_at.toISOString()
       : (row.calculated_at ?? null),
   };
+}
+
+/**
+ * The commit-side half of the staleness control.
+ *
+ * `payRunStaleness` is what the wizard RENDERS — a banner and a disabled
+ * button, both client-side, both of which a scripted call to the runs API or
+ * a tab left open across an edit simply walks past. This is the boundary
+ * that ENFORCES it: called immediately before `commitPayRun`, it turns the
+ * same answer into a refusal, so the figures the GL projection materializes
+ * are always ones a calculation produced against the inputs as they stand
+ * now — never ones the operator edited past after Calculate ran.
+ *
+ * A missing run and a never-calculated run are NOT this gate's question to
+ * answer: both fall through to `commitPayRun`'s own state guards ("pay run
+ * not found", "calculate the pay run before committing"), which name those
+ * states precisely. This gate owns exactly one question — is the stored
+ * calculation still current — and answers it by refusing when it is not.
+ */
+export async function assertPayRunNotStale(
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const { stale, reasons, calculatedAt } = await payRunStaleness(orgId, documentId);
+  if (!stale || calculatedAt === null) return;
+  throw new PayrollError(
+    `the run's inputs changed after it was last calculated (${reasons.join(", ")})`
+      + " — recalculate before committing",
+  );
 }
 
 /** Net pay owed on one rail, and how many people are on it. */
