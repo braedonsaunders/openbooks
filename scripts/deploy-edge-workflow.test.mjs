@@ -11,6 +11,13 @@ const publishWorkflow = readFileSync(
   "utf8",
 );
 
+const triggerShaValidationBlock = `          if [[ ! "$TRIGGER_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "The tested commit must be a full lowercase SHA-1." >&2
+            exit 1
+          fi
+
+`;
+
 function occurrenceCount(source, value) {
   return source.split(value).length - 1;
 }
@@ -21,6 +28,54 @@ function namedStep(source, name) {
   assert.notEqual(start, -1, `workflow must contain the ${name} step`);
   const next = source.indexOf("\n      - ", start + marker.length);
   return source.slice(start, next === -1 ? source.length : next);
+}
+
+function assertExactDispatchCommit(source) {
+  const dispatchStep = namedStep(source, "Dispatch edge container publish");
+  assert.equal(
+    occurrenceCount(dispatchStep, "--arg ref "),
+    1,
+    "the publish dispatch must declare exactly one ref argument",
+  );
+  assert.match(
+    dispatchStep,
+    /--arg ref "\$TRIGGER_SHA"/,
+    "the publish dispatch ref must be the tested commit",
+  );
+  assert.equal(
+    occurrenceCount(dispatchStep, "--arg commitSha "),
+    1,
+    "the publish dispatch must declare exactly one commitSha argument",
+  );
+  assert.match(
+    dispatchStep,
+    /--arg commitSha "\$TRIGGER_SHA"/,
+    "the publish dispatch commitSha must be the tested commit",
+  );
+  assert.equal(
+    occurrenceCount(dispatchStep, "commit_sha: $commitSha"),
+    1,
+    "the workflow dispatch inputs must include only the tested commit sha",
+  );
+  const validationPattern = 'if [[ ! "$TRIGGER_SHA" =~ ^[0-9a-f]{40}$ ]]; then';
+  const validationIndex = dispatchStep.indexOf(validationPattern);
+  assert.notEqual(
+    validationIndex,
+    -1,
+    "the tested commit must be validated before dispatching publish",
+  );
+  const payloadIndex = dispatchStep.indexOf('dispatch_payload="$(');
+  assert.notEqual(payloadIndex, -1, "the publish dispatch must build its payload inline");
+  assert.ok(
+    validationIndex < payloadIndex,
+    "the tested commit must be validated before building the dispatch payload",
+  );
+  const dispatchIndex = dispatchStep.indexOf("gh api \\");
+  assert.notEqual(dispatchIndex, -1, "the publish dispatch must call gh api inline");
+  assert.ok(
+    validationIndex < dispatchIndex,
+    "the tested commit must be validated before dispatching publish",
+  );
 }
 
 function assertExactPublishRunDataflow(source) {
@@ -71,6 +126,7 @@ function assertExactPublishRunDataflow(source) {
 }
 
 test("edge deployment dispatches and watches the publish run for the tested commit", () => {
+  assertExactDispatchCommit(deployWorkflow);
   assert.match(
     deployWorkflow,
     /TRIGGER_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/,
