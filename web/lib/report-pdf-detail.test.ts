@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { generalLedgerExportData } from './report-pdf-detail.ts'
+import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-pdf-detail.ts'
 
 const t = (key: string) => key
 
@@ -44,4 +44,61 @@ test('general-ledger export mirrors the paper view with one section per account'
   ])
   assert.equal(data.groups[0]?.rows[1]?.[1], 'JE-100')
   assert.equal(data.groups[0]?.rows[1]?.[3], 125)
+})
+
+test('general-ledger export marks its money columns', () => {
+  const data = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: false,
+    accounts: [{
+      id: 'account-1',
+      number: '5210',
+      name: 'Overhead Allowance',
+      type: 'cogs',
+      opening: '0.0000',
+      closing: '125.0000',
+      lines: [],
+    }],
+  }, 'General Ledger', t)
+
+  assert.deepEqual(data.groups[0]?.money, [false, false, false, true, true, true])
+})
+
+test('pdfMoney prints exact ledger decimals IEEE-754 would corrupt', () => {
+  // Past 2^53 (~15.95 significant digits) a Number() rounds cents away:
+  // Number('9007199254740.9938') is already 9007199254740.994, and
+  // Number('12345678901234567.8900') lands on ...568.00 — real money drift.
+  assert.equal(pdfMoney('9007199254740.9938'), '9,007,199,254,740.99')
+  assert.equal(pdfMoney('12345678901234567.8900'), '12,345,678,901,234,567.89')
+})
+
+test('pdfMoney rounds the exact value, not its double projection', () => {
+  // Number('2.675') is really 2.67499999999999982…, which formats to "2.67";
+  // the exact decimal string must half-round UP to "2.68".
+  assert.equal(pdfMoney('2.675'), '2.68')
+})
+
+test('pdfMoney uses statement money conventions and locale separators', () => {
+  assert.equal(pdfMoney('125'), '125.00')
+  assert.equal(pdfMoney('-125.0000'), '-125.00')
+  assert.equal(pdfMoney('-0.0000'), '0.00')
+  assert.equal(pdfMoney('0'), '0.00')
+  assert.equal(pdfMoney('0.005'), '0.01')
+  assert.equal(pdfMoney('1234567.891', 'de'), '1.234.567,89')
+})
+
+test('pdfMoney renders non-numeric text raw instead of throwing', () => {
+  assert.equal(pdfMoney('n/a'), 'n/a')
+  assert.equal(pdfMoney('Acme GmbH'), 'Acme GmbH')
+})
+
+test('isExactDecimalText separates ledger decimals from prose and dates', () => {
+  assert.equal(isExactDecimalText('125.0000'), true)
+  assert.equal(isExactDecimalText('-12.5'), true)
+  assert.equal(isExactDecimalText('+7'), true)
+  assert.equal(isExactDecimalText(''), false)
+  assert.equal(isExactDecimalText('2026-01-31'), false)
+  assert.equal(isExactDecimalText('12.5%'), false)
+  assert.equal(isExactDecimalText('JE-100'), false)
 })
