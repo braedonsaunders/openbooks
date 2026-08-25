@@ -25,18 +25,20 @@ test('arbitrary or lookalike target tables are refused', () => {
 
 /**
  * Regression coverage for the private-folder metadata ACL defect in
- * web/lib/file-cabinet.ts + the folder [id] API route: getFolder() and
- * getFolderPath() (the breadcrumb source on /documents) used to bypass
- * private-folder visibility entirely — any documents.read caller could read a
- * hidden folder's name/owner/counts by id, crumbs leaked hidden ancestor
- * names, parentId exposed hidden ancestor ids, and childCount counted private
- * children the viewer cannot open. An earlier partial fix was rejected by
- * verification for exactly those residual leaks.
+ * web/lib/file-cabinet.ts + the folder [id] API route: getFolder(),
+ * getFolderPath() (the breadcrumb source on /documents), getFolderTree() and
+ * listFolderContents() used to bypass private-folder visibility entirely — any
+ * documents.read caller could read a hidden folder's name/owner/counts by id,
+ * crumbs leaked hidden ancestor names, parentId exposed hidden ancestor ids
+ * (single-folder reads AND sidebar/main-pane rows alike), and childCount
+ * counted private children the viewer cannot open. An earlier partial fix was
+ * rejected by verification for exactly those residual leaks.
  *
  * The scenario runs against the real exported functions on a real database,
- * asserting denied/allowed metadata, descendant counts, breadcrumbs, and the
- * mechanical parity invariant (folderAccessLevel ≠ 'none' ⇔ getFolder returns
- * the row) for every viewer/folder pair.
+ * asserting denied/allowed metadata, descendant counts, breadcrumbs, tree and
+ * folder-contents scoping, and the mechanical parity invariant
+ * (folderAccessLevel ≠ 'none' ⇔ getFolder returns the row) for every
+ * viewer/folder pair.
  */
 test(
   "folder metadata and breadcrumbs enforce private-folder visibility",
@@ -92,6 +94,8 @@ test(
         folderAccessLevel,
         getFolder,
         getFolderPath,
+        getFolderTree,
+        listFolderContents,
         setGrant,
       } from "./web/lib/file-cabinet.ts";
 
@@ -173,6 +177,43 @@ test(
         const adminHub = await getFolder(orgId, hub, adminViewer);
         assert.equal(adminHub?.parentId, privRoot, "admins keep the real parent id");
         assert.equal(adminHub?.childCount, 1);
+
+        // The sidebar tree and the main-pane listing carry the same scoping:
+        // hidden folders never appear, hidden ancestor ids never leak through
+        // parentId, and childCount never counts children the viewer cannot open.
+        const samTree = await getFolderTree(orgId, samViewer);
+        const samById = new Map(samTree.map((n) => [n.id, n]));
+        assert.deepEqual(
+          [...samById.keys()].sort(),
+          [hub, hubKid, pub, pubKid].sort(),
+          "tree lists exactly the visible folders",
+        );
+        for (const node of samTree) {
+          assert.equal(
+            node.parentId === kidPrivate || node.parentId === privRoot, false,
+            "no tree row leaks a hidden ancestor id",
+          );
+        }
+        assert.equal(samById.get(pub).childCount, 1, "tree childCount excludes the hidden private child");
+        assert.equal(samById.get(hub).parentId, null, "granted subtree roots read as roots, not via a hidden parent id");
+        assert.equal(samById.get(hubKid).parentId, hub, "hierarchy inside an opened subtree is preserved");
+        assert.equal(samById.get(pubKid).childCount, 0);
+
+        const malloryTree = await getFolderTree(orgId, malloryViewer);
+        const malloryPub = malloryTree.find((n) => n.id === pub);
+        assert.equal(malloryPub.childCount, 2, "owners count all of their children");
+        assert.equal(malloryTree.find((n) => n.id === kidPrivate)?.parentId, pub);
+
+        const adminTree = await getFolderTree(orgId, adminViewer);
+        assert.equal(adminTree.find((n) => n.id === hub)?.parentId, privRoot, "admins keep real parent ids in the tree");
+
+        const pubContents = await listFolderContents(orgId, samViewer, { parentId: pub });
+        assert.deepEqual(pubContents.folders.map((n) => n.id), [pubKid], "hidden private child is not listed");
+        assert.equal(pubContents.folders[0].childCount, 0);
+
+        const privContents = await listFolderContents(orgId, samViewer, { parentId: privRoot });
+        assert.deepEqual(privContents.folders.map((n) => n.id), [hub], "grant re-opens exactly its own subtree");
+        assert.equal(privContents.folders[0].parentId, null, "listing rows mask a hidden parent id too");
 
         // Read/write parity across every viewer × folder pair: exactly the
         // folders the access tier can act on expose metadata.

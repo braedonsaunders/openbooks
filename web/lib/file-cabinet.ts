@@ -494,11 +494,19 @@ export async function ensureRecordFolder(
  *
  * Counts are computed with GROUP BY aggregates (two single passes) rather than
  * correlated subqueries per folder.
+ *
+ * The same private-folder read scope as everywhere else applies: hidden
+ * folders never appear, a parentId behind a foreign private boundary is masked
+ * to null (a grant re-opens exactly its own subtree), and childCount counts
+ * only children the viewer could actually open.
  */
 export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<FolderNode[]> {
   const scope = await resolveReadScope(orgId, viewer)
+  const parentVisible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)
   const r = (await db.execute<FolderNode>(sql`
-    select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
+    select f.id, f.name,
+           case when ${parentVisible} then f.parent_folder_id end as "parentId",
+           f.is_system as "isSystem",
            f.system_kind as "systemKind", f.is_private as "isPrivate",
            f.is_inactive as "isInactive", f.record_table as "recordTable",
            f.record_id as "recordId",
@@ -509,6 +517,7 @@ export async function getFolderTree(orgId: string, viewer: FileViewer): Promise<
         select parent_folder_id, count(*)::int as n
           from folders
          where org_id = ${orgId} and not is_inactive
+           and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`id`)}
          group by parent_folder_id
       ) cc on cc.parent_folder_id = f.id
       left join (
@@ -971,6 +980,10 @@ export async function listFolderContents(
   const parentPred = opts.parentId
     ? sql`f.parent_folder_id = ${opts.parentId}`
     : sql`f.parent_folder_id is null`
+  // Folder rows carry the same scoping as the tree: hidden ancestors never
+  // leak through parentId, and childCount stays within the viewer's scope.
+  const rowParentVisible = visibleFolderPredicate(scope.hiddenFolderIds, sql`f.parent_folder_id`)
+  const childVisible = visibleFolderPredicate(scope.hiddenFolderIds, sql`c.id`)
 
   // Folder count first — it anchors the combined pagination math.
   const folderCount = (await db.execute<{ n: number }>(sql`
@@ -984,12 +997,15 @@ export async function listFolderContents(
   const folders =
     offset < folderTotal
       ? ((await db.execute<FolderNode>(sql`
-          select f.id, f.name, f.parent_folder_id as "parentId", f.is_system as "isSystem",
+          select f.id, f.name,
+                 case when ${rowParentVisible} then f.parent_folder_id end as "parentId",
+                 f.is_system as "isSystem",
                  f.system_kind as "systemKind", f.is_private as "isPrivate",
                  f.is_inactive as "isInactive", f.record_table as "recordTable",
                  f.record_id as "recordId",
                  (select count(*)::int from folders c
-                   where c.parent_folder_id = f.id and c.org_id = ${orgId} and not c.is_inactive) as "childCount",
+                   where c.parent_folder_id = f.id and c.org_id = ${orgId} and not c.is_inactive
+                     and ${childVisible}) as "childCount",
                  (select count(*)::int from files fi
                    where fi.folder_id = f.id and fi.org_id = ${orgId} and not fi.is_inactive) as "fileCount"
             from folders f
