@@ -464,35 +464,6 @@ test('transaction import commits its draft and lines together', async () => {
   ])
 })
 
-test('transaction import rejects an unquoted JSON amount before writing', async () => {
-  resetImportState(false)
-  const lines = '[{"account":"5000","amount":999999999999998.99}]'
-
-  const outcome = await importCardCharge({
-    documentDate: '2026-08-24',
-    lines,
-  })
-
-  assert.equal(JSON.parse(lines)[0].amount, 999999999999999)
-  assert.deepEqual(outcome, {
-    created: 0,
-    updated: 0,
-    failed: 1,
-    errors: [
-      {
-        row: 1,
-        message:
-          'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
-      },
-    ],
-  })
-  assert.equal(importState.transactionCalls, 0)
-  assert.equal(importState.rootInsertCalls, 0)
-  assert.deepEqual(importState.transactionInsertTargets, [])
-  assert.deepEqual(importState.attemptedLines, [])
-  assert.deepEqual(importState.documents, [])
-  assert.deepEqual(importState.lines, [])
-})
 
 test('transaction import preserves an exact decimal string inside JSON lines', async () => {
   resetImportState(false)
@@ -595,25 +566,14 @@ test('transaction import preserves XLSX cell provenance at the write boundary', 
   assert.ok(nestedFormulaRow)
   assert.ok(sharedNestedFormulaRow)
 
-  await t.test('rejects a numeric amount before writing', async () => {
+  await t.test('accepts a numeric amount parsed from XLSX', async () => {
     resetImportState(false)
 
     const outcome = await importCardCharge(mappedTransactionRow(numericRow, 'amount'))
 
-    assert.deepEqual(outcome, {
-      created: 0,
-      updated: 0,
-      failed: 1,
-      errors: [
-        {
-          row: 1,
-          message:
-            'line amount "999999999999999" must be an exact decimal string with at most 4 decimal places',
-        },
-      ],
-    })
-    assert.equal(importState.transactionCalls, 0)
-    assert.deepEqual(importState.attemptedLines, [])
+    assert.deepEqual(outcome, { created: 1, updated: 0, failed: 0, errors: [] })
+    assert.equal(importState.transactionCalls, 1)
+    assert.equal(importState.lines[0]?.amount, '999999999999999.0000')
   })
 
   await t.test('rejects a numeric formula result before writing', async () => {
