@@ -14,6 +14,7 @@ import {
   documentRevisionProjection,
   normalizeDocumentRecordRevisions,
 } from "../documents";
+import { pgTextArrayLiteral } from "../pg-array";
 import type { ApplicationContext } from "./context";
 import {
   assertApplicationPermission,
@@ -98,7 +99,7 @@ function subsidiaryWhere(
   const allowed = context.authz.allowedSubsidiaryIds;
   if (allowed === null) return null;
   if (allowed.size === 0) return sql`false`;
-  return sql`subsidiary_id = any(${[...allowed]}::uuid[])`;
+  return sql`subsidiary_id = any(${pgTextArrayLiteral([...allowed])}::uuid[])`;
 }
 
 function baseWhere(
@@ -109,7 +110,9 @@ function baseWhere(
   const conditions: SQL[] = [sql`org_id = ${context.authz.user.orgId}`];
   if (input.id) conditions.push(sql`id = ${input.id}`);
   if (scope.resolved.documentKinds) {
-    conditions.push(sql`kind = any(${[...scope.resolved.documentKinds]}::text[])`);
+    conditions.push(
+      sql`kind = any(${pgTextArrayLiteral([...scope.resolved.documentKinds])}::text[])`,
+    );
   }
   if (scope.resolved.dynamic) {
     conditions.push(sql`type_key = ${scope.resolved.key}`);

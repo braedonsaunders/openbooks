@@ -4,6 +4,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { AppPlatformAdapter } from '@openbooks/engine/src/apps-runtime.ts'
 import type { SessionUser } from '@/lib/auth'
+import { pgTextArrayLiteral } from '@/lib/pg-array'
 import { permissionSetCovers } from '@/lib/permissions'
 import {
   loadApiSchema,
@@ -119,14 +120,6 @@ function clampInteger(value: unknown, min: number, max: number, fallback: number
 
 function quoteIdentifier(identifier: string): SQL {
   return sql.raw(`"${identifier.replace(/"/g, '""')}"`)
-}
-
-/** Drizzle binds interpolated JS arrays as scalars, so `any($n::text[])` needs
- *  an explicit PostgreSQL array-literal text param (see payments/lib.ts). */
-function pgTextArrayLiteral(values: readonly string[]): string {
-  return `{${values
-    .map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`)
-    .join(',')}}`
 }
 
 function fieldExpression(resolved: ResolvedApiType, field: ApiField | null, name: string): SQL {
