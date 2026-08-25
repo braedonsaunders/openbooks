@@ -283,6 +283,14 @@ export function OrderDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
+  // Optimistic-concurrency token (documents.updated_at). Every mutating
+  // request echoes it; the server refuses any mutation whose view of the
+  // order is not the stored revision. A ref — not state — so a save and the
+  // issue that immediately follows it share the exact same revision without
+  // waiting on a re-render.
+  const revisionOf = (value: unknown) => new Date(value as string | number | Date).toISOString()
+  const revisionRef = useRef<string>(revisionOf(doc.updated_at))
+
   const apiBase = `/api/${
     kind === 'quote' ? 'estimates' : kind === 'sales_order' ? 'sales-orders' : 'purchase-orders'
   }`
@@ -404,12 +412,17 @@ export function OrderDrawer({
       request: () => fetch(`${apiBase}/${doc.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, expectedUpdatedAt: revisionRef.current }),
       }),
       setState: setSaveState,
       onError: (message) => toast.error(message ?? t('actionFailed')),
     })
-    if (saved) setDirty(false)
+    if (saved) {
+      // Adopt the server's post-save revision so the next mutation (e.g. an
+      // issue right after this save) fences on what is actually stored.
+      if (saved.doc?.updated_at != null) revisionRef.current = revisionOf(saved.doc.updated_at)
+      setDirty(false)
+    }
     return saved
   }
 
@@ -438,7 +451,7 @@ export function OrderDrawer({
     const res = await fetch(`${apiBase}/${doc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, reason }),
+      body: JSON.stringify({ status, reason, expectedUpdatedAt: revisionRef.current }),
     })
     const data = await res.json()
     setBusy(false)
@@ -446,6 +459,7 @@ export function OrderDrawer({
       toast.error(data.error ?? t('actionFailed'))
       return
     }
+    if (data.doc?.updated_at != null) revisionRef.current = revisionOf(data.doc.updated_at)
     if (data.approvalPending || data.voidPending) {
       toast.success(tCommon('actions.submitForApproval'))
     } else {
@@ -500,7 +514,11 @@ export function OrderDrawer({
     )
       return
     setBusy(true)
-    const res = await fetch(`${apiBase}/${doc.id}`, { method: 'DELETE' })
+    const res = await fetch(`${apiBase}/${doc.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: revisionRef.current }),
+    })
     if (res.ok) {
       toast.success(t('toastDeleted'))
       router.push(meta.base)
@@ -516,7 +534,7 @@ export function OrderDrawer({
     const res = await fetch(`${apiBase}/${doc.id}/convert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetKind }),
+      body: JSON.stringify({ targetKind, expectedUpdatedAt: revisionRef.current }),
     })
     const data = await res.json()
     setBusy(false)

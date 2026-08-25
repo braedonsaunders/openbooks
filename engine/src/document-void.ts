@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
-import { db, schema, withOrgContext, withOrgTransaction } from "./db.ts";
+import { db, schema, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
@@ -19,6 +19,23 @@ export interface DocumentVoidResult {
   runId: string | null;
 }
 
+/**
+ * Optimistic-concurrency token from documents.updated_at. When supplied, the
+ * void refuses unless the caller's view is still the stored revision — a stale
+ * dashboard must not cancel a document it never saw (edits, applications, or
+ * an approval that landed after it loaded). The comparison happens inside the
+ * claim transaction against the row the claim itself locks.
+ */
+export type DocumentVoidInput = {
+  documentId: string;
+  orgId: string;
+  actorId: string;
+  reason: string;
+  reversalDate?: string | null;
+  source?: FlowEventSource;
+  expectedUpdatedAt?: string | null;
+};
+
 function validateReason(reason: string): string {
   const value = reason.trim();
   if (value.length < 5 || value.length > 500) {
@@ -34,12 +51,18 @@ function validateDate(value: string): string {
   return value;
 }
 
-async function loadVoidableDocument(documentId: string, orgId: string) {
+type DocumentRow = typeof schema.documents.$inferSelect;
+
+async function loadDocument(documentId: string, orgId: string): Promise<DocumentRow> {
   const [doc] = await db
     .select()
     .from(schema.documents)
     .where(and(eq(schema.documents.id, documentId), eq(schema.documents.orgId, orgId)));
   if (!doc) throw new DocumentVoidError("document not found");
+  return doc;
+}
+
+function assertDocumentVoidable(doc: DocumentRow): void {
   if (!["approved", "posted"].includes(doc.status)) {
     throw new DocumentVoidError(
       `${doc.documentNumber} is ${doc.status}; only issued or posted documents can be voided`,
@@ -48,43 +71,41 @@ async function loadVoidableDocument(documentId: string, orgId: string) {
   if (doc.voidRequestedAt) {
     throw new DocumentVoidError(`${doc.documentNumber} already has a pending void request`);
   }
-  return doc;
 }
 
 /**
- * Tenant-authored before_void scripts run in QuickJS. They must not check out
- * `longPool` (max 4, no statement timeout) — that pin is for clone/wipe only.
- * `withOrgContext` applies RLS on the request pool without holding a
- * transaction across the sandbox.
+ * Run only after requestDocumentVoid owns the document's conditional
+ * reservation. The caller's transaction must remain active so script_runs and
+ * ob.journal.create participate in the same atomic unit as the reservation.
+ * ob.query alone checks out from the physically separate governed READ ONLY
+ * pool, so ten contending request transactions cannot form a pool cycle.
  */
 async function runBeforeVoidScripts(input: {
-  documentId: string;
+  document: DocumentRow;
   orgId: string;
 }): Promise<void> {
-  await withOrgContext(input.orgId, async () => {
-    const doc = await loadVoidableDocument(input.documentId, input.orgId);
-    const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, input.orgId));
-    const lines = await db
-      .select()
-      .from(schema.documentLines)
-      .where(and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)));
-    if (!org) throw new DocumentVoidError("organization not found");
-    const scriptCtx: ScriptContext = {
-      trigger: "before_void",
-      document: doc as unknown as Record<string, unknown>,
-      lines: lines as unknown as Record<string, unknown>[],
-      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
-    };
-    const outcomes = await runTriggerScripts("before_void", scriptCtx, doc.id);
-    const bad = outcomes.find((outcome) => outcome.status !== "ok");
-    if (bad) {
-      throw new DocumentVoidError(
-        bad.status === "aborted"
-          ? `voiding vetoed by script "${bad.name}": ${bad.abortReason}`
-          : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
-      );
-    }
-  });
+  const doc = input.document;
+  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, input.orgId));
+  const lines = await db
+    .select()
+    .from(schema.documentLines)
+    .where(and(eq(schema.documentLines.documentId, doc.id), eq(schema.documentLines.orgId, input.orgId)));
+  if (!org) throw new DocumentVoidError("organization not found");
+  const scriptCtx: ScriptContext = {
+    trigger: "before_void",
+    document: doc as unknown as Record<string, unknown>,
+    lines: lines as unknown as Record<string, unknown>[],
+    org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+  };
+  const outcomes = await runTriggerScripts("before_void", scriptCtx, doc.id);
+  const bad = outcomes.find((outcome) => outcome.status !== "ok");
+  if (bad) {
+    throw new DocumentVoidError(
+      bad.status === "aborted"
+        ? `voiding vetoed by script "${bad.name}": ${bad.abortReason}`
+        : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
+    );
+  }
 }
 
 /**
@@ -93,22 +114,35 @@ async function runBeforeVoidScripts(input: {
  * aggregate approval invokes completeRequestedDocumentVoid through the
  * documents adapter.
  */
-export async function requestDocumentVoid(input: {
-  documentId: string;
-  orgId: string;
-  actorId: string;
-  reason: string;
-  reversalDate?: string | null;
-  source?: FlowEventSource;
-}): Promise<DocumentVoidResult> {
+export async function requestDocumentVoid(
+  input: DocumentVoidInput,
+): Promise<DocumentVoidResult> {
   const reason = validateReason(input.reason);
   // Business-meaningful default date — the org's business day via a sim-clock-
   // aware instant, not the server's UTC day.
   const reversalDate = validateDate(input.reversalDate?.trim() || (await businessToday(input.orgId)));
-  await runBeforeVoidScripts(input);
   return withOrgTransaction(input.orgId, async () => {
-    const doc = await loadVoidableDocument(input.documentId, input.orgId);
-
+    const current = await loadDocument(input.documentId, input.orgId);
+    // Exact revision fencing before the claim (and therefore before every
+    // material effect). Millisecond comparison on both sides: the wire token
+    // is an ISO string truncated to ms, so equality in SQL against the stored
+    // microsecond timestamp would never hold.
+    if (
+      input.expectedUpdatedAt !== undefined &&
+      input.expectedUpdatedAt !== null &&
+      new Date(input.expectedUpdatedAt).getTime() !==
+        new Date(current.updatedAt as unknown as string | number | Date).getTime()
+    ) {
+      throw new DocumentVoidError(
+        "this document changed after you opened it; reload and review the latest revision",
+      );
+    }
+    // This compare-and-set is the single-winner claim. PostgreSQL locks the
+    // aggregate row and rechecks the predicate after a concurrent waiter
+    // resumes. Every material before_void effect stays in this same
+    // transaction: a throw, disconnect, or process crash rolls the claim,
+    // audit, script journal, and flow effects back together, so a retry starts
+    // from the original issued document.
     const reserved = (await db.execute<{ id: string }>(sql`
       update documents
          set void_reason = ${reason},
@@ -117,16 +151,18 @@ export async function requestDocumentVoid(input: {
              void_reversal_date = ${reversalDate},
              updated_at = now(),
              updated_by = ${input.actorId}
-       where id = ${doc.id} and org_id = ${input.orgId}
+       where id = ${input.documentId} and org_id = ${input.orgId}
          and status in ('approved', 'posted')
          and void_requested_at is null
-       returning id
+      returning id
     `));
     if (!reserved.rows[0]) {
+      assertDocumentVoidable(current);
       throw new DocumentVoidError(
-        `${doc.documentNumber} changed while the void request was being created; reload and try again`,
+        `${current.documentNumber} changed while the void request was being created; reload and try again`,
       );
     }
+    const doc = current;
     await db.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -144,6 +180,8 @@ export async function requestDocumentVoid(input: {
       )
     `);
 
+    await runBeforeVoidScripts({ document: doc, orgId: input.orgId });
+
     const flows = await runRecordFlows(
       { kind: "before_void", source: input.source ?? "ui" },
       doc.kind,
@@ -151,13 +189,6 @@ export async function requestDocumentVoid(input: {
       { orgId: input.orgId, userId: input.actorId },
     );
     if (flows.failed) {
-      await db.execute(sql`
-        update documents
-           set void_requested_at = null, void_requested_by = null,
-               void_reversal_date = null, void_reason = null,
-               updated_at = now(), updated_by = ${input.actorId}
-         where id = ${doc.id} and org_id = ${input.orgId}
-      `);
       throw new DocumentVoidError("void approval routing failed; the document was not voided");
     }
     if (flows.gatesCreated > 0) {

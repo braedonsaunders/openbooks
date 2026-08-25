@@ -1,4 +1,4 @@
-import { pool } from "./db.ts";
+import { connectGovernedReadClient } from "./db.ts";
 
 /**
  * The query surface is real PostgreSQL, with no proprietary query dialect.
@@ -104,7 +104,7 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
   const body = validateUserSql(sqlText);
   const wrapped = `select * from (${body}) __q limit ${maxRows + 1}`;
 
-  const client = await pool.connect();
+  const client = await connectGovernedReadClient();
   const started = Date.now();
   try {
     await prepareQueryContext(client, opts.orgId);
@@ -153,7 +153,7 @@ export interface SchemaTable {
  * actually query — nothing they lack privileges on leaks through.
  */
 export async function listSchema(orgId: string): Promise<SchemaTable[]> {
-  const client = await pool.connect();
+  const client = await connectGovernedReadClient();
   try {
     await prepareQueryContext(client, orgId);
     await beginGovernedReadTransaction(client, orgId, 10_000);
@@ -219,7 +219,7 @@ export async function listSchema(orgId: string): Promise<SchemaTable[]> {
  * the only place that grants it SELECT privileges.
  */
 export async function ensureReadRole(): Promise<void> {
-  const client = await pool.connect();
+  const client = await connectGovernedReadClient();
   try {
     const r = await client.query(
       `select 1 from pg_roles r

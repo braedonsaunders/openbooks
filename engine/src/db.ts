@@ -62,6 +62,30 @@ basePool.on("error", (err) => {
   console.error("[pg pool] transient client error (ignored, will reconnect):", (err as Error).message);
 });
 
+// Governed ad-hoc SQL must never compete with request transactions for the
+// same clients. A lifecycle command can hold one request client and a row lock
+// while a before_* script runs ob.query; if that query checked out from the
+// request pool, ten concurrent commands could occupy every client and wait in
+// a cycle. This physically separate pool retains the SQL API's real READ ONLY
+// transaction and SELECT-only role without weakening command atomicity.
+const governedReadPool = new pg.Pool({
+  connectionString: databaseUrl,
+  max: 10,
+  keepAlive: true,
+  connectionTimeoutMillis: 30_000,
+  query_timeout: 120_000,
+  statement_timeout: 120_000,
+  // CLI callers historically close only the request pool. An idle governed
+  // connection must not keep those short-lived processes alive on its own.
+  allowExitOnIdle: true,
+});
+governedReadPool.on("error", (err) => {
+  console.error(
+    "[pg governed read pool] transient client error (ignored, will reconnect):",
+    (err as Error).message,
+  );
+});
+
 // A separate pool for long-running, org-spanning units of work (the sandbox
 // clone engine, refresh, and org wipes) run via withOrg. These single
 // transactions can far exceed the request pool's 120s client query_timeout —
@@ -107,6 +131,30 @@ function protectCheckedOutClient(client: pg.PoolClient, label: string): pg.PoolC
 
 const rawLongConnect = async (): Promise<pg.PoolClient> =>
   protectCheckedOutClient(await longPool.connect(), "pg longPool");
+
+/**
+ * Check out isolated capacity for governed user SQL. Tenant context and the
+ * READ ONLY/openbooks_read transaction are established by sqlapi.ts after the
+ * application role prepares the connection-local tenant context table.
+ */
+export const connectGovernedReadClient = async (): Promise<pg.PoolClient> => {
+  const client = protectCheckedOutClient(
+    await governedReadPool.connect(),
+    "pg governed read pool",
+  );
+  try {
+    // The SQL API applies its tenant identity transaction-locally after it
+    // prepares the protected temp context. Until then, fail closed even if a
+    // previous caller left session GUCs behind before its client was returned.
+    await client.query(
+      "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'off', false)",
+    );
+    return client;
+  } catch (error) {
+    client.release(error as Error);
+    throw error;
+  }
+};
 
 /** Timeout-free pool for long org-scoped units of work (backups, clones). */
 export { longPool };
@@ -180,7 +228,11 @@ async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise
 // carry the RLS GUCs. Each pooled query brackets applyGuc + the query on one
 // dedicated client; each pooled connect (used by drizzle transactions) applies
 // the GUCs up front.
-(basePool).query = async (text: any, params?: any): Promise<any> => {
+type PoolQueryInput = string | pg.QueryConfig<unknown[]>;
+const queryWithOrgContext = async (
+  text: PoolQueryInput,
+  params?: unknown[],
+): Promise<pg.QueryResult> => {
   const ctx = activeOrgCtx();
   const client = await rawConnect();
   try {
@@ -190,17 +242,25 @@ async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise
     client.release();
   }
 };
-const origConnectDescriptor = pg.Pool.prototype.connect;
-(basePool).connect = async (cb?: unknown): Promise<any> => {
+basePool.query = queryWithOrgContext as typeof basePool.query;
+
+type PoolConnectCallback = (
+  error: Error | undefined,
+  client: pg.PoolClient | undefined,
+  release: (error?: Error | boolean) => void,
+) => void;
+const connectWithOrgContext = async (
+  callback?: PoolConnectCallback,
+): Promise<pg.PoolClient | void> => {
   const client = await rawConnect();
   await applyGuc(client, activeOrgCtx());
-  if (typeof cb === "function") {
-    cb(null, client, client.release.bind(client));
+  if (callback) {
+    callback(undefined, client, client.release.bind(client));
     return;
   }
   return client;
 };
-void origConnectDescriptor;
+basePool.connect = connectWithOrgContext as typeof basePool.connect;
 
 export const pool = basePool;
 const poolDb = drizzle({ client: basePool });

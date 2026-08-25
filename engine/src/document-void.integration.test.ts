@@ -4,11 +4,86 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { deleteDocument } from "./document-delete.ts";
-import { requestDocumentVoid } from "./document-void.ts";
+import { DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedApprovedQuote(
+  org: ScratchOrg,
+  actorId: string,
+  documentNumber: string,
+): Promise<string> {
+  const documentId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, party_id, subsidiary_id,
+       document_date, currency, status, created_by)
+    values (
+      ${documentId}, ${org.orgId}, 'quote', ${documentNumber},
+      ${org.customerId}, ${org.subsidiaryId}, ${org.date}, 'CAD',
+      'approved', ${actorId}
+    )
+  `);
+  return documentId;
+}
+
+function journalScriptSource(
+  org: ScratchOrg,
+  marker: string,
+  opts: { pause?: boolean; abortAfterCreate?: boolean } = {},
+): string {
+  const input = JSON.stringify({
+    documentDate: org.date,
+    memo: `before_void artifact ${marker}`,
+    referenceNumber: marker,
+    lines: [
+      { accountId: org.accounts.cogs, amount: "1" },
+      { accountId: org.accounts.bank, amount: "-1" },
+    ],
+  });
+  return `
+    function main() {
+      ${opts.pause ? `ob.query("select pg_sleep(0.25)::text as waited");` : ""}
+      ob.journal.create(${input});
+      ${opts.abortAfterCreate ? `ob.abort("forced failure after journal creation");` : ""}
+    }
+  `;
+}
+
+async function seedBeforeVoidScript(
+  org: ScratchOrg,
+  actorId: string,
+  source: string,
+): Promise<string> {
+  const scriptId = randomUUID();
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(settings, '{features,scripts}', 'true'::jsonb, true)
+     where id = ${org.orgId}
+  `);
+  await db.execute(sql`
+    insert into user_scripts
+      (id, org_id, name, trigger_point, document_kind, source,
+       timeout_ms, sort_order, is_active, created_by)
+    values (
+      ${scriptId}, ${org.orgId}, 'Void journal probe', 'before_void',
+      'quote', ${source}, 5000, 1, true, ${actorId}
+    )
+  `);
+  return scriptId;
+}
+
+async function countRows(query: ReturnType<typeof sql>): Promise<number> {
+  const result = await db.execute<{ count: number }>(query);
+  return Number(result.rows[0]!.count);
+}
 
 test("controlled void preserves the source and posts an exact open-period reversal", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -147,6 +222,306 @@ test("controlled void preserves the source and posts an exact open-period revers
       mode: "transaction_void",
       reason: "Duplicate vendor invoice entered in error",
     });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("concurrent void contenders commit one before_void journal from the claimed request", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Concurrent Void Controller", "admin");
+    const documentId = await seedApprovedQuote(org, actorId, "QUOTE-VOID-RACE-1");
+    const marker = `void-race-${randomUUID()}`;
+    const scriptId = await seedBeforeVoidScript(
+      org,
+      actorId,
+      journalScriptSource(org, marker, { pause: true }),
+    );
+
+    const settled = await Promise.allSettled(
+      Array.from({ length: 2 }, (_, index) => requestDocumentVoid({
+        documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: `Concurrent void request ${index + 1}`,
+        reversalDate: org.date,
+        source: "api",
+      })),
+    );
+
+    const fulfilled = settled.filter(
+      (result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof requestDocumentVoid>>> =>
+        result.status === "fulfilled",
+    );
+    const rejected = settled.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    assert.equal(fulfilled.length, 1, "one request owns the void claim");
+    assert.equal(rejected.length, 1, "the duplicate request loses before scripts run");
+    assert.equal(fulfilled[0]!.value.status, "voided");
+    assert.ok(rejected[0]!.reason instanceof DocumentVoidError);
+
+    const source = await db.execute<{
+      status: string;
+      void_requested_at: Date | null;
+    }>(sql`
+      select status, void_requested_at
+        from documents
+       where id = ${documentId} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(source.rows[0], { status: "voided", void_requested_at: null });
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from script_runs
+         where org_id = ${org.orgId}
+           and script_id = ${scriptId}
+           and target_id = ${documentId}
+           and status = 'ok'
+      `),
+      1,
+      "only the claimed request executes before_void",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from documents
+         where org_id = ${org.orgId}
+           and kind = 'journal'
+           and reference_number = ${marker}
+           and status = 'draft'
+      `),
+      1,
+      "one claimed request commits one draft journal",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from document_lines line
+          join documents journal
+            on journal.id = line.document_id and journal.org_id = line.org_id
+         where journal.org_id = ${org.orgId}
+           and journal.kind = 'journal'
+           and journal.reference_number = ${marker}
+      `),
+      2,
+      "the sole journal artifact is complete and balanced",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'documents'
+           and row_id = ${documentId}
+           and action = 'update'
+           and changes->>'mode' = 'void_request'
+      `),
+      1,
+      "the winning claim has one durable request audit",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a stale exact-revision token refuses the void before any before_void effect", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Fenced Void Controller", "admin");
+    const documentId = await seedApprovedQuote(org, actorId, "QUOTE-VOID-FENCE-1");
+    await seedBeforeVoidScript(org, actorId, journalScriptSource(org, `void-fence-${randomUUID()}`));
+
+    const storedUpdatedAt = (
+      await db.execute<{ updated_at: Date | string }>(sql`
+        select updated_at
+          from documents
+         where id = ${documentId} and org_id = ${org.orgId}
+      `)
+    ).rows[0]!.updated_at;
+    // The client echoes documents.updated_at as an ISO string truncated to
+    // milliseconds; both sides of the fence compare at that precision.
+    const exactToken = new Date(new Date(storedUpdatedAt as string).getTime()).toISOString();
+    const staleToken = new Date(new Date(exactToken).getTime() - 3_600_000).toISOString();
+
+    await assert.rejects(
+      requestDocumentVoid({
+        documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "Stale view must not cancel this document",
+        reversalDate: org.date,
+        source: "api",
+        expectedUpdatedAt: staleToken,
+      }),
+      /changed after you opened it/,
+    );
+
+    // The refusal leaves the issued document exactly as it was: no claim, no
+    // request audit, and not one before_void effect.
+    const refused = (await db.execute<{
+      status: string;
+      void_requested_at: Date | null;
+    }>(sql`
+      select status, void_requested_at
+        from documents
+       where id = ${documentId} and org_id = ${org.orgId}
+    `));
+    assert.deepEqual(refused.rows[0], { status: "approved", void_requested_at: null });
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from audit_log
+         where org_id = ${org.orgId}
+           and table_name = 'documents'
+           and row_id = ${documentId}
+           and changes->>'mode' = 'void_request'
+      `),
+      0,
+      "the stale request wrote no void-request audit",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from script_runs
+         where org_id = ${org.orgId} and target_id = ${documentId}
+      `),
+      0,
+      "no before_void script ran against the stale view",
+    );
+
+    // The stored revision admits the very same void.
+    const result = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Current revision completes normally",
+      reversalDate: org.date,
+      source: "api",
+      expectedUpdatedAt: exactToken,
+    });
+    assert.equal(result.status, "voided");
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from script_runs
+         where org_id = ${org.orgId}
+           and target_id = ${documentId}
+           and status = 'ok'
+      `),
+      1,
+      "the fenced retry from the current revision runs before_void once",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failed before_void effect rolls back its claim and journal before a safe retry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Retrying Void Controller", "admin");
+    const documentId = await seedApprovedQuote(org, actorId, "QUOTE-VOID-RETRY-1");
+    const marker = `void-retry-${randomUUID()}`;
+    const scriptId = await seedBeforeVoidScript(
+      org,
+      actorId,
+      journalScriptSource(org, marker, { abortAfterCreate: true }),
+    );
+
+    await assert.rejects(
+      requestDocumentVoid({
+        documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "Test rollback after a script veto",
+        reversalDate: org.date,
+        source: "api",
+      }),
+      (error: unknown) =>
+        error instanceof DocumentVoidError
+        && /forced failure after journal creation/.test(error.message),
+    );
+
+    const afterFailure = await db.execute<{
+      status: string;
+      void_requested_at: Date | null;
+      void_requested_by: string | null;
+      void_reversal_date: string | null;
+    }>(sql`
+      select status, void_requested_at, void_requested_by,
+             void_reversal_date::text as void_reversal_date
+        from documents
+       where id = ${documentId} and org_id = ${org.orgId}
+    `);
+    assert.deepEqual(afterFailure.rows[0], {
+      status: "approved",
+      void_requested_at: null,
+      void_requested_by: null,
+      void_reversal_date: null,
+    });
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from documents
+         where org_id = ${org.orgId}
+           and kind = 'journal'
+           and reference_number = ${marker}
+      `),
+      0,
+      "the veto rolls the material script effect back",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from script_runs
+         where org_id = ${org.orgId}
+           and script_id = ${scriptId}
+           and target_id = ${documentId}
+      `),
+      0,
+      "the failed command leaves no committed script-attempt state",
+    );
+
+    await db.execute(sql`
+      update user_scripts
+         set source = ${journalScriptSource(org, marker)}, updated_at = now()
+       where id = ${scriptId} and org_id = ${org.orgId}
+    `);
+    const retry = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Retry after the script was corrected",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(retry.status, "voided");
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from documents
+         where org_id = ${org.orgId}
+           and kind = 'journal'
+           and reference_number = ${marker}
+           and status = 'draft'
+      `),
+      1,
+      "the clean retry commits exactly one journal",
+    );
+    assert.equal(
+      await countRows(sql`
+        select count(*)::int as count
+          from script_runs
+         where org_id = ${org.orgId}
+           and script_id = ${scriptId}
+           and target_id = ${documentId}
+           and status = 'ok'
+      `),
+      1,
+      "the successful retry has one committed script audit",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
