@@ -115,7 +115,7 @@ test("the route acknowledges a signed adyen delivery after isolating its malform
       merchantReference: "tok_route_bad",
       amount: { value: "103.5", currency: "CAD" },
       eventCode: "AUTHORISATION",
-      success: "true",
+      success: "TRUE",
     };
     const sibling = {
       pspReference: "PSP-ROUTE-GOOD",

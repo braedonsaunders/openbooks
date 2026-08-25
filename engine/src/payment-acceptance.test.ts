@@ -368,6 +368,39 @@ test("adyen webhook: a delivery whose only actionable item is malformed stays au
   assert.equal(firstEvent, null);
 });
 
+test("adyen webhook: success flags normalize boolean and case variants", () => {
+  const keyBytes = Buffer.alloc(32, 17);
+  const secret = keyBytes.toString("base64");
+
+  const { body: boolBody } = signedAdyenDelivery(Buffer.from(keyBytes), [{
+    pspReference: "PSP-BOOL",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_bool",
+    amount: { value: 10300, currency: "CAD" },
+    eventCode: "AUTHORISATION",
+    success: true,
+  }]);
+  const boolEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, boolBody, { webhookSecret: secret });
+  assert.ok(boolEvent);
+  assert.equal(boolEvent.status, "succeeded");
+  assert.equal(boolEvent.externalRef, "PSP-BOOL");
+
+  const { body: capsBody } = signedAdyenDelivery(Buffer.from(keyBytes), [{
+    pspReference: "PSP-CAPS",
+    originalReference: "",
+    merchantAccountCode: "TestMerchant",
+    merchantReference: "tok_caps",
+    amount: { value: 10300, currency: "CAD" },
+    eventCode: "AUTHORISATION",
+    success: " TRUE ",
+  }]);
+  const capsEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, capsBody, { webhookSecret: secret });
+  assert.ok(capsEvent);
+  assert.equal(capsEvent.status, "succeeded");
+  assert.equal(capsEvent.externalRef, "PSP-CAPS");
+});
+
 test("gocardless webhook: raw-body HMAC verified", () => {
   const secret = "gc-whsec";
   const body = JSON.stringify({

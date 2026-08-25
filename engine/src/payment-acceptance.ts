@@ -388,8 +388,21 @@ const stripeAdapter: PaymentProviderAdapter = {
  *  converted exactly or not at all: a value that cannot normalize (e.g. a
  *  fractional minor-unit amount) throws to the caller's per-item quarantine
  *  rather than settling on coerced data. */
+function normalizeAdyenSuccessFlag(value: unknown): "true" | "false" | null {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "false") return normalized as "true" | "false";
+    return null;
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return null;
+}
+
 function normalizeAdyenNotificationItem(payload: Record<string, unknown>, item: any): WebhookEvent | null {
-  if (item.eventCode === "AUTHORISATION" && item.success === "true") {
+  const successFlag = normalizeAdyenSuccessFlag(item.success);
+  if (item.eventCode === "AUTHORISATION" && successFlag === "true") {
     return {
       externalRef: String(item.pspReference ?? ""),
       linkToken: item.merchantReference ?? null,
