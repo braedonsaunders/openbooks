@@ -195,40 +195,55 @@ export const bankMatchRules = pgTable(
  * Payment runs: select approved payables → generate instructions → export
  * EFT/ACH file (or print cheques) → post payments on confirmation.
  */
-export const paymentRuns = pgTable("payment_runs", {
-  id: id(),
-  orgId: orgRef(),
-  runNumber: text("run_number").notNull(),
-  bankAccountId: uuid("bank_account_id").notNull(),
-  paymentBankProfileId: uuid("payment_bank_profile_id"),
-  subsidiaryId: uuid("subsidiary_id"),
-  sourceScheduleId: uuid("source_schedule_id"),
-  parentPaymentRunId: uuid("parent_payment_run_id"),
-  method: text("method", { enum: ["eft", "ach", "sepa", "wire", "cheque", "direct_debit", "positive_pay", "custom"] }).notNull(),
-  direction: text("direction", { enum: ["outbound", "inbound"] }).notNull().default("outbound"),
-  purpose: text("purpose", { enum: ["vendor_payments", "customer_collections", "refunds", "positive_pay"] })
-    .notNull()
-    .default("vendor_payments"),
-  currency: currencyCode("currency"),
-  status: text("status", { enum: ["draft", "pending_approval", "approved", "processing", "generated", "delivered", "partially_failed", "confirmed", "settled", "returned", "rejected", "rolled_back", "cancelled"] })
-    .notNull()
-    .default("draft"),
-  selectionCriteria: jsonb("selection_criteria").notNull().default({}),
-  paymentCount: integer("payment_count").notNull().default(0),
-  totalAmount: money("total_amount").notNull().default("0"),
-  scheduledFor: date("scheduled_for"),
-  exportedFileRef: text("exported_file_ref"),
-  exportedAt: timestamp("exported_at", { withTimezone: true }),
-  submittedAt: timestamp("submitted_at", { withTimezone: true }),
-  submittedBy: uuid("submitted_by"),
-  approvedAt: timestamp("approved_at", { withTimezone: true }),
-  approvedBy: uuid("approved_by"),
-  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
-  rejectedBy: uuid("rejected_by"),
-  rejectionReason: text("rejection_reason"),
-  settledAt: timestamp("settled_at", { withTimezone: true }),
-  ...auditColumns,
-});
+export const paymentRuns = pgTable(
+  "payment_runs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    runNumber: text("run_number").notNull(),
+    bankAccountId: uuid("bank_account_id").notNull(),
+    paymentBankProfileId: uuid("payment_bank_profile_id"),
+    subsidiaryId: uuid("subsidiary_id"),
+    sourceScheduleId: uuid("source_schedule_id"),
+    parentPaymentRunId: uuid("parent_payment_run_id"),
+    method: text("method", { enum: ["eft", "ach", "sepa", "wire", "cheque", "direct_debit", "positive_pay", "custom"] }).notNull(),
+    direction: text("direction", { enum: ["outbound", "inbound"] }).notNull().default("outbound"),
+    purpose: text("purpose", { enum: ["vendor_payments", "customer_collections", "refunds", "positive_pay"] })
+      .notNull()
+      .default("vendor_payments"),
+    currency: currencyCode("currency"),
+    status: text("status", { enum: ["draft", "pending_approval", "approved", "processing", "generated", "delivered", "partially_failed", "confirmed", "settled", "returned", "rejected", "rolled_back", "cancelled"] })
+      .notNull()
+      .default("draft"),
+    selectionCriteria: jsonb("selection_criteria").notNull().default({}),
+    paymentCount: integer("payment_count").notNull().default(0),
+    totalAmount: money("total_amount").notNull().default("0"),
+    scheduledFor: date("scheduled_for"),
+    exportedFileRef: text("exported_file_ref"),
+    exportedAt: timestamp("exported_at", { withTimezone: true }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: uuid("submitted_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectedBy: uuid("rejected_by"),
+    rejectionReason: text("rejection_reason"),
+    settledAt: timestamp("settled_at", { withTimezone: true }),
+    /** Random per-claim posting lease; instruction and completion writes must match the token currently stored on the run. */
+    postingClaimToken: uuid("posting_claim_token"),
+    /** When the current posting claim was taken or last made progress; a claim older than the staleness window may be recovered by a new poster. */
+    postingClaimedAt: timestamp("posting_claimed_at", { withTimezone: true }),
+    /** User that took the current posting claim. */
+    postingClaimedBy: uuid("posting_claimed_by"),
+    ...auditColumns,
+  },
+  (t) => [
+    // Recovery sweeps and operational dashboards look for exactly these rows.
+    index("payment_runs_posting_claims")
+      .on(t.orgId, t.postingClaimedAt)
+      .where(sql`${t.status} = 'processing'`),
+  ],
+);
 
 /**
  * SFTP daemon runtime config — a single global row (the deployment hosts one
