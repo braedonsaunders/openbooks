@@ -31,14 +31,33 @@ export default async function LotRecallReport({
   const definitionId = await builtInReportDefinitionId(authz.user.orgId, 'lot-recall')
   if (!definitionId) notFound()
 
-  const source = await searchParams
+  const rawParams = await searchParams
+  const source = new URLSearchParams()
+  for (const [key, value] of Object.entries(rawParams)) {
+    if (value === undefined) continue
+    if (Array.isArray(value)) {
+      for (const entry of value) source.append(key, entry)
+    } else {
+      source.append(key, value)
+    }
+  }
+
   const forwarded = new URLSearchParams()
-  for (const [key, raw] of Object.entries(source)) {
+  for (const [key, raw] of Object.entries(rawParams)) {
     if (!FORWARDED_PARAMS.has(key)) continue
-    for (const value of Array.isArray(raw) ? raw : raw ? [raw] : []) {
+    const values = Array.isArray(raw) ? raw : raw ? [raw] : []
+    for (const value of values) {
       forwarded.append(key, value)
     }
   }
+  for (const [key, value] of source.entries()) {
+    if (!key.startsWith('filter.')) continue
+    forwarded.append(key, value)
+  }
+
+  const viewFilter = source.get('savedView')
+  if (viewFilter) forwarded.set('savedView', viewFilter)
+
   const query = forwarded.toString()
   redirect(`/reports/custom/run/${definitionId}${query ? `?${query}` : ''}`)
 }
