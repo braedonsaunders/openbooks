@@ -27,12 +27,17 @@ const {
   DocumentEditError,
   requireDocumentEditRevision,
   runDocumentVersionedTransaction,
+  runPostedCorrectionDraftFlows,
   validateCorrectionReason,
   validateEditableDocumentLines,
 } = await import('./documents.ts')
 const { computeBillTotals } = await import('./bills.ts')
 const { withSimClock } = await import('@openbooks/engine/src/clock.ts')
-const { db, env, pool, withBypass, withOrgContext } = await import('@openbooks/engine/src/db.ts')
+const {
+  DocumentVoidError,
+  requestDocumentVoid,
+} = await import('@openbooks/engine/src/document-void.ts')
+const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/db.ts')
 const { postDocument } = await import('@openbooks/engine/src/posting.ts')
 const {
   createScratchOrg,
@@ -199,6 +204,7 @@ test(
     const correctionSourceId = randomUUID()
     const correctionEntryId = randomUUID()
     const applicationCorrectionSourceId = randomUUID()
+    const voidRollbackSourceId = randomUUID()
     const createFlowId = randomUUID()
     const correctionFlowId = randomUUID()
     const correctionFlowGuard = `occ_correction_flow_${correctionFlowId.replaceAll('-', '')}`
@@ -281,6 +287,27 @@ test(
            amount, tax_amount, extra_dims, custom, created_by, updated_by)
         values
           (${org.orgId}, ${applicationCorrectionSourceId}, 1,
+           ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
+           '{}'::jsonb, ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id,
+           document_date, posting_date, currency, fx_rate, status, subtotal,
+           tax_total, total, memo, custom, extra_dims, created_by, updated_by)
+        values
+          (${voidRollbackSourceId}, ${org.orgId}, 'vendor_bill',
+           'OCC-VOID-ROLLBACK', ${org.vendorId}, ${org.subsidiaryId},
+           ${org.date}, ${org.date}, 'CAD', '1', 'approved', '125', '0', '125',
+           'void rollback source', '{}'::jsonb, '{}'::jsonb,
+           ${actorId}, ${actorId})
+      `)
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price,
+           amount, tax_amount, extra_dims, custom, created_by, updated_by)
+        values
+          (${org.orgId}, ${voidRollbackSourceId}, 1,
            ${org.accounts.cogs}, '1', '125', '125', '0', '{}'::jsonb,
            '{}'::jsonb, ${actorId}, ${actorId})
       `)
@@ -775,6 +802,146 @@ test(
           notifications: 1,
         })
       })
+
+      await t.test('a failing void rolls the whole posted correction back atomically', async () => {
+        await withOrgContext(org.orgId, () => postDocument(
+          voidRollbackSourceId,
+          {
+            control: {
+              ar: org.accounts.ar,
+              ap: org.accounts.ap,
+              bank: org.accounts.bank,
+            },
+          },
+          { audit: { actorId, source: 'test' } },
+        ))
+        // A void claim that lands between the replacement draft and the void
+        // request is exactly the window the removed compensating-delete
+        // fallback could not reliably clean up. With the claim in place the
+        // void request can never succeed, so the whole unit must roll back.
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            update documents
+               set void_reason = 'claimed concurrently',
+                   void_requested_at = now(),
+                   void_requested_by = ${actorId},
+                   void_reversal_date = ${org.date},
+                   updated_by = ${actorId}
+             where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
+          `)
+        })
+
+        // The UI route's composition: both writes inside one tenant
+        // transaction, flows deferred until it commits.
+        const runCorrectionCommand = () => withSimClock(org.date, () => withOrgContext(
+          org.orgId,
+          async () => {
+            const outcome = await withOrgTransaction(org.orgId, async () => {
+              const source = await loadStoredDocument(org.orgId, voidRollbackSourceId)
+              const replacement = await createPostedCorrectionDraft(
+                voidRollbackSourceId,
+                {
+                  expectedUpdatedAt: source.updatedAt,
+                  amendmentReason: 'Correct duplicated vendor charge',
+                  partyId: org.vendorId,
+                  documentDate: org.date,
+                  memo: 'atomic correction',
+                  lines: [{ accountId: org.accounts.cogs, amount: '125' }],
+                },
+                editContext,
+                { deferFlows: true },
+              )
+              const result = await requestDocumentVoid({
+                documentId: voidRollbackSourceId,
+                orgId: org.orgId,
+                actorId,
+                reason: 'Correct duplicated vendor charge',
+                source: 'ui',
+              })
+              return { replacement, result }
+            })
+            await runPostedCorrectionDraftFlows(outcome.replacement.id, 'vendor_bill', {
+              orgId: org.orgId,
+              userId: actorId,
+              source: 'posted_correction',
+            })
+            return outcome
+          },
+        ))
+
+        const attempt = await settle(runCorrectionCommand())
+        assert.ok(
+          attempt.status === 'rejected'
+            && attempt.reason instanceof DocumentVoidError
+            && /already has a pending void request/.test(attempt.reason.message),
+        )
+
+        const lineage = await withOrgContext(org.orgId, async () => (await db.execute<{
+          links: number
+          replacements: number
+        }>(sql`
+          select
+            (select count(*)::int from document_links
+              where org_id = ${org.orgId}
+                and to_document_id = ${voidRollbackSourceId}
+                and link_type = 'reverses') as links,
+            (select count(*)::int from documents
+              where org_id = ${org.orgId}
+                and custom->>'correctionOf' = ${voidRollbackSourceId}) as replacements
+        `)).rows[0])
+        assert.deepEqual(lineage, { links: 0, replacements: 0 })
+        assert.equal((await loadStoredDocument(org.orgId, voidRollbackSourceId)).status, 'posted')
+
+        // Fail-closed means recoverable: once the competing claim clears, the
+        // same request succeeds end to end — no stuck correction edge.
+        await withOrgContext(org.orgId, async () => {
+          await db.execute(sql`
+            update documents
+               set void_reason = null,
+                   void_requested_at = null,
+                   void_requested_by = null,
+                   void_reversal_date = null,
+                   updated_by = ${actorId}
+             where id = ${voidRollbackSourceId} and org_id = ${org.orgId}
+          `)
+        })
+        const retry = await settle(runCorrectionCommand())
+        assert.ok(retry.status === 'fulfilled' && retry.value.result.status === 'voided')
+
+        const committed = await withOrgContext(org.orgId, async () => (await db.execute<{
+          sourceStatus: string
+          links: number
+          replacementMemo: string | null
+          runs: number
+        }>(sql`
+          select source.status as "sourceStatus",
+                 (select count(*)::int from document_links l2
+                   where l2.org_id = source.org_id
+                     and l2.to_document_id = source.id
+                     and l2.link_type = 'reverses') as links,
+                 (select r.memo from document_links l3
+                    join documents r on r.org_id = l3.org_id and r.id = l3.from_document_id
+                   where l3.org_id = source.org_id
+                     and l3.to_document_id = source.id
+                     and l3.link_type = 'reverses') as "replacementMemo",
+                 (select count(*)::int from flow_runs
+                   where org_id = ${org.orgId}
+                     and subject_id = (
+                       select l4.from_document_id from document_links l4
+                        where l4.org_id = source.org_id
+                          and l4.to_document_id = source.id
+                          and l4.link_type = 'reverses'
+                     )) as runs
+            from documents source
+           where source.org_id = ${org.orgId} and source.id = ${voidRollbackSourceId}
+        `)).rows[0])
+        assert.deepEqual(committed, {
+          sourceStatus: 'voided',
+          links: 1,
+          replacementMemo: 'atomic correction',
+          runs: 1,
+        })
+      })
     } finally {
       await withBypass(async () => {
         await db.execute(sql.raw(`drop trigger if exists ${correctionFlowGuard} on flow_runs`))
@@ -923,4 +1090,30 @@ test("the posted-correction path records its reverses edge through the mandatory
   const fn = source.match(/export async function createPostedCorrectionDraft[\s\S]*?\n\}/)
   assert.ok(fn, 'createPostedCorrectionDraft found')
   assert.doesNotMatch(fn[0], /linkType:/)
+})
+
+test('the UI correction route commits the replacement and its void as one atomic unit', () => {
+  // Regression pin (source-level): POST used to create the replacement, then
+  // request the void outside any transaction, and paper over failures with a
+  // best-effort deleteDocument whose errors were swallowed — so a failed void
+  // (and a failed cleanup) left a `reverses` edge against a still-posted
+  // source, permanently bricking further corrections with a 409 conflict.
+  const routeSource = readFileSync(
+    new URL('../app/api/documents/[id]/correct/route.ts', import.meta.url),
+    'utf8',
+  )
+  const handler = routeSource.slice(routeSource.indexOf('export async function POST'))
+  const atomic = handler.indexOf('withOrgTransaction(')
+  const create = handler.indexOf('createPostedCorrectionDraft(', atomic)
+  const defer = handler.indexOf('{ deferFlows: true }', create)
+  const voidCall = handler.indexOf('requestDocumentVoid(', defer)
+  const dispatch = handler.indexOf('runPostedCorrectionDraftFlows(', voidCall)
+  assert.ok(atomic >= 0 && create > atomic && defer > create && voidCall > defer)
+  // Flow dispatch happens only after the atomic unit resolves.
+  assert.ok(dispatch > voidCall)
+  // Neither write may be separated from the wrapper by an early return.
+  assert.doesNotMatch(handler.slice(atomic, voidCall), /NextResponse\.json/)
+  // The swallowed compensating delete must stay dead.
+  assert.doesNotMatch(handler, /deleteDocument/)
+  assert.doesNotMatch(handler, /\.catch\(\(\) => \{\}\)/)
 })

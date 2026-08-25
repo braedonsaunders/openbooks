@@ -1,16 +1,16 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
-import { deleteDocument } from '@openbooks/engine/src/document-delete.ts'
 import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../../../lib/authz'
 import {
   createPermission,
   createPostedCorrectionDraft,
+  runPostedCorrectionDraftFlows,
   DOC_KINDS,
   isDocKindEnabled,
   DocumentEditError,
@@ -67,37 +67,50 @@ export async function POST(
   if (body.subsidiaryId !== undefined && !subsidiariesInScope(authz, [body.subsidiaryId])) {
     return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
   }
-  let replacement: { id: string; documentNumber: string } | null = null
+  let outcome: {
+    replacement: { id: string; documentNumber: string }
+    result: { status: 'voided' | 'pending_approval'; runId: string | null }
+  }
   try {
-    replacement = await createPostedCorrectionDraft(id, body, {
+    // The replacement draft (and its mandatory `reverses` evidence) plus the
+    // source's controlled void are one atomic unit. A void that fails for any
+    // reason — a pending void claim, reconciliation, applied payments, a
+    // closed reversal period, a before_void veto — rolls the replacement and
+    // its lineage back with it, so the source can never be left carrying a
+    // correction edge while it is still posted.
+    outcome = await withOrgTransaction(authz.user.orgId, async () => {
+      const replacement = await createPostedCorrectionDraft(id, body, {
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        source: 'posted_correction',
+      }, { deferFlows: true })
+      const result = await requestDocumentVoid({
+        documentId: id,
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        reason: body.amendmentReason ?? '',
+        source: 'ui',
+      })
+      return { replacement, result }
+    })
+    // Flow plans may enqueue email or other externally visible work; dispatch
+    // only after the atomic unit above has committed.
+    await runPostedCorrectionDraftFlows(outcome.replacement.id, source.kind, {
       orgId: authz.user.orgId,
       userId: authz.user.id,
       source: 'posted_correction',
     })
-    const result = await requestDocumentVoid({
-      documentId: id,
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      reason: body.amendmentReason ?? '',
-      source: 'ui',
-    })
     return NextResponse.json(
       {
         ok: true,
-        correctionId: replacement.id,
-        correctionNumber: replacement.documentNumber,
-        voidStatus: result.status,
-        requestId: result.runId,
+        correctionId: outcome.replacement.id,
+        correctionNumber: outcome.replacement.documentNumber,
+        voidStatus: outcome.result.status,
+        requestId: outcome.result.runId,
       },
-      { status: result.status === 'pending_approval' ? 202 : 201 },
+      { status: outcome.result.status === 'pending_approval' ? 202 : 201 },
     )
   } catch (error) {
-    if (replacement) {
-      await deleteDocument(replacement.id, authz.user.id, authz.user.orgId, {
-        source: 'posted_correction_rollback',
-        reason: 'correction request failed',
-      }).catch(() => {})
-    }
     if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {
       return NextResponse.json({ error: error.message }, { status: error instanceof DocumentEditError ? error.status : 422 })
     }
