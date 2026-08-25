@@ -358,23 +358,24 @@ test('global search threads allowedSubsidiaryIds into contacts and transactions'
   const src = source('lib/search.ts')
   assert.match(src, /const scope = authz\.allowedSubsidiaryIds/)
   assert.match(src, /searchContacts\(orgId, q, like, scope\)/)
-  assert.match(src, /searchTransactions\(orgId, q, like, num, scope\)/)
+  assert.match(src, /searchTransactions\(orgId, q, like, num, transactionKinds, scope\)/)
 })
 
 test('transaction hits obey the documents visibility predicate on every leg', () => {
   const src = source('lib/search.ts')
-  assert.match(src, /const subsidiaryFilter = subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, scope\)/)
+  assert.match(src, /const documentSubsidiaryFilter = subsidiaryVisibleFilter\(sql`d\.subsidiary_id`, scope\)/)
   // Amount leg, text leg, party leg, and the final projection all filter —
   // a leak through any single leg discloses the record.
-  assert.ok(count(src, '${hiddenKindFilter}${subsidiaryFilter}') >= 4,
+  assert.ok(count(src, '${visibleKindFilter}${documentSubsidiaryFilter}') >= 4,
     'candidate legs and final select must each carry the scope filter')
 })
 
 test('contact hits use the party lists\u2019 own org-wide predicate', () => {
   const src = source('lib/search.ts')
-  assert.ok(
-    src.includes('p.subsidiary_id is null or p.subsidiary_id = any('),
-    'null-subsidiary parties stay searchable exactly like the party lists render them',
-  )
-  assert.match(src, /: sql`and false`/)
+  assert.match(src, /const subsidiaryFilter = masterDataSubsidiaryFilter\(sql`p\.subsidiary_id`, scope\)/,
+    'contact search must invoke the master-data scope helper')
+  assert.match(src, /\(\$\{column\} is null or \$\{column\} = any\(/,
+    'null-subsidiary parties stay searchable exactly like the party lists render them')
+  assert.match(src, /if \(ids\.length === 0\) return sql`and false`/,
+    'an empty scope fails closed before the party query runs')
 })
