@@ -370,7 +370,30 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
   return snapshots;
 }
 
+/**
+ * A worker that crashes mid-run leaves its row stuck at 'running', and the
+ * fx_provider_runs_one_running unique index would then reject every future
+ * run for that config forever. A live run cannot legitimately outlast this
+ * budget: each provider request times out after 20 seconds and even the
+ * worst case (Open Exchange Rates, one request per lookback day, 31 days)
+ * finishes far inside it, so an older 'running' row belongs to a dead
+ * process, not a busy one. Same freshness idiom as continuous-close runs.
+ */
+const FX_RUN_STALE_AFTER = sql.raw("interval '30 minutes'");
+const FX_RUN_ABANDONED_MESSAGE =
+  "abandoned: the synchronization process crashed or was killed before recording an outcome; the stalled run was reclaimed automatically";
+
 async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<string> {
+  // Reclaim a crashed run's slot before claiming it: without this the partial
+  // unique index turns one crash into a permanent synchronization outage.
+  // Rows younger than the budget — genuinely running elsewhere — stay put,
+  // so concurrent runs remain mutually exclusive.
+  await db.execute(sql`
+    update fx_provider_runs set status = 'failed',
+      error_message = ${FX_RUN_ABANDONED_MESSAGE}, finished_at = now()
+     where org_id = ${config.orgId} and provider_config_id = ${config.id}
+       and status = 'running' and started_at <= now() - ${FX_RUN_STALE_AFTER}
+  `);
   try {
     const r = (await db.execute<{ id: string }>(sql`
       insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by)
@@ -453,25 +476,32 @@ export async function runFxProvider(
       });
     }
     const next = config.isEnabled ? computeNextSyncAt(config.schedule, config.syncHourUtc, now) : null;
-    await db.execute(sql`
+    // Fenced on status: if this run was already reclaimed as abandoned by a
+    // newer attempt, it must not resurrect its row, and schedule ownership
+    // (last_success_at / watermark / next_sync_at) stays with that newer run.
+    const stamped = await db.execute(sql`
       update fx_provider_runs set status = 'ok', finished_at = now(),
         observations_received = ${result.observationsReceived}, rates_inserted = ${result.ratesInserted},
         rates_updated = ${result.ratesUpdated}, manual_overrides_preserved = ${result.manualOverridesPreserved}
-       where id = ${runId} and org_id = ${orgId}
+       where id = ${runId} and org_id = ${orgId} and status = 'running'
     `);
-    await db.execute(sql`
-      update fx_provider_configs set
-        last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
-        last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
-        last_error = null, next_sync_at = ${next}, updated_at = now()
-       where id = ${config.id} and org_id = ${orgId}
-    `);
+    if (stamped.rowCount) {
+      await db.execute(sql`
+        update fx_provider_configs set
+          last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
+          last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
+          last_error = null, next_sync_at = ${next}, updated_at = now()
+         where id = ${config.id} and org_id = ${orgId}
+      `);
+    }
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : "FX provider synchronization failed";
     const retryAt = config.isEnabled && config.schedule !== "manual" ? new Date(now.getTime() + 60 * 60 * 1000) : null;
-    await db.execute(sql`update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)}, finished_at = now() where id = ${runId} and org_id = ${orgId}`);
-    await db.execute(sql`update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt}, updated_at = now() where id = ${config.id} and org_id = ${orgId}`);
+    const stamped = await db.execute(sql`update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)}, finished_at = now() where id = ${runId} and org_id = ${orgId} and status = 'running'`);
+    if (stamped.rowCount) {
+      await db.execute(sql`update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt}, updated_at = now() where id = ${config.id} and org_id = ${orgId}`);
+    }
     throw error;
   }
 }
