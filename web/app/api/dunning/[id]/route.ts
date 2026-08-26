@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { requirePermission } from "../../../../lib/authz";
+import { guardPermission } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
@@ -47,7 +47,8 @@ async function owned(orgId: string, id: string): Promise<boolean> {
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!(await owned(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -126,7 +127,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   await db.transaction(async (tx) => {
     // Snapshot policy and ladder first: deletion removes the only record of

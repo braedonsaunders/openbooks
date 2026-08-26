@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { requirePermission } from "../../../lib/authz";
+import { guardPermission } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 
 export const runtime = "nodejs";
@@ -47,7 +47,8 @@ function validStages(raw: unknown): StageInput[] | null {
 }
 
 export async function GET() {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const policies = (await db.execute<Record<string, unknown>>(sql`
     select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
            min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive"
@@ -69,7 +70,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;

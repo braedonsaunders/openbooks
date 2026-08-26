@@ -25,7 +25,7 @@ import {
   voidVendorPayApplication,
 } from "@openbooks/engine/src/subcontracts.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { guardPermission, requirePermission } from "../../../lib/authz";
+import { guardPermission } from "../../../lib/authz";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { isFeatureEnabled } from "../../../lib/features";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
@@ -49,7 +49,8 @@ function invalidDecimal(label: string) {
 }
 
 export async function GET(request: Request) {
-  const authz = await requirePermission("ap.read");
+  const authz = await guardPermission("ap.read");
+  if (authz instanceof NextResponse) return authz;
   const feature = await guardSubcontractsFeature(authz.user.orgId);
   if (feature) return feature;
   const orgId = authz.user.orgId;

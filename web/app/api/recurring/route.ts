@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { requirePermission } from "../../../lib/authz";
+import { guardPermission } from "../../../lib/authz";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents";
 
@@ -17,7 +17,8 @@ const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "cus
  * because a schedule mints (and optionally posts) real documents.
  */
 export async function GET() {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const hidden = new Set(await disabledDocKinds(authz.user.orgId));
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
@@ -37,7 +38,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
