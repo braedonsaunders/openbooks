@@ -20,6 +20,7 @@ interface TransactionImportState {
   savepointsOpened: number
   savepointReleases: number
   savepointRollbacks: number
+  failureLifecycle: string[]
   documents: Record<string, unknown>[]
   lines: Record<string, unknown>[]
   attemptedLines: Record<string, unknown>[]
@@ -37,6 +38,7 @@ const importState: TransactionImportState = {
   savepointsOpened: 0,
   savepointReleases: 0,
   savepointRollbacks: 0,
+  failureLifecycle: [],
   documents: [],
   lines: [],
   attemptedLines: [],
@@ -85,8 +87,10 @@ const mockSources = new Map<string, string>([
           state.savepointsOpened++
         } else if (/^\\s*release\\s+savepoint\\s/i.test(text)) {
           state.savepointReleases++
+          state.failureLifecycle.push('release')
         } else if (/^\\s*rollback\\s+to\\s+savepoint\\s/i.test(text)) {
           state.savepointRollbacks++
+          state.failureLifecycle.push('rollback')
         } else if (!inTransaction && isInsertStatement(query)) {
           state.outOfTransactionInsertStatements++
         }
@@ -170,6 +174,7 @@ const mockSources = new Map<string, string>([
           } catch (error) {
             if (unsettledWrites > 0) state.strandedTransactionWrites += unsettledWrites
             state.rollbacks++
+            state.failureLifecycle.push('rethrow')
             throw error
           }
         },
@@ -258,6 +263,7 @@ function resetImportState(failLineInsert: boolean): void {
   importState.savepointsOpened = 0
   importState.savepointReleases = 0
   importState.savepointRollbacks = 0
+  importState.failureLifecycle.length = 0
   importState.documents.length = 0
   importState.lines.length = 0
   importState.attemptedLines.length = 0
@@ -416,7 +422,12 @@ test('transaction import rolls back its draft when line persistence fails', asyn
   // so a surrounding org transaction cannot commit an orphan draft.
   assert.equal(importState.savepointsOpened, 1)
   assert.equal(importState.savepointRollbacks, 1)
-  assert.equal(importState.savepointReleases, 0)
+  assert.equal(importState.savepointReleases, 1)
+  assert.deepEqual(
+    importState.failureLifecycle,
+    ['rollback', 'release', 'rethrow'],
+    'the failed row must release its rolled-back savepoint before its error escapes',
+  )
   // The line write itself must have been issued on the import's transaction
   // connection and settled inside it: no root-connection escape hatch (query
   // builder or raw SQL) and no fire-and-forget write may exist.

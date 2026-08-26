@@ -361,6 +361,7 @@ async function writeTransactions(
           return doc.id
         } catch (e) {
           await tx.execute(sql`rollback to savepoint document_import_row`)
+          await tx.execute(sql`release savepoint document_import_row`)
           throw e
         }
       })
