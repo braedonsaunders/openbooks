@@ -422,6 +422,93 @@ test(
 );
 
 test(
+  "posted and closed accounting history refuses fiscal relabelling without mutation",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const entryId = randomUUID();
+      await withOrgContext(fixture.orgId, async () => {
+        await db.execute(sql`
+          insert into journal_entries
+            (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, memo, status, origin)
+          values
+            (${entryId}, ${fixture.orgId}, ${fixture.bookId}, ${fixture.subsidiaryId},
+             'FISCAL-HISTORY-LOCK', ${fixture.date}, ${fixture.periodId},
+             'immutable fiscal history', 'draft', 'manual')`);
+        await db.execute(sql`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate)
+          values
+            (${fixture.orgId}, ${entryId}, 1, ${fixture.accounts.bank},
+             ${fixture.subsidiaryId}, '1', 'CAD', '1', '1'),
+            (${fixture.orgId}, ${entryId}, 2, ${fixture.accounts.revenue},
+             ${fixture.subsidiaryId}, '-1', 'CAD', '-1', '1')`);
+        await db.execute(sql`
+          update journal_entries
+             set status = 'posted', posted_at = now(), posted_by = ${fixture.actorId}
+           where id = ${entryId} and org_id = ${fixture.orgId}`);
+        await db.execute(sql`
+          insert into period_locks
+            (org_id, period_id, book_id, subsidiary_id, module, state, reason)
+          values
+            (${fixture.orgId}, ${fixture.periodId}, ${fixture.bookId},
+             ${fixture.subsidiaryId}, 'gl', 'closed',
+             'immutable fiscal history regression')`);
+      });
+
+      const before = await settingsState(fixture.orgId);
+      const response = await put(fixture, {
+        name: "Must Not Change",
+        fiscalYearStartMonth: 4,
+      });
+      assert.equal(response.status, 409);
+      assert.deepEqual(await response.json(), {
+        error: "fiscal-calendar-locked",
+        message:
+          "Cannot change the fiscal calendar after postings or period closure.",
+      });
+      assert.deepEqual(await settingsState(fixture.orgId), before);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "a fresh organization can configure its fiscal-year start month",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const response = await put(fixture, { fiscalYearStartMonth: 4 });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        changed: true,
+        periodsRederived: true,
+      });
+
+      const after = await settingsState(fixture.orgId);
+      assert.equal(after.settings.fiscalYearStartMonth, 4);
+      assert.equal(after.calendarMonth, 4);
+      assert.deepEqual(after.periods, [
+        { fiscalYear: 2027, periodNumber: 4, name: "Jul 2026" },
+      ]);
+      assert.equal(after.audits, 1);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
   "control mappings reject inactive, summary, and wrong-type accounts and accept valid roles",
   { skip: !DB },
   async () => {
