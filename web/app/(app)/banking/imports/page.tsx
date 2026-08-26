@@ -15,6 +15,7 @@ interface FeedRow extends Record<string, unknown> {
   provider: string
   status: string
   last_sync_at: string | null
+  last_attempt_at: string | null
   last_error: string | null
   is_active: boolean
   account_number: string | null
@@ -41,7 +42,7 @@ export default async function BankingImports({
   const feedsEnabled = featureEnabled(features, 'bankFeeds')
   const feeds = feedsEnabled
     ? ((await db.execute<FeedRow>(sql`
-        select c.name, c.provider, c.status, c.last_sync_at, c.last_error, c.is_active,
+        select c.name, c.provider, c.status, c.last_sync_at, c.last_attempt_at, c.last_error, c.is_active,
                a.number as account_number, a.name as account_name
           from bank_feed_connections c
           join accounts a on a.id = c.account_id and a.org_id = c.org_id
@@ -84,6 +85,12 @@ export default async function BankingImports({
                   <span className="ml-auto text-slate-500 dark:text-slate-400">
                     {t('bankFeeds.operational.lastSync')}:{' '}
                     {feed.last_sync_at ? new Date(feed.last_sync_at).toLocaleDateString('en-CA') : t('bankFeeds.operational.never')}
+                    {feed.last_error && feed.last_attempt_at ? (
+                      <>
+                        {' '}· {t('bankFeeds.operational.lastAttempt')}:{' '}
+                        {new Date(feed.last_attempt_at).toLocaleDateString('en-CA')}
+                      </>
+                    ) : null}
                   </span>
                   {feed.last_error ? <span className="w-full text-xs text-red-600" title={feed.last_error}>⚠ {feed.last_error}</span> : null}
                 </li>

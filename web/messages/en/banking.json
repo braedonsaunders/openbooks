@@ -693,6 +693,7 @@
       "manage": "Manage feeds",
       "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
       "lastSync": "Last sync",
+      "lastAttempt": "Last attempt",
       "never": "Never"
     },
     "client": {
@@ -706,6 +707,7 @@
       "connection": {
         "paused": "paused",
         "synced": "synced {date}",
+        "attempted": "attempted {date}",
         "test": "Test",
         "sync": "Sync",
         "pause": "Pause",

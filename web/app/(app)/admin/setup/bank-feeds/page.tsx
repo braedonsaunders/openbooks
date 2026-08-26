@@ -30,7 +30,8 @@ export default async function BankFeedsPage() {
     db.execute<any>(sql`
       select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
-             c.last_sync_at as "lastSyncAt", c.last_result as "lastResult", c.last_error as "lastError",
+             c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
+             c.last_result as "lastResult", c.last_error as "lastError",
              c.is_active as "isActive", (c.credentials is not null) as "hasCredentials",
              a.number as "accountNumber", a.name as "accountName"
         from bank_feed_connections c

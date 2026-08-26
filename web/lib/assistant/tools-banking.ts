@@ -163,7 +163,7 @@ const listUnmatchedBankLines: AssistantToolDef = {
 const listBankFeeds: AssistantToolDef = {
   name: "list_bank_feeds",
   description:
-    "List bank feed connections: provider, name, linked GL account, status, sync cadence, next/last sync timestamps, last result, and whether credentials are configured. Credentials themselves are sealed and never returned. Read-only.",
+    "List bank feed connections: provider, name, linked GL account, status, sync cadence, next sync, last success, last attempt timestamps, last result, and whether credentials are configured. Credentials themselves are sealed and never returned. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["admin.setup.manage"] },
   inputSchema: z.object({}),
@@ -176,7 +176,7 @@ const listBankFeeds: AssistantToolDef = {
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select c.id, c.name, c.provider, c.account_id, c.status,
              c.external_account_id, c.sync_cadence,
-             c.next_sync_at, c.last_sync_at, c.last_result, c.last_error, c.is_active,
+             c.next_sync_at, c.last_sync_at, c.last_attempt_at, c.last_result, c.last_error, c.is_active,
              (c.credentials is not null) as has_credentials,
              a.number as account_number, a.name as account_name
         from bank_feed_connections c
@@ -201,6 +201,7 @@ const listBankFeeds: AssistantToolDef = {
           syncCadence: c.sync_cadence,
           nextSyncAt: c.next_sync_at,
           lastSyncAt: c.last_sync_at,
+          lastAttemptAt: c.last_attempt_at,
           lastResult: c.last_result,
           lastError: c.last_error,
           isActive: c.is_active,

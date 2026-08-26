@@ -22,6 +22,7 @@ interface Connection {
   externalAccountId: string | null;
   syncCadence: string;
   lastSyncAt: string | null;
+  lastAttemptAt: string | null;
   lastError: string | null;
   isActive: boolean;
   accountNumber: string | null;
@@ -216,6 +217,7 @@ export function BankFeedsClient({
                     <span className="font-mono">{c.accountNumber}</span>
                     <span className="truncate">{c.accountName}</span>
                     {c.lastSyncAt && <><span>·</span><span>{t("connection.synced", { date: new Date(c.lastSyncAt).toLocaleDateString("en-CA") })}</span></>}
+                    {c.lastError && c.lastAttemptAt && <><span>·</span><span>{t("connection.attempted", { date: new Date(c.lastAttemptAt).toLocaleDateString("en-CA") })}</span></>}
                   </div>
                   {c.lastError && <div className="mt-1 truncate text-xs text-red-600" title={c.lastError}>⚠ {c.lastError}</div>}
                 </div>
