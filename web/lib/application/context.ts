@@ -2,6 +2,7 @@ import "server-only";
 import type { Authz } from "../authz";
 import { can } from "../authz";
 import type { ApiKeyAuth } from "../api-auth";
+import type { ApiRequestAudit } from "./api-key-audit";
 import { forbidden } from "./errors";
 
 export type ApplicationOperationSource = "api" | "mcp" | "assistant";
@@ -12,6 +13,13 @@ export interface ApplicationContext {
   source: ApplicationOperationSource;
   requestId: string;
   apiKeyId: string | null;
+  /**
+   * Transport key/request correlation for API-key-authenticated requests.
+   * `executeIdempotent` writes the material command's atomic execution event
+   * through it; the transport wrapper consumes the claimed marker and adds its
+   * own event only for outcomes that ran no fresh command.
+   */
+  requestAudit?: ApiRequestAudit;
 }
 
 export function applicationContextFromApiKey(
@@ -28,6 +36,7 @@ export function applicationContextFromApiKey(
     source,
     requestId,
     apiKeyId: auth.keyId,
+    requestAudit: auth.audit,
   };
 }
 

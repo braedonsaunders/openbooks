@@ -7,6 +7,7 @@ import {
   withOrgTransaction,
 } from "@openbooks/engine/src/db.ts";
 import type { ApplicationContext } from "./context";
+import { insertApiKeyEvent, markClaimedCommandEvidence } from "./api-key-audit";
 import { conflict, invalidInput } from "./errors";
 import {
   NonJsonValueError,
@@ -108,6 +109,13 @@ async function claimLockHeld(
  * polling (with leader-failure failover — a rival that rolled back without
  * committing never ran the command, so the waiter claims it). Only the
  * claimant keeps its transaction open, across `execute()` alone.
+ *
+ * API-key-authenticated commands additionally commit their durable execution
+ * evidence (`api_key_events`) INSIDE the claim transaction: an audit storage
+ * failure rolls the whole command back, so a material effect can never exist
+ * without its event. Handlers whose transport responds with a status other
+ * than 200 on success must pass `successStatus` (the records adapter derives
+ * it from its write result, e.g. 201 for creates).
  */
 export async function executeIdempotent<T>(args: {
   context: ApplicationContext;
@@ -115,6 +123,8 @@ export async function executeIdempotent<T>(args: {
   idempotencyKey: string;
   request: unknown;
   execute: () => Promise<T>;
+  /** Maps a freshly executed command's value onto the transport status to record. */
+  successStatus?: (value: T) => number;
   /** Upper bound on waiting an in-flight rival out; defaults to the standard budget. */
   rivalWaitBudgetMs?: number;
 }): Promise<{ replayed: boolean; value: T }> {
@@ -212,6 +222,28 @@ export async function executeIdempotent<T>(args: {
                completed_at = now()
          where id = ${inserted.rows[0]!.id} and org_id = ${context.authz.user.orgId}
       `);
+
+      // The command's durable evidence, committed atomically with it. A forced
+      // audit failure throws here and rolls the entire claim back — the
+      // transport then surfaces a plain internal error and no effect persists.
+      const trail = context.requestAudit;
+      if (context.apiKeyId && trail) {
+        await insertApiKeyEvent({
+          orgId: context.authz.user.orgId,
+          keyId: context.apiKeyId,
+          method: trail.method,
+          path: trail.path,
+          statusCode: args.successStatus ? args.successStatus(value) : 200,
+          durationMs: Date.now() - trail.startedAt,
+          ipAddress: trail.ipAddress,
+          userAgent: trail.userAgent,
+        });
+        // Only a successfully written event claims the marker: the claim
+        // transaction is about to commit (nothing after this statement fails
+        // the transaction), so the transport will not write a second row.
+        markClaimedCommandEvidence(trail);
+      }
+
       return { replayed: false, value };
     });
 

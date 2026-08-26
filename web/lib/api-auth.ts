@@ -3,6 +3,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
+import {
+  insertApiKeyEvent,
+  transportEvent,
+  type ApiRequestAudit,
+} from "./application/api-key-audit";
 import { setRequestOrg } from "./request-org";
 import {
   PERMISSION_CATALOGUE,
@@ -71,6 +76,12 @@ export interface ApiKeyAuth {
   rateLimitPerMin: number | null;
   /** Subsidiary visibility inherited from the owning user's role assignments. */
   allowedSubsidiaryIds: Set<string> | null;
+  /**
+   * Canonical key/request correlation captured at transport entry. Every
+   * execution event for this request — the claim transaction's atomic row and
+   * the wrapper's own writes alike — is assembled from it.
+   */
+  audit: ApiRequestAudit;
 }
 
 interface ApiKeySqlRow {
@@ -116,7 +127,10 @@ function expandToCatalogue(perms: Set<string>): Set<string> {
  * intersection of the key's scopes with the OWNER's effective permissions — a
  * key never grants more than its owner.
  */
-export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null> {
+export async function resolveApiKeyAuth(
+  req: Request,
+  startedAt: number = Date.now(),
+): Promise<ApiKeyAuth | null> {
   const token = extractBearer(req);
   if (!token) return null;
   if (!token.startsWith(KEY_PREFIX)) return null;
@@ -194,10 +208,11 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     homeOrgId: keyRow.org_id,
   };
 
-  // Best-effort last-used update — fire and forget, never blocks the request.
-  void db
-    .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id} and org_id = ${keyRow.org_id}`)
-    .catch(() => {});
+  // Durable usage trace: a credential that authenticates successfully always
+  // leaves its last-used stamp behind — the request is refused when this (or
+  // any) required database write fails, never waved through unrecorded.
+  await db
+    .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id} and org_id = ${keyRow.org_id}`);
 
   return {
     user,
@@ -205,6 +220,13 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     permissions: scopedSet,
     rateLimitPerMin: keyRow.rate_limit_per_min == null ? null : Number(keyRow.rate_limit_per_min),
     allowedSubsidiaryIds: allowedSubs,
+    audit: {
+      method: req.method,
+      path: new URL(req.url).pathname,
+      ipAddress: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+      userAgent: req.headers.get("user-agent")?.slice(0, 500) ?? null,
+      startedAt,
+    },
   };
 }
 
@@ -215,11 +237,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
  * external store is needed. Returns a 429 response to return directly when the
  * key is over its ceiling, or null to proceed. A null ceiling means unlimited.
  */
-export async function enforceRateLimit(
-  auth: ApiKeyAuth,
-  req: Request,
-  start: number,
-): Promise<NextResponse | null> {
+export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse | null> {
   if (auth.rateLimitPerMin == null) return null;
   const r = (await db.execute(sql`
     update api_keys
@@ -233,16 +251,13 @@ export async function enforceRateLimit(
   if (count <= auth.rateLimitPerMin) return null;
 
   const retryAfter = Math.max(1, 60 - new Date().getSeconds());
-  logKeyEvent({
-    orgId: auth.user.orgId,
-    keyId: auth.keyId,
-    method: req.method,
-    path: new URL(req.url).pathname,
-    statusCode: 429,
-    durationMs: Date.now() - start,
-    req,
-    error: "rate limit exceeded",
-  });
+  // Required evidence: a rate-limited key's attempt is still an authenticated
+  // execution. A failing write propagates and fails the request closed.
+  await insertApiKeyEvent(transportEvent(
+    auth.audit,
+    { orgId: auth.user.orgId, keyId: auth.keyId },
+    { statusCode: 429, error: "rate limit exceeded" },
+  ));
   return NextResponse.json(
     { error: `rate limit exceeded (${auth.rateLimitPerMin}/min)` },
     { status: 429, headers: { "Retry-After": String(retryAfter) } },
@@ -271,7 +286,7 @@ export async function guardApiKey(
   }
   const featureGate = await guardApiKeyFeature(auth, "apiAccess");
   if (featureGate) return featureGate;
-  const limited = await enforceRateLimit(auth, req, Date.now());
+  const limited = await enforceRateLimit(auth);
   if (limited) return limited;
   if (!canApi(auth, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 });
@@ -287,29 +302,4 @@ export async function guardApiKeyFeature(
   return (await isFeatureEnabled(auth.user.orgId, featureKey))
     ? null
     : NextResponse.json({ error: "not found" }, { status: 404 });
-}
-
-/**
- * Log an API key event (execution log). Fire-and-forget — never blocks the
- * response. Called by the v1 route wrapper after every request.
- */
-export function logKeyEvent(args: {
-  orgId: string;
-  keyId: string | null;
-  method: string;
-  path: string;
-  statusCode: number;
-  durationMs: number;
-  req: Request;
-  error?: string;
-}): void {
-  void db
-    .execute(sql`
-      insert into api_key_events (org_id, key_id, method, path, status_code, duration_ms, ip_address, user_agent, error)
-      values (${args.orgId}, ${args.keyId}, ${args.method}, ${args.path}, ${args.statusCode},
-              ${args.durationMs},
-              ${args.req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null},
-              ${args.req.headers.get("user-agent")?.slice(0, 500) ?? null},
-              ${args.error ?? null})`)
-    .catch(() => {});
 }

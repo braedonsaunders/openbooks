@@ -10,9 +10,9 @@ import {
 import {
   enforceRateLimit,
   guardApiKeyFeature,
-  logKeyEvent,
   resolveApiKeyAuth,
 } from "../api-auth";
+import { insertApiKeyEvent, transportEvent } from "../application/api-key-audit";
 import { createOpenBooksMcpServer } from "./server";
 
 function configured(name: string): string[] {
@@ -30,7 +30,6 @@ function boundaryOptions() {
 }
 
 export async function handleMcpPost(request: Request): Promise<Response> {
-  const startedAt = Date.now();
   const rejected = mcpBoundaryResponse(request, boundaryOptions());
   if (rejected) return rejected;
 
@@ -42,7 +41,7 @@ export async function handleMcpPost(request: Request): Promise<Response> {
   }
   const featureGate = await guardApiKeyFeature(auth, "mcpAccess");
   if (featureGate) return featureGate;
-  const limited = await enforceRateLimit(auth, request, startedAt);
+  const limited = await enforceRateLimit(auth);
   if (limited) return limited;
 
   const requestId = resolveMcpRequestId(request);
@@ -62,16 +61,19 @@ export async function handleMcpPost(request: Request): Promise<Response> {
       console.warn("[mcp] transport failure", error);
     },
   });
-  logKeyEvent({
-    orgId: auth.user.orgId,
-    keyId: auth.keyId,
-    method: request.method,
-    path: "/mcp",
-    statusCode: response.status,
-    durationMs: Date.now() - startedAt,
-    req: request,
-    ...(transportError !== undefined ? { error: "transport failure" } : {}),
-  });
+  // Required evidence for the boundary itself: awaited, and a failing write
+  // fails the request closed. Per-tool execution evidence rides the claim
+  // transaction inside executeIdempotent (see server.ts's audit hook).
+  try {
+    await insertApiKeyEvent(transportEvent(
+      auth.audit,
+      { orgId: auth.user.orgId, keyId: auth.keyId },
+      { statusCode: response.status, ...(transportError !== undefined ? { error: "transport failure" } : {}) },
+    ));
+  } catch (cause) {
+    console.error("[mcp] execution evidence unavailable", cause);
+    return jsonRpcErrorResponse(500, -32003, "Execution evidence unavailable");
+  }
   return response;
 }
 

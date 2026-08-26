@@ -4,10 +4,14 @@ import { NextResponse } from "next/server";
 import {
   enforceRateLimit,
   guardApiKeyFeature,
-  logKeyEvent,
   resolveApiKeyAuth,
   type ApiKeyAuth,
 } from "../../../../../lib/api-auth";
+import {
+  insertApiKeyEvent,
+  takeClaimedCommandEvidence,
+  transportEvent,
+} from "../../../../../lib/application/api-key-audit";
 import { applicationContextFromApiKey } from "../../../../../lib/application/context";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import {
@@ -18,17 +22,39 @@ import { clamp } from "../../../../../lib/list-params";
 
 export const runtime = "nodejs";
 
+/**
+ * Durably evidence one finished request attempt. Material commands already
+ * committed their atomic event inside their claim transaction (the consumed
+ * marker says so); every other outcome writes its row here — awaited, so a
+ * failing audit write fails the response closed instead of dropping the trail.
+ * Returns a plain 500 to return directly when the event cannot be persisted.
+ */
+async function emitExecutionEvent(status: number, auth: ApiKeyAuth, error?: string): Promise<NextResponse | null> {
+  try {
+    if (!takeClaimedCommandEvidence(auth.audit)) {
+      await insertApiKeyEvent(transportEvent(
+        auth.audit,
+        { orgId: auth.user.orgId, keyId: auth.keyId },
+        { statusCode: status, error: error ?? null },
+      ));
+    }
+    return null;
+  } catch (cause) {
+    console.error("[api/v1/records] execution evidence unavailable", cause);
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
+  }
+}
+
 /** GET /api/v1/records/[typeKey] — same application query used by MCP. */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ typeKey: string }> },
 ): Promise<NextResponse> {
-  const start = Date.now();
   const auth = await resolveApiKeyAuth(request);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   const featureGate = await guardApiKeyFeature(auth, "apiAccess");
   if (featureGate) return featureGate;
-  const limited = await enforceRateLimit(auth, request, start);
+  const limited = await enforceRateLimit(auth);
   if (limited) return limited;
   const { typeKey } = await params;
   const url = new URL(request.url);
@@ -40,10 +66,11 @@ export async function GET(
       perPage: clamp(Number(url.searchParams.get("perPage") ?? "25"), 5, 100),
       subsidiaryId: url.searchParams.get("subsidiaryId") || undefined,
     });
-    done(request, start, 200, auth);
+    const tail = await emitExecutionEvent(200, auth);
+    if (tail) return tail;
     return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
   } catch (error) {
-    return failure(request, start, auth, error);
+    return failure(auth, error);
   }
 }
 
@@ -52,17 +79,17 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ typeKey: string }> },
 ): Promise<NextResponse> {
-  const start = Date.now();
   const auth = await resolveApiKeyAuth(request);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   const featureGate = await guardApiKeyFeature(auth, "apiAccess");
   if (featureGate) return featureGate;
-  const limited = await enforceRateLimit(auth, request, start);
+  const limited = await enforceRateLimit(auth);
   if (limited) return limited;
   const { typeKey } = await params;
   const idempotencyKey = request.headers.get("idempotency-key")?.trim();
   if (!idempotencyKey) {
-    done(request, start, 400, auth);
+    const tail = await emitExecutionEvent(400, auth);
+    if (tail) return tail;
     return NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 });
   }
   let body: Record<string, unknown>;
@@ -73,8 +100,7 @@ export async function POST(
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
     body = parsed as Record<string, unknown>;
   } catch {
-    done(request, start, 400, auth);
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+    return failure(auth, new ApplicationError("invalid_input", "invalid JSON body", 400));
   }
   try {
     const result = await createApplicationRecord(context(auth, request), {
@@ -82,7 +108,8 @@ export async function POST(
       body,
       idempotencyKey,
     });
-    done(request, start, result.status, auth);
+    const tail = await emitExecutionEvent(result.status, auth);
+    if (tail) return tail;
     return NextResponse.json(result.result, {
       status: result.status,
       headers: {
@@ -91,7 +118,7 @@ export async function POST(
       },
     });
   } catch (error) {
-    return failure(request, start, auth, error);
+    return failure(auth, error);
   }
 }
 
@@ -103,28 +130,15 @@ function context(auth: ApiKeyAuth, request: Request) {
   );
 }
 
-function failure(request: Request, start: number, auth: ApiKeyAuth, error: unknown): NextResponse {
+async function failure(auth: ApiKeyAuth, error: unknown): Promise<NextResponse> {
   if (error instanceof ApplicationError) {
-    done(request, start, error.status, auth, error.code);
-    return NextResponse.json(
+    const tail = await emitExecutionEvent(error.status, auth, error.code);
+    return tail ?? NextResponse.json(
       { error: error.code, message: error.message, details: error.details },
       { status: error.status },
     );
   }
   console.error("[api/v1/records] application operation failed", error);
-  done(request, start, 500, auth, "internal_error");
-  return NextResponse.json({ error: "internal_error" }, { status: 500 });
-}
-
-function done(request: Request, start: number, status: number, auth: ApiKeyAuth, error?: string): void {
-  logKeyEvent({
-    orgId: auth.user.orgId,
-    keyId: auth.keyId,
-    method: request.method,
-    path: new URL(request.url).pathname,
-    statusCode: status,
-    durationMs: Date.now() - start,
-    req: request,
-    error,
-  });
+  const tail = await emitExecutionEvent(500, auth, "internal_error");
+  return tail ?? NextResponse.json({ error: "internal_error" }, { status: 500 });
 }
