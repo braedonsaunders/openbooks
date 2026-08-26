@@ -713,6 +713,16 @@ export type ContinuousCloseRunResult = {
   autoResolved: number;
 };
 
+/**
+ * A scheduler tick that lost the compare-and-swap claim of its occurrence to
+ * a racing tick owns nothing and must write nothing — the winner's run row is
+ * the occurrence's one durable execution record.
+ */
+export type ContinuousCloseClaimLoss = {
+  status: "claimed_elsewhere";
+  agentKey: ContinuousCloseAgentKey;
+};
+
 export type ContinuousCloseEnrichmentInput = {
   orgId: string;
   runId: string;
@@ -757,7 +767,33 @@ export function registerContinuousCloseEnricher(enricher: ContinuousCloseEnriche
   (globalThis as ContinuousCloseRuntime).__openbooksContinuousCloseEnricher = enricher;
 }
 
-export async function runContinuousCloseAgent(args: { orgId: string; agentKey: ContinuousCloseAgentKey; trigger: AgentTrigger; initiatedBy?: string | null }): Promise<ContinuousCloseRunResult> {
+/**
+ * Execute one continuous-close scan.
+ *
+ * When `scheduledOccurrence` names the due cadence slot a scheduler tick is
+ * firing, the very first statement inside this scan's transaction claims that
+ * slot: the policy cursor advances by compare-and-swap on the observed
+ * `next_run_at`, org-scoped to the policy row. The advance therefore commits
+ * atomically WITH the durable ai_agent_runs row and every detection artifact,
+ * so a process killed anywhere before commit rolls back to "still due" and the
+ * next tick refires the occurrence — there is no committed cursor state that
+ * is not already backed by run evidence. The claimed fire time is persisted in
+ * every outcome's stats as `scheduled_for`, keeping the occurrence's
+ * scheduled-for timestamp on its durable record.
+ */
+export async function runContinuousCloseAgent(args: {
+  orgId: string;
+  agentKey: ContinuousCloseAgentKey;
+  trigger: AgentTrigger;
+  initiatedBy?: string | null;
+  scheduledOccurrence?: {
+    policyId: string;
+    /** Fire time this tick observed as due, claimed with a compare-and-swap. */
+    claimedNextRunAt: Date;
+    /** Cursor value to commit for a won claim — the next cadence step. */
+    nextRunAt: Date;
+  };
+}): Promise<ContinuousCloseRunResult | ContinuousCloseClaimLoss> {
   type PreparedRun =
     | { kind: "terminal"; result: ContinuousCloseRunResult }
     | {
@@ -768,9 +804,27 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
         evaluatedDetectors: ContinuousCloseDetectorKey[];
         findingIds: string[];
         analysis: ContinuousCloseAnalysisSettings;
-      };
+      }
+    | { kind: "unclaimed" };
 
   const prepared = await withOrg(args.orgId, async (): Promise<PreparedRun> => {
+    // Claim the occurrence BEFORE anything else in this transaction. A racing
+    // tick blocks on this row lock and, when the winner commits, re-evaluates
+    // the WHERE against the advanced value and claims zero rows — exactly one
+    // scheduler execution per occurrence, no skip-noise rows from the loser.
+    let scheduledFor: string | null = null;
+    if (args.scheduledOccurrence) {
+      const occurrence = args.scheduledOccurrence;
+      const claim = (await db.execute<{ id: string }>(sql`
+        update ai_agent_policies set next_run_at = ${occurrence.nextRunAt}, updated_at = now()
+         where id = ${occurrence.policyId} and org_id = ${args.orgId}
+           and next_run_at = ${occurrence.claimedNextRunAt}
+        returning id
+      `));
+      if (!claim.rows.length) return { kind: "unclaimed" }; // another tick owns it
+      scheduledFor = occurrence.claimedNextRunAt.toISOString();
+    }
+    const occurrenceStats = scheduledFor === null ? {} : { scheduled_for: scheduledFor };
     const lock = (await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
     `));
@@ -785,7 +839,7 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
           detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
           initiatedBy: args.initiatedBy ?? null,
           finishedAt: new Date(),
-          stats: { reason: "already_running" },
+          stats: { reason: "already_running", ...occurrenceStats },
         })
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
@@ -810,7 +864,7 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
           detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
           initiatedBy: args.initiatedBy ?? null,
           finishedAt: new Date(),
-          stats: { reason: "already_running", activeRunId: active.rows[0].id },
+          stats: { reason: "already_running", activeRunId: active.rows[0].id, ...occurrenceStats },
         })
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
@@ -841,7 +895,7 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
       .returning({ id: schema.aiAgentRuns.id });
     if (!global.rows[0]?.enabled || !configured?.enabled) {
       await db.execute(sql`
-        update ai_agent_runs set status = 'skipped', finished_at = now(), stats = '{"reason":"disabled"}'::jsonb
+        update ai_agent_runs set status = 'skipped', finished_at = now(), stats = ${JSON.stringify({ reason: "disabled", ...occurrenceStats })}::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
       return { kind: "terminal", result: { runId: run!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
@@ -864,9 +918,26 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
                  evaluatedDetectors.map((key) => sql`${key}`),
                  sql`, `,
                )})
-               and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
-            returning id
-          `)));
+                and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
+             returning id
+           `)));
+      // Close out the run INSIDE the claimed transaction: completed status,
+      // measured stats, and last_run_at commit together with the cursor
+      // advance and every detection artifact above.
+      const runStats = {
+        detected: findings.length,
+        autoResolved: resolved.rows.length,
+        evaluatedDetectors,
+        ...occurrenceStats,
+      };
+      await db.execute(sql`
+        update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(runStats)}::jsonb
+         where id = ${run!.id} and org_id = ${args.orgId}
+      `);
+      await db.execute(sql`
+        update ai_agent_policies set last_run_at = now(), updated_at = now()
+         where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+      `);
       return {
         kind: "ready",
         runId: run!.id,
@@ -879,14 +950,23 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
     } catch (error) {
       console.error(`[continuous-close] ${args.agentKey} scan failed`, error);
       await db.execute(sql`
-        update ai_agent_runs set status = 'failed', finished_at = now(), error_code = 'detector_failed'
+        update ai_agent_runs set status = 'failed', finished_at = now(), error_code = 'detector_failed', stats = ${JSON.stringify({ reason: "detector_failed", ...occurrenceStats })}::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
       return { kind: "terminal", result: { runId: run!.id, agentKey: args.agentKey, status: "failed", detected: 0, autoResolved: 0 } };
     }
   });
+  if (prepared.kind === "unclaimed") {
+    return { status: "claimed_elsewhere", agentKey: args.agentKey };
+  }
   if (prepared.kind === "terminal") return prepared.result;
 
+  // Enrichment is model work that must not pin the claimed transaction while
+  // it runs network-bound tools. The run itself is already durable — claim,
+  // detection artifacts, completed status, and last_run_at all committed with
+  // it — so enrichment appends its brief to stats afterwards; a crash here
+  // degrades to a completed run without a narrative instead of losing or
+  // wedging the occurrence.
   let enrichment: ContinuousCloseEnrichmentResult = {
     status: "skipped",
     analyzedFindings: 0,
@@ -917,28 +997,23 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
       };
     }
   }
-  const stats = {
+  await withOrgContext(args.orgId, () =>
+    db.execute(sql`
+      update ai_agent_runs set stats = stats || ${JSON.stringify({ enrichment })}::jsonb
+       where id = ${prepared.runId} and org_id = ${args.orgId}
+    `));
+  const resultStats = {
     detected: prepared.detected,
     autoResolved: prepared.autoResolved,
     evaluatedDetectors: prepared.evaluatedDetectors,
     enrichment,
   };
-  return withOrg(args.orgId, async () => {
-    await db.execute(sql`
-      update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(stats)}::jsonb
-       where id = ${prepared.runId} and org_id = ${args.orgId}
-    `);
-    await db.execute(sql`
-      update ai_agent_policies set last_run_at = now(), updated_at = now()
-       where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-    `);
-    return {
-      runId: prepared.runId,
-      agentKey: args.agentKey,
-      status: "completed",
-      ...stats,
-    };
-  });
+  return {
+    runId: prepared.runId,
+    agentKey: args.agentKey,
+    status: "completed",
+    ...resultStats,
+  };
 }
 
 /** Claim and execute every tenant policy whose automatic scan is due. */
@@ -953,7 +1028,7 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
       org_id: string;
       agent_key: ContinuousCloseAgentKey;
       cadence: AgentCadence;
-      next_run_at: Date;
+      next_run_at: Date | string;
     }>(sql`
     select p.id, p.org_id, p.agent_key, p.cadence, p.next_run_at
       from ai_agent_policies p
@@ -965,19 +1040,26 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
      order by p.next_run_at
   `));
   for (const policy of due.rows) {
-    const next = nextContinuousCloseRunAt(policy.cadence, now);
-    const claim = await withBypassContext(() =>
-      db.execute<{ id: string }>(sql`
-      update ai_agent_policies set next_run_at = ${next}, updated_at = now()
-       where id = ${policy.id} and org_id = ${policy.org_id} and next_run_at = ${policy.next_run_at}
-      returning id
-    `));
-    if (claim.rows.length === 0) continue;
-    await withOrgContext(policy.org_id, () =>
-      runContinuousCloseAgent({
-        orgId: policy.org_id,
-        agentKey: policy.agent_key,
-        trigger: "scheduler",
-      }));
+    // The occurrence claim now runs INSIDE the agent's own transaction (see
+    // runContinuousCloseAgent): the cursor advance commits atomically with the
+    // run row it justifies, so nothing between scan and execution can strand a
+    // claimed-but-unrecorded cadence slot.
+    try {
+      await withOrgContext(policy.org_id, () =>
+        runContinuousCloseAgent({
+          orgId: policy.org_id,
+          agentKey: policy.agent_key,
+          trigger: "scheduler",
+          scheduledOccurrence: {
+            policyId: policy.id,
+            claimedNextRunAt: new Date(policy.next_run_at),
+            nextRunAt: nextContinuousCloseRunAt(policy.cadence, now),
+          },
+        }));
+    } catch (error) {
+      // The rolled-back claim leaves the policy still due; one broken org must
+      // not starve the remaining tenants of their tick.
+      console.error(`[continuous-close] ${policy.agent_key} scheduler tick failed`, error);
+    }
   }
 }

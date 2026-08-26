@@ -139,6 +139,43 @@ test("agent schedules advance in UTC without local-time drift", () => {
   assert.equal(nextContinuousCloseRunAt("weekly", from).toISOString(), "2026-03-15T06:30:00.000Z");
 });
 
+test("the occurrence claim shares one transaction with the run row, closing the crash-skip window", () => {
+  // The defect: the scheduler claimed by committing next_run_at advancement in
+  // its own statement BEFORE calling runContinuousCloseAgent — a process killed
+  // between the claim and the run's later insert stranded an advanced cursor
+  // with no run record, permanently skipping the occurrence. The fix claims
+  // INSIDE the agent's transaction, matching the recurring and subscription
+  // schedulers, so either both commit or neither does.
+  const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
+  const run = source.indexOf("export async function runContinuousCloseAgent");
+  const orgTxn = source.indexOf("await withOrg(args.orgId, async (): Promise<PreparedRun>", run);
+  const claim = source.indexOf("set next_run_at = ${occurrence.nextRunAt}", run);
+  const runInsert = source.indexOf(".insert(schema.aiAgentRuns)", run);
+  assert.notEqual(run, -1, "runContinuousCloseAgent exists");
+  assert.ok(orgTxn > run, "the scan runs in one pinned org transaction");
+  assert.ok(claim > orgTxn, "the occurrence is claimed inside that same transaction");
+  assert.ok(runInsert > claim, "the durable run row follows the claim within it");
+  const claimSql = source.slice(claim, source.indexOf("returning id", claim));
+  assert.match(
+    claimSql,
+    /where id = \$\{occurrence\.policyId\} and org_id = \$\{args\.orgId\}\s+and next_run_at = \$\{occurrence\.claimedNextRunAt\}/,
+    "the claim stays compare-and-swap and org-scoped: one tick wins an occurrence",
+  );
+  // The claimed fire time rides on every durable outcome, so the run record
+  // keeps the occurrence's scheduled-for timestamp after a crash-gap resume.
+  assert.match(source.slice(claim, source.indexOf("export async function runDueContinuousCloseAgents")), /scheduled_for: scheduledFor/);
+});
+
+test("nothing may claim an occurrence outside the agent transaction anymore", () => {
+  // Any next_run_at writer left in the scheduler loop would reintroduce the
+  // committed-claim crash window between scan and execution.
+  const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
+  const due = source.indexOf("export async function runDueContinuousCloseAgents");
+  const loop = source.slice(due);
+  assert.doesNotMatch(loop, /set next_run_at/, "the loop never writes the cursor itself");
+  assert.match(loop, /scheduledOccurrence:/, "the loop hands its observed occurrence to the agent");
+});
+
 test("detector policies default every registered control on and preserve explicit disablement", () => {
   const defaults = defaultContinuousCloseDetectors("accounting");
   assert.deepEqual(
