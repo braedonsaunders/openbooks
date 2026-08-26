@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { db } from "./db.ts";
-import { add, isZero, mulRate, neg } from "./money.ts";
+import { add, fromUnits, isZero, mulRate, neg, toUnits } from "./money.ts";
 
 /**
  * Subsidiary context for the posting engine (a multi-entity model inside
@@ -194,6 +194,51 @@ export interface IntercompanyLeg {
   fxRate: string;
   subsidiaryId: string;
   memo: string;
+}
+
+/**
+ * Per-line FX translation rounds each line independently (mulRate), so a
+ * document whose transaction-currency amounts balance exactly can post
+ * functional amounts that miss zero by a few ten-thousandths. Ordinary
+ * single-entity documents get no intercompany legs to absorb that, and the
+ * kernel requires exact balance — so each subsidiary's own rounding residual
+ * is folded onto the final line of its group: the same convention the
+ * intercompany balancer applies to its due-to/from legs.
+ *
+ * Only a group whose transaction amounts already sum to zero can be carrying
+ * rounding; anything else is real economics left for the intercompany
+ * balancer to pair (or the kernel to refuse). A transaction-balanced group
+ * whose functional residual exceeds half a ledger unit per line cannot be
+ * rounding and is refused loudly instead of flattened into the ledger. The
+ * adjustment touches functional amounts only and is a pure function of the
+ * ordered lines, so regeneration reproduces it exactly.
+ */
+export function absorbFxRoundingResidual<
+  T extends { amount: string; subsidiaryId: string; txnAmount?: string | null },
+>(lines: T[]): void {
+  const groups = new Map<string, T[]>();
+  for (const line of lines) {
+    const group = groups.get(line.subsidiaryId);
+    if (group) group.push(line);
+    else groups.set(line.subsidiaryId, [line]);
+  }
+  for (const [subId, group] of groups) {
+    let transactional = 0n;
+    for (const l of group) transactional += toUnits(l.txnAmount ?? l.amount);
+    if (transactional !== 0n) continue;
+    const total = group.reduce((acc, l) => acc + toUnits(l.amount), 0n);
+    if (total === 0n) continue;
+    // Each line's translation error is bounded by half a ledger unit, so a
+    // transaction-balanced group is only rounding while |total| ≤ n/2 units.
+    const magnitude = total < 0n ? -total : total;
+    if (2n * magnitude > BigInt(group.length)) {
+      throw new SubsidiaryError(
+        `functional-currency residual ${fromUnits(total)} on subsidiary ${subId} exceeds per-line FX rounding and cannot be absorbed`,
+      );
+    }
+    const last = group[group.length - 1]!;
+    last.amount = fromUnits(toUnits(last.amount) - total);
+  }
 }
 
 /**
