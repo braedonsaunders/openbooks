@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
+import { MissingRatesError } from './consolidation'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -50,18 +51,37 @@ export type StatementDimFilter = {
 }
 
 /**
+ * One subsidiary's consolidated translation rates for ONE accounting period.
+ * Comparative statements and lifetime (accumulated-earnings) buckets must
+ * translate each period's activity through that period's own derived rates —
+ * never a single set borrowed from the report date.
+ */
+export type StatementSubsidiaryRateSet = {
+  subsidiaryId: string
+  /** Functional currency being translated from (target = the view currency). */
+  currency: string
+  /** Inclusive posting-date window (the accounting period) the set covers. */
+  periodFrom: string
+  periodTo: string
+  averageRate: string
+  currentRate: string
+  historicalRate: string
+}
+
+/**
  * Subsidiary context for a statement. `ids` = the journal-line subsidiaries in
  * view (one leaf for standalone; a subtree plus its elimination subsidiaries
- * for consolidated). `rates` (per subsidiary, only for entities whose
- * functional currency differs from the target) translates in-query: flow
- * columns at the average rate, balance columns at current, equity at
- * historical — the CTA plug that keeps a translated balance sheet in balance
- * is added by balanceSheetView. Absent context = every subsidiary, untranslated
+ * for consolidated). `rates` carry one windowed rate set PER ACCOUNTING PERIOD
+ * per foreign-currency entity and translate in-query: flow columns at each
+ * line-period's average rate, balance columns at the current rate as of the
+ * column's end date, equity at that period's historical rate — the CTA plug
+ * that keeps a translated balance sheet in balance is added by
+ * balanceSheetView. Absent context = every subsidiary, untranslated
  * (single-subsidiary orgs, unchanged behavior).
  */
 export type StatementSubsidiaryContext = {
   ids: string[]
-  rates?: { subsidiaryId: string; averageRate: string; currentRate: string; historicalRate: string }[]
+  rates?: StatementSubsidiaryRateSet[]
   /** Exact ownership multiplier. Equity-method entities are excluded upstream;
    * proportionately consolidated entities carry a factor below one. */
   weights?: { subsidiaryId: string; factor: string }[]
@@ -165,24 +185,113 @@ function dimFilterSql(dims: StatementDimFilter | undefined, subsidiary?: Stateme
   return w
 }
 
+/** Rate sets grouped per translated subsidiary id (insertion-ordered). */
+function rateSetsBySubsidiary(
+  rates: NonNullable<StatementSubsidiaryContext['rates']>,
+): Map<string, StatementSubsidiaryRateSet[]> {
+  const bySub = new Map<string, StatementSubsidiaryRateSet[]>()
+  for (const set of rates) {
+    const existing = bySub.get(set.subsidiaryId)
+    if (existing) existing.push(set)
+    else bySub.set(set.subsidiaryId, [set])
+  }
+  return bySub
+}
+
 /**
- * The summed amount expression. With translation rates in play, each line is
- * multiplied by its subsidiary's rate for the statement mode: average for flow
- * (P&L), current for balance — except equity accounts, which translate at the
- * historical rate. Subsidiaries not listed in `rates` (functional currency
- * already equals the target) multiply by 1.
+ * Fail closed BEFORE any rows are read when a required reporting window is not
+ * fully covered by the union of a subsidiary's derived rate-set windows — a
+ * silent fallback would misstate translated totals in exactly the way the
+ * windowed-rate contract exists to prevent. Merging adjacent windows makes
+ * multi-period columns (YTD, equal-length comparatives) legitimate while any
+ * true calendar gap fails loudly.
  */
-function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext): SQL {
+function assertRateCoverage(subsidiary: StatementSubsidiaryContext, required: { from: string; to: string }[]): void {
+  for (const [subsidiaryId, sets] of rateSetsBySubsidiary(subsidiary.rates!)) {
+    const sorted = [...sets].sort((a, b) => a.periodFrom.localeCompare(b.periodFrom));
+    const merged: { from: string; to: string }[] = [];
+    for (const w of sorted) {
+      const last = merged[merged.length - 1];
+      // +1 day: consecutive accounting periods share no dates but abut.
+      if (last && addDays(last.to, 1) >= w.periodFrom) {
+        if (w.periodTo > last.to) last.to = w.periodTo;
+      } else {
+        merged.push({ from: w.periodFrom, to: w.periodTo });
+      }
+    }
+    for (const need of required) {
+      if (!merged.some((m) => m.from <= need.from && need.to <= m.to)) {
+        throw new MissingRatesError(
+          `No consolidated exchange rates for ${sorted[0]!.currency} covering ${need.from}..${need.to} ` +
+            `(subsidiary ${subsidiaryId}). Derive rates from period close first.`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Cumulative (as-of) flow buckets reach every posted line, so no translated
+ * subsidiary may hold activity dated before its earliest derived rate set.
+ * Book-scoped to the statement's own book like the render it guards.
+ */
+async function assertNoUntranslatedHistory(
+  orgId: string,
+  bookId: string | null | undefined,
+  subsidiary: StatementSubsidiaryContext,
+): Promise<void> {
+  const ids = [...rateSetsBySubsidiary(subsidiary.rates!).keys()];
+  const earliest = [...subsidiary.rates!].reduce((a, b) => (b.periodFrom < a.periodFrom ? b : a)).periodFrom;
+  const oldest = (await db.execute<{ d: string | null }>(sql`
+    select min(e.posting_date)::text as d
+      from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+     where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
+       and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
+       and e.book_id = ${statementBookExpr(orgId, bookId)}
+       and e.posting_date < ${earliest}`));
+  const date = oldest.rows[0]?.d;
+  if (date) {
+    throw new MissingRatesError(
+      `Activity dated ${date} predates the earliest derived consolidated FX rates ` +
+        `(${earliest}). Derive rates from earlier period closes before reporting accumulated earnings.`,
+    );
+  }
+}
+
+/**
+ * The summed amount expression. With translation rate sets in play, each line
+ * is multiplied by the rate of THE PERIOD ITS ACTIVITY FALLS IN: flow columns
+ * pick each posting date's average rate; balance columns translate at the
+ * current rate as of the column's end date (`asOf`) — except equity accounts,
+ * which use that period's historical rate. Subsidiaries not listed in `rates`
+ * (functional currency already equals the target) multiply by 1.
+ */
+function amountExpr(mode: StatementMode, subsidiary?: StatementSubsidiaryContext, asOf?: string): SQL {
   const rates = subsidiary?.rates
   const weights = subsidiary?.weights
-  const pick = (r: NonNullable<StatementSubsidiaryContext['rates']>[number]) =>
-    mode === 'flow'
-      ? sql`${r.averageRate}::numeric`
-      : sql`case when a.type = 'equity' then ${r.historicalRate}::numeric else ${r.currentRate}::numeric end`
   let rateExpr = sql`1::numeric`
   if (rates?.length) {
+    // The reference date selects the window: the line's own posting date for
+    // flows, the column's as-of date for balances.
+    const reference = mode === 'flow' ? sql`e.posting_date` : sql`${asOf!}::date`
+    const pick =
+      mode === 'flow'
+        ? sql`w.average_rate`
+        : sql`case when a.type = 'equity' then w.historical_rate else w.current_rate end`
     rateExpr = sql`case l.subsidiary_id`
-    for (const r of rates) rateExpr = sql`${rateExpr} when ${r.subsidiaryId}::uuid then ${pick(r)}`
+    for (const [subsidiaryId, sets] of rateSetsBySubsidiary(rates)) {
+      const windows = sql.join(
+        sets.map(
+          (r) =>
+            sql`(${r.periodFrom}::date, ${r.periodTo}::date, ${r.averageRate}::numeric, ${r.currentRate}::numeric, ${r.historicalRate}::numeric)`,
+        ),
+        sql`, `,
+      )
+      rateExpr = sql`${rateExpr} when ${subsidiaryId}::uuid then (
+        select ${pick}
+          from (values ${windows}) as w(period_from, period_to, average_rate, current_rate, historical_rate)
+         where ${reference} >= w.period_from and ${reference} <= w.period_to)`
+    }
     rateExpr = sql`${rateExpr} else 1 end`
   }
   let weightExpr = sql`1::numeric`
@@ -549,10 +658,35 @@ export async function statementMatrix(opts: {
        order by a.number nulls last, a.name
     `))
   } else {
-    const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
+    // Windowed translation: prove every column's window is covered by a
+    // derived rate set BEFORE reading rows — a missing historical rate must
+    // fail loudly and side-effect-free, never fall back to another period's
+    // rates. Cumulative balance-mode flow buckets additionally refuse activity
+    // predating the earliest derived set.
+    const translationKind = opts.translationMode ?? opts.mode
+    if (opts.subsidiary?.rates?.length) {
+      if (translationKind === 'flow') {
+        assertRateCoverage(opts.subsidiary, [{ from: overallFrom, to: overallTo }])
+        if (opts.mode === 'balance') await assertNoUntranslatedHistory(orgId, opts.bookId, opts.subsidiary)
+      } else {
+        assertRateCoverage(opts.subsidiary, cols.map((c) => ({ from: c.to, to: c.to })))
+      }
+    }
+    // Flow columns share one posting-date-driven expression; balance columns
+    // each bind to the rate set covering their own end date.
+    const amountByAsOf = new Map<string, SQL>()
+    const amountFor = (col: AmountColumn): SQL => {
+      const key = translationKind === 'balance' ? col.to : '*'
+      let amount = amountByAsOf.get(key)
+      if (!amount) {
+        amount = amountExpr(translationKind, opts.subsidiary, translationKind === 'balance' ? col.to : undefined)
+        amountByAsOf.set(key, amount)
+      }
+      return amount
+    }
     const filterCols = sql.join(
       cols.map(
-        (c, i) => sql`coalesce(sum(${amount}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
+        (c, i) => sql`coalesce(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
       ),
       sql`, `,
     )

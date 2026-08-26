@@ -12,8 +12,10 @@ import { subsidiaryFeatureEnabled } from "./features";
  *   - no subsidiaries beyond the root  → no context (unchanged single-entity org)
  *   - a leaf                            → standalone view of that entity
  *   - a parent (or nothing = the root)  → CONSOLIDATED subtree: children plus
- *     elimination subsidiaries, each foreign-currency entity translated via the
- *     period's consolidated rates (missing rates fail loudly — derive first).
+ *     elimination subsidiaries, each foreign-currency entity translated via
+ *     the WINDOWED consolidated rates of every accounting period up to the
+ *     report date, so each column and historical bucket uses its own period's
+ *     rates (missing rates fail loudly — derive first).
  */
 
 export class MissingRatesError extends Error {}
@@ -92,15 +94,34 @@ export async function resolveSubsidiaryView(
   const foreign = [...new Set(inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency))];
   let rates: StatementSubsidiaryContext["rates"];
   if (consolidated && foreign.length > 0) {
-    const r = (await db.execute<{ from: string; avg: string; cur: string; hist: string }>(sql`
-      select cf.from_currency as "from", cf.average_rate as avg, cf.current_rate as cur, cf.historical_rate as hist
+    // Rate sets load for EVERY accounting period ending on or before the
+    // report date (scoped to the node's org), so comparative columns and
+    // lifetime buckets translate through the rates of the period their
+    // activity actually falls in — never a single set borrowed from the
+    // report's own period. The report period's set stays mandatory here:
+    // resolveSubsidiaryView refuses a context whose own period has no rates.
+    const scope = (await db.execute<{ org_id: string }>(sql`
+      select org_id from subsidiaries where id = ${node.id}`));
+    if (!scope.rows[0]) throw new Error(`subsidiary ${node.id} not found while resolving consolidated rates`);
+    const r = (await db.execute<{ from: string; pFrom: string; pTo: string; avg: string; cur: string; hist: string }>(sql`
+      select cf.from_currency as "from", p.starts_on as "pFrom", p.ends_on as "pTo",
+             cf.average_rate as "avg", cf.current_rate as "cur", cf.historical_rate as "hist"
         from consolidated_fx_rates cf
         join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
-       where cf.to_currency = ${node.baseCurrency}
+       where cf.org_id = ${scope.rows[0].org_id} and p.org_id = ${scope.rows[0].org_id}
+         and cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
-         and p.starts_on <= ${periodTo} and p.ends_on >= ${periodTo}`));
-    const byCcy = new Map(r.rows.map((x) => [x.from, x]));
-    const missing = foreign.filter((c) => !byCcy.has(c));
+         and p.ends_on <= ${periodTo}
+       order by p.ends_on`));
+    const byCcy = new Map<string, typeof r.rows>();
+    for (const row of r.rows) {
+      const list = byCcy.get(row.from);
+      if (list) list.push(row);
+      else byCcy.set(row.from, [row]);
+    }
+    const missing = foreign.filter(
+      (c) => !(byCcy.get(c) ?? []).some((x) => x.pFrom <= periodTo && periodTo <= x.pTo),
+    );
     if (missing.length > 0) {
       throw new MissingRatesError(
         `No consolidated exchange rates for ${missing.join(", ")} → ${node.baseCurrency} in the period ending ${periodTo}. Derive rates from period close first.`,
@@ -108,15 +129,17 @@ export async function resolveSubsidiaryView(
     }
     rates = inView
       .filter((s) => s.baseCurrency !== node.baseCurrency)
-      .map((s) => {
-        const x = byCcy.get(s.baseCurrency)!;
-        return {
+      .flatMap((s) =>
+        byCcy.get(s.baseCurrency)!.map((row) => ({
           subsidiaryId: s.id,
-          averageRate: x.avg,
-          currentRate: x.cur,
-          historicalRate: x.hist,
-        };
-      });
+          currency: s.baseCurrency,
+          periodFrom: row.pFrom,
+          periodTo: row.pTo,
+          averageRate: row.avg,
+          currentRate: row.cur,
+          historicalRate: row.hist,
+        })),
+      );
   }
 
   return {
