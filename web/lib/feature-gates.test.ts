@@ -1161,6 +1161,30 @@ test('the surfaces this test was written for are covered', () => {
     /guardSuperAdmin\(/,
     'global SFTP daemon mutation must sit behind the platform super-admin authority, not an org feature write',
   )
+  // SFTP access mutations mutate security state: each one must delegate its
+  // evidence to the ONE Setup audit writer (auditSetupChange) inside the same
+  // transaction as the mutation — never a parallel audit format.
+  for (const file of [
+    'app/api/banking/sftp/route.ts',
+    'app/api/banking/sftp/[id]/route.ts',
+    'app/api/platform/sftp/daemon/route.ts',
+  ]) {
+    assert.match(
+      read(file),
+      /from ['"][./]*lib\/setup\/audit['"]/,
+      `${file} must import the shared Setup audit writer`,
+    )
+    assert.match(
+      read(file),
+      /auditSetupChange\(/,
+      `${file} must write SFTP access evidence through auditSetupChange`,
+    )
+    assert.match(
+      read(file),
+      /db\.transaction\(/,
+      `${file} must commit the mutation and its audit evidence as one transaction`,
+    )
+  }
   assert.match(
     read('app/api/banking/sftp/schedules/route.ts'),
     /guardFeaturePermission\('admin\.setup\.manage', 'bankFeeds'\)/,
@@ -1348,8 +1372,8 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/inventory.ts'),
-    /export async function applyInventoryReceiptsForBill[\s\S]{0,400}inventoryFeatureEnabled\(db, orgId\)/,
-    'bill posting must not mint inventory receipts when Inventory is off — existing layers stay',
+    /export async function applyBillInventoryReceipts[\s\S]{0,200}inventoryFeatureEnabled\(runner, orgId\)/,
+    'bill posting must not mint inventory receipts when Inventory is off',
   )
   assert.match(
     read('../engine/src/inventory.ts'),

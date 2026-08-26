@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
-import { db } from "../db.ts";
+import { db, type SqlExecutor } from "../db.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments.ts";
 import { startSftpServer, generateHostKey, type SftpResolver, type SftpServerHandle } from "./server.ts";
 
@@ -30,8 +30,8 @@ export interface DaemonConfig {
 }
 
 /** Load the singleton daemon config, provisioning it (with a fresh host key) on first use. */
-export async function loadDaemonConfig(): Promise<DaemonConfig> {
-  const r = (await db.execute<{ enabled: boolean; port: number; host_key: string; advertised_host: string | null }>(sql`
+export async function loadDaemonConfig(runner: SqlExecutor = db): Promise<DaemonConfig> {
+  const r = (await runner.execute<{ enabled: boolean; port: number; host_key: string; advertised_host: string | null }>(sql`
     select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
   `));
   if (r.rows[0]) {
@@ -39,7 +39,7 @@ export async function loadDaemonConfig(): Promise<DaemonConfig> {
     return { enabled: c.enabled, port: c.port, hostKey: c.host_key, advertisedHost: c.advertised_host };
   }
   const hostKey = generateHostKey();
-  await db.execute(sql`
+  await runner.execute(sql`
     insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
     on conflict (id) do nothing
   `);
@@ -133,10 +133,16 @@ export function stopSftpServer(): Promise<void> {
   return h ? h.close() : Promise.resolve();
 }
 
-/** Apply a settings change and reconcile the running daemon. */
-export async function updateDaemonConfig(patch: { enabled?: boolean; port?: number; advertisedHost?: string | null }, userId: string): Promise<DaemonConfig> {
-  await loadDaemonConfig(); // ensure the row exists
-  await db.execute(sql`
+/**
+ * Apply a settings change on the given runner. The caller owns the atomic
+ * unit — pass the transaction so the config write commits (or rolls back)
+ * together with its audit evidence, and only reconcile the running listener
+ * AFTER that unit commits: binding a port the database no longer says we own
+ * must never survive an audit failure.
+ */
+export async function updateDaemonConfig(patch: { enabled?: boolean; port?: number; advertisedHost?: string | null }, userId: string, runner: SqlExecutor = db): Promise<DaemonConfig> {
+  await loadDaemonConfig(runner); // ensure the row exists
+  await runner.execute(sql`
     update sftp_daemon set
       enabled = coalesce(${patch.enabled ?? null}, enabled),
       port = coalesce(${patch.port ?? null}, port),
@@ -144,7 +150,50 @@ export async function updateDaemonConfig(patch: { enabled?: boolean; port?: numb
       updated_at = now(), updated_by = ${userId}
     where id = 'default'
   `);
-  const cfg = await loadDaemonConfig();
-  await ensureSftpServer();
-  return cfg;
+  return loadDaemonConfig(runner);
+}
+
+/**
+ * Marker substituted for credential material (passwords, authorized keys,
+ * host keys) in audit evidence: the trail proves a secret existed without
+ * ever carrying its bytes — ciphertext included.
+ */
+export const SFTP_AUDIT_REDACTED = "[redacted]";
+
+/** The sftp_servers columns an audit snapshot is built from. */
+export type SftpServerAuditRow = {
+  name: string;
+  username: string;
+  backend: string;
+  bucket: string | null;
+  root_prefix: string;
+  is_active: boolean;
+  password_encrypted: string | null;
+  authorized_keys: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+/**
+ * Column-named, secret-free snapshot of an sftp_servers row for audit_log
+ * before/after evidence. Credential columns collapse to the redaction marker.
+ */
+export function sftpServerAuditSnapshot(row: SftpServerAuditRow): Record<string, unknown> {
+  return {
+    name: row.name,
+    username: row.username,
+    backend: row.backend,
+    bucket: row.bucket,
+    root_prefix: row.root_prefix,
+    is_active: row.is_active,
+    password_encrypted: row.password_encrypted === null ? null : SFTP_AUDIT_REDACTED,
+    authorized_keys: row.authorized_keys === null ? null : SFTP_AUDIT_REDACTED,
+    created_by: row.created_by,
+    updated_by: row.updated_by,
+  };
+}
+
+/** Secret-free snapshot of the global daemon configuration — never the host key. */
+export function sftpDaemonConfigAuditSnapshot(cfg: { enabled: boolean; port: number; advertisedHost: string | null }): Record<string, unknown> {
+  return { enabled: cfg.enabled, port: cfg.port, advertised_host: cfg.advertisedHost };
 }
