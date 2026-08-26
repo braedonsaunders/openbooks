@@ -918,7 +918,26 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
   });
 }
 
-/** Create (or reuse an open) provider checkout session for a link. */
+/**
+ * The transaction advisory lock that serializes hosted-checkout creation for
+ * one payment link. The provider side effect is external and un-undoable, so
+ * the initiated-attempt reuse probe is only a control if two concurrent
+ * requests cannot pass it simultaneously.
+ */
+export function checkoutSessionLockKey(orgId: string, linkId: string): string {
+  return `payment-acceptance-checkout:${orgId}:${linkId}`;
+}
+
+/**
+ * Create (or reuse an open) provider checkout session for a link.
+ *
+ * IDEMPOTENT per link under concurrency: a transaction-scoped advisory lock
+ * serializes requests before anything is read or written, so a double-submitted
+ * /pay/{token} produces exactly one provider checkout call and one initiated
+ * attempt — the loser re-probes inside the lock and reuses the winner's live
+ * session. The lock rides the org transaction, so a failed provider call rolls
+ * everything back and releases it: no claim survives to block a genuine retry.
+ */
 export async function createCheckoutSession(
   token: string,
   returnUrl: string,
@@ -931,6 +950,11 @@ export async function createCheckoutSession(
   }
   if (link.status !== "active") throw new PaymentAcceptanceError(`payment link is ${link.status}`);
   return await withOrg(link.orgId, async () => {
+    // Serialize creators for this link BEFORE any read or write below.
+    await db.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${checkoutSessionLockKey(link.orgId, link.id)}, 0))
+    `);
+
     const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
       select document_number, open_balance from documents where id = ${link.documentId} and org_id = ${link.orgId}
     `));
