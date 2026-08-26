@@ -140,6 +140,16 @@ export async function runAppEndpoint(opts: {
   let units = 0;
   const started = Date.now();
 
+  // Host API seal — once this run's terminal outcome has been computed (or an
+  // outer invocation envelope has begun adjudicating it), every asyncified
+  // host function refuses further work. Adapter calls are synchronous with
+  // the invocation's transaction only up to that boundary; a straggler host
+  // call sneaking in afterwards could stage effect rows outside the window
+  // the envelope rolls back or commits (see engine/src/apps-invocations.ts).
+  let sealed = false;
+  const refuseIfSealed = (): { error: ReturnType<typeof vm.newError> } | null =>
+    sealed ? { error: vm.newError("host API closed: the endpoint outcome was already determined") } : null;
+
   /** Charge units; throw a governance error handle when over budget. */
   const charge = (
     cost: number,
@@ -165,6 +175,8 @@ export async function runAppEndpoint(opts: {
     const storageGet = vm.newAsyncifiedFunction(
       "__storage_get",
       async (keyH, nsH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         const over = charge(COST.storageGet);
         if (over) return over;
         const value = await adapters.storage.get(
@@ -177,6 +189,8 @@ export async function runAppEndpoint(opts: {
     const storageSet = vm.newAsyncifiedFunction(
       "__storage_set",
       async (keyH, valH, nsH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         const over = charge(COST.storageSet);
         if (over) return over;
         const raw = vm.dump(valH);
@@ -191,6 +205,8 @@ export async function runAppEndpoint(opts: {
     const storageList = vm.newAsyncifiedFunction(
       "__storage_list",
       async (prefixH, nsH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         const over = charge(COST.storageList);
         if (over) return over;
         const rows = await adapters.storage.list(
@@ -203,6 +219,8 @@ export async function runAppEndpoint(opts: {
     const storageDelete = vm.newAsyncifiedFunction(
       "__storage_delete",
       async (keyH, nsH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         const over = charge(COST.storageDelete);
         if (over) return over;
         await adapters.storage.delete(
@@ -216,6 +234,8 @@ export async function runAppEndpoint(opts: {
     const recordsList = vm.newAsyncifiedFunction(
       "__records_list",
       async (typeH, filtersH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         if (!adapters.records)
           return {
             error: vm.newError(
@@ -236,6 +256,8 @@ export async function runAppEndpoint(opts: {
     const recordsGet = vm.newAsyncifiedFunction(
       "__records_get",
       async (typeH, idH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         if (!adapters.records)
           return {
             error: vm.newError(
@@ -255,6 +277,8 @@ export async function runAppEndpoint(opts: {
     const journalCreate = vm.newAsyncifiedFunction(
       "__journal_create",
       async (inputH, postH) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         if (!adapters.journal)
           return {
             error: vm.newError(`${FORBIDDEN}gl.post not granted to this app`),
@@ -282,6 +306,8 @@ export async function runAppEndpoint(opts: {
       call: (...args: unknown[]) => Promise<unknown>,
     ) =>
       vm.newAsyncifiedFunction(name, async (...handles) => {
+        const closed = refuseIfSealed();
+        if (closed) return closed;
         if (!adapters.platform) {
           return { error: vm.newError(`${FORBIDDEN}platform API unavailable`) };
         }
@@ -390,7 +416,14 @@ export async function runAppEndpoint(opts: {
       })()
     `;
 
-    const result = await vm.evalCodeAsync(program);
+    let result: Awaited<ReturnType<typeof vm.evalCodeAsync>>;
+    try {
+      result = await vm.evalCodeAsync(program);
+    } finally {
+      // From here on no new host work belongs to this attempt: the outcome is
+      // being adjudicated. Applies on both the resolved and rejected paths.
+      sealed = true;
+    }
     if (result.error) {
       const err = vm.dump(result.error);
       result.error.dispose();
