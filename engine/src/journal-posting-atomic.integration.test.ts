@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "./db.ts";
+import { toUnits } from "./money.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { postDocument } from "./posting.ts";
 import {
@@ -239,3 +240,174 @@ test("before_post script effects are atomic with the posting transaction", { ski
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+/**
+ * Regression: a multi-line foreign-currency document could never post.
+ * applySubsidiaries converts each line independently — mulRate rounds every
+ * line to four decimals on its own — so a balanced EUR entry whose exact
+ * conversions sum to zero still rounds to lines that miss zero by a
+ * ten-thousandth, and an ordinary single-subsidiary document injects no
+ * intercompany legs to absorb it. assertFinalKernelBalance therefore rejected
+ * the entry before any ledger write, blocking the whole multi-currency
+ * deployment class. The kernel now folds that per-line rounding residual onto
+ * the final line of the origin subsidiary (the same convention the intercompany
+ * balancer applies to its own due-to/from legs), so the committed entry
+ * balances exactly while every transaction-currency amount, rate and currency
+ * rides untouched — and the adjustment is a pure function of the ordered
+ * lines, so regeneration reproduces it and reversals negate it exactly.
+ */
+test(
+  "a multi-line EUR journal whose per-line conversions round apart posts balanced",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "FX poster", "admin"),
+      );
+      // 100 + 100 − 200 EUR converts to exactly zero, but per-line half-up
+      // rounding at 0.3333333333 yields 33.3333 + 33.3333 − 66.6667 = −0.0001.
+      const documentId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id,
+             document_date, posting_date, currency, fx_rate, subtotal,
+             tax_total, total, created_by)
+          values (
+            ${documentId}, ${org.orgId}, 'journal', 'approved', 'JE-FX-RESIDUAL',
+            ${org.subsidiaryId}, ${org.date}, ${org.date}, 'EUR',
+            '0.3333333333', '200', '0', '200', ${actorId}
+          )
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, description,
+             amount, quantity, unit_price, tax_amount)
+          values
+            (${org.orgId}, ${documentId}, 1, ${org.accounts.bank},
+             'EUR debit one', '100', '1', '100', '0'),
+            (${org.orgId}, ${documentId}, 2, ${org.accounts.cogs},
+             'EUR debit two', '100', '1', '100', '0'),
+            (${org.orgId}, ${documentId}, 3, ${org.accounts.revenue},
+             'EUR credit', '-200', '1', '-200', '0')
+        `);
+      });
+
+      const entryId = await withOrgTransaction(org.orgId, async () =>
+        postDocument(documentId, postingControlDeps(org), { deferEffects: true }),
+      );
+
+      const lines = await withOrgContext(org.orgId, () =>
+        db.execute<{
+          amount: string;
+          txn_amount: string;
+          fx_rate: string;
+          currency: string;
+          subsidiary_id: string;
+        }>(sql`
+          select amount::text as amount, txn_amount::text as txn_amount,
+                 fx_rate::text as fx_rate, currency,
+                 subsidiary_id::text as subsidiary_id
+            from journal_lines
+           where org_id = ${org.orgId} and entry_id = ${entryId}
+           order by line_number
+        `),
+      );
+      // The final line absorbed the −0.0001 residual; nothing else moved.
+      assert.deepEqual(
+        lines.rows.map((l) => l.amount),
+        ["33.3333", "33.3333", "-66.6666"],
+      );
+      assert.equal(
+        lines.rows.reduce((acc, l) => acc + toUnits(l.amount), 0n),
+        0n,
+        "the committed entry must balance to the ten-thousandth",
+      );
+      // The transaction-currency economics are untouched by the absorption.
+      assert.deepEqual(
+        lines.rows.map((l) => l.txn_amount),
+        ["100.0000", "100.0000", "-200.0000"],
+      );
+      assert.deepEqual(lines.rows.map((l) => l.fx_rate), [
+        "0.3333333333",
+        "0.3333333333",
+        "0.3333333333",
+      ]);
+      assert.deepEqual([...new Set(lines.rows.map((l) => l.currency))], ["EUR"]);
+      assert.deepEqual(
+        [...new Set(lines.rows.map((l) => l.subsidiary_id))],
+        [org.subsidiaryId],
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+/**
+ * Control for the FX-residual absorption: when every line converts exactly
+ * there is no residual, so the stored functional amounts are the pure per-line
+ * conversions and nothing is adjusted.
+ */
+test(
+  "an exact-rate foreign-currency journal posts with untouched per-line conversions",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "FX poster", "admin"),
+      );
+      const documentId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id,
+             document_date, posting_date, currency, fx_rate, subtotal,
+             tax_total, total, created_by)
+          values (
+            ${documentId}, ${org.orgId}, 'journal', 'approved', 'JE-FX-EXACT',
+            ${org.subsidiaryId}, ${org.date}, ${org.date}, 'EUR',
+            '1.2500000000', '150', '0', '150', ${actorId}
+          )
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, description,
+             amount, quantity, unit_price, tax_amount)
+          values
+            (${org.orgId}, ${documentId}, 1, ${org.accounts.bank},
+             'EUR debit one', '100', '1', '100', '0'),
+            (${org.orgId}, ${documentId}, 2, ${org.accounts.cogs},
+             'EUR debit two', '50', '1', '50', '0'),
+            (${org.orgId}, ${documentId}, 3, ${org.accounts.revenue},
+             'EUR credit', '-150', '1', '-150', '0')
+        `);
+      });
+
+      const entryId = await withOrgTransaction(org.orgId, async () =>
+        postDocument(documentId, postingControlDeps(org), { deferEffects: true }),
+      );
+
+      const lines = await withOrgContext(org.orgId, () =>
+        db.execute<{ amount: string; txn_amount: string }>(sql`
+          select amount::text as amount, txn_amount::text as txn_amount
+            from journal_lines
+           where org_id = ${org.orgId} and entry_id = ${entryId}
+           order by line_number
+        `),
+      );
+      assert.deepEqual(
+        lines.rows.map((l) => l.amount),
+        ["125.0000", "62.5000", "-187.5000"],
+      );
+      assert.deepEqual(
+        lines.rows.map((l) => l.txn_amount),
+        ["100.0000", "50.0000", "-150.0000"],
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

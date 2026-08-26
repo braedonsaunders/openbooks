@@ -13,6 +13,7 @@ import {
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
+  absorbFxRoundingResidual,
   intercompanyBalancingLegs,
   loadSubsidiaryContext,
   SubsidiaryError,
@@ -1126,6 +1127,13 @@ async function applySubsidiaries(
         fxRate,
       });
     }
+    // Every line converted independently above, so a foreign-currency
+    // document's rounded lines can miss zero by a few ten-thousandths even
+    // though its transaction amounts balance. Fold that per-subsidiary
+    // rounding onto each group's final line before balancing: single-entity
+    // documents get no intercompany legs at all, and the kernel asserts
+    // exact balance.
+    absorbFxRoundingResidual(stamped);
     const originFxRate = await functionalRate(origin.baseCurrency);
     const legs = await intercompanyBalancingLegs(runner, {
       orgId: doc.orgId,
