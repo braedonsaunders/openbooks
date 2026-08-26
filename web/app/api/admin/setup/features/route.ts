@@ -7,6 +7,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import {
   FEATURES,
   FEATURE_BY_KEY,
+  acquireFeatureGateLock,
   featureDisableBlocked,
   featureEnabled,
   featureRequirements,
@@ -25,6 +26,13 @@ export const dynamic = 'force-dynamic'
  * feature (its surfaces would render against missing defaults) or a stale
  * executable schedule for a disabled scripts feature. Provisioning is
  * idempotent, so retrying a failed toggle converges exactly once.
+ *
+ * The turn-off blockers are evaluated INSIDE this transaction, under the org's
+ * feature-gate fence (`acquireFeatureGateLock`): an operation that could create
+ * a blocker — a project activating under the `projects` gate — takes the same
+ * fence before changing active state, so the two operations serialize and the
+ * outcome is always a refused disable or a refused activation. Evaluating the
+ * blockers before the transaction would leave a window where both apply.
  */
 export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
@@ -45,15 +53,11 @@ export async function PUT(req: Request) {
   }
   if (Object.keys(clean).length === 0) return NextResponse.json({ error: 'at least one feature is required' }, { status: 422 })
 
-  // A feature whose disable-check is hard-blocked can't be turned off — its data
-  // is structurally load-bearing (e.g. the ledger is partitioned per subsidiary).
-  for (const [key, value] of Object.entries(clean)) {
-    if (value === false && (await featureDisableBlocked(orgId, key))) {
-      return NextResponse.json({ error: 'feature-blocked', key }, { status: 409 })
-    }
-  }
-
   const dependencyError = await withOrgTransaction(orgId, async () => {
+    // Serialize against every operation that can establish a feature dependency
+    // (project activation/creation). Held to commit, so no blocker can appear
+    // between the checks below and the flag write.
+    await acquireFeatureGateLock(orgId)
     // Inside this pinned tenant transaction every db call below (including the
     // ones inside the engine's provisioning and scripting helpers) routes to
     // the same connection, so a failure anywhere rolls back the flags, the
@@ -65,6 +69,15 @@ export async function PUT(req: Request) {
     if (!before.rows[0]) return { error: 'not-found' }
     const currentState = before.rows[0].features ?? {}
     const after = { ...currentState, ...clean }
+    // A feature whose disable-check is hard-blocked can't be turned off — its
+    // data is structurally load-bearing (e.g. the ledger is partitioned per
+    // subsidiary). Checked under the fence: a blocker that appears mid-flight
+    // (an activation committing first) must refuse THIS disable.
+    for (const [key, value] of Object.entries(clean)) {
+      if (value === false && (await featureDisableBlocked(orgId, key))) {
+        return { error: 'feature-blocked', key }
+      }
+    }
     for (const [key, value] of Object.entries(clean)) {
       if (!value) continue
       const missing = featureRequirements(FEATURE_BY_KEY.get(key)!)

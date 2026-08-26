@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
@@ -9,6 +9,7 @@ import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
+import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
@@ -90,6 +91,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * task-scoped, audited and concurrency-controlled endpoints; accepting them
  * here would create a second mutation path with unsafe replace semantics.
  * Only provided fields are touched; a real name is required to activate.
+ *
+ * The write runs under the org's feature-gate fence with the `projects` gate
+ * re-checked inside the same transaction: the entry guard above read the gate
+ * outside any transaction, so a concurrent feature disable could otherwise
+ * commit between that read and this write and strand an active project under a
+ * disabled feature. The fence is the same one the disable path holds while it
+ * re-evaluates its blockers, so exactly one side wins.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('projects.manage')
@@ -212,7 +220,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await db.execute(sql`
+  let featureRefused = false
+  await withOrgTransaction(user.orgId, async () => {
+    // Serialize against feature toggles, then re-ask the gate the entry guard
+    // already asked: its answer may be stale by the time this write lands.
+    await acquireFeatureGateLock(user.orgId)
+    if (!(await isFeatureEnabled(user.orgId, 'projects'))) {
+      featureRefused = true
+      return
+    }
+    await db.execute(sql`
     update projects set
       name = ${name !== undefined ? name : sql`name`},
       project_type_id = ${projectTypeId !== undefined ? projectTypeId : sql`project_type_id`},
@@ -234,6 +251,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       updated_at = now(), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
   `)
+  })
+  if (featureRefused) {
+    return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+  }
 
   const payload = await loadProject(id, user.orgId)
   return NextResponse.json(payload)
