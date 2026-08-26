@@ -243,7 +243,10 @@ async function readResponseBody(provider: HttpProvider, response: Response): Pro
 }
 async function providerFetch(provider: HttpProvider, url: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS) })
+    // Provider API keys ride Authorization headers (and POSTs carry the whole
+    // customer message); a followed redirect would replay both to whatever host
+    // the Location names.
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS), redirect: 'error' })
   } catch (error) {
     throw providerNetworkError(provider, error)
   }

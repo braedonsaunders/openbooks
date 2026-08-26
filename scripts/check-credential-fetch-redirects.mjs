@@ -67,24 +67,6 @@ const REFUSAL_IN_TEXT_PATTERN = /redirect\s*:\s*["'](error|manual)["']/;
  */
 const KNOWN_UNSAFE = [
   {
-    path: "packages/emails/src/transport.ts",
-    fn: "providerFetch",
-    findingId: "fnd_mt9hq5zf_n0e5c1",
-    reason: "Resend/SendGrid/Mailgun API keys ride Authorization headers through a redirect-following fetch",
-  },
-  {
-    path: "web/lib/assistant/models.ts",
-    fn: "fetchJson",
-    findingId: "fnd_mt9hq5zf_n0e5c1",
-    reason: "AI provider keys ride Authorization/x-api-key headers and a Google ?key= query parameter",
-  },
-  {
-    path: "web/lib/assistant/client.ts",
-    fn: "boundedAiFetch",
-    findingId: "fnd_mt9hq5zf_n0e5c1",
-    reason: "forwards SDK-built requests bearing provider API keys without refusing redirects",
-  },
-  {
     path: LEDGER_PARITY_ERP_CLIENT,
     fn: "request",
     findingId: "fnd_mt9jrpuy_4c7az9",

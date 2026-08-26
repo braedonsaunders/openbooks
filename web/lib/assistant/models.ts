@@ -24,7 +24,9 @@ function dedupeSort(items: ModelListItem[]): ModelListItem[] {
 }
 
 async function fetchJson(url: string, headers: Record<string, string>): Promise<unknown> {
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
+  // Provider keys ride Authorization headers or a ?key= query parameter; a
+  // followed redirect would replay them to whichever host the Location names.
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(15_000), redirect: "error" });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}${body ? ` — ${body.slice(0, 160)}` : ""}`);
