@@ -23,7 +23,7 @@ function namedStep(source, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-function assertExactDispatchCommit(source) {
+function assertMainDispatchRefAndExactCommit(source) {
   const dispatchStep = namedStep(source, "Dispatch edge container publish");
   assert.equal(
     occurrenceCount(dispatchStep, "--arg ref "),
@@ -32,8 +32,8 @@ function assertExactDispatchCommit(source) {
   );
   assert.match(
     dispatchStep,
-    /--arg ref "\$TRIGGER_SHA"/,
-    "the publish dispatch ref must be the tested commit",
+    /--arg ref "main"/,
+    "the publish dispatch ref must resolve to the main branch",
   );
   assert.equal(
     occurrenceCount(dispatchStep, "--arg commitSha "),
@@ -145,7 +145,7 @@ function assertExactPublishRunDataflow(source) {
 }
 
 test("edge deployment dispatches and watches the publish run for the tested commit", () => {
-  assertExactDispatchCommit(deployWorkflow);
+  assertMainDispatchRefAndExactCommit(deployWorkflow);
   assert.match(
     deployWorkflow,
     /TRIGGER_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/,
@@ -153,8 +153,8 @@ test("edge deployment dispatches and watches the publish run for the tested comm
   );
   assert.match(
     deployWorkflow,
-    /--arg ref "\$TRIGGER_SHA"/,
-    "the workflow dispatch ref must be the tested commit",
+    /--arg ref "main"/,
+    "the workflow dispatch ref must resolve to the main branch",
   );
   assert.match(
     deployWorkflow,
