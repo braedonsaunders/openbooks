@@ -1282,6 +1282,33 @@ export async function reverseSecurityDepositTransaction(input: {
   });
 }
 
+/** Reusable conflict read mirroring the cam_pool_source_account_guard storage trigger. */
+async function assertNoSharedSourceOverlap(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  propertyId: string,
+  startsOn: string,
+  endsOn: string,
+  expenseAccountIds: string[],
+  excludePoolId?: string,
+): Promise<void> {
+  const conflicts = (await tx.execute<{ name: string }>(sql`
+    select cp.name from cam_pools cp
+     where cp.org_id=${orgId} and cp.property_id=${propertyId} and cp.status<>'cancelled'
+       and cp.period_starts_on<=${endsOn} and cp.period_ends_on>=${startsOn}
+       ${excludePoolId ? sql`and cp.id<>${excludePoolId}` : sql``}
+       and exists(
+         select 1 from jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb) wanted(account)
+          where account in (select shared from jsonb_array_elements_text(cp.expense_account_ids) shared)
+       )
+     order by cp.created_at,cp.id limit 1`));
+  const conflict = conflicts.rows[0];
+  if (conflict) {
+    throw new PropertyManagementError("CAM pools cannot overlap periods while sharing any expense account: "
+      + `pool "${conflict.name}" already bills these sources for this property over an overlapping window`);
+  }
+}
+
 export async function createCamPool(input: { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
   const name = input.name.trim();
   const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
@@ -1294,6 +1321,7 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+    await assertNoSharedSourceOverlap(tx, input.orgId, input.propertyId, startsOn, endsOn, expenseAccountIds);
     const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,budget_amount,expense_account_ids,status,created_by,updated_by)
       select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${exactMoney(input.budgetAmount, "CAM budget")},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`));
@@ -1315,6 +1343,9 @@ export async function updateCamPool(input: { orgId: string; actorId: string; poo
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
       (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
     if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+    const editable = (await tx.execute<{ propertyId: string }>(sql`select property_id as "propertyId" from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`));
+    if (!editable.rows[0]) throw new PropertyManagementError("Editable CAM pool not found");
+    await assertNoSharedSourceOverlap(tx, input.orgId, editable.rows[0].propertyId, startsOn, endsOn, expenseAccountIds, input.poolId);
     const result = (await tx.execute<{ id: string; propertyId: string }>(sql`
       update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
         allocation_basis=${input.allocationBasis},budget_amount=${budgetAmount},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
