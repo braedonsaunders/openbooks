@@ -153,13 +153,14 @@ test("journal posting serializes with period close through a shared advisory fen
   const migration = readFileSync(closePostingFenceMigrationPath, "utf8");
   // The fence helper must hash byte-identically to the engine's exclusive
   // side (periodScopeAdvisoryLock in engine/src/close.ts), or the two sides
-  // would serialize on different keys and the race would stay open.
+  // would serialize on different keys and the race would stay open. Shared
+  // mode is the _shared advisory variant — the one call that lets parallel
+  // postings stay parallel while still conflicting with the close writer's
+  // exclusive acquisition.
   assert.match(
     migration,
-    /hashtextextended\('period-lock:' \|\| p_org::text \|\| ':' \|\| p_period::text \|\| ':' \|\| p_book::text, 0\),\s*\n\s*false/,
+    /pg_advisory_xact_lock_shared\(\s*\n\s*hashtextextended\('period-lock:' \|\| p_org::text \|\| ':' \|\| p_period::text \|\| ':' \|\| p_book::text, 0\)\s*\n?\s*\)/,
   );
-  // Shared mode is what lets parallel postings stay parallel while still
-  // conflicting with the close writer's exclusive acquisition.
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.period_posting_fence/);
   assert.match(migration, /LANGUAGE plpgsql VOLATILE/);
   assert.match(migration, /COMMENT ON FUNCTION public\.period_posting_fence\(uuid, uuid, uuid\) IS/);
