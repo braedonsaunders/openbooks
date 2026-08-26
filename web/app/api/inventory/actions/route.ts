@@ -18,6 +18,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/permissions.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -51,21 +52,28 @@ function num(v: unknown): string | null {
  * Post an inventory movement through the kernel: receive (DR inventory / CR
  * offset), issue (DR COGS / CR inventory), or adjust (± vs the adjustment
  * account). Costing follows the item's profile.
+ *
+ * Each action is gated by its own authority from INVENTORY_ACTION_PERMISSIONS:
+ * value-carrying movements demand the items.post monetary grant and reversal
+ * demands items.reverse, so catalog maintenance never confers ledger power.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('items.manage')
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = (parsedBody.data) as Body
+  const permission: CataloguePermission | undefined = (
+    INVENTORY_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>
+  )[body?.action as string]
+  if (!body.action || !permission) {
+    return NextResponse.json({ error: 'invalid action' }, { status: 422 })
+  }
+  const gate = await guardPermission(permission)
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
     return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body
-  if (!body.action || !['receive', 'issue', 'adjust', 'transfer', 'build', 'landed', 'reverse'].includes(body.action)) {
-    return NextResponse.json({ error: 'invalid action' }, { status: 422 })
-  }
   if (body.action === 'reverse') {
     if (!body.movementId || !isUuid(body.movementId)) {
       return NextResponse.json({ error: 'movement required' }, { status: 422 })
@@ -75,6 +83,15 @@ export async function POST(req: Request) {
     }
     if (typeof body.memo !== 'string' || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
       return NextResponse.json({ error: 'reversal reason must be between 5 and 500 characters' }, { status: 422 })
+    }
+    // The movement's subsidiary lives on the row, not in the request, so
+    // resolve it server-side and fence restricted callers before any unwind.
+    const source = await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from inventory_movements where id = ${body.movementId} and org_id = ${user.orgId}`,
+    )
+    const movementSubsidiaryId = source.rows[0]?.subsidiary_id ?? null
+    if (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId))) {
+      return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
     }
     try {
       const res = await reverseInventoryMovement(user.orgId, user.id, {

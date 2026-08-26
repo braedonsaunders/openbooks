@@ -65,6 +65,12 @@ export const PERMISSION_CATALOGUE = [
   // Items & services catalog
   "items.read",
   "items.manage",
+  // Inventory financial authority. Catalog maintenance (items.manage) decides
+  // what an item IS; these decide who may move its VALUE — renaming a catalog
+  // entry must never hand over ledger power, so posting and reversing are
+  // their own grants, not riders on items.manage.
+  "items.post",
+  "items.reverse",
   // Projects & job costing
   "projects.read",
   "projects.manage",
@@ -265,6 +271,8 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "items.read", labelKey: permissionLabelKey("items.read") },
       { key: "items.manage", labelKey: permissionLabelKey("items.manage") },
+      { key: "items.post", labelKey: permissionLabelKey("items.post") },
+      { key: "items.reverse", labelKey: permissionLabelKey("items.reverse") },
     ],
   },
   {
@@ -406,6 +414,42 @@ export const PERMISSION_GROUPS: {
 ];
 
 /**
+ * Which catalogue key authorizes each state-changing action of the inventory
+ * movement API (`web/app/api/inventory/actions`):
+ *
+ *   - every value-carrying movement posts a journal, so it demands
+ *     `items.post` — the scoped monetary authority;
+ *   - unwinding a posted movement is its own approve-class grant
+ *     (`items.reverse`, the close.reopen / time.reopen precedent): whoever may
+ *     post must not automatically hold the power to erase postings.
+ *
+ * Lot and serial identifiers are catalog facts rather than journal facts, so
+ * they are not listed here — their surface stays on `items.manage`.
+ */
+export const INVENTORY_ACTION_PERMISSIONS = {
+  receive: "items.post",
+  issue: "items.post",
+  adjust: "items.post",
+  transfer: "items.post",
+  build: "items.post",
+  landed: "items.post",
+  reverse: "items.reverse",
+} as const satisfies Record<string, CataloguePermission>;
+
+/**
+ * Same contract for the advanced inventory API
+ * (`web/app/api/inventory/advanced`). `createTransfer` only drafts an order,
+ * but drafting is the first half of a stock-moving, journal-carrying act whose
+ * execution demands items.post, so the pair shares one authority.
+ */
+export const INVENTORY_ADVANCED_ACTION_PERMISSIONS = {
+  createTransfer: "items.post",
+  shipTransfer: "items.post",
+  receiveTransfer: "items.post",
+  postLandedVoucher: "items.post",
+} as const satisfies Record<string, CataloguePermission>;
+
+/**
  * Built-in role definitions, seeded per organization. Authorization is based
  * exclusively on explicit role_assignments rows.
  */
@@ -468,6 +512,8 @@ export const BUILT_IN_ROLES: Record<
       "records.manage_types",
       "items.read",
       "items.manage",
+      "items.post",
+      "items.reverse",
       "projects.read",
       "projects.manage",
       "compliance.read",
@@ -535,6 +581,9 @@ export const BUILT_IN_ROLES: Record<
       "records.create",
       "items.read",
       "items.manage",
+      // Day-to-day stock movements are bookkeeping; erasing them is not —
+      // reversal stays with the controller (maker/checker on posted value).
+      "items.post",
       "projects.read",
       "projects.manage",
       "compliance.read",

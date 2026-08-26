@@ -18,6 +18,10 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import {
+  INVENTORY_ADVANCED_ACTION_PERMISSIONS,
+  type CataloguePermission,
+} from "@openbooks/engine/src/permissions.ts";
 
 export const runtime = "nodejs";
 
@@ -83,16 +87,38 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission("items.manage");
+  const parsedBody = await parseJsonBody(req, jsonObject);
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = ((parsedBody.data));
+  const action = typeof body?.action === "string" ? body.action : undefined;
+  // ensureLot/ensureSerial only mint catalog identifiers, so they keep the
+  // catalog-maintenance grant; every stock-moving verb demands the monetary
+  // authority mapped in INVENTORY_ADVANCED_ACTION_PERMISSIONS.
+  const permission: CataloguePermission | undefined =
+    action === "ensureLot" || action === "ensureSerial"
+      ? "items.manage"
+      : (INVENTORY_ADVANCED_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>)[
+          action as string
+        ];
+  if (!permission) return NextResponse.json({ error: "unknown action" }, { status: 400 });
+  const gate = await guardPermission(permission);
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "inventory"))) {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }
   const orgId = gate.user.orgId;
   const userId = gate.user.id;
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
+
+  /** Refuse restricted callers any order whose subsidiary they cannot see. */
+  const orderSubsidiaryInScope = async (orderId: unknown): Promise<boolean> => {
+    if (!gate.allowedSubsidiaryIds) return true;
+    if (typeof orderId !== "string" || !isUuid(orderId)) return false;
+    const r = await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId}`,
+    );
+    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
+  };
 
   try {
     switch (body.action) {
@@ -131,10 +157,16 @@ export async function POST(req: Request) {
         return NextResponse.json(res, { status: 201 });
       }
       case "shipTransfer": {
+        if (!(await orderSubsidiaryInScope(body.id))) {
+          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+        }
         const res = await shipTransferOrder(orgId, userId, body.id, body.date);
         return NextResponse.json(res);
       }
       case "receiveTransfer": {
+        if (!(await orderSubsidiaryInScope(body.id))) {
+          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+        }
         const res = await receiveTransferOrder(orgId, userId, body.id, body.date);
         return NextResponse.json(res);
       }

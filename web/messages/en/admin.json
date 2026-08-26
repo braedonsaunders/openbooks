@@ -835,6 +835,8 @@
     "insights_publish": "Publish to the shared library",
     "items_read": "View items and services",
     "items_manage": "Create and edit items",
+    "items_post": "Post inventory movements",
+    "items_reverse": "Reverse inventory movements",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
     "time_read": "View timesheets",

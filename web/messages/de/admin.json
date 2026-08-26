@@ -772,6 +772,8 @@
     "insights_publish": "In der gemeinsamen Bibliothek veröffentlichen",
     "items_read": "Artikel und Dienstleistungen anzeigen",
     "items_manage": "Artikel erstellen und bearbeiten",
+    "items_post": "Lagerbewegungen buchen",
+    "items_reverse": "Lagerbewegungen stornieren",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
     "time_read": "Zeiterfassungen anzeigen",
