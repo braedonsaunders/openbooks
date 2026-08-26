@@ -12,6 +12,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
@@ -87,6 +88,7 @@ export const journalEntries = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("journal_entries_org_id_id_unique").on(t.orgId, t.id),
     index("je_org_date").on(t.orgId, t.postingDate),
     index("je_org_period").on(t.orgId, t.periodId),
     index("je_source_doc").on(t.sourceDocumentId),

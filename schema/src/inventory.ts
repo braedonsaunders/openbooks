@@ -38,7 +38,10 @@ export const stockLocations = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("stock_locations_org_code").on(t.orgId, t.locationId, t.code)],
+  (t) => [
+    uniqueIndex("stock_locations_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("stock_locations_org_code").on(t.orgId, t.locationId, t.code),
+  ],
 );
 
 export const itemInventoryProfiles = pgTable("item_inventory_profiles", {

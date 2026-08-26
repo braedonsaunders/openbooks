@@ -46,6 +46,63 @@ async function line(
   return id;
 }
 
+test(
+  "document lines keep financial references inside their owning tenant",
+  { skip: !DB },
+  async () => {
+    const owner = await createScratchOrg();
+    const foreign = await createScratchOrg();
+    try {
+      const documentId = randomUUID();
+      const controlLineId = randomUUID();
+      const rejectedLineId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, document_date, currency)
+        values
+          (${documentId}, ${owner.orgId}, 'vendor_bill', ${`TENANT-FK-${documentId}`},
+           ${owner.date}, 'CAD')
+      `);
+
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, amount)
+        values
+          (${controlLineId}, ${owner.orgId}, ${documentId}, 1, ${owner.accounts.cogs}, '12')
+      `);
+
+      await assert.rejects(
+        db.execute(sql`
+          insert into document_lines
+            (id, org_id, document_id, line_number, account_id, amount)
+          values
+            (${rejectedLineId}, ${owner.orgId}, ${documentId}, 2, ${foreign.accounts.cogs}, '7')
+        `),
+        (error: unknown) =>
+          errorChainMatches(error, /document_lines_account_id_fkey/),
+      );
+
+      const state = await db.execute<{
+        accepted_count: number;
+        rejected_count: number;
+      }>(sql`
+        select
+          count(*) filter (where id = ${controlLineId})::int as accepted_count,
+          count(*) filter (where id = ${rejectedLineId})::int as rejected_count
+        from document_lines
+        where org_id = ${owner.orgId}
+      `);
+      assert.deepEqual(state.rows[0], {
+        accepted_count: 1,
+        rejected_count: 0,
+      });
+    } finally {
+      await dropScratchOrg(foreign.orgId);
+      await dropScratchOrg(owner.orgId);
+    }
+  },
+);
+
 test("moving a line cannot strand its old entry unbalanced and then post it", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

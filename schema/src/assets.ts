@@ -145,6 +145,7 @@ export const equipmentUnits = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("equipment_units_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("equipment_units_org_number").on(t.orgId, t.unitNumber),
     uniqueIndex("equipment_units_fixed_asset").on(t.fixedAssetId),
     index("equipment_units_org_status").on(t.orgId, t.status),

@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +15,24 @@ import {
   numeric,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
+import { accounts } from "./coa";
+import {
+  accountingPeriods,
+  classes,
+  departments,
+  locations,
+  paymentCards,
+  projects,
+} from "./core";
+import { parties } from "./parties";
+import { subsidiaries } from "./subsidiaries";
+import { journalEntries } from "./ledger";
+import { taxCodes, taxGroups } from "./tax";
+import { stockLocations } from "./inventory";
+import { equipmentUnits } from "./assets";
+import { itemRateVersions } from "./item-rates";
+import { timeEntries } from "./time";
+import { fieldTickets } from "./field-tickets";
 
 /**
  * Business documents — the mutable layer users touch. One supertype table +
@@ -113,6 +132,7 @@ export const documents = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("documents_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
     index("documents_party").on(t.partyId),
@@ -125,6 +145,56 @@ export const documents = pgTable(
       .on(t.orgId, t.partyId)
       .where(sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`),
     index("documents_project").on(t.projectId),
+    foreignKey({
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+      name: "documents_party_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.paymentCardId],
+      foreignColumns: [paymentCards.orgId, paymentCards.id],
+      name: "documents_payment_card_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+      name: "documents_subsidiary_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.postingPeriodId],
+      foreignColumns: [accountingPeriods.orgId, accountingPeriods.id],
+      name: "documents_posting_period_org_fk",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.departmentId],
+      foreignColumns: [departments.orgId, departments.id],
+      name: "documents_department_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+      name: "documents_project_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [locations.orgId, locations.id],
+      name: "documents_location_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.classId],
+      foreignColumns: [classes.orgId, classes.id],
+      name: "documents_class_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.postedEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: "documents_posted_entry_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.reversalEntryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+      name: "documents_reversal_entry_id_fkey",
+    }),
     check(
       "documents_posted_period_required",
       sql`${t.status} <> 'posted' or (${t.postedEntryId} is not null and ${t.postingPeriodId} is not null)`,
@@ -242,9 +312,110 @@ export const documentLines = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("document_lines_org_id_id_unique").on(t.orgId, t.id),
     index("doc_lines_document").on(t.documentId),
     index("doc_lines_project_billable").on(t.projectId, t.isBillable),
     index("doc_lines_party").on(t.partyId),
+    foreignKey({
+      columns: [t.orgId, t.documentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "document_lines_document_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+      name: "document_lines_item_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.accountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+      name: "document_lines_account_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.taxCodeId],
+      foreignColumns: [taxCodes.orgId, taxCodes.id],
+      name: "document_lines_tax_code_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.taxGroupId],
+      foreignColumns: [taxGroups.orgId, taxGroups.id],
+      name: "document_lines_tax_group_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+      name: "document_lines_party_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.departmentId],
+      foreignColumns: [departments.orgId, departments.id],
+      name: "document_lines_department_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+      name: "document_lines_project_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [locations.orgId, locations.id],
+      name: "document_lines_location_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.classId],
+      foreignColumns: [classes.orgId, classes.id],
+      name: "document_lines_class_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+      name: "document_lines_subsidiary_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.employeeId],
+      foreignColumns: [parties.orgId, parties.id],
+      name: "document_lines_employee_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.timeEntryId],
+      foreignColumns: [timeEntries.orgId, timeEntries.id],
+      name: "document_lines_time_entry_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.timeTypeId],
+      foreignColumns: [timeTypes.orgId, timeTypes.id],
+      name: "document_lines_time_type_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.billedByLineId],
+      foreignColumns: [t.orgId, t.id],
+      name: "document_lines_billed_by_line_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.fieldTicketId],
+      foreignColumns: [fieldTickets.orgId, fieldTickets.documentId],
+      name: "document_lines_field_ticket_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.equipmentUnitId],
+      foreignColumns: [equipmentUnits.orgId, equipmentUnits.id],
+      name: "document_lines_equipment_unit_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.rateVersionId],
+      foreignColumns: [itemRateVersions.orgId, itemRateVersions.id],
+      name: "document_lines_rate_version_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.recoveryAccountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+      name: "document_lines_recovery_account_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.stockLocationId],
+      foreignColumns: [stockLocations.orgId, stockLocations.id],
+      name: "document_lines_stock_location_id_fkey",
+    }),
     check("doc_lines_target", sql`${t.itemId} IS NOT NULL OR ${t.accountId} IS NOT NULL`),
     check("doc_lines_one_tax_profile", sql`num_nonnulls(${t.taxCodeId}, ${t.taxGroupId}) <= 1`),
   ],
@@ -274,6 +445,16 @@ export const documentLinks = pgTable(
   (t) => [
     index("doc_links_from").on(t.fromDocumentId),
     index("doc_links_to").on(t.toDocumentId),
+    foreignKey({
+      columns: [t.orgId, t.fromDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "document_links_from_document_id_fkey",
+    }),
+    foreignKey({
+      columns: [t.orgId, t.toDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+      name: "document_links_to_document_id_fkey",
+    }),
     uniqueIndex("document_links_unique_edge").on(
       t.orgId,
       t.fromDocumentId,
@@ -334,7 +515,10 @@ export const items = pgTable(
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("items_org_code").on(t.orgId, t.code)],
+  (t) => [
+    uniqueIndex("items_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("items_org_code").on(t.orgId, t.code),
+  ],
 );
 
 /**
@@ -358,42 +542,46 @@ export const overheadRates = pgTable("overhead_rates", {
   ...auditColumns,
 });
 
-export const timeTypes = pgTable("time_types", {
-  id: id(),
-  orgId: orgRef(),
-  name: text("name").notNull(), // Regular, Overtime, Double-time, Shop…
-  /** Semantic class is independent from the commercial multipliers. A tenant
-   * may pay straight time while presenting an overtime category, so neither
-   * names nor numeric rates are a safe way to infer this meaning. */
-  classification: text("classification", {
-    enum: ["regular", "overtime", "double_time", "other"],
-  })
-    .notNull()
-    .default("regular"),
-  costMultiplier: money("cost_multiplier").notNull().default("1"),
-  /** Default bill-rate multiplier (OT ×1.5, DT ×2). A rate-book line's
-   * explicit per-time-type rate overrides this. */
-  billMultiplier: money("bill_multiplier").notNull().default("1"),
-  isBillableDefault: boolean("is_billable_default").notNull().default(true),
-  /** Opt-in for the compact crew grid. Time types remain available to normal
-   * timesheets and costing when this is false. */
-  showOnFieldTicket: boolean("show_on_field_ticket").notNull().default(false),
-  /**
-   * The entry records a field EVENT, not worked time: an on-call day, a
-   * claimed per-diem night. Derived earnings rules (pay_derived_rules) read
-   * these entries; the wage calculation skips them, so a supervisor asserting
-   * "he was on call Tuesday" never produces a zero-dollar wage line or phantom
-   * hours that per-hour components and union fringes would then price.
-   */
-  excludeFromWages: boolean("exclude_from_wages").notNull().default(false),
-  isActive: boolean("is_active").notNull().default(true),
-  custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
-  /**
-   * `costMultiplier` and `excludeFromWages` are direct inputs to gross earnings
-   * in calculatePayRun, so this is money configuration and carries the audit
-   * quartet: without `updatedAt`, raising an overtime multiplier after a run is
-   * calculated is invisible to `payRunStaleness` and the run commits wages at
-   * the old rate while reporting itself fresh.
-   */
-  ...auditColumns,
-});
+export const timeTypes = pgTable(
+  "time_types",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(), // Regular, Overtime, Double-time, Shop…
+    /** Semantic class is independent from the commercial multipliers. A tenant
+     * may pay straight time while presenting an overtime category, so neither
+     * names nor numeric rates are a safe way to infer this meaning. */
+    classification: text("classification", {
+      enum: ["regular", "overtime", "double_time", "other"],
+    })
+      .notNull()
+      .default("regular"),
+    costMultiplier: money("cost_multiplier").notNull().default("1"),
+    /** Default bill-rate multiplier (OT ×1.5, DT ×2). A rate-book line's
+     * explicit per-time-type rate overrides this. */
+    billMultiplier: money("bill_multiplier").notNull().default("1"),
+    isBillableDefault: boolean("is_billable_default").notNull().default(true),
+    /** Opt-in for the compact crew grid. Time types remain available to normal
+     * timesheets and costing when this is false. */
+    showOnFieldTicket: boolean("show_on_field_ticket").notNull().default(false),
+    /**
+     * The entry records a field EVENT, not worked time: an on-call day, a
+     * claimed per-diem night. Derived earnings rules (pay_derived_rules) read
+     * these entries; the wage calculation skips them, so a supervisor asserting
+     * "he was on call Tuesday" never produces a zero-dollar wage line or phantom
+     * hours that per-hour components and union fringes would then price.
+     */
+    excludeFromWages: boolean("exclude_from_wages").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
+    /**
+     * `costMultiplier` and `excludeFromWages` are direct inputs to gross earnings
+     * in calculatePayRun, so this is money configuration and carries the audit
+     * quartet: without `updatedAt`, raising an overtime multiplier after a run is
+     * calculated is invisible to `payRunStaleness` and the run commits wages at
+     * the old rate while reporting itself fresh.
+     */
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("time_types_org_id_id_unique").on(t.orgId, t.id)],
+);

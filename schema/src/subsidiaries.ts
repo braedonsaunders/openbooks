@@ -49,6 +49,7 @@ export const subsidiaries = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("subsidiaries_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("subsidiaries_org_name").on(t.orgId, t.name),
     // Exactly one root per org.
     uniqueIndex("subsidiaries_org_root")
