@@ -141,6 +141,14 @@ export const scriptRuns = pgTable(
     errorMessage: text("error_message"),
     durationMs: integer("duration_ms"),
     at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Actor provenance (migration 0052): an interactive trigger ("Run now",
+     * endpoint invocations) persists users.id; NULL = system automation
+     * (cron ticks). The runners re-resolve any stamped id against users
+     * before executing, so nothing but a real user of the owning org lands
+     * here. Same null-means-system rule as documents.created_by.
+     */
+    createdBy: uuid("created_by"),
   },
   (t) => [index("script_runs_script").on(t.scriptId, t.at)],
 );

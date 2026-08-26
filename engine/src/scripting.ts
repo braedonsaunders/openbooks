@@ -350,6 +350,9 @@ export async function runTriggerScripts(
       logs: res.logs,
       errorMessage: res.status === "ok" ? null : res.abortReason,
       durationMs: res.durationMs,
+      // Attribution mirrors the triggering operation's own actor: a real user
+      // when an authenticated human drove it, explicit null when system-driven.
+      createdBy: ctx.user?.id ?? null,
     });
     await db.execute(
       sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${ctx.org.id}`,
@@ -367,6 +370,7 @@ export async function runTriggerScripts(
 export async function runScheduledScript(
   scriptId: string,
   orgId: string,
+  opts: ScriptRunOptions = {},
 ): Promise<ScriptOutcome> {
   if (!(await scriptingFeatureEnabled(orgId))) throw new Error("scripts feature is disabled");
   const [s] = await db
@@ -395,9 +399,14 @@ export async function runScheduledScript(
     .where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
+  // Attribution before any source runs: a manual "Run now" carries its
+  // authenticated actor through ctx and every evidence row; a true cron tick
+  // passes none and stays explicitly system-attributed (null created_by).
+  const user = await resolveScriptUser(orgId, opts.actorId ?? null);
   const ctx: ScriptContext = {
     trigger: "scheduled",
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    ...(user ? { user } : {}),
   };
   const res = await runScript(s.source, ctx, s.timeoutMs);
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
@@ -411,6 +420,7 @@ export async function runScheduledScript(
     logs: res.logs,
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
+    createdBy: user?.id ?? null,
   });
   await db.execute(
     sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
@@ -468,6 +478,8 @@ export async function runEndpointScript(
     logs: res.logs,
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
+    // Endpoint invocations are always interactive (permission-gated caller).
+    createdBy: user.id,
   });
   await db.execute(
     sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
@@ -481,11 +493,15 @@ const BULK_TIMEOUT_MS = 30_000;
 /**
  * Run a bulk script — the long-budget background kind. Same contract as a
  * scheduled script (doc-less ctx), but with an extended deadline; meant to be
- * consumed on the worker via the scripts queue, with inline fallback.
+ * consumed on the worker via the scripts queue, with inline fallback. A
+ * queued "Run now" carries its authenticated actor through opts.actorId and
+ * it is re-resolved against users here — the one boundary every entry path
+ * (route, inline fallback, worker payload) shares.
  */
 export async function runBulkScript(
   scriptId: string,
   orgId: string,
+  opts: ScriptRunOptions = {},
 ): Promise<ScriptOutcome> {
   if (!(await scriptingFeatureEnabled(orgId))) throw new Error("scripts feature is disabled");
   const [s] = await db
@@ -505,9 +521,14 @@ export async function runBulkScript(
     .where(eq(schema.orgs.id, orgId));
   if (!org) throw new Error("org not found");
 
+  // Attribution before any source runs, exactly like the scheduled runner:
+  // interactive "Run now" keeps its real user through ctx (so journal drafts
+  // get created_by instead of system provenance), cron-style callers keep null.
+  const user = await resolveScriptUser(orgId, opts.actorId ?? null);
   const ctx: ScriptContext = {
     trigger: "bulk",
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
+    ...(user ? { user } : {}),
   };
   const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS);
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
@@ -521,6 +542,7 @@ export async function runBulkScript(
     logs: res.logs,
     errorMessage: res.status === "ok" ? null : res.abortReason,
     durationMs: res.durationMs,
+    createdBy: user?.id ?? null,
   });
   await db.execute(
     sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${orgId}`,
@@ -537,6 +559,63 @@ export class InvalidScheduledScriptCronError extends Error {
     super("invalid cron expression");
     this.name = "InvalidScheduledScriptCronError";
   }
+}
+
+/** Thrown when an attributed runner is handed an id that no active user of
+ *  the owning org backs (a stale identity, or a UUID from another domain such
+ *  as a subscription/template row). Execution is refused before any source
+ *  runs: user-actor columns receive either a validated users.id or NULL, and
+ *  a run never silently downgrades an authorized human to system provenance. */
+export class ScriptActorError extends Error {
+  readonly name = "ScriptActorError";
+}
+
+/**
+ * Attribution option for runners reachable from a queue or scheduler boundary.
+ * `actorId` is the interactive triggerer (e.g. the admin who pressed "Run
+ * now"); omitted/null means system automation and stays explicit null
+ * provenance everywhere (script_runs.created_by, journal created_by).
+ */
+export interface ScriptRunOptions {
+  actorId?: string | null;
+}
+
+/**
+ * Resolve an attributed human actor for one script run. The actor is
+ * re-resolved against the users table at this deepest shared boundary so
+ * every entry path (HTTP route, inline fallback, queue payload) stamps the
+ * same thing: a real, currently-active user of the owning org — with their
+ * name and role keys for ob.runtime — or nothing at all. Same join contract
+ * as web/lib/auth.ts session roles.
+ */
+async function resolveScriptUser(
+  orgId: string,
+  actorId: string | null,
+): Promise<NonNullable<ScriptContext["user"]> | null> {
+  if (!actorId) return null;
+  const [u] = await db
+    .select({ id: schema.users.id, name: schema.users.name })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, actorId),
+        eq(schema.users.orgId, orgId),
+        eq(schema.users.isActive, true),
+      ),
+    );
+  if (!u) throw new ScriptActorError(`run actor ${actorId} is not an active user of organization ${orgId}`);
+  const roles = await db
+    .select({ key: schema.appRoles.key })
+    .from(schema.roleAssignments)
+    .innerJoin(schema.appRoles, eq(schema.appRoles.id, schema.roleAssignments.roleId))
+    .where(
+      and(
+        eq(schema.roleAssignments.orgId, orgId),
+        eq(schema.roleAssignments.userId, actorId),
+      ),
+    )
+    .orderBy(asc(schema.appRoles.isBuiltIn), asc(schema.appRoles.key));
+  return { id: u.id, name: u.name, roles: roles.map((r) => r.key) };
 }
 
 /**

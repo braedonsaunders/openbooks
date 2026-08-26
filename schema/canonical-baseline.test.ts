@@ -50,6 +50,8 @@ const effectiveDateOverlapExclusionMigrationPath =
   "schema/migrations/generated/0051_effective_date_overlap_exclusion_constraints.sql";
 const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
+const scriptRunActorMigrationPath =
+  "schema/migrations/generated/0056_script_run_actor.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -98,6 +100,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0052_durable_work_lease_fencing.sql",
     "0054_bank_feed_attempt_watermark.sql",
     "0055_flow_scheduled_occurrence_durability.sql",
+    "0056_script_run_actor.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -107,6 +110,19 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("script runs attribute their trigger at the storage boundary", () => {
+  const migration = readFileSync(scriptRunActorMigrationPath, "utf8");
+
+  assert.match(
+    migration,
+    /ALTER TABLE public\.script_runs ADD COLUMN IF NOT EXISTS created_by uuid/,
+  );
+  // Attribution semantics are documented where every query can see them.
+  assert.match(migration, /interactive triggers persist users\.id; NULL means the system triggered/);
+  // Actor provenance is an additive column, never a history rewrite.
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("account classification edits serialize with first journal-line inserts", () => {
