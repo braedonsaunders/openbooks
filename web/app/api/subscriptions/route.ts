@@ -7,19 +7,39 @@ import {
   billSubscriptionNow,
   changeSubscription,
   monthlyRecurringRevenue,
+  normalizeSubscriptionCadence,
+  normalizeSubscriptionMoney,
   prorateFirstInvoice,
   type Interval,
 } from "@openbooks/engine/src/subscription-billing.ts";
-import { add, normalizeMoney } from "@openbooks/engine/src/money.ts";
-import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { add } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
 export const runtime = "nodejs";
 
-const INTERVALS = ["weekly", "monthly", "quarterly", "annually"];
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+function subscriptionDate(value: unknown, label: string): string {
+  if (
+    typeof value !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    || value.startsWith("0000-")
+  ) {
+    throw new SubscriptionError(`${label} must be a valid ISO date`);
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  const canonical = Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+  if (canonical !== value) throw new SubscriptionError(`${label} must be a valid ISO date`);
+  return value;
+}
+
+function optionalBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new SubscriptionError(`${label} must be a boolean`);
+  return value;
+}
 
 /** Stored plans stay when item_id is omitted. A new inventory / assembly / kit
  *  item is Inventory configuration — refuse it when that switch is off. A new
@@ -116,17 +136,16 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
         if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-        if (!INTERVALS.includes(body.interval)) return NextResponse.json({ error: "invalid interval" }, { status: 400 });
-        const amount = canonicalDecimal(body.amount ?? "0", 4);
-        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
+        const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
         const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId);
         if (refusedItem) return refusedItem;
         const created = await db.transaction(async (tx) => {
           const row = (await tx.execute<Record<string, unknown>>(sql`
             insert into subscription_plans (org_id, name, description, amount, currency_code, interval,
                                             interval_count, income_account_id, item_id, tax_code_id, created_by, updated_by)
-            values (${orgId}, ${body.name}, ${body.description ?? null}, ${normalizeMoney(amount)},
-                    ${body.currency ?? null}, ${body.interval}, ${Number(body.intervalCount ?? 1)},
+            values (${orgId}, ${body.name}, ${body.description ?? null}, ${amount},
+                    ${body.currency ?? null}, ${cadence.interval}, ${cadence.intervalCount},
                     ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
             returning *
           `));
@@ -134,7 +153,7 @@ export async function POST(req: Request) {
             insert into audit_log
               (org_id, table_name, row_id, action, changes, actor_id)
             values
-              (${orgId}, 'subscription_plans', ${(row.rows[0] as any).id as string}, 'insert',
+              (${orgId}, 'subscription_plans', ${String(row.rows[0]!.id)}, 'insert',
                ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
           `);
           return row.rows[0]!;
@@ -148,8 +167,10 @@ export async function POST(req: Request) {
         if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
           return NextResponse.json({ error: "not found" }, { status: 404 });
         }
-        const amount = canonicalDecimal(body.amount ?? "0", 4);
-        if (amount === null) return NextResponse.json({ error: "invalid amount" }, { status: 422 });
+        if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+        const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
+        const amount = normalizeSubscriptionMoney(body.amount ?? "0", "amount", "nonnegative");
+        const isActive = optionalBoolean(body.isActive, "active") ?? true;
         let storedItemId: string | null | undefined;
         if (body.itemId !== undefined) {
           const stored = (await db.execute<{ item_id: string | null }>(sql`
@@ -165,12 +186,12 @@ export async function POST(req: Request) {
           if (!before.rows[0]) return true;
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
-                   amount = ${normalizeMoney(amount)},
+                   amount = ${amount},
                    currency_code = ${body.currency !== undefined ? body.currency : sql`currency_code`},
-                   interval = ${body.interval}, interval_count = ${Number(body.intervalCount ?? 1)},
+                   interval = ${cadence.interval}, interval_count = ${cadence.intervalCount},
                    income_account_id = ${body.incomeAccountId ?? null},
                    item_id = ${body.itemId !== undefined ? body.itemId ?? null : sql`item_id`},
-                   tax_code_id = ${body.taxCodeId ?? null}, is_active = ${body.isActive ?? true},
+                   tax_code_id = ${body.taxCodeId ?? null}, is_active = ${isActive},
                    updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
             returning *
@@ -214,46 +235,50 @@ export async function POST(req: Request) {
       }
       case "addSubscription": {
         if (!body.customerId || !body.planId) return NextResponse.json({ error: "customer and plan required" }, { status: 400 });
-        const startOn = body.startOn || await businessToday(orgId);
+        const startOnInput = body.startOn === undefined || body.startOn === null || body.startOn === ""
+          ? await businessToday(orgId)
+          : body.startOn;
+        const startOn = subscriptionDate(startOnInput, "start date");
         // firstBillOn is when the first FULL cycle bills; if it's after the start
         // and proration is requested, we bill the partial [start, firstBillOn] now.
-        const firstBillOn = body.firstBillOn || startOn;
-        const quantityRaw = canonicalDecimal(body.quantity ?? "1", 4);
-        if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-        let quantity: string;
-        try {
-          quantity = normalizeMoney(quantityRaw);
-        } catch {
-          return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
+        const firstBillOnInput = body.firstBillOn === undefined || body.firstBillOn === null || body.firstBillOn === ""
+          ? startOn
+          : body.firstBillOn;
+        const firstBillOn = subscriptionDate(firstBillOnInput, "first bill date");
+        if (firstBillOn < startOn) {
+          throw new SubscriptionError("first bill date cannot precede the start date");
         }
+        const prorateFirstPeriod = optionalBoolean(body.prorateFirstPeriod, "prorate first period") ?? false;
+        if (prorateFirstPeriod && firstBillOn <= startOn) {
+          throw new SubscriptionError("a prorated first period requires a later first bill date");
+        }
+        const autoPost = optionalBoolean(body.autoPost, "auto post") ?? false;
+        const quantity = normalizeSubscriptionMoney(body.quantity ?? "1", "quantity", "positive");
         const priceOverride =
           body.priceOverride != null && body.priceOverride !== ""
-            ? canonicalDecimal(body.priceOverride, 4)
+            ? normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative")
             : null;
-        if (body.priceOverride != null && body.priceOverride !== "" && priceOverride === null) {
-          return NextResponse.json({ error: "invalid price override" }, { status: 422 });
-        }
         const created = await db.transaction(async (tx) => {
           const row = (await tx.execute<Record<string, unknown>>(sql`
             insert into subscriptions (org_id, customer_id, plan_id, quantity, price_override, start_on,
                                        next_bill_on, current_period_start, auto_post, memo, created_by, updated_by)
             values (${orgId}, ${body.customerId}, ${body.planId}, ${quantity},
-                    ${priceOverride != null ? normalizeMoney(priceOverride) : null},
-                    ${startOn}, ${firstBillOn}, ${startOn}, ${body.autoPost ?? false}, ${body.memo ?? null}, ${userId}, ${userId})
+                    ${priceOverride},
+                    ${startOn}, ${firstBillOn}, ${startOn}, ${autoPost}, ${body.memo ?? null}, ${userId}, ${userId})
             returning *
           `));
           await tx.execute(sql`
             insert into audit_log
               (org_id, table_name, row_id, action, changes, actor_id)
             values
-              (${orgId}, 'subscriptions', ${(row.rows[0] as any).id as string}, 'insert',
+              (${orgId}, 'subscriptions', ${String(row.rows[0]!.id)}, 'insert',
                ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
           `);
           return row.rows[0]!;
         });
         const id = ((created)).id as string;
         let proration: unknown = null;
-        if (body.prorateFirstPeriod && firstBillOn > startOn) {
+        if (prorateFirstPeriod) {
           proration = await prorateFirstInvoice(id, firstBillOn);
         }
         return NextResponse.json({ id, proration }, { status: 201 });
@@ -263,20 +288,12 @@ export async function POST(req: Request) {
         if (!owned.rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
         let quantity: string | undefined;
         if (body.quantity != null) {
-          const exact = canonicalDecimal(body.quantity, 4);
-          if (exact === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          try {
-            quantity = normalizeMoney(exact);
-          } catch {
-            return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          }
+          quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
         }
         let priceOverride: string | null | undefined;
         if ("priceOverride" in body) {
           if (body.priceOverride != null && body.priceOverride !== "") {
-            const exact = canonicalDecimal(body.priceOverride, 4);
-            if (exact === null) return NextResponse.json({ error: "invalid price override" }, { status: 422 });
-            priceOverride = normalizeMoney(exact);
+            priceOverride = normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative");
           } else {
             priceOverride = null;
           }
@@ -289,36 +306,49 @@ export async function POST(req: Request) {
       }
       case "updateSubscription": {
         const sets: SQL[] = [];
-        if ("status" in body) sets.push(sql`status = ${body.status}`);
+        if ("status" in body) {
+          if (typeof body.status !== "string" || !["active", "paused", "canceled"].includes(body.status)) {
+            throw new SubscriptionError("invalid subscription status");
+          }
+          sets.push(sql`status = ${body.status}`);
+        }
         if (body.status === "canceled") sets.push(sql`canceled_on = ${await businessToday(orgId)}`);
         if ("quantity" in body) {
-          const quantityRaw = canonicalDecimal(body.quantity, 4);
-          if (quantityRaw === null) return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          let quantity: string;
-          try {
-            quantity = normalizeMoney(quantityRaw);
-          } catch {
-            return NextResponse.json({ error: "invalid quantity" }, { status: 422 });
-          }
+          const quantity = normalizeSubscriptionMoney(body.quantity, "quantity", "positive");
           sets.push(sql`quantity = ${quantity}`);
         }
         if ("priceOverride" in body) {
           if (body.priceOverride != null && body.priceOverride !== "") {
-            const exact = canonicalDecimal(body.priceOverride, 4);
-            if (exact === null) return NextResponse.json({ error: "invalid price override" }, { status: 422 });
-            sets.push(sql`price_override = ${normalizeMoney(exact)}`);
+            const priceOverride = normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative");
+            sets.push(sql`price_override = ${priceOverride}`);
           } else {
             sets.push(sql`price_override = null`);
           }
         }
-        if ("autoPost" in body) sets.push(sql`auto_post = ${Boolean(body.autoPost)}`);
-        if ("nextBillOn" in body) sets.push(sql`next_bill_on = ${body.nextBillOn}`);
+        if ("autoPost" in body) {
+          const autoPost = optionalBoolean(body.autoPost, "auto post");
+          if (autoPost === undefined) throw new SubscriptionError("auto post must be a boolean");
+          sets.push(sql`auto_post = ${autoPost}`);
+        }
+        const nextBillOn = "nextBillOn" in body
+          ? subscriptionDate(body.nextBillOn, "next bill date")
+          : undefined;
+        if (nextBillOn !== undefined) sets.push(sql`next_bill_on = ${nextBillOn}`);
         if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
         const missing = await db.transaction(async (tx) => {
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from subscriptions where id = ${body.id} and org_id = ${orgId}
           `));
           if (!before.rows[0]) return true;
+          if (nextBillOn !== undefined) {
+            const startOn = String(before.rows[0].start_on);
+            const currentPeriodStart = before.rows[0].current_period_start == null
+              ? null
+              : String(before.rows[0].current_period_start);
+            if (nextBillOn < startOn || (currentPeriodStart !== null && nextBillOn < currentPeriodStart)) {
+              return "invalidPeriod" as const;
+            }
+          }
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
              where id = ${body.id} and org_id = ${orgId}
@@ -333,6 +363,9 @@ export async function POST(req: Request) {
           `);
           return false;
         });
+        if (missing === "invalidPeriod") {
+          return NextResponse.json({ error: "next bill date cannot precede the subscription period" }, { status: 422 });
+        }
         if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
         return NextResponse.json({ ok: true });
       }

@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { advanceSubscription, monthlyRecurringRevenue, prorate, prorationDocument } from "./subscription-billing.ts";
+import {
+  SubscriptionError,
+  advanceSubscription,
+  monthlyRecurringRevenue,
+  normalizeSubscriptionCadence,
+  normalizeSubscriptionMoney,
+  prorate,
+  prorationDocument,
+} from "./subscription-billing.ts";
 
 test("advanceSubscription steps by interval × count with month-end clamp", () => {
   assert.equal(advanceSubscription("2026-01-15", "monthly", 1), "2026-02-15");
@@ -19,6 +27,45 @@ test("monthlyRecurringRevenue normalizes each interval to a monthly figure", () 
   assert.equal(monthlyRecurringRevenue("300", "quarterly", 1, "1"), "100.0000");
   assert.equal(monthlyRecurringRevenue("300", "monthly", 3, "1"), "100.0000");
   assert.equal(monthlyRecurringRevenue("100", "weekly", 1, "1"), "433.3333");
+});
+
+test("base subscription configuration preserves valid exact decimals and rejects impossible values", () => {
+  assert.equal(
+    normalizeSubscriptionMoney("999999999999999.9999", "amount", "nonnegative"),
+    "999999999999999.9999",
+  );
+  assert.equal(normalizeSubscriptionMoney("0.0001", "quantity", "positive"), "0.0001");
+  assert.deepEqual(normalizeSubscriptionCadence("quarterly", "3"), {
+    interval: "quarterly",
+    intervalCount: 3,
+  });
+  assert.equal(monthlyRecurringRevenue("0.1001", "monthly", 1, "3"), "0.3003");
+
+  for (const invalid of ["-0.0001", "1.00001", "1000000000000000"]) {
+    assert.throws(
+      () => normalizeSubscriptionMoney(invalid, "amount", "nonnegative"),
+      SubscriptionError,
+    );
+  }
+  assert.throws(
+    () => normalizeSubscriptionMoney("0", "quantity", "positive"),
+    /quantity must be greater than zero/,
+  );
+  assert.throws(() => normalizeSubscriptionCadence("monthly", 0), /positive integer/);
+  assert.throws(() => normalizeSubscriptionCadence("monthly", 1.5), /positive integer/);
+  assert.throws(() => normalizeSubscriptionCadence("sometimes", 1), /interval must be/);
+});
+
+test("billing analytics and period advancement fail closed on residual invalid rows", () => {
+  assert.throws(() => advanceSubscription("2026-01-31", "monthly", 0), /positive integer/);
+  assert.throws(
+    () => monthlyRecurringRevenue("-10", "monthly", 1, "1"),
+    /amount must be nonnegative/,
+  );
+  assert.throws(
+    () => monthlyRecurringRevenue("10", "monthly", 1, "0"),
+    /quantity must be greater than zero/,
+  );
 });
 
 test("prorate bills the remaining slice of a period exactly", () => {
@@ -159,19 +206,23 @@ test("a downgrade proration becomes a customer credit memo, never a negative inv
 
 test("changeSubscription persists quantity and priceOverride through canonicalDecimal then normalizeMoney", () => {
   const source = readFileSync(new URL("./subscription-billing.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubscriptionMoney");
+  const helperStart = source.indexOf("export function normalizeSubscriptionMoney");
   const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubscriptionMoney helper is defined");
+  assert.ok(helperStart >= 0 && helperEnd > helperStart, "normalizeSubscriptionMoney helper is defined");
   const helper = source.slice(helperStart, helperEnd + 2);
   assert.match(helper, /canonicalDecimal\(value, 4\)/);
   assert.match(helper, /normalizeMoney\(exact\)/);
   assert.match(helper, /must be an exact decimal/);
+  assert.match(helper, /POSTGRES_MONEY_MAX_UNITS/);
+  assert.match(helper, /must be greater than zero/);
+  assert.match(helper, /must be nonnegative/);
 
   const fn = source.indexOf("export async function changeSubscription");
   const next = source.indexOf("export async function prorateFirstInvoice");
   const body = source.slice(fn, next);
-  assert.match(body, /persistSubscriptionMoney\(changes\.quantity \?\? oldQty, "quantity"\)/);
-  assert.match(body, /persistSubscriptionMoney\(changes\.priceOverride, "price override"\)/);
+  assert.match(body, /persistSubscriptionMoney\(changes\.quantity \?\? persistedOldQty, "quantity", "positive"\)/);
+  assert.match(body, /persistSubscriptionMoney\(changes\.priceOverride, "price override", "nonnegative"\)/);
+  assert.match(body, /persistSubscriptionMoney\(oldPrice, "stored price", "nonnegative"\)/);
   assert.doesNotMatch(body, /normalizeMoney\(changes\.quantity/);
   assert.doesNotMatch(body, /normalizeMoney\(changes\.priceOverride\)/);
 });
@@ -182,8 +233,8 @@ test("createSubscriptionInvoice persists line quantity and unitPrice through per
   const next = source.indexOf("async function billOne");
   const body = source.slice(fn, next);
   assert.ok(fn >= 0 && next > fn, "createSubscriptionInvoice precedes billOne");
-  assert.match(body, /persistSubscriptionMoney\(input\.quantity, "quantity"\)/);
-  assert.match(body, /persistSubscriptionMoney\(input\.unitPrice, "unit price"\)/);
+  assert.match(body, /persistSubscriptionMoney\(input\.quantity, "quantity", "positive"\)/);
+  assert.match(body, /persistSubscriptionMoney\(input\.unitPrice, "unit price", "nonnegative"\)/);
   assert.doesNotMatch(body, /normalizeDecimal\(input\.quantity/);
   assert.doesNotMatch(body, /normalizeDecimal\(input\.unitPrice/);
 });

@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -39,7 +41,14 @@ export const subscriptionPlans = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [index("subscription_plans_org").on(t.orgId, t.isActive)],
+  (t) => [
+    index("subscription_plans_org").on(t.orgId, t.isActive),
+    check("subscription_plans_amount_nonnegative", sql`${t.amount} >= 0`),
+    check(
+      "subscription_plans_cadence_valid",
+      sql`${t.interval} in ('weekly', 'monthly', 'quarterly', 'annually') and ${t.intervalCount} > 0`,
+    ),
+  ],
 );
 
 export const subscriptions = pgTable(
@@ -72,5 +81,15 @@ export const subscriptions = pgTable(
   (t) => [
     index("subscriptions_org_status").on(t.orgId, t.status),
     index("subscriptions_due").on(t.status, t.nextBillOn),
+    check(
+      "subscriptions_pricing_valid",
+      sql`${t.quantity} > 0 and (${t.priceOverride} is null or ${t.priceOverride} >= 0)`,
+    ),
+    check(
+      "subscriptions_period_valid",
+      sql`${t.startOn} <= ${t.nextBillOn}
+          and (${t.currentPeriodStart} is null
+            or (${t.currentPeriodStart} >= ${t.startOn} and ${t.currentPeriodStart} <= ${t.nextBillOn}))`,
+    ),
   ],
 );
