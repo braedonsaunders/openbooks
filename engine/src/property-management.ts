@@ -83,7 +83,7 @@ interface BaseRentChargeRow extends Record<string, unknown> {
 interface DueLeaseChargeRow extends Record<string, unknown> {
   id: string; leaseId: string; dueOn: string; amount: string; periodStartsOn: string; periodEndsOn: string;
   description: string; incomeAccountId: string | null; itemId: string | null; taxCodeId: string | null;
-  tenantId: string; leaseNumber: string; paymentTermsDays: number; autoPost: boolean; createdBy: string | null;
+  tenantId: string; leaseNumber: string; paymentTermsDays: number; autoPost: boolean;
   subsidiaryId: string; locationId: string | null; currency: string;
 }
 interface LateFeeRow extends Record<string, unknown> {
@@ -228,9 +228,9 @@ async function multiCurrencyFeatureEnabled(runner: Pick<typeof db, "execute">, o
   return result.rows[0]?.enabled === true;
 }
 
-async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string, changes: unknown) {
-  await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${orgId},${table},${rowId},${action},${JSON.stringify(changes)}::jsonb,${actorId})`);
+async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string | null, changes: unknown, requestId?: string | null) {
+  await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)
+    values(${orgId},${table},${rowId},${action},${JSON.stringify(changes)}::jsonb,${actorId},${requestId ?? null})`);
 }
 
 export async function createManagedProperty(input: {
@@ -644,7 +644,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; le
   return { id: result.rows[0].id };
 }
 
-async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<number> {
+async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<number> {
   const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const horizon = throughOn ?? addDays(addMonths(startOfMonth(await businessToday(orgId)), 13), -1);
@@ -660,10 +660,19 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
       created += result.rows.length;
     }
   }
+  if (created === 0) return 0;
+  // Durable provenance per generated batch: a null actor is the engine-wide
+  // system identity; the marker names the initiating surface and the source
+  // lease so scheduled rows are auditable without borrowing any user identity.
+  await audit(runner, orgId, "property_leases", leaseId, "schedule_generated", actorId,
+    actorId === null
+      ? { created, source: "scheduler", actorKind: "system", actorReason: "property billing schedule" }
+      : { created, source: "user" },
+    actorId === null ? `property-billing:schedule:${leaseId}` : null);
   return created;
 }
 
-export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
+export async function scheduleLeaseCharges(orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<{ created: number }> {
   await assertEnabled(db, orgId);
   const created = await db.transaction((tx) => generateLeaseSchedule(tx, orgId, actorId, leaseId, throughOn));
   return { created };
@@ -959,13 +968,22 @@ export async function levelLeaseRentStraightLine(
   return results;
 }
 
+/**
+ * Bill every lease whose schedule lines are due as of `asOf`.
+ *
+ * `actorId` is the authenticated caller on interactive paths; a null actor is
+ * the engine-wide system identity for scheduler runs. There is deliberately NO
+ * fallback to `lease.created_by`: a null-author lease bills under system
+ * provenance instead of throwing or impersonating its historical author, and a
+ * real user's id never leaks onto another actor's artifacts.
+ */
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = asOf ?? await businessToday(orgId);
   await assertEnabled(db, orgId);
   const due = (await db.execute<DueLeaseChargeRow>(sql`
     select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
       c.description,c.income_account_id as "incomeAccountId",c.item_id as "itemId",c.tax_code_id as "taxCodeId",
-      l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",l.created_by as "createdBy",
+      l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",
       p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency
     from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
     join property_leases l on l.id=s.lease_id and l.org_id=s.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
@@ -1006,15 +1024,19 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
           }
         }
         const lines: AdvancedBillingLine[] = billRows.map((row) => ({ description: `${row.description} · ${row.periodStartsOn}–${row.periodEndsOn}`, quantity: "1", unitPrice: row.amount, incomeAccountId: row.incomeAccountId, itemId: row.itemId, taxCodeId: row.taxCodeId }));
-        const actor = actorId ?? first.createdBy; if (!actor) throw new PropertyManagementError(`Lease ${first.leaseNumber} has no billing owner`);
-        const generated = await createSubscriptionInvoice({ orgId, actorId: actor, customerId: first.tenantId, subsidiaryId: first.subsidiaryId,
+        const generated = await createSubscriptionInvoice({ orgId, actorId, customerId: first.tenantId, subsidiaryId: first.subsidiaryId,
           locationId: first.locationId, currency: first.currency, incomeAccountId: null, itemId: null, taxCodeId: null,
           description: `Lease ${first.leaseNumber}`, quantity: "1", unitPrice: "0", memo: `Lease ${first.leaseNumber}`,
           invoiceDate: through, dueDate: addDays(through, first.paymentTermsDays), autoPost: first.autoPost, lines,
-          custom: { propertyManagement: { billingKey: key, leaseId, scheduleIds: ids, kind: "rent" } } });
+          postingAuditSource: "property_rent_billing",
+          custom: { propertyManagement: {
+            billingKey: key, leaseId, scheduleIds: ids, kind: "rent",
+            billingRunSource: actorId === null ? "scheduler" : "user",
+            ...(actorId === null ? { actorKind: "system", actorReason: "scheduled lease rent billing" } : {}),
+          } } });
         invoiceId = generated.invoiceId;
       }
-      await db.execute(sql`update lease_schedule_lines set status='invoiced',invoice_document_id=${invoiceId},updated_at=now(),updated_by=${actorId ?? first.createdBy}
+      await db.execute(sql`update lease_schedule_lines set status='invoiced',invoice_document_id=${invoiceId},updated_at=now(),updated_by=${actorId}
         where org_id=${orgId} and status='scheduled' and id::text in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`);
       invoices.push(invoiceId);
     });
@@ -1025,7 +1047,15 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
   return { billed: billed.rows[0]?.n ?? 0, invoices };
 }
 
-export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
+/**
+ * Assess late fees for every overdue posted lease invoice as of `asOf`.
+ *
+ * `actorId` is the authenticated caller on interactive paths; a null actor is
+ * the engine-wide system identity for scheduler runs. Each generated fee is
+ * attributed at its own source line (never an org-wide stand-in) and commits
+ * with its audit evidence inside one transaction.
+ */
+export async function assessLeaseLateFees(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
   const date = validDate(asOf ?? await businessToday(orgId), "Late-fee date")!;
   await assertEnabled(db, orgId);
   const overdue = (await db.execute<LateFeeRow>(sql`
@@ -1050,14 +1080,26 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
   for (const row of overdue.rows) {
     const amount = row.late_fee_type === "fixed" ? exactMoney(row.late_fee_value, "Late-fee value") : mulPercent(row.transaction_open, row.late_fee_value);
     if (cmp(amount, "0") <= 0) continue;
-    const result = (await db.execute(sql`
-      with charge as (insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
-        select ${orgId},${row.lease_id},'late_fee','Late fee',${amount},'one_time',${date},${date},${row.rent_income_account_id},${actorId},${actorId}
-        where not exists(select 1 from lease_schedule_lines where org_id=${orgId} and source_schedule_id=${row.source_schedule_id}) returning id)
-      insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,source_schedule_id,created_by,updated_by)
-      select ${orgId},${row.lease_id},id,${date},${date},${date},${amount},${row.source_schedule_id},${actorId},${actorId} from charge returning id
-    `));
-    created += result.rows.length;
+    // The fee pair and its audit evidence commit as one unit: a failed audit
+    // insert rolls the fee back so the next run re-assesses cleanly.
+    await withOrgTransaction(orgId, async () => {
+      const result = (await db.execute<{ id: string }>(sql`
+        with charge as (insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
+          select ${orgId},${row.lease_id},'late_fee','Late fee',${amount},'one_time',${date},${date},${row.rent_income_account_id},${actorId},${actorId}
+          where not exists(select 1 from lease_schedule_lines where org_id=${orgId} and source_schedule_id=${row.source_schedule_id}) returning id)
+        insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,source_schedule_id,created_by,updated_by)
+        select ${orgId},${row.lease_id},id,${date},${date},${date},${amount},${row.source_schedule_id},${actorId},${actorId} from charge returning id
+      `));
+      if (!result.rows.length) return;
+      const feeLineId = result.rows[0]!.id;
+      await audit(db, orgId, "lease_schedule_lines", feeLineId, "late_fee_assess", actorId,
+        { leaseId: row.lease_id, amount, lateFeeType: row.late_fee_type, sourceScheduleId: row.source_schedule_id,
+          ...(actorId === null
+            ? { source: "scheduler", actorKind: "system", actorReason: "scheduled lease late fees" }
+            : { source: "user" }) },
+        actorId === null ? `property-billing:late_fee:${row.lease_id}:${row.source_schedule_id}` : null);
+      created += result.rows.length;
+    });
   }
   return { created };
 }
@@ -1671,20 +1713,28 @@ export async function propertyManagementWorkspace(orgId: string) {
   return { properties: properties.rows, units: units.rows, leases: leases.rows, charges: charges.rows, escalations: escalations.rows, schedules: schedules.rows, deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows };
 }
 
-/** Scheduler entry point. Each org/lease is idempotent through invoice billing keys and schedule status. */
+/**
+ * Scheduler entry point. Each org/lease is idempotent through invoice billing
+ * keys and schedule status.
+ *
+ * The run is engine-initiated: every write it makes — schedule lines, rent
+ * invoices, auto-posting, late fees — carries system provenance (null actor)
+ * plus durable per-run/per-lease markers, never a historical lease author and
+ * never an org-wide first actor. Interactive callers attribute their own
+ * authenticated user instead.
+ */
 export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number }> {
   const result = { billed: 0, invoices: 0, lateFees: 0 };
   const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where coalesce((settings->'features'->>'propertyManagement')::boolean,false)`)));
   for (const org of orgs.rows) await withOrg(org.id, async () => {
     // Each org bills on its own calendar day.
     const date = asOf ?? await businessToday(org.id);
-    const leases = (await db.execute<{ id: string; actor: string | null }>(sql`select id,coalesce(updated_by,created_by) as actor from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
+    const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
     for (const lease of leases.rows) {
-      if (!lease.actor) continue;
-      await scheduleLeaseCharges(org.id, lease.actor, lease.id);
+      // Null-author leases are ordinary scheduler work; no actor is consulted.
+      await scheduleLeaseCharges(org.id, null, lease.id);
     }
-    const feeActor = leases.rows.find((lease) => lease.actor)?.actor;
-    const fees = feeActor ? await assessLeaseLateFees(org.id, feeActor, date) : { created: 0 };
+    const fees = await assessLeaseLateFees(org.id, null, date);
     const billed = await billDueLeaseCharges(org.id, null, date);
     result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
   });

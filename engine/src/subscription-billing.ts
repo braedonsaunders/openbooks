@@ -278,7 +278,12 @@ async function resolveIncomeAccount(orgId: string, incomeAccountId: string | nul
 
 export interface InvoiceSpec {
   orgId: string;
-  actorId: string;
+  /**
+   * The authenticated caller, or null for engine-initiated writes — the
+   * repository-wide system identity (null created_by means system). Callers
+   * stamp their own provenance into `custom`.
+   */
+  actorId: string | null;
   customerId: string;
   subsidiaryId: string | null;
   currency: string;
@@ -299,6 +304,12 @@ export interface InvoiceSpec {
   lines?: AdvancedBillingLine[];
   /** Source-owned provenance retained on the native invoice header. */
   custom?: Record<string, unknown>;
+  /**
+   * When this spec auto-posts, records the posting's transaction-audit source
+   * (audit_log.changes.source / request_id) alongside `actorId`, so automated
+   * postings carry the same durable evidence interactive ones do.
+   */
+  postingAuditSource?: string;
   /** Property CAM true-ups may issue a native customer credit. */
   documentKind?: "customer_invoice" | "customer_credit";
 }
@@ -419,7 +430,9 @@ export async function createSubscriptionInvoice(
       throw new SubscriptionError(`approval could not be routed: ${submission.flowError}`);
     }
     if (!submission.gated) {
-      await postDocument(invoiceId, await controlDeps(spec.orgId));
+      await postDocument(invoiceId, await controlDeps(spec.orgId), spec.postingAuditSource
+        ? { audit: { actorId: spec.actorId, source: spec.postingAuditSource } }
+        : {});
       posted = true;
     }
   }
