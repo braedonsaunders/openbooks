@@ -22,6 +22,14 @@ interface JsonRpcResponse<T> {
   error?: { code: number; message: string; data?: { name?: string; message?: string; debug?: string } };
 }
 
+/** Odoo credentials must never cross an HTTP redirect boundary. Every JSON-RPC
+ *  call carries the tenant database, username, and API key (or password) in its
+ *  POST body; following even one 3xx could repost them to a host that was never
+ *  configured as the tenant's Odoo origin. */
+function odooFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 export class OdooClient {
   private uid: number | null = null;
   private seq = 0;
@@ -29,7 +37,7 @@ export class OdooClient {
   constructor(private creds: OdooCreds) {}
 
   private async rpc<T>(service: string, method: string, args: unknown[]): Promise<T> {
-    const res = await fetch(`${this.creds.url.replace(/\/$/, "")}/jsonrpc`, {
+    const res = await odooFetch(`${this.creds.url.replace(/\/$/, "")}/jsonrpc`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
