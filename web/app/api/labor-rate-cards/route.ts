@@ -38,6 +38,10 @@ export async function POST(req: Request) {
   const today = await businessToday(gate.user.orgId);
   try {
     const id = await db.transaction(async (tx) => {
+      // A rate card writes a book and its first version in one unit: take the
+      // same advisory fence the Setup rate-book writer takes so a concurrent
+      // book edit for this organization cannot interleave with card creation.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`)
       const book = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
         values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})

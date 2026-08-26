@@ -128,12 +128,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const result = await db.transaction(async (tx) => {
       const item = ((await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
       if (!item.rows[0]) throw new Error('Item not found')
+      // First version creation must serialize with rate-book currency edits:
+      // take the same advisory fence and row lock the Setup writer takes,
+      // before this transaction reads the book. A concurrent currency PATCH
+      // then either commits before the book is read here, or waits for this
+      // version to become visible and is rejected by rate_book_currency_guard.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`)
       let rateBookId = body.rateBookId
       if (rateBookId) {
-        const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)))
+        const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active for update`)))
         if (!book.rows[0]) throw new Error('Rate book not found')
       } else {
-        const existing = (await tx.execute(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1`)) as any
+        const existing = (await tx.execute(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1 for update`)) as any
         rateBookId = existing.rows[0]?.id
         if (!rateBookId) {
           const org = ((await tx.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`)))

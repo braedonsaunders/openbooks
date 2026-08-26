@@ -18,6 +18,14 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
+/** Drizzle wraps driver errors (DrizzleQueryError), hiding the PostgreSQL
+ * message in `cause`; match the whole rendered chain so a trigger rejection
+ * stays assertable. */
+function pgMessage(error: unknown): string {
+  const cause = (error as { cause?: unknown }).cause;
+  return `${String(error)}\n${cause === undefined ? "" : String(cause)}`;
+}
+
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 type EngineDb = typeof import("../engine/src/db.ts");
@@ -105,7 +113,7 @@ test(
         h.db.transaction(async (tx) => {
           await insertProgressInvoice(h, tx, "10000.0000", "10000.0000");
         }),
-      /header totals do not tie to its lines/,
+      (error: unknown) => pgMessage(error).includes("header totals do not tie to its lines"),
     );
     const residue = await h.db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents
