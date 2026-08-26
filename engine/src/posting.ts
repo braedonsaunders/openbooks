@@ -26,10 +26,14 @@ import {
 } from "./close.ts";
 import {
   applyBillInventoryReceipts,
+  applyInventoryReturnsForVendorCredit,
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
+  applyVendorCreditInventoryReturns,
   assertBillReceiptsPostable,
+  assertVendorCreditInventoryReturnsPostable,
   resolveBillInventoryAccounts,
+  resolveVendorCreditInventoryAccounts,
 } from "./inventory.ts";
 import { createObligationsFromInvoice, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
 import {
@@ -134,6 +138,12 @@ export interface PostingDeps {
    * postDocument / regenerateGlImpactTx for vendor_bill documents.
    */
   inventoryAssetByLine?: Map<string, string>;
+  /**
+   * document_line id → inventory variance/adjustment account for a native
+   * vendor return. The credit books the commercial amount here; the inventory
+   * return journal debits carried cost here, leaving only policy variance.
+   */
+  inventoryReturnOffsetByLine?: Map<string, string>;
 }
 
 export interface SourceCorrectionAuthorization {
@@ -921,10 +931,10 @@ export const RULES: Record<string, RuleFn> = {
     ];
   },
 
-  /** Vendor credit memo: the reverse of vendor_bill. DR AP / CR expense + tax. */
+  /** Vendor credit memo: DR AP / CR expense or inventory-return variance + tax. */
   vendor_credit: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
+      accountId: deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId!,
       amount: neg(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -1304,6 +1314,36 @@ export async function postDocument(
       );
     }
   }
+  if (
+    doc.kind === "vendor_credit" &&
+    !deps.migration &&
+    !deps.inventoryReturnOffsetByLine
+  ) {
+    deps = {
+      ...deps,
+      inventoryReturnOffsetByLine: await resolveVendorCreditInventoryAccounts(
+        db,
+        doc.orgId,
+        doc.id,
+      ),
+    };
+  }
+  if (doc.kind === "vendor_credit" && !deps.migration) {
+    try {
+      await assertVendorCreditInventoryReturnsPostable(
+        db,
+        doc.orgId,
+        doc.id,
+        doc.partyId,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw new PostingError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
 
   const lines = await db
     .select()
@@ -1669,6 +1709,23 @@ export async function postDocument(
         );
       }
     }
+    if (doc.kind === "vendor_credit" && !deps.migration) {
+      try {
+        await applyVendorCreditInventoryReturns(
+          tx,
+          doc.orgId,
+          options.audit?.actorId ?? null,
+          doc.id,
+          postingDate,
+          subApplied.docSubId,
+        );
+      } catch (error) {
+        if (error instanceof PostingError) throw error;
+        throw new PostingError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
 
     // Product subledgers drain after commit. Write the outbox row in this
     // transaction so a crash leaves a durable retry for runPostDocumentEffects.
@@ -1784,6 +1841,14 @@ export async function runPostDocumentEffects(
         effectActorId,
         doc.id,
         entryId,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
+    } else if (doc.kind === "vendor_credit") {
+      await applyInventoryReturnsForVendorCredit(
+        doc.orgId,
+        effectActorId,
+        doc.id,
         postingDate,
         await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );

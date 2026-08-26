@@ -82,7 +82,7 @@ export const purchasingWorkflow: DocArticle = {
   category: 'transactions',
   order: 2,
   summary: 'A practical tour of purchase orders, bills, credits, approvals, payments, and vendor balances.',
-  updated: '2026-07-22',
+  updated: '2026-08-26',
   keywords: ['purchase', 'purchase order', 'vendor bill', 'vendor credit', 'accounts payable', 'payment', 'approval'],
   related: ['payments-and-applications', 'transaction-lifecycle', 'file-cabinet'],
   body: `# Purchases: Order to Payment
@@ -117,8 +117,18 @@ accounts and credits accounts payable.
 ## Vendor credit
 
 Use a vendor credit for returned goods, price adjustments, and other genuine
-reductions. Apply it to the relevant bill or leave it open for a future
-application. Do not bury vendor credits in manual control-account journals.
+reductions. For a physical return, use an inventory item line and select the
+originating posted receipt. Select the exact lot or serial when the item is
+tracked. Posting reduces accounts payable, relieves only the selected on-hand
+cost layers at carried cost, and leaves any difference between the vendor's
+credit and carried cost in the item's configured variance or adjustment
+account. A return is rejected if its receipt evidence is missing, belongs to a
+different vendor, or no longer has enough on-hand quantity.
+
+For a price-only adjustment that does not move stock, use the appropriate
+non-inventory account line. Apply the credit to the relevant bill or leave it
+open for a future application. Do not bury vendor credits in manual
+control-account journals.
 
 ## Payment
 
