@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const utilizationView = () => readFileSync("web/app/(app)/analytics/utilization/UtilizationView.tsx", "utf8");
+const drawerSource = () => readFileSync("packages/ui/src/drawer.tsx", "utf8");
 
 interface Button {
   tag: string;
@@ -83,4 +84,107 @@ test("the departments cards/table toggles announce their target and pressed stat
   // Toggle buttons must expose state, not just action.
   assert.match(cards.tag, /aria-pressed=\{view === 'cards'\}/);
   assert.match(table.tag, /aria-pressed=\{view === 'table'\}/);
+});
+
+/** Every .tsx source under web/ (build output excluded), with its path. */
+function tsxSources(dir = "web"): [path: string, source: string][] {
+  const out: [path: string, source: string][] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".next") continue;
+      out.push(...tsxSources(`${dir}/${entry.name}`));
+    } else if (entry.name.endsWith(".tsx")) {
+      out.push([`${dir}/${entry.name}`, readFileSync(`${dir}/${entry.name}`, "utf8")]);
+    }
+  }
+  return out;
+}
+
+/** Opening tags of every `<Name …>` occurrence in the source, sliced to the tag itself. */
+function openingTags(source: string, name: string): string[] {
+  const tags: string[] = [];
+  const pattern = new RegExp(`<${name}(?=[\\s>/])`, "g");
+  for (let match = pattern.exec(source); match; match = pattern.exec(source)) {
+    const end = openTagEnd(source, match.index);
+    if (end === -1) break;
+    tags.push(source.slice(match.index, end + 1));
+  }
+  return tags;
+}
+
+/** JSX attribute names written directly on an opening tag — `{…}` expression interiors are skipped so a nested component's props never count. */
+function attributes(tag: string): Set<string> {
+  const names = new Set<string>();
+  let depth = 0;
+  for (let i = 0; i < tag.length; i++) {
+    const ch = tag[i]!;
+    if (ch === '"' || ch === "'" || ch === "`") {
+      i = tag.indexOf(ch, i + 1);
+      if (i < 0) break;
+    } else if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+    } else if (depth === 0 && /[A-Za-z]/.test(ch)) {
+      const word = /^[A-Za-z][A-Za-z0-9-]*/.exec(tag.slice(i))![0];
+      if (/[\s]/.test(tag[i - 1] ?? "")) names.add(word);
+      i += word.length - 1;
+    }
+  }
+  return names;
+}
+
+/** Title values that can never name a dialog, even though the prop is present. */
+const STATIC_EMPTY_TITLE = /title=(?:"\s*"|'\s*'|`{2}|\{\s*(?:"\s*"|'\s*'|undefined|null)\s*\})(?=[\s/>])/;
+
+function drawerTitleViolations(path: string, source: string): string[] {
+  const violations: string[] = [];
+  for (const name of ["Drawer", "UrlDrawer"]) {
+    for (const tag of openingTags(source, name)) {
+      const flat = tag.replace(/\s+/g, " ").trim();
+      const namedStatically = attributes(tag).has("title") && !STATIC_EMPTY_TITLE.test(flat);
+      if (!namedStatically) violations.push(`${path}: ${flat}`);
+    }
+  }
+  return violations;
+}
+
+test("every drawer instance names its dialog through a non-empty title prop", () => {
+  const violations = tsxSources().flatMap(([path, source]) => drawerTitleViolations(path, source));
+  assert.deepEqual(violations, []);
+});
+
+test("a drawer without a title fails this contract suite instead of shipping unnamed", () => {
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} size="md"><form /></Drawer>').length, 1);
+  assert.deepEqual(drawerTitleViolations("fixture", '<UrlDrawer open closeHref="/x"><form /></UrlDrawer>').length, 1);
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} title={undefined}>x</Drawer>').length, 1);
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} title={null}>x</Drawer>').length, 1);
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} title="">x</Drawer>').length, 1);
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} title={" "}>x</Drawer>').length, 1);
+  // A real title satisfies the contract, and nested components carrying their
+  // own title attributes do not mask an unnamed host drawer.
+  assert.deepEqual(drawerTitleViolations("fixture", '<Drawer open onClose={() => {}} title={t("new")}><Panel title="Forecast" /></Drawer>'), []);
+});
+
+test("the shared drawer derives its dialog name from its own heading", () => {
+  const src = drawerSource();
+  // The panel is labelled by the generated heading id…
+  assert.match(src, /role="dialog"\s*\n\s*aria-modal="true"\s*\n\s*aria-labelledby=\{headingId\}/);
+  // …which is owned by the rendered heading.
+  assert.match(src, /<h2 id=\{headingId\}/);
+  // The heading id comes from useId, so no call site supplies ids by hand.
+  assert.match(src, /const headingId = React\.useId\(\)/);
+});
+
+test("drawer title is required at compile time and fails closed at runtime", () => {
+  const src = drawerSource();
+  // No optional `title?:` remains on either Drawer or UrlDrawer: omitting it
+  // is a type error, not a silently unnamed dialog.
+  assert.doesNotMatch(src, /title\?:/);
+  // A drawer opened with a title that resolves empty throws rather than
+  // mounting a role=dialog with no accessible name.
+  assert.match(
+    src,
+    /throw new Error\(["']Drawer: a non-empty title is required so the dialog exposes an accessible name\.["']\)/,
+  );
 });
