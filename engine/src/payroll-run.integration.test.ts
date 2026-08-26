@@ -1206,11 +1206,16 @@ const settle = <T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> =>
  * `payroll_batch_ref`; either is safely inside that fenced interval.
  */
 async function parkedSelectionBackends(): Promise<string[]> {
+  // pg_stat_activity truncates query text to track_activity_query_size
+  // (1kB default), so the matcher must key on a phrase that survives in the
+  // FIRST kilobyte of the calculation-source fence query. "stub_employees"
+  // sits in its opening CTEs; the payroll_batch_ref predicate lives past
+  // the 2kB mark and is invisible on default-configured servers.
   const claims = (await db.execute<{ pid: number }>(sql`
     select pid from pg_stat_activity
      where datname = current_database()
        and state = 'active' and wait_event_type = 'Lock'
-       and query like '%payroll_batch_ref%'
+       and query like '%stub_employees%'
        and pid <> pg_backend_pid()`));
   return claims.rows.map((r) => String(r.pid));
 }
