@@ -7,6 +7,7 @@ import {
   InformationReturnError,
   markFilingFiled,
   recomputeFiling,
+  voidFiling,
 } from '@openbooks/engine/src/information-returns.ts'
 import { getAuthz, can } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
@@ -77,14 +78,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } else if (action === 'void') {
       const reason = (body.reason ?? '').trim()
       if (!reason) return NextResponse.json({ error: 'voiding a filing needs a reason' }, { status: 400 })
-      // A filed return is not un-filed by voiding our record of it; the void is
-      // the internal note that a corrected filing supersedes it.
-      const updated = (await db.execute<{ id: string }>(sql`
-        update information_return_filings
-           set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${id} and status <> 'void'
-        returning id`))
-      if (updated.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      // Void through the service, never a bare UPDATE here: the service locks
+      // the row and refuses to void a FILED return — transmitted evidence is
+      // permanent — and commits the lifecycle write together with its audit
+      // evidence in one unit.
+      await voidFiling({ orgId, filingId: id, actorId, reason })
+      return NextResponse.json({ id })
     } else {
       return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
@@ -94,7 +93,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               ${JSON.stringify({ after: body })}::jsonb, ${actorId})`)
     return NextResponse.json({ id })
   } catch (e) {
-    const status = e instanceof InformationReturnError ? 422 : 500
+    const status = e instanceof InformationReturnError ? e.status : 500
     return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status })
   }
 }

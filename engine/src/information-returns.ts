@@ -27,7 +27,20 @@ import { canonicalDecimal, isZeroDecimal } from "./exact-decimal.ts";
  * and they are the whole reason this is a workspace and not a report.
  */
 
-export class InformationReturnError extends Error {}
+/**
+ * The single failure type of the information-return boundary. Carries the HTTP
+ * status a caller should surface (404 the row is absent, 400 the request was
+ * malformed, otherwise 422 the filing state refused it) so routes can delegate
+ * to these functions without re-implementing their checks — the checks only
+ * hold when they run in here, inside the locked unit.
+ */
+export class InformationReturnError extends Error {
+  readonly status: number;
+  constructor(message: string, status = 422) {
+    super(message);
+    this.status = status;
+  }
+}
 
 export type FormType = "1099-NEC" | "1099-MISC" | "T4A";
 
@@ -976,7 +989,7 @@ async function lockFilingRow(orgId: string, filingId: string): Promise<FilingRow
      for update
   `));
   const row = rows.rows[0];
-  if (!row) throw new InformationReturnError("information return filing not found");
+  if (!row) throw new InformationReturnError("information return filing not found", 404);
   return row;
 }
 
@@ -1112,7 +1125,7 @@ export async function voidFiling(args: {
   reason: string;
 }): Promise<void> {
   const reason = args.reason.trim();
-  if (!reason) throw new InformationReturnError("voiding a filing needs a reason");
+  if (!reason) throw new InformationReturnError("voiding a filing needs a reason", 400);
   await withOrg(args.orgId, async () => {
     const filing = await lockFilingRow(args.orgId, args.filingId);
     if (filing.status === "void") {
@@ -1198,7 +1211,9 @@ export async function updateFilingRecipient(args: {
          and r.filing_id = ${args.filingId}
     `));
     const recipient = rows.rows[0];
-    if (!recipient) throw new InformationReturnError("information return recipient not found");
+    if (!recipient) {
+      throw new InformationReturnError("information return recipient not found", 404);
+    }
 
     const form = formDefinition(filing.formType);
     const validBoxes = new Set(form.boxes.map((b) => b.key));
@@ -1207,23 +1222,23 @@ export async function updateFilingRecipient(args: {
       const cleaned: Record<string, string> = {};
       for (const [box, value] of Object.entries(args.adjustments)) {
         if (!validBoxes.has(box)) {
-          throw new InformationReturnError(`${box} is not a box on ${form.formType}`);
+          throw new InformationReturnError(`${box} is not a box on ${form.formType}`, 400);
         }
         const exact = canonicalDecimal(value, 4);
         if (exact === null) {
-          throw new InformationReturnError(`${box}: not a valid amount`);
+          throw new InformationReturnError(`${box}: not a valid amount`, 400);
         }
         if (!isZeroDecimal(exact)) cleaned[box] = normalizeMoney(exact);
       }
       if (Object.keys(cleaned).length > 0 && !(args.adjustmentReason ?? "").trim()) {
-        throw new InformationReturnError("an adjustment needs a reason");
+        throw new InformationReturnError("an adjustment needs a reason", 400);
       }
       adjustments = cleaned;
     }
 
     const status = args.status ?? (recipient.status as "included" | "excluded");
     if (status === "excluded" && !(args.exclusionReason ?? "").trim()) {
-      throw new InformationReturnError("excluding a recipient needs a reason");
+      throw new InformationReturnError("excluding a recipient needs a reason", 400);
     }
     const adjustmentReason =
       Object.keys(adjustments).length > 0 ? (args.adjustmentReason ?? "").trim() : null;
@@ -1267,4 +1282,28 @@ export async function updateFilingRecipient(args: {
               })}::jsonb, ${args.actorId})
     `);
   });
+}
+
+/**
+ * Stamp the recipients whose copies were just furnished as printed.
+ *
+ * This is deliberately the ONLY write to a frozen filing's recipients besides
+ * the lifecycle transitions: furnishing a copy is not an edit of what was
+ * transmitted — the stamp records that the evidence was handed over, which is
+ * exactly why it must stay possible after the freeze. It lives here, and
+ * nowhere else, so every writer of these tables is in this one auditable file.
+ */
+export async function stampRecipientCopiesPrinted(args: {
+  orgId: string;
+  filingId: string;
+  /** One recipient, or all included recipients when omitted. */
+  recipientId?: string | null;
+  actorId: string;
+}): Promise<void> {
+  await db.execute(sql`
+    update information_return_recipients
+       set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
+     where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
+       and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
+  `);
 }
