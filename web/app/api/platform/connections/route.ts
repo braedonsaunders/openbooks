@@ -11,6 +11,7 @@ import {
   validateSourceSecret,
 } from "@openbooks/engine/src/sync/connection.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -177,21 +178,38 @@ export async function POST(req: Request) {
         : "unconfigured";
 
   try {
-    const [row] = await db
-      .insert(schema.connections)
-      .values({
+    const id = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .insert(schema.connections)
+        .values({
+          orgId,
+          source: manifest.source,
+          displayName,
+          authKind: manifest.authKind,
+          status,
+          config,
+          secrets: sealed,
+          createdBy: actorId,
+          updatedBy: actorId,
+        })
+        .returning();
+      if (!row) throw new Error("connection insert returned no row");
+      await tx.insert(schema.auditLog).values({
         orgId,
-        source: manifest.source,
-        displayName,
-        authKind: manifest.authKind,
-        status,
-        config,
-        secrets: sealed,
-        createdBy: actorId,
-        updatedBy: actorId,
-      })
-      .returning({ id: schema.connections.id });
-    return NextResponse.json({ id: row!.id });
+        tableName: "connections",
+        rowId: row.id,
+        action: "insert",
+        changes: connectionAuditChanges({
+          event: "connection_created",
+          before: null,
+          after: row,
+          credentialsChanged: sealed != null,
+        }),
+        actorId,
+      });
+      return row.id;
+    });
+    return NextResponse.json({ id });
   } catch (e) {
     const msg = (e as { message?: string })?.message ?? "create failed";
     // Unique (org, displayName) collision → friendly message.

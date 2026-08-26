@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { and, eq, sql } from "drizzle-orm";
+import { db, schema } from "@openbooks/engine/src/db.ts";
 import { sealJson, unsealJson } from "@openbooks/engine/src/secrets.ts";
 import {
   getConnection,
@@ -11,6 +11,7 @@ import {
 } from "@openbooks/engine/src/sync/connection.ts";
 import { nextMirrorAt } from "@openbooks/engine/src/sync/mirror-schedule.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
+import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
@@ -29,11 +30,6 @@ export async function PATCH(
   const orgId = gate.user.orgId;
   const { id } = await params;
 
-  const existing = await getConnection(orgId, id);
-  if (!existing)
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  const manifest = sourceType(existing.source);
-
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
@@ -45,105 +41,147 @@ export async function PATCH(
     postedChangePolicy?: "review_required" | "append_only_automatic";
     status?: "active" | "paused";
   };
+  const today =
+    body.config && typeof body.config === "object"
+      ? await businessToday(orgId)
+      : undefined;
 
-  const sets: ReturnType<typeof sql>[] = [];
-  if (typeof body.displayName === "string" && body.displayName.trim()) {
-    sets.push(sql`display_name = ${body.displayName.trim()}`);
-  }
-  if (body.config && typeof body.config === "object") {
-    const merged = { ...existing.config, ...body.config };
-    if (manifest) {
-      const configError = validateSourceConfig(manifest, merged, { today: await businessToday(orgId) });
-      if (configError)
-        return NextResponse.json({ error: configError }, { status: 400 });
+  const result = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(schema.connections)
+      .where(
+        and(
+          eq(schema.connections.orgId, orgId),
+          eq(schema.connections.id, id),
+        ),
+      )
+      .for("update");
+    if (!existing) {
+      return NextResponse.json({ error: "not found" }, { status: 404 });
     }
-    sets.push(sql`config = ${JSON.stringify(merged)}::jsonb`);
-  }
-  if (body.secrets && manifest) {
-    const current = unsealJson<Record<string, string>>(existing.secrets) ?? {};
-    for (const f of manifest.secretFields) {
-      const v = body.secrets[f.key];
-      if (v !== undefined && v !== null && String(v) !== "") {
-        const secretError = validateSourceSecret(
-          existing.source,
-          f.key,
-          String(v),
-        );
-        if (secretError)
-          return NextResponse.json({ error: secretError }, { status: 400 });
-        current[f.key] = String(v);
+
+    const manifest = sourceType(existing.source);
+    const updates: Partial<typeof schema.connections.$inferInsert> = {};
+    let credentialsChanged = false;
+
+    if (typeof body.displayName === "string" && body.displayName.trim()) {
+      updates.displayName = body.displayName.trim();
+    }
+    if (body.config && typeof body.config === "object") {
+      const currentConfig =
+        existing.config &&
+        typeof existing.config === "object" &&
+        !Array.isArray(existing.config)
+          ? existing.config
+          : {};
+      const merged = { ...currentConfig, ...body.config };
+      if (manifest) {
+        const configError = validateSourceConfig(manifest, merged, { today });
+        if (configError) {
+          return NextResponse.json({ error: configError }, { status: 400 });
+        }
+      }
+      updates.config = merged;
+    }
+    if (body.secrets && manifest) {
+      const current =
+        unsealJson<Record<string, string>>(existing.secrets) ?? {};
+      for (const field of manifest.secretFields) {
+        const value = body.secrets[field.key];
+        if (value !== undefined && value !== null && String(value) !== "") {
+          const secretError = validateSourceSecret(
+            existing.source,
+            field.key,
+            String(value),
+          );
+          if (secretError) {
+            return NextResponse.json(
+              { error: secretError },
+              { status: 400 },
+            );
+          }
+          current[field.key] = String(value);
+          credentialsChanged = true;
+        }
+      }
+      if (credentialsChanged) {
+        updates.secrets = sealJson(current);
+        // Providing credentials clears the "unconfigured" state.
+        if (existing.status === "unconfigured") updates.status = "active";
       }
     }
-    sets.push(sql`secrets = ${sealJson(current)}`);
-    // Providing credentials clears the "unconfigured" state.
-    if (existing.status === "unconfigured") sets.push(sql`status = 'active'`);
-  }
-  if (typeof body.mirrorEnabled === "boolean")
-    sets.push(sql`mirror_enabled = ${body.mirrorEnabled}`);
-  if (typeof body.mirrorSchedule === "string") {
-    try {
-      nextMirrorAt(body.mirrorSchedule, new Date());
-    } catch (error) {
-      return NextResponse.json(
-        { error: (error as Error).message },
-        { status: 400 },
-      );
+    if (typeof body.mirrorEnabled === "boolean") {
+      updates.mirrorEnabled = body.mirrorEnabled;
     }
-    sets.push(sql`mirror_schedule = ${body.mirrorSchedule}`);
-  }
-  const postedChangePolicyChanged =
-    body.postedChangePolicy !== undefined &&
-    body.postedChangePolicy !== existing.postedChangePolicy;
-  if (postedChangePolicyChanged) {
+    if (typeof body.mirrorSchedule === "string") {
+      try {
+        nextMirrorAt(body.mirrorSchedule, new Date());
+      } catch (error) {
+        return NextResponse.json(
+          { error: (error as Error).message },
+          { status: 400 },
+        );
+      }
+      updates.mirrorSchedule = body.mirrorSchedule;
+    }
     if (
-      body.postedChangePolicy !== "review_required" &&
-      body.postedChangePolicy !== "append_only_automatic"
+      body.postedChangePolicy !== undefined &&
+      body.postedChangePolicy !== existing.postedChangePolicy
     ) {
-      return NextResponse.json(
-        { error: "invalid posted-change policy" },
-        { status: 400 },
-      );
+      if (
+        body.postedChangePolicy !== "review_required" &&
+        body.postedChangePolicy !== "append_only_automatic"
+      ) {
+        return NextResponse.json(
+          { error: "invalid posted-change policy" },
+          { status: 400 },
+        );
+      }
+      updates.postedChangePolicy = body.postedChangePolicy;
+      updates.postedChangeAuthorizedBy =
+        body.postedChangePolicy === "append_only_automatic"
+          ? gate.user.id
+          : null;
+      updates.postedChangeAuthorizedAt =
+        body.postedChangePolicy === "append_only_automatic"
+          ? new Date()
+          : null;
     }
-    if (body.postedChangePolicy === "append_only_automatic") {
-      sets.push(
-        sql`posted_change_policy = 'append_only_automatic'`,
-        sql`posted_change_authorized_by = ${gate.user.id}`,
-        sql`posted_change_authorized_at = now()`,
-      );
-    } else {
-      sets.push(
-        sql`posted_change_policy = 'review_required'`,
-        sql`posted_change_authorized_by = null`,
-        sql`posted_change_authorized_at = null`,
-      );
+    if (body.status === "active" || body.status === "paused") {
+      updates.status = body.status;
     }
-  }
-  if (body.status === "active" || body.status === "paused")
-    sets.push(sql`status = ${body.status}`);
 
-  if (sets.length === 0) return NextResponse.json({ ok: true });
-  sets.push(sql`updated_at = now()`, sql`updated_by = ${gate.user.id}`);
-  await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`update connections set ${sql.join(sets, sql`, `)} where org_id = ${orgId} and id = ${id}`,
-    );
-    if (postedChangePolicyChanged) {
-      await tx.execute(sql`
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id)
-        values (
-          ${orgId}, 'connections', ${id}, 'update',
-          ${JSON.stringify({
-            field: "postedChangePolicy",
-            before: existing.postedChangePolicy,
-            after: body.postedChangePolicy,
-            control: "append_only_source_correction",
-          })}::jsonb,
-          ${gate.user.id}
-        )
-      `);
-    }
+    if (Object.keys(updates).length === 0) return null;
+    updates.updatedAt = new Date();
+    updates.updatedBy = gate.user.id;
+    const [updated] = await tx
+      .update(schema.connections)
+      .set(updates)
+      .where(
+        and(
+          eq(schema.connections.orgId, orgId),
+          eq(schema.connections.id, id),
+        ),
+      )
+      .returning();
+    if (!updated) throw new Error("connection update returned no row");
+    await tx.insert(schema.auditLog).values({
+      orgId,
+      tableName: "connections",
+      rowId: id,
+      action: "update",
+      changes: connectionAuditChanges({
+        event: "connection_updated",
+        before: existing,
+        after: updated,
+        credentialsChanged,
+      }),
+      actorId: gate.user.id,
+    });
+    return updated;
   });
+  if (result instanceof NextResponse) return result;
   return NextResponse.json({ ok: true });
 }
 
@@ -158,8 +196,6 @@ export async function DELETE(
   const existing = await getConnection(orgId, id);
   if (!existing)
     return NextResponse.json({ error: "not found" }, { status: 404 });
-  // Audit-safe snapshot: the sealed secrets blob never enters the trail.
-  const { secrets, ...rest } = existing as unknown as Record<string, unknown>;
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`delete from connections where org_id = ${orgId} and id = ${id}`,
@@ -169,10 +205,14 @@ export async function DELETE(
         (org_id, table_name, row_id, action, changes, actor_id)
       values (
         ${orgId}, 'connections', ${id}, 'delete',
-        ${JSON.stringify({
-          before: { ...rest, hasSecrets: secrets != null },
-          source: String(existing.source),
-        })}::jsonb,
+        ${JSON.stringify(
+          connectionAuditChanges({
+            event: "connection_deleted",
+            before: existing,
+            after: null,
+            credentialsChanged: existing.secrets != null,
+          }),
+        )}::jsonb,
         ${gate.user.id}
       )
     `);
