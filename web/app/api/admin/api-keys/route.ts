@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { generateApiKey } from "../../../../lib/api-auth";
 import {
@@ -15,9 +15,18 @@ export const runtime = "nodejs";
 /**
  * API key management. Gated by `api.keys.manage`. Keys are org-scoped and
  * owned by the creating user. The plaintext key is returned ONLY at creation
- * — at rest we keep the SHA-256 hash + a 4-char preview. Revocation is
- * `is_active = false` (preserves the audit/event log). Every change is
- * recorded in audit_log.
+ * — at rest we keep the SHA-256 hash + a 4-char preview.
+ *
+ * Suspending a key (`PATCH isActive=false`) is reversible through an explicit,
+ * audited resume. Revocation (`DELETE`) is terminal: the stored credential
+ * material is replaced with artifacts from a discarded secret, so the old
+ * bearer token cannot authenticate even if `is_active` is later changed by a
+ * direct write. The append-only revocation audit record also blocks API
+ * reactivation; restoring access requires a newly generated key.
+ *
+ * Each mutation and its redacted audit evidence commit in one
+ * `withOrgTransaction` unit. Audit failure therefore rolls the mutation back,
+ * and a one-time plaintext is returned only after its creation unit commits.
  */
 
 function normalizeScopes(input: unknown): string[] | null {
@@ -54,6 +63,18 @@ async function audit(args: {
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'api_keys', ${args.rowId}, ${args.action},
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
+}
+
+/** The append-only `delete` audit record is the durable terminal marker. */
+async function hasRevocationRecord(orgId: string, rowId: string): Promise<boolean> {
+  const result = await db.execute(sql`
+    select 1 from audit_log
+     where org_id = ${orgId}
+       and table_name = 'api_keys'
+       and row_id = ${rowId}
+       and action = 'delete'
+     limit 1`);
+  return result.rows.length > 0;
 }
 
 /** List all keys in the org (without secrets). */
@@ -113,24 +134,42 @@ export async function POST(req: Request) {
   }
 
   const gen = generateApiKey();
-  const inserted = (await db.execute(sql`
-    insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
-                          key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
-    values (${actor.orgId}, ${actor.id}, ${name}, ${body.description?.trim() || null},
-            ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
-            ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
-    returning id`)) as any;
+  const description = body.description?.trim() || null;
+  const insertedId = await withOrgTransaction(actor.orgId, async () => {
+    const inserted = (await db.execute(sql`
+      insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
+                            key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
+      values (${actor.orgId}, ${actor.id}, ${name}, ${description},
+              ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
+              ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
+      returning id`)) as unknown as { rows: Array<{ id: string }> };
+    const id = inserted.rows[0]?.id;
+    if (!id) throw new Error("api key insert did not return an id");
 
-  await audit({
-    orgId: actor.orgId, rowId: inserted.rows[0].id, action: "insert",
-    changes: { name: [null, name], scopes: [null, scopes], scopesCount: scopes.length },
-    actorId: actor.id,
+    await audit({
+      orgId: actor.orgId,
+      rowId: id,
+      action: "insert",
+      changes: {
+        before: null,
+        after: {
+          name,
+          description,
+          scopes,
+          rate_limit_per_min: rateValue,
+          is_active: true,
+          expires_at: expiresAt,
+        },
+      },
+      actorId: actor.id,
+    });
+    return id;
   });
 
-  return NextResponse.json({ id: inserted.rows[0].id, plaintext: gen.plaintext }, { status: 201 });
+  return NextResponse.json({ id: insertedId, plaintext: gen.plaintext }, { status: 201 });
 }
 
-/** Update a key — name, description, scopes, or revoke (is_active = false). */
+/** Update a key — name, description, scopes, suspension/resume, or rate limit. */
 export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
@@ -149,61 +188,114 @@ export async function PATCH(req: Request) {
   if (!body.id || !isUuid(body.id)) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
+  const keyId = body.id;
 
-  const existing = ((await db.execute(sql`
-    select id, name, description, scopes, rate_limit_per_min, is_active
-      from api_keys where id = ${body.id} and org_id = ${actor.orgId}`)));
-  const key = existing.rows[0];
-  if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
-
-  const changes: Record<string, unknown> = {};
-  const sets: SQL[] = [];
-
+  const fields = {
+    name: undefined as string | undefined,
+    description: undefined as string | null | undefined,
+    scopes: undefined as string[] | undefined,
+    isActive: undefined as boolean | undefined,
+    rateLimitPerMin: undefined as number | null | undefined,
+  };
   if (body.name !== undefined) {
     const name = body.name.trim();
     if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
-    sets.push(sql`name = ${name}`);
-    changes.name = [key.name, name];
+    fields.name = name;
   }
   if (body.description !== undefined) {
-    const desc = body.description.trim() || null;
-    sets.push(sql`description = ${desc}`);
-    changes.description = [key.description, desc];
+    fields.description = body.description.trim() || null;
   }
   if (body.scopes !== undefined) {
     const scopes = normalizeScopes(body.scopes);
     if (!scopes) {
       return NextResponse.json({ error: "scopes must be known catalogue keys" }, { status: 400 });
     }
-    sets.push(sql`scopes = ${JSON.stringify(scopes)}`);
-    changes.scopes = [key.scopes, scopes];
-  }
-  if (body.isActive !== undefined) {
-    sets.push(sql`is_active = ${body.isActive}`);
-    changes.is_active = [key.is_active, body.isActive];
+    fields.scopes = scopes;
   }
   if (body.rateLimitPerMin !== undefined) {
     const rate = parseRate(body.rateLimitPerMin);
     if (rate === false) {
       return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
     }
-    sets.push(sql`rate_limit_per_min = ${rate}`);
-    changes.rate_limit_per_min = [key.rate_limit_per_min, rate];
+    fields.rateLimitPerMin = rate;
   }
-  if (sets.length === 0) {
+  const wantsReactivation = body.isActive === true;
+  if (body.isActive !== undefined) fields.isActive = body.isActive;
+  if (Object.values(fields).every((value) => value === undefined)) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   }
 
-  await db.execute(sql`
-    update api_keys
-       set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
-     where id = ${body.id} and org_id = ${actor.orgId}`);
+  return withOrgTransaction(actor.orgId, async () => {
+    const existing = (await db.execute(sql`
+      select id, name, description, scopes, rate_limit_per_min, is_active
+        from api_keys
+       where id = ${keyId} and org_id = ${actor.orgId}
+       for update`)) as unknown as {
+      rows: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        scopes: unknown;
+        rate_limit_per_min: number | null;
+        is_active: boolean;
+      }>;
+    };
+    const key = existing.rows[0];
+    if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
-  await audit({ orgId: actor.orgId, rowId: body.id, action: "update", changes, actorId: actor.id });
-  return NextResponse.json({ ok: true });
+    if (wantsReactivation && (await hasRevocationRecord(actor.orgId, keyId))) {
+      return NextResponse.json(
+        { error: "this key was revoked; revocation is permanent — create a new key" },
+        { status: 409 },
+      );
+    }
+
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    const sets: SQL[] = [];
+    if (fields.name !== undefined) {
+      sets.push(sql`name = ${fields.name}`);
+      before.name = key.name;
+      after.name = fields.name;
+    }
+    if (fields.description !== undefined) {
+      sets.push(sql`description = ${fields.description}`);
+      before.description = key.description;
+      after.description = fields.description;
+    }
+    if (fields.scopes !== undefined) {
+      sets.push(sql`scopes = ${JSON.stringify(fields.scopes)}`);
+      before.scopes = key.scopes;
+      after.scopes = fields.scopes;
+    }
+    if (fields.isActive !== undefined) {
+      sets.push(sql`is_active = ${fields.isActive}`);
+      before.is_active = key.is_active;
+      after.is_active = fields.isActive;
+    }
+    if (fields.rateLimitPerMin !== undefined) {
+      sets.push(sql`rate_limit_per_min = ${fields.rateLimitPerMin}`);
+      before.rate_limit_per_min = key.rate_limit_per_min;
+      after.rate_limit_per_min = fields.rateLimitPerMin;
+    }
+
+    await db.execute(sql`
+      update api_keys
+         set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
+       where id = ${keyId} and org_id = ${actor.orgId}`);
+
+    await audit({
+      orgId: actor.orgId,
+      rowId: keyId,
+      action: "update",
+      changes: { before, after },
+      actorId: actor.id,
+    });
+    return NextResponse.json({ ok: true });
+  });
 }
 
-/** Revoke a key (soft-delete: is_active = false, preserves audit trail). */
+/** Revoke a key permanently while preserving its row and event references. */
 export async function DELETE(req: Request) {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
@@ -214,21 +306,50 @@ export async function DELETE(req: Request) {
   const { id } = (parsedBody3.data) as { id?: string };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  const existing = ((await db.execute(sql`
-    select id, name, key_prefix, is_active from api_keys
-     where id = ${id} and org_id = ${actor.orgId}`)));
-  const key = existing.rows[0];
-  if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
+  return withOrgTransaction(actor.orgId, async () => {
+    const existing = (await db.execute(sql`
+      select id, name, key_prefix, is_active
+        from api_keys
+       where id = ${id} and org_id = ${actor.orgId}
+       for update`)) as unknown as {
+      rows: Array<{ id: string; name: string; key_prefix: string; is_active: boolean }>;
+    };
+    const key = existing.rows[0];
+    if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
-  // Soft-delete: mark inactive so the event log retains its references.
-  await db.execute(sql`
-    update api_keys set is_active = false, updated_at = now(), updated_by = ${actor.id}
-     where id = ${id} and org_id = ${actor.orgId}`);
+    // Destroy the stored lookup artifacts with a discarded secret. A direct
+    // is_active=true write therefore cannot revive the compromised bearer.
+    const destroyed = generateApiKey();
+    await db.execute(sql`
+      update api_keys
+         set is_active = false,
+             key_hash = ${destroyed.keyHash},
+             key_prefix = ${destroyed.keyPrefix},
+             key_preview = ${destroyed.keyPreview},
+             updated_at = now(),
+             updated_by = ${actor.id}
+       where id = ${id} and org_id = ${actor.orgId}`);
 
-  await audit({
-    orgId: actor.orgId, rowId: id, action: "delete",
-    changes: { name: [key.name, null], key_prefix: [key.key_prefix, null] },
-    actorId: actor.id,
+    await audit({
+      orgId: actor.orgId,
+      rowId: id,
+      action: "delete",
+      changes: {
+        before: {
+          name: key.name,
+          key_prefix: key.key_prefix,
+          is_active: key.is_active,
+          credential_material: "stored",
+        },
+        after: {
+          name: key.name,
+          key_prefix: "[destroyed]",
+          is_active: false,
+          credential_material: "destroyed",
+        },
+      },
+      actorId: actor.id,
+    });
+    return NextResponse.json({ ok: true });
   });
-  return NextResponse.json({ ok: true });
 }
