@@ -4,6 +4,8 @@ import test from "node:test";
 
 const scheduler = readFileSync("engine/src/worker/backup-scheduler.ts", "utf8");
 const backup = readFileSync("engine/src/backup.ts", "utf8");
+const backupPolicy = readFileSync("web/app/api/admin/backups/policy/route.ts", "utf8");
+const manualPurge = readFileSync("web/app/api/admin/backups/[id]/route.ts", "utf8");
 const storedDownload = readFileSync("web/app/api/admin/backups/[id]/download/route.ts", "utf8");
 const directDownload = readFileSync("web/app/api/admin/backups/download/route.ts", "utf8");
 
@@ -31,6 +33,28 @@ test("stored backup upload is recoverable and retention cannot relabel completio
   assert.ok(upload < completion && completion < rotation);
   assert.match(backup, /state\?\.status === "completed"/);
   assert.match(backup, /backup_retention_failed/);
+});
+
+test("backup policy changes commit with their mandatory audit evidence", () => {
+  const transaction =
+    backupPolicy.match(/await withOrgTransaction\(orgId, async \(\) => \{([\s\S]*?)\n  \}\);/)?.[1] ?? "";
+  const mutation = transaction.indexOf("insert into backup_policies");
+  const evidence = transaction.indexOf("await auditBackupEvent");
+  assert.ok(mutation >= 0 && mutation < evidence);
+});
+
+test("backup purges persist intent before storage deletion and atomically record completion", () => {
+  const start = backup.indexOf("export async function purgeBackupRun");
+  const purge = start < 0 ? "" : backup.slice(start, backup.indexOf("\n}\n", start) + 3);
+  const intent = purge.indexOf("await auditBackupEvent");
+  const deletion = purge.indexOf("await deleteBackupObject");
+  const completion = purge.indexOf("return withOrgTransaction");
+  const stamp = purge.indexOf("set purged_at = now()");
+  const evidence = purge.lastIndexOf("await auditBackupEvent");
+  assert.ok(intent >= 0 && intent < deletion && deletion < completion && completion < stamp && stamp < evidence);
+  assert.match(purge, /purged_at is null[\s\S]*returning id/);
+  assert.match(manualPurge, /await purgeBackupRun/);
+  assert.match(backup, /rotateBackups[\s\S]*await purgeBackupRun/);
 });
 
 test("stale upload reconciliation requires exact object hash and size", () => {
