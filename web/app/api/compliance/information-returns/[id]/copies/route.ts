@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { db } from '@openbooks/engine/src/db.ts'
+import {
+  stampRecipientCopiesPrinted,
+} from '@openbooks/engine/src/information-returns.ts'
 import { guardPermission } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
@@ -110,11 +113,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       ? await renderInformationReturnPdf(forms[0]!)
       : await renderInformationReturnBatchPdf(forms)
 
-  await db.execute(sql`
-    update information_return_recipients
-       set printed_at = now(), updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and filing_id = ${id} and status = 'included'
-       and (${recipientId ?? null}::uuid is null or id = ${recipientId ?? null}::uuid)`)
+  // Furnishing is stamped through the engine's one owned write to recipients —
+  // the only mutation a frozen filing still accepts, because handing over a
+  // copy is not an edit of what was transmitted.
+  await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
 
   const stamp = await businessToday(orgId)
   const filename =
