@@ -14,6 +14,8 @@ const documentRevisionMonotonicMigrationPath =
   "schema/migrations/generated/0013_document_revision_monotonic.sql";
 const flowEmailOutboxMigrationPath =
   "schema/migrations/generated/0014_flow_email_outbox.sql";
+const closePostingFenceMigrationPath =
+  "schema/migrations/generated/0022_close_posting_fence.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -41,6 +43,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0015_payment_instruction_posting_claim_fence.sql",
     "0016_gl_month_activity_book_id.sql",
     "0020_inventory_subsidiary_ownership.sql",
+    "0022_close_posting_fence.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -144,6 +147,32 @@ test("transactional flow emails defer through the durable scheduler outbox", () 
   )?.[1];
   assert.ok(scopeCheck, "migration must (re)create the scheduler_outbox_scope check");
   assert.match(scopeCheck, /\(kind = 'flow_email'\) AND \(org_id IS NOT NULL\) AND \(subject_id IS NOT NULL\) AND \(payload IS NOT NULL\)/);
+});
+
+test("journal posting serializes with period close through a shared advisory fence", () => {
+  const migration = readFileSync(closePostingFenceMigrationPath, "utf8");
+  // The fence helper must hash byte-identically to the engine's exclusive
+  // side (periodScopeAdvisoryLock in engine/src/close.ts), or the two sides
+  // would serialize on different keys and the race would stay open.
+  assert.match(
+    migration,
+    /hashtextextended\('period-lock:' \|\| p_org::text \|\| ':' \|\| p_period::text \|\| ':' \|\| p_book::text, 0\),\s*\n\s*false/,
+  );
+  // Shared mode is what lets parallel postings stay parallel while still
+  // conflicting with the close writer's exclusive acquisition.
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.period_posting_fence/);
+  assert.match(migration, /LANGUAGE plpgsql VOLATILE/);
+  assert.match(migration, /COMMENT ON FUNCTION public\.period_posting_fence\(uuid, uuid, uuid\) IS/);
+  // je_guard keeps its prior rules but takes the fence before every branch
+  // that consults GL period state: posted-entry deletion, amend rematerialize
+  // (old and new scope), and draft -> posted.
+  assert.match(migration, /CREATE OR REPLACE FUNCTION public\.je_guard\(\)/);
+  const fences = migration.match(/perform period_posting_fence\(/g);
+  assert.equal(fences?.length, 4, "every ledger-mutating je_guard branch must take the fence");
+  assert.match(
+    migration,
+    /perform period_posting_fence\(new\.org_id, new\.period_id, new\.book_id\);\s*\n\s*if period_module_blocks_write/,
+  );
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
