@@ -7,6 +7,7 @@ import { db, withBypass } from "./db.ts";
 import {
   computeNextSyncAt,
   FxProviderError,
+  FxRunLeaseLostError,
   normalizeFxSnapshots,
   parseBankOfCanadaJson,
   parseEcbCsv,
@@ -104,6 +105,32 @@ test("FX run conflicts inspect wrapped database causes before returning a domain
     source.slice(createRunStart, source.indexOf("\nexport async function runFxProvider", createRunStart)),
     /if \(isFxRunInProgressConflict\(error\)\) throw new FxProviderError\("an FX provider run is already in progress"\)/,
   );
+});
+
+// The completion stamp must live INSIDE the rates' transaction and be fenced
+// on the per-claim lease token (same idiom as posting_effects), so a crash can
+// never leave rates applied while the run/config still say running, and a
+// reclaimed claim can neither resurrect its row nor promote schedule
+// ownership. These static guards pin the structure that makes the recovery
+// stages idempotent.
+test("FX run claims are fenced by a per-claim lease token with an atomic completion unit", () => {
+  const claimStart = source.indexOf("async function createRun");
+  const runEnd = source.indexOf("\n/** Scheduler scan", claimStart);
+  assert.ok(claimStart >= 0 && runEnd > claimStart, "runFxProvider is defined after createRun");
+
+  // The takeover path clears the stale claim's token when reclaiming it...
+  assert.match(source.slice(claimStart, source.indexOf("\nexport async function runFxProvider", claimStart)), /lease_token = null/);
+  // ...every new claim mints its own token...
+  assert.match(source.slice(claimStart, runEnd), /gen_random_uuid\(\)/);
+  // ...rate application only happens under a held, token-matched running row...
+  assert.match(source.slice(claimStart, runEnd), /and lease_token = \$\{claim\.leaseToken\} and status = 'running'\s+for update/);
+  // ...the success stamp is executed on the transaction executor...
+  const stampMatch = source.slice(claimStart, runEnd).match(/const stamped = await tx\.execute\(sql`[\s\S]*?`\);[\s\S]*?if \(!stamped\.rowCount\) throw new FxRunLeaseLostError\(\);/);
+  assert.ok(stampMatch, "the success stamp runs inside the rates transaction with the lease fence");
+  assert.match(stampMatch[0]!, /lease_token = null/);
+  assert.match(stampMatch[0]!, /id = \$\{claim\.runId\} and org_id = \$\{orgId\} and lease_token = \$\{claim\.leaseToken\} and status = 'running'/);
+  // ...and the failure stamp carries the identical fence.
+  assert.match(source.slice(claimStart, runEnd), /where id = \$\{claim\.runId\} and org_id = \$\{orgId\} and lease_token = \$\{claim\.leaseToken\} and status = 'running'\s*`\);\s*if \(!stamped\.rowCount\) return;/);
 });
 
 test("weekday schedules skip weekends and weekly schedules remain seven days apart", () => {
@@ -367,13 +394,14 @@ test(
 
       async function plantRunningRow(startedAt: SQL): Promise<void> {
         await db.execute(sql`
-          insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, started_at)
-          values (${org.orgId}, ${configId}, 'scheduler', current_date - 7, current_date, ${startedAt})
+          insert into fx_provider_runs
+            (org_id, provider_config_id, trigger, requested_from, requested_to, started_at, lease_token)
+          values (${org.orgId}, ${configId}, 'scheduler', current_date - 7, current_date, ${startedAt}, gen_random_uuid())
         `);
       }
-      async function runRows(): Promise<Array<{ status: string; error_message: string | null }>> {
-        const r = await db.execute<{ status: string; error_message: string | null }>(sql`
-          select status, error_message from fx_provider_runs
+      async function runRows(): Promise<Array<{ status: string; error_message: string | null; lease_token: string | null }>> {
+        const r = await db.execute<{ status: string; error_message: string | null; lease_token: string | null }>(sql`
+          select status, error_message, lease_token from fx_provider_runs
            where org_id = ${org.orgId} order by started_at asc, id asc`);
         return r.rows;
       }
@@ -387,6 +415,7 @@ test(
       assert.equal(rows.length, 2);
       assert.match(rows[0]!.error_message ?? "", /crashed|killed/i, "the abandonment must be operator-visible");
       assert.equal(rows[0]!.status, "failed");
+      assert.equal(rows[0]!.lease_token, null, "the takeover must clear the dead claim's fencing token");
       assert.equal(rows[1]!.status, "ok");
 
       // Control: a fresh running row still excludes concurrent runs.
@@ -427,6 +456,7 @@ test(
       const abandoned = finalRows.filter((row) => (row.error_message ?? "").includes("abandoned"));
       assert.equal(abandoned.length, 3, "every planted stale row ends reclaimed and failed");
       assert.ok(abandoned.every((row) => row.status === "failed"));
+      assert.ok(abandoned.every((row) => row.lease_token === null), "every reclaimed claim is unfenced");
       assert.equal(finalRows.at(-1)!.status, "ok");
     } finally {
       globalThis.fetch = originalFetch;
@@ -435,3 +465,225 @@ test(
     }
   },
 );
+
+/** Scratch org, currencies, and a manual-schedule provider config for a sync whose observations come from `url`. */
+async function setupManualFxScratchOrg(): Promise<{ orgId: string; configId: string }> {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    for (const code of ["USD", "EUR"]) {
+      await db.execute(sql`
+        insert into currencies (code, name, minor_units) values (${code}, ${code}, 2)
+        on conflict (code) do nothing`);
+    }
+    await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"multiCurrency":true}}'::jsonb
+       where id = ${org.orgId}`);
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
+    await saveFxProviderConfig(org.orgId, actorId, {
+      provider: "bank_of_canada",
+      baseCurrency: "CAD",
+      currencies: ["USD", "EUR"],
+      schedule: "manual",
+      syncHourUtc: 0,
+      lookbackDays: 7,
+      isEnabled: true,
+      apiKey: null,
+    });
+    const config = await db.execute<{ id: string }>(sql`
+      select id from fx_provider_configs where org_id = ${org.orgId}`);
+    return { orgId: org.orgId, configId: config.rows[0]!.id };
+  } catch (error) {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    throw error;
+  }
+}
+
+// A crash DURING the rates upsert must persist nothing: the completion stamp
+// shares one transaction with every rate write, so a failure partway through
+// leaves zero partial rows while the claim records its failure — and replay
+// from scratch applies everything exactly once.
+test(
+  "a mid-upsert crash persists no partial rates and recovery replays atomically",
+  { skip: !DB },
+  async () => {
+    // CAD-per-USD collapses to 1e-10, so CAD→USD normalizes to
+    // 10000000000.0000000000 — beyond numeric(19,10). The (CAD,EUR) insert
+    // before it succeeds, then PostgreSQL rejects (CAD,USD) inside the same
+    // transaction: a genuine storage fault fired after real writes began.
+    let poisonUsd = true;
+    const provider = createServer((req, res) => {
+      const today = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{
+          d: today,
+          FXUSDCAD: { v: poisonUsd ? "0.0000000001" : "1.2500" },
+          FXEURCAD: { v: "1.0900" },
+        }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    const org = await setupManualFxScratchOrg();
+    try {
+      // Drizzle wraps storage faults in a DrizzleQueryError; walk the cause
+      // chain like isFxRunInProgressConflict does for constraint conflicts.
+      const overflowFault = (error: unknown): boolean => {
+        let current: unknown = error;
+        for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+          const message = (current as { message?: string }).message ?? "";
+          if (/numeric field overflow|out of range/i.test(message)) return true;
+          current = (current as { cause?: unknown }).cause;
+        }
+        return false;
+      };
+      await assert.rejects(
+        runFxProvider(org.orgId, "manual"),
+        overflowFault,
+        "the poisoned observation must fail inside the upsert transaction",
+      );
+      const rateCount = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
+      assert.equal(rateCount.rows[0]!.count, "0", "no partial application may survive the crash stage");
+
+      const crashed = await db.execute<{ status: string; lease_token: string | null }>(sql`
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId}`);
+      assert.deepEqual(crashed.rows, [{ status: "failed", lease_token: null }],
+        "the crashed attempt must record its failure and release its fencing token");
+      const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`);
+      assert.ok(
+        /numeric field overflow|out of range/i.test(configState.rows[0]!.last_error ?? ""),
+        "the config must carry the failure",
+      );
+      assert.equal(configState.rows[0]!.last_success_at, null, "a crashed attempt owns no success");
+
+      // Replay from scratch: the recovery run re-claims cleanly and applies
+      // every pair exactly once, with run state and rates committing together.
+      poisonUsd = false;
+      const replay = await runFxProvider(org.orgId, "manual");
+      assert.equal(replay.ratesInserted, 6, "the replay materializes every directed pair exactly once");
+      const pairs = await db.execute<{ from_currency: string; to_currency: string; rate: string }>(sql`
+        select from_currency, to_currency, rate::text from fx_rates
+         where org_id = ${org.orgId} order by from_currency, to_currency`);
+      assert.equal(pairs.rows.length, 6);
+      for (const row of pairs.rows) {
+        assert.match(row.rate, /^\d+\.\d{10}$/, `${row.from_currency}→${row.to_currency} stays inside numeric(19,10)`);
+      }
+      const settledRows = await db.execute<{ status: string; lease_token: string | null }>(sql`
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId} order by started_at asc, id asc`);
+      assert.deepEqual(settledRows.rows, [
+        { status: "failed", lease_token: null },
+        { status: "ok", lease_token: null },
+      ], "recovery ends with the failed stage terminal and the replay committed unfenced");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+// A superseded claim — one whose run aged past the lease TTL while still in
+// flight and was reclaimed by a fresh attempt — must not stamp its outcome,
+// resurrect its row, or promote schedule ownership. The winner's commit is the
+// only visible effect.
+test(
+  "a reclaimed claim cannot complete or promote schedule ownership after losing its lease",
+  { skip: !DB },
+  async () => {
+    let gated = false;
+    let releaseLoser!: () => void;
+    const gate = new Promise<void>((resolve) => { releaseLoser = resolve; });
+    const provider = createServer((req, res) => {
+      const today = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+        if (gated) return gate.then(() => originalFetch(requested, init));
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    const org = await setupManualFxScratchOrg();
+    try {
+      // Start an attempt and hold it mid-fetch, exactly where a wedged worker
+      // sits while everyone else thinks it died.
+      gated = true;
+      const loserPromise = runFxProvider(org.orgId, "manual").catch((error: unknown) => error);
+      let lost: { id: string } | undefined;
+      for (let waited = 0; waited < 10_000 && !lost; waited += 50) {
+        const runningRow = await db.execute<{ id: string }>(sql`
+          select id from fx_provider_runs
+           where org_id = ${org.orgId} and status = 'running' limit 1`);
+        lost = runningRow.rows[0];
+        if (!lost) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.ok(lost, "the held attempt must claim its run row before fetching");
+
+      // Age it past the lease TTL so the next attempt is entitled to take over.
+      await db.execute(sql`
+        update fx_provider_runs set started_at = now() - interval '45 minutes' where id = ${lost.id}`);
+      gated = false;
+      const winner = await runFxProvider(org.orgId, "manual");
+      assert.equal(winner.ratesInserted, 6, "the takeover completes the synchronization normally");
+
+      // Only now may the former holder resume — straight into its fence.
+      releaseLoser();
+      const loserOutcome = await Promise.race([
+        loserPromise,
+        new Promise((resolve) => setTimeout(() => resolve(new Error("loser promise did not settle")), 15_000)),
+      ]);
+      assert.ok(
+        loserOutcome instanceof FxRunLeaseLostError,
+        `the supseded attempt must surface its lost lease, got: ${String(loserOutcome)}`,
+      );
+
+      const rows = await db.execute<{ id: string; status: string; error_message: string | null; lease_token: string | null }>(sql`
+        select id, status, error_message, lease_token from fx_provider_runs
+         where org_id = ${org.orgId} order by started_at asc, id asc`);
+      assert.deepEqual(rows.rows.map((row) => ({
+        status: row.status,
+        messageAbandoned: (row.error_message ?? "").includes("abandoned"),
+        lease_token: row.lease_token,
+      })), [
+        { status: "failed", messageAbandoned: true, lease_token: null },
+        { status: "ok", messageAbandoned: false, lease_token: null },
+      ], "exactly one ok row survives: the winner's");
+
+      const rates = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
+      assert.equal(rates.rows[0]!.count, "6", "the stale attempt applied nothing before or after losing its lease");
+
+      const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`);
+      assert.equal(configState.rows[0]!.last_error, null, "the fenced attempt may not write config errors either");
+      assert.notEqual(configState.rows[0]!.last_success_at, null, "schedule ownership stays with the winner");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+

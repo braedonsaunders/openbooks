@@ -43,6 +43,9 @@ export const fxProviderRuns = pgTable(
     ratesUpdated: integer("rates_updated").notNull().default(0),
     manualOverridesPreserved: integer("manual_overrides_preserved").notNull().default(0),
     errorMessage: text("error_message"),
+    /** Random per-claim fencing token; rate application and completion/failure
+     *  stamps must match the active running claim (see migration 0057). */
+    leaseToken: uuid("lease_token"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     createdBy: uuid("created_by"),
