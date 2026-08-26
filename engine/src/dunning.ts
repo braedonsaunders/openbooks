@@ -2,14 +2,17 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { cmp } from "./money.ts";
+import { enqueueFlowEmail } from "./scheduler-outbox.ts";
 
 /**
  * Dunning — automated collections over the AR subledger. For each active policy
  * the runner finds overdue open invoices, works out how many days past due each
  * is, and fires the single highest un-fired ladder stage whose offset that
- * invoice has crossed. Firing enqueues a reminder email and writes an
- * append-only dunning_log row; the unique (document, stage) index makes the
- * whole thing idempotent, so re-running the scheduler never double-sends.
+ * invoice has crossed. Firing defers one reminder email through the durable
+ * scheduler_outbox and writes an append-only dunning_log row; both inserts ride
+ * this org's single transaction, so the send is atomic with the sent claim,
+ * and the unique (document, stage) index on the log makes the whole thing
+ * idempotent — re-running the scheduler never double-sends.
  *
  * Collections never touches the ledger — it is a communications layer, so it
  * lives outside the posting kernel entirely.
@@ -193,10 +196,6 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
           // order the planner happened to return would acquire the same set in
           // different sequences and deadlock. A total order makes that
           // impossible — one tick simply waits.
-          //
-          // Without it the enqueue happened before the log insert, so two ticks
-          // could both enqueue the same notice and only then race to record it —
-          // the customer received the letter twice.
           await db.execute(
             sql`select pg_advisory_xact_lock(hashtextextended(${`dunning:${doc.id}:${stage.id}`}, 0))`,
           );
@@ -215,31 +214,52 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
             detail = "no billing email on the customer record";
           } else {
             try {
-              const { enqueueEmail } = await import("@openbooks/jobs");
-              await enqueueEmail({
+              // Defer through the durable outbox instead of handing the letter
+              // straight to Redis. The deferral insert rides THIS org's pinned
+              // transaction, so it commits — or rolls back — together with the
+              // dunning_log row below. A direct BullMQ enqueue commits outside
+              // Postgres: a crash or a later statement error in this tick left
+              // mail queued against a claim that no longer existed, and the
+              // next tick fired the same rung again — the customer got the
+              // letter twice. subject_id carries the document id for operator
+              // traceability; the deterministic occurrence key is this rung's
+              // identity, so a replayed tick collapses onto one row.
+              const deferred = await enqueueFlowEmail({
                 orgId,
-                to,
-                subject,
-                html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
-                text: body,
-                meta: { category: "dunning" },
+                runId: doc.id,
+                occurrenceKey: `dunning:${doc.id}:${stage.id}`,
+                payload: {
+                  to: [to],
+                  subject,
+                  html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+                  text: body,
+                  meta: { category: "dunning" },
+                },
               });
+              if (!deferred) {
+                // Unreachable through this path — a committed attempt always
+                // pairs the outbox row with its log row, which the re-check
+                // above would have caught — but if storage ever says otherwise
+                // the safe move is to let the existing deferral own delivery
+                // rather than double-claiming the rung.
+                continue;
+              }
             } catch (e) {
               status = "failed";
               detail = e instanceof Error ? e.message : String(e);
             }
           }
 
-          // Record the notice ONLY when it actually went out. The log is the
-          // record of what the customer was sent, and it doubles as the "this
-          // rung has fired" marker via its unique (document, stage) index.
+          // Record the notice ONLY when its delivery is durably staged. The log
+          // is the record of what the customer was sent, and it doubles as the
+          // "this rung has fired" marker via its unique (document, stage) index.
           //
-          // Writing a 'failed' or 'skipped' row into that same slot therefore
-          // retired the rung permanently: one transient queue error, or one
-          // customer who happened to have no billing email on file the first
-          // time the stage came due, and that step of the collections ladder
-          // never ran again — silently, for the life of the invoice. Leaving
-          // the slot empty lets a later tick retry once the cause is fixed.
+          // Writing a 'failed' or 'skipped' row into that same slot would retire
+          // the rung permanently: one transient queue error, or one customer who
+          // happened to have no billing email on file the first time the stage
+          // came due, and that step of the collections ladder never ran again —
+          // silently, for the life of the invoice. Leaving the slot empty lets a
+          // later tick retry once the cause is fixed.
           if (status === "sent") {
             await db.execute(sql`
               insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
