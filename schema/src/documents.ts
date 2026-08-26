@@ -76,7 +76,12 @@ export const documents = pgTable(
     voidReversalDate: date("void_reversal_date"),
     reversalEntryId: uuid("reversal_entry_id"),
 
-    // Denormalized totals, recomputed from lines by trigger (fast lists).
+    // Denormalized totals (fast lists), derived from this document's lines.
+    // Migration 0017_document_total_line_invariant refreshes them whenever a
+    // line's financial shape changes and rejects any committed header write
+    // whose subtotal/tax_total/total contradict those lines (debit-side totals
+    // for journal-shaped kinds). documents_posted_financial_guard then freezes
+    // the verified values once the document posts.
     subtotal: money("subtotal").notNull().default("0"),
     taxTotal: money("tax_total").notNull().default("0"),
     total: money("total").notNull().default("0"),

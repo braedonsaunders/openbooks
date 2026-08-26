@@ -4,7 +4,7 @@ import { businessToday } from "./business-date.ts";
 import { now } from "./clock.ts";
 import { loadRequiredControlAccounts } from "./control-accounts.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
-import { add, sum } from "./money.ts";
+import { add, cmp, neg, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { computeNextRunAt } from "./scripting.ts";
@@ -503,10 +503,25 @@ async function generateFromTemplate(
     taxes.push(String(l.tax_amount ?? "0"));
   }
 
-  const subtotal = amounts.length ? sum(amounts) : "0";
+  // Header totals must tie to the cloned lines under the storage invariant
+  // (0017_document_total_line_invariant): commercial kinds carry
+  // subtotal = Σ amount and total = subtotal + tax, while a standing journal's
+  // lines are signed legs that balance to zero, so its header is the debit-side
+  // view — total = Σ positive amounts — the same shape the journals writer and
+  // payroll commits produce.
   const taxTotal = taxes.length ? sum(taxes) : "0";
+  const journalShaped = tpl.kind === "journal" || tpl.kind === "pay_run";
+  const debitSum = journalShaped
+    ? sum(amounts.filter((amount) => cmp(amount, "0") > 0))
+    : "";
+  const subtotal = amounts.length
+    ? (journalShaped ? add(debitSum, neg(taxTotal)) : sum(amounts))
+    : "0";
+  const total = amounts.length
+    ? (journalShaped ? debitSum : add(subtotal, taxTotal))
+    : "0";
   await db.execute(sql`
-    update documents set subtotal = ${subtotal}, tax_total = ${taxTotal}, total = ${add(subtotal, taxTotal)}
+    update documents set subtotal = ${subtotal}, tax_total = ${taxTotal}, total = ${total}
      where id = ${newId} and org_id = ${orgId}
   `);
 
