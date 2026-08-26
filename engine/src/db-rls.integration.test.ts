@@ -92,15 +92,74 @@ test("withBypassContext actually reaches the database with bypass", { skip: !DB 
     "withBypassContext did not carry bypass to the pool — org-spanning reads are silently empty",
   );
 
-  // And the deny-by-default posture is still intact outside any scope — but
-  // only where there IS a default to deny. The trusted-test harness
-  // (test-database-bypass.ts, loaded by `npm test`) exists precisely to turn
-  // bypass on globally, so under it an unscoped read legitimately sees every
-  // org. Asserting 0 there tests the harness, not the posture.
+  // The scope must also be observable at the mechanism level, not just through
+  // one row count: inside withBypassContext the pooled statement carries the
+  // bypass GUCs (the pool wrapper applies them on the checked-out client
+  // immediately before each statement, so current_setting reflects exactly
+  // what this query ran with).
+  const scopedGucs = await withBypassContext(() =>
+    db.execute<{ org: string; bypass: string }>(
+      sql`select current_setting('app.current_org', true) as org,
+                 current_setting('app.bypass_rls', true) as bypass`,
+    ),
+  );
+  assert.deepEqual(
+    { org: scopedGucs.rows[0]!.org, bypass: scopedGucs.rows[0]!.bypass },
+    { org: "", bypass: "on" },
+    "withBypassContext did not apply the bypass GUCs to its pooled statements",
+  );
+
+  // Outside any scope the posture is deny-by-default — but "deny" is a
+  // property of the database ROLE, not of the GUCs alone. The trusted-test
+  // harness (test-database-bypass.ts, loaded by `npm test`) turns bypass on
+  // globally, so under it an unscoped read legitimately sees every org and
+  // asserting anything about rows would test the harness, not the posture.
   if (!process.env.OPENBOOKS_TRUSTED_TEST_BYPASS) {
-    const unscoped = (await db.execute<{ n: number }>(
+    // With no context anywhere, the wrapper must bracket every pooled
+    // statement with the fail-closed GUCs.
+    const unscopedGucs = await db.execute<{ org: string; bypass: string }>(
+      sql`select current_setting('app.current_org', true) as org,
+                 current_setting('app.bypass_rls', true) as bypass`,
+    );
+    assert.deepEqual(
+      { org: unscopedGucs.rows[0]!.org, bypass: unscopedGucs.rows[0]!.bypass },
+      { org: "", bypass: "off" },
+      "an unscoped pooled query did not apply the deny-by-default GUCs",
+    );
+
+    // An unscoped read must never see MORE than an explicitly denied session
+    // on the same connection string. The old assertion here demanded zero
+    // rows outright, which is unsatisfiable rather than protective: the pool
+    // connects with OPENBOOKS_DB_URL, and in CI and local development that is
+    // the bootstrap role (the service container's POSTGRES_USER), which
+    // PostgreSQL exempts from row security even under FORCE ROW LEVEL
+    // SECURITY — superuser and BYPASSRLS sessions ignore every policy, so no
+    // set_config combination can show them fewer rows. On a constrained
+    // runtime role (production traffic, openbooks_app in CI) the denied count
+    // is zero and this is that original end-to-end proof; on an exempt role
+    // both counts equal the full table by server semantics, and production is
+    // kept honest separately: bootstrap provisions openbooks_app as
+    // NOSUPERUSER/NOBYPASSRLS and assertSafeRuntimeDatabaseRole refuses to
+    // start a production process on any role that could bypass tenant RLS.
+    const denied = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+    await denied.connect();
+    let deniedCount: number;
+    try {
+      await denied.query(
+        "select set_config('app.current_org', '', false), set_config('app.bypass_rls', 'off', false)",
+      );
+      const counted = await denied.query<{ n: number }>("select count(*)::int as n from orgs");
+      deniedCount = Number(counted.rows[0]!.n);
+    } finally {
+      await denied.end().catch(() => {});
+    }
+    const unscoped = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from orgs`,
-    ));
-    assert.equal(Number(unscoped.rows[0]!.n), 0);
+    );
+    assert.equal(
+      Number(unscoped.rows[0]!.n),
+      deniedCount,
+      "an unscoped pooled read saw more than an explicitly denied session on the same role",
+    );
   }
 });
