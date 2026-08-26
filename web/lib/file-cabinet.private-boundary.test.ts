@@ -229,3 +229,246 @@ test(
     assert.equal(result.status, 0, result.stderr || result.stdout);
   },
 );
+
+/**
+ * Regression coverage for the mutation/audit atomicity defect in
+ * web/lib/file-cabinet.ts: mutations and their audit evidence used to be two
+ * independent autocommit statements issued by the route, so a failed audit
+ * insert returned an error AFTER the file had already changed — irreversible
+ * for purgeFile (files, versions, blobs, attachment links already gone).
+ *
+ * The verbs now own mutation + attributable before/after evidence in ONE
+ * inDbTransaction unit (recordFileEvent executes on the caller-provided
+ * executor seam), and the external S3 deletion stays strictly post-commit.
+ *
+ * These cases run against a real database in a scratch org. Deferred live-PG
+ * execution command (schema-ready throwaway database):
+ *   eval "$(scripts/testdb.sh new)" && NODE_ENV=test node --import tsx --test --test-force-exit web/lib/file-audit.test.ts web/lib/cabinet.private-boundary.test.ts
+ * (with OPENBOOKS_TRUSTED_TEST_BYPASS=1 exported for the trusted test boundary;
+ * npm test supplies it).
+ */
+
+/** Probe + (if needed) bootstrap the schema, then run one scenario child. Same
+ *  environment contract as the boundary test above. */
+function runCabinetAtomicityScenario(source: string): void {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+      import pg from "pg";
+      const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+      await client.connect();
+      const r = await client.query("select to_regclass('public.folders') is not null as ok");
+      console.log("BOOTSTRAP_NEEDED=" + (!r.rows[0].ok));
+      await client.end();
+      `,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(probe.status, 0, probe.stderr || probe.stdout);
+  if (/BOOTSTRAP_NEEDED=true/.test(probe.stdout)) {
+    const bootstrapped = spawnSync(process.execPath, ["--import", "tsx", "scripts/bootstrap.ts"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        ORG_NAME: "OpenBooks Test",
+        ORG_CURRENCY: "CAD",
+        ORG_COUNTRY: "CA",
+      },
+      encoding: "utf8",
+    });
+    assert.equal(bootstrapped.status, 0, bootstrapped.stderr || bootstrapped.stdout);
+  }
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "--import",
+      "./engine/src/test-database-bypass.ts",
+      "--input-type=module",
+      "-e",
+      source,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
+/** Shared fixture: a folder holding a file with two DB-stored versions and an
+ *  attachment link — everything a purge must account for. */
+const PURGE_FIXTURE = `
+  const actor = randomUUID();
+  const folderId = randomUUID();
+  const fileId = randomUUID();
+  await db.execute(sql\`
+    insert into folders (id, org_id, parent_folder_id, name)
+    values (\${folderId}, \${orgId}, null, 'atomicity')
+  \`);
+  await db.execute(sql\`
+    insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+    values (\${fileId}, \${orgId}, \${folderId}, \${fileName}, 'text/plain', 9)
+  \`);
+  for (let v = 1; v <= 2; v++) {
+    const versionId = randomUUID();
+    await db.execute(sql\`
+      insert into file_versions (id, file_id, version_number, size_bytes, content_type, content_hash)
+      values (\${versionId}, \${fileId}, \${v}, 9, 'text/plain', \${"hash-" + v})
+    \`);
+    await db.execute(sql\`insert into file_blobs (version_id, bytes) values (\${versionId}, 'payload')\`);
+  }
+  await db.execute(sql\`
+    update files set current_version_id = (
+      select id from file_versions where file_id = \${fileId} and version_number = 2
+    ) where id = \${fileId}
+  \`);
+  await db.execute(sql\`
+    insert into file_attachments (org_id, file_id, target_table, target_id)
+    values (\${orgId}, \${fileId}, 'documents', \${linkTarget})
+  \`);
+`;
+
+const COUNTS_QUERY = `
+  const counts = (await db.execute(sql\`
+    select
+      (select count(*)::int from files where id = \${fileId}) as files,
+      (select count(*)::int from file_versions where file_id = \${fileId}) as versions,
+      (select count(*)::int from file_blobs where version_id in (
+        select id from file_versions where file_id = \${fileId}
+      )) as blobs,
+      (select count(*)::int from file_attachments where file_id = \${fileId}) as links
+  \`)).rows[0];
+`;
+
+test(
+  "forced purge-audit failure leaves every purged row intact (fail-closed atomicity)",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runCabinetAtomicityScenario(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { purgeFile } from "./web/lib/file-cabinet.ts";
+
+      installTrustedTestDatabaseBypass();
+
+      const org = await createScratchOrg();
+      const orgId = org.orgId;
+      try {
+        const fileName = "doomed.txt";
+        const linkTarget = randomUUID();
+        ${PURGE_FIXTURE}
+
+        // Force the audit insert to fail for THIS org's purge events. Utility
+        // statements cannot take bind parameters, so the org scope is inlined
+        // after asserting its shape.
+        assert.match(orgId, /^[0-9a-f][0-9a-f-]{34}$/);
+        await db.execute(sql.raw(\`
+          create function openbooks_test_block_purge_audit() returns trigger
+          language plpgsql as $fn$ begin raise exception 'forced audit failure'; end $fn$
+        \`));
+        await db.execute(sql.raw(\`
+          create trigger block_purge_audit before insert on audit_log for each row
+          when (new.org_id = '\${orgId}'::uuid and new.table_name = 'files'
+                and new.changes->>'event' = 'purge')
+          execute function openbooks_test_block_purge_audit()
+        \`));
+
+        // THE DEFECT: pre-fix, the deletes committed first and only the route's
+        // second autocommit audit failed afterwards — rows gone forever while
+        // the caller saw an error. The combined verb must abort the WHOLE unit.
+        await assert.rejects(
+          () => purgeFile(orgId, fileId, { actorId: actor }),
+          (error) => /forced audit failure/.test(String((error && error.cause) || error)),
+        );
+
+        // Committed state after the rejected purge: nothing deleted anywhere.
+        ${COUNTS_QUERY}
+        assert.equal(counts.files, 1, "mutation rolled back: the file row survives");
+        assert.equal(counts.versions, 2, "both versions survive the aborted purge");
+        assert.equal(counts.blobs, 2, "both blobs survive the aborted purge");
+        assert.equal(counts.links, 1, "the attachment link survives the aborted purge");
+        const evidence = (await db.execute(sql\`
+          select count(*)::int as n from audit_log
+           where table_name = 'files' and row_id = \${fileId}
+        \`)).rows[0].n;
+        assert.equal(evidence, 0, "the failed audit left no partial evidence");
+      } finally {
+        await db.execute(sql\`drop trigger if exists block_purge_audit on audit_log\`);
+        await db.execute(sql\`drop function if exists openbooks_test_block_purge_audit()\`);
+        await dropScratchOrg(orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "successful purge commits redacted before/link/version evidence atomically",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runCabinetAtomicityScenario(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { purgeFile } from "./web/lib/file-cabinet.ts";
+
+      installTrustedTestDatabaseBypass();
+
+      const org = await createScratchOrg();
+      const orgId = org.orgId;
+      try {
+        const fileName = "kept-evidence.txt";
+        const linkTarget = randomUUID();
+        ${PURGE_FIXTURE}
+
+        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), true);
+
+        // Committed state after the successful purge: all rows gone.
+        ${COUNTS_QUERY}
+        assert.equal(counts.files, 0, "the file row is gone");
+        assert.equal(counts.versions, 0, "all versions are gone");
+        assert.equal(counts.blobs, 0, "all blobs are gone");
+        assert.equal(counts.links, 0, "attachment links are gone");
+
+        // Exactly one durable evidence row retains the redacted before-state.
+        const rows = (await db.execute(sql\`
+          select action, actor_id as "actorId", changes
+            from audit_log where table_name = 'files' and row_id = \${fileId}
+        \`)).rows;
+        assert.equal(rows.length, 1, "exactly one durable purge evidence row");
+        const evidence = rows[0];
+        assert.equal(evidence.action, "delete");
+        assert.equal(evidence.changes.event, "purge");
+        assert.equal(evidence.changes.permanent, true);
+        assert.equal(String(evidence.actorId), actor, "evidence names the actor");
+        assert.equal(evidence.changes.before.file.name, fileName);
+        assert.equal(evidence.changes.before.file.contentType, "text/plain");
+        assert.equal(evidence.changes.before.file.sizeBytes, 9);
+        assert.deepEqual(
+          evidence.changes.before.versions.map((v) => [v.versionNumber, v.contentHash]),
+          [[1, "hash-1"], [2, "hash-2"]],
+          "version inventory survives the purge",
+        );
+        assert.deepEqual(
+          evidence.changes.before.attachments,
+          [{ targetTable: "documents", targetId: linkTarget }],
+          "attachment links survive the purge as evidence",
+        );
+        // Redacted: metadata only — no blob payload key anywhere in the evidence.
+        assert.ok(!/"bytes"/.test(JSON.stringify(evidence)), "evidence carries no blob bytes");
+      } finally {
+        await dropScratchOrg(orgId);
+      }
+    `);
+  },
+);

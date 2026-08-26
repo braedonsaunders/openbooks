@@ -1,8 +1,9 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/db.ts'
 import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob } from './file-storage'
+import { recordFileEvent } from './file-audit'
 
 /**
  * File Cabinet — cabinet-first document management. Files exist independently
@@ -1198,20 +1199,57 @@ export async function replaceFile(input: {
   })
 }
 
+/**
+ * Attribution for a mutating verb's audit evidence. When passed, the verb
+ * commits the mutation and its attributable before/after evidence in ONE
+ * inDbTransaction unit — a failed audit insert rolls the mutation back
+ * (fail-closed). When omitted, the verb keeps its legacy single-statement
+ * behaviour for callers that record their own evidence.
+ */
+export interface FileMutationAudit {
+  actorId: string | null
+}
+
 export async function renameFile(
   orgId: string,
   id: string,
   name: string,
   updatedBy: string,
+  audit?: FileMutationAudit,
 ): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
-    update files set name = ${name}, extension = ${deriveExtension(name)},
-                     updated_by = ${updatedBy}, updated_at = now()
-     where id = ${id} and org_id = ${orgId}
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
-    returning id
-  `))
-  return r.rows.length > 0
+  if (!audit) {
+    const r = (await db.execute<{ id: string }>(sql`
+      update files set name = ${name}, extension = ${deriveExtension(name)},
+                       updated_by = ${updatedBy}, updated_at = now()
+       where id = ${id} and org_id = ${orgId}
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+      returning id
+    `))
+    return r.rows.length > 0
+  }
+  return inDbTransaction(async (tx) => {
+    const prev = (await tx.execute<{ id: string; name: string }>(sql`
+      select id, name from files where id = ${id} and org_id = ${orgId}
+        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+      for update
+    `))
+    if (prev.rows.length === 0) return false
+    await tx.execute(sql`
+      update files set name = ${name}, extension = ${deriveExtension(name)},
+                       updated_by = ${updatedBy}, updated_at = now()
+       where id = ${id} and org_id = ${orgId}
+    `)
+    await recordFileEvent({
+      orgId,
+      actorId: audit.actorId,
+      table: 'files',
+      rowId: id,
+      action: 'rename',
+      changes: { from: prev.rows[0]!.name, to: name },
+      executor: tx,
+    })
+    return true
+  })
 }
 
 export async function moveFile(
@@ -1219,30 +1257,76 @@ export async function moveFile(
   id: string,
   folderId: string,
   updatedBy: string,
+  audit?: FileMutationAudit,
 ): Promise<boolean> {
-  // Destination folder must exist inside this org (blocks cross-org moves).
-  const r = (await db.execute<{ id: string }>(sql`
-    update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
-     where id = ${id} and org_id = ${orgId}
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
-       and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
-    returning id
-  `))
-  return r.rows.length > 0
+  if (!audit) {
+    // Destination folder must exist inside this org (blocks cross-org moves).
+    const r = (await db.execute<{ id: string }>(sql`
+      update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
+       where id = ${id} and org_id = ${orgId}
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+         and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
+      returning id
+    `))
+    return r.rows.length > 0
+  }
+  return inDbTransaction(async (tx) => {
+    const prev = (await tx.execute<{ id: string; folderId: string }>(sql`
+      select id, folder_id as "folderId" from files where id = ${id} and org_id = ${orgId}
+        and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+        and exists (select 1 from folders fo where fo.id = ${folderId} and fo.org_id = ${orgId})
+      for update
+    `))
+    if (prev.rows.length === 0) return false
+    await tx.execute(sql`
+      update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
+       where id = ${id} and org_id = ${orgId}
+    `)
+    await recordFileEvent({
+      orgId,
+      actorId: audit.actorId,
+      table: 'files',
+      rowId: id,
+      action: 'move',
+      changes: { fromFolderId: prev.rows[0]!.folderId, toFolderId: folderId },
+      executor: tx,
+    })
+    return true
+  })
 }
 
 /**
  * Trash a file — soft-delete (is_inactive) so it can be restored. AP-capture
  * evidence files are protected. Attachment links are kept (restore re-shows it).
  */
-export async function deleteFile(orgId: string, id: string): Promise<boolean> {
-  const r = (await db.execute<{ id: string }>(sql`
-    update files set is_inactive = true, updated_at = now()
-     where id = ${id} and org_id = ${orgId} and not is_inactive
-       and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
-    returning id
-  `))
-  return r.rows.length > 0
+export async function deleteFile(
+  orgId: string,
+  id: string,
+  audit?: FileMutationAudit,
+): Promise<boolean> {
+  const trash = async (exec: SqlExecutor): Promise<boolean> => {
+    const r = (await exec.execute<{ id: string }>(sql`
+      update files set is_inactive = true, updated_at = now()
+       where id = ${id} and org_id = ${orgId} and not is_inactive
+         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
+      returning id
+    `))
+    return r.rows.length > 0
+  }
+  if (!audit) return trash(db)
+  return inDbTransaction(async (tx) => {
+    if (!(await trash(tx))) return false
+    await recordFileEvent({
+      orgId,
+      actorId: audit.actorId,
+      table: 'files',
+      rowId: id,
+      action: 'delete',
+      changes: { permanent: false },
+      executor: tx,
+    })
+    return true
+  })
 }
 
 /** Restore a trashed file. */
@@ -1256,11 +1340,63 @@ export async function restoreFile(orgId: string, id: string): Promise<boolean> {
 }
 
 /**
+ * Redacted durable evidence retained when a purged file's rows disappear:
+ * metadata, the version inventory, and attachment links — never blob bytes.
+ */
+interface PurgedFileEvidence {
+  file: { id: string; folderId: string; name: string; contentType: string; sizeBytes: number }
+  versions: Array<{
+    id: string
+    versionNumber: number
+    sizeBytes: number
+    contentType: string
+    contentHash: string | null
+  }>
+  attachments: Array<{ targetTable: string; targetId: string }>
+}
+
+async function capturePurgeEvidence(
+  exec: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<PurgedFileEvidence> {
+  const meta = (await exec.execute<PurgedFileEvidence['file']>(sql`
+    select id, folder_id as "folderId", name, content_type as "contentType", size_bytes as "sizeBytes"
+      from files where id = ${id} and org_id = ${orgId}
+  `))
+  const versions = (await exec.execute<PurgedFileEvidence['versions'][number]>(sql`
+    select fv.id, fv.version_number as "versionNumber", fv.size_bytes as "sizeBytes",
+           fv.content_type as "contentType", fv.content_hash as "contentHash"
+      from file_versions fv
+      join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
+     where fv.file_id = ${id}
+     order by fv.version_number
+  `))
+  const attachments = (await exec.execute<PurgedFileEvidence['attachments'][number]>(sql`
+    select target_table as "targetTable", target_id as "targetId"
+      from file_attachments where file_id = ${id} and org_id = ${orgId}
+     order by created_at
+  `))
+  return { file: meta.rows[0]!, versions: versions.rows, attachments: attachments.rows }
+}
+
+/**
  * Permanently delete a file with its versions, blobs, and attachment links.
  * Explicit deletes (not FK cascades) so nothing is orphaned.
+ *
+ * When `audit` is passed, the deletes commit together with durable redacted
+ * before-evidence in one transaction: a failed audit insert aborts the purge
+ * with every row intact. The S3 blob deletion stays strictly POST-commit —
+ * external objects are only removed after metadata, evidence, and all DB
+ * link/version/blob/file rows are durably gone — so an audit failure leaves
+ * both metadata and external blobs untouched and retryable.
  */
-export async function purgeFile(orgId: string, id: string): Promise<boolean> {
-  const deleted = await db.transaction(async (tx) => {
+export async function purgeFile(
+  orgId: string,
+  id: string,
+  audit?: FileMutationAudit,
+): Promise<boolean> {
+  const deleted = await inDbTransaction(async (tx) => {
     const owned = (await tx.execute<{ id: string }>(sql`
       select id from files where id = ${id} and org_id = ${orgId}
         and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
@@ -1272,6 +1408,7 @@ export async function purgeFile(orgId: string, id: string): Promise<boolean> {
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
       where fv.file_id = ${id} and fv.storage_kind = 's3'
     `))
+    const evidence = audit ? await capturePurgeEvidence(tx, orgId, id) : null
     await tx.execute(sql`
       delete from file_blobs where version_id in (
         select fv.id from file_versions fv
@@ -1287,6 +1424,17 @@ export async function purgeFile(orgId: string, id: string): Promise<boolean> {
       where fv.file_id = fi.id and fi.org_id = ${orgId} and fv.file_id = ${id}
     `)
     await tx.execute(sql`delete from files where id = ${id} and org_id = ${orgId}`)
+    if (audit && evidence) {
+      await recordFileEvent({
+        orgId,
+        actorId: audit.actorId,
+        table: 'files',
+        rowId: id,
+        action: 'purge',
+        changes: { permanent: true, before: evidence },
+        executor: tx,
+      })
+    }
     return s3Versions.rows.map((v) => v.id)
   })
   if (deleted === null) return false
