@@ -14,6 +14,7 @@ import {
   uuid,
   numeric,
 } from "drizzle-orm/pg-core";
+import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 import { accounts } from "./coa";
 import {
@@ -131,7 +132,7 @@ export const documents = pgTable(
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
     uniqueIndex("documents_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),

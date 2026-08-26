@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -15,7 +16,23 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { PgTableExtraConfigValue } from "drizzle-orm/pg-core";
+import { accounts } from "./coa";
+import {
+  accountingBooks,
+  accountingPeriods,
+  classes,
+  departments,
+  locations,
+  paymentCards,
+  projects,
+} from "./core";
+import { documents } from "./documents";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
+import { parties } from "./parties";
+import { subsidiaries } from "./subsidiaries";
+import { taxCodes } from "./tax";
+import { equipmentUnits } from "./assets";
 
 /**
  * THE KERNEL. Controlled-mutation double-entry journal.
@@ -87,8 +104,33 @@ export const journalEntries = pgTable(
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
-  (t) => [
+  (t): PgTableExtraConfigValue[] => [
     uniqueIndex("journal_entries_org_id_id_unique").on(t.orgId, t.id),
+    foreignKey({
+      name: "journal_entries_book_id_fkey",
+      columns: [t.orgId, t.bookId],
+      foreignColumns: [accountingBooks.orgId, accountingBooks.id],
+    }),
+    foreignKey({
+      name: "journal_entries_subsidiary_id_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "journal_entries_period_id_fkey",
+      columns: [t.orgId, t.periodId],
+      foreignColumns: [accountingPeriods.orgId, accountingPeriods.id],
+    }),
+    foreignKey({
+      name: "journal_entries_source_document_id_fkey",
+      columns: [t.orgId, t.sourceDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+    foreignKey({
+      name: "journal_entries_reverses_entry_id_fkey",
+      columns: [t.orgId, t.reversesEntryId],
+      foreignColumns: [t.orgId, t.id],
+    }),
     index("je_org_date").on(t.orgId, t.postingDate),
     index("je_org_period").on(t.orgId, t.periodId),
     index("je_source_doc").on(t.sourceDocumentId),
@@ -164,6 +206,61 @@ export const journalLines = pgTable(
     custom: jsonb("custom").notNull().default({}),
   },
   (t) => [
+    foreignKey({
+      name: "journal_lines_entry_id_fkey",
+      columns: [t.orgId, t.entryId],
+      foreignColumns: [journalEntries.orgId, journalEntries.id],
+    }),
+    foreignKey({
+      name: "journal_lines_account_id_fkey",
+      columns: [t.orgId, t.accountId],
+      foreignColumns: [accounts.orgId, accounts.id],
+    }),
+    foreignKey({
+      name: "journal_lines_subsidiary_id_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }),
+    foreignKey({
+      name: "journal_lines_party_id_fkey",
+      columns: [t.orgId, t.partyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
+    foreignKey({
+      name: "journal_lines_department_id_fkey",
+      columns: [t.orgId, t.departmentId],
+      foreignColumns: [departments.orgId, departments.id],
+    }),
+    foreignKey({
+      name: "journal_lines_project_id_fkey",
+      columns: [t.orgId, t.projectId],
+      foreignColumns: [projects.orgId, projects.id],
+    }),
+    foreignKey({
+      name: "journal_lines_location_id_fkey",
+      columns: [t.orgId, t.locationId],
+      foreignColumns: [locations.orgId, locations.id],
+    }),
+    foreignKey({
+      name: "journal_lines_class_id_fkey",
+      columns: [t.orgId, t.classId],
+      foreignColumns: [classes.orgId, classes.id],
+    }),
+    foreignKey({
+      name: "journal_lines_equipment_unit_id_fkey",
+      columns: [t.orgId, t.equipmentUnitId],
+      foreignColumns: [equipmentUnits.orgId, equipmentUnits.id],
+    }),
+    foreignKey({
+      name: "journal_lines_payment_card_id_fkey",
+      columns: [t.orgId, t.paymentCardId],
+      foreignColumns: [paymentCards.orgId, paymentCards.id],
+    }),
+    foreignKey({
+      name: "journal_lines_tax_code_id_fkey",
+      columns: [t.orgId, t.taxCodeId],
+      foreignColumns: [taxCodes.orgId, taxCodes.id],
+    }),
     index("jl_entry").on(t.entryId),
     index("jl_org_account").on(t.orgId, t.accountId),
     /**

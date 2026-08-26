@@ -24,6 +24,8 @@ const wipPrebillSandboxWipeMigrationPath =
   "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
 const documentTenantForeignKeysMigrationPath =
   "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
+const ledgerTenantCoherenceMigrationPath =
+  "schema/migrations/generated/0038_ledger_tenant_coherent_foreign_keys.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -54,6 +56,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0022_close_posting_fence.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
+    "0038_ledger_tenant_coherent_foreign_keys.sql",
     "0039_document_tenant_coherent_foreign_keys.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
   ]);
@@ -341,6 +344,59 @@ test("journal posting serializes with period close through a shared advisory fen
     migration,
     /perform period_posting_fence\(new\.org_id, new\.period_id, new\.book_id\);\s*\n\s*if period_module_blocks_write/,
   );
+});
+
+test("ledger headers, lines, and trigger reads are tenant coherent", () => {
+  const migration = readFileSync(ledgerTenantCoherenceMigrationPath, "utf8");
+
+  assert.match(migration, /DO \$preflight\$/);
+  assert.match(
+    migration,
+    /ledger tenant-coherence migration found a cross-organization reference/,
+  );
+  assert.match(migration, /this migration never rewrites ledger history/);
+
+  const expectedForeignKeys = [
+    ["journal_entries_book_id_fkey", "org_id, book_id", "accounting_books"],
+    ["journal_entries_period_id_fkey", "org_id, period_id", "accounting_periods"],
+    ["journal_entries_reverses_entry_id_fkey", "org_id, reverses_entry_id", "journal_entries"],
+    ["journal_entries_source_document_id_fkey", "org_id, source_document_id", "documents"],
+    ["journal_entries_subsidiary_id_fkey", "org_id, subsidiary_id", "subsidiaries"],
+    ["journal_lines_account_id_fkey", "org_id, account_id", "accounts"],
+    ["journal_lines_class_id_fkey", "org_id, class_id", "classes"],
+    ["journal_lines_department_id_fkey", "org_id, department_id", "departments"],
+    ["journal_lines_entry_id_fkey", "org_id, entry_id", "journal_entries"],
+    ["journal_lines_equipment_unit_id_fkey", "org_id, equipment_unit_id", "equipment_units"],
+    ["journal_lines_location_id_fkey", "org_id, location_id", "locations"],
+    ["journal_lines_party_id_fkey", "org_id, party_id", "parties"],
+    ["journal_lines_payment_card_id_fkey", "org_id, payment_card_id", "payment_cards"],
+    ["journal_lines_project_id_fkey", "org_id, project_id", "projects"],
+    ["journal_lines_subsidiary_id_fkey", "org_id, subsidiary_id", "subsidiaries"],
+    ["journal_lines_tax_code_id_fkey", "org_id, tax_code_id", "tax_codes"],
+  ] as const;
+  for (const [constraint, columns, target] of expectedForeignKeys) {
+    assert.match(
+      migration,
+      new RegExp(
+        `ADD CONSTRAINT ${constraint}\\s+FOREIGN KEY \\(${columns}\\)\\s+REFERENCES public\\.${target} \\(org_id, id\\) DEFERRABLE NOT VALID`,
+      ),
+    );
+    assert.match(
+      migration,
+      new RegExp(`VALIDATE CONSTRAINT ${constraint}`),
+    );
+  }
+
+  assert.match(
+    migration,
+    /from accounts\s+where id = new\.account_id and org_id = new\.org_id/,
+  );
+  assert.match(
+    migration,
+    /from journal_lines\s+where entry_id = new\.id and org_id = new\.org_id/,
+  );
+  assert.match(migration, /where id = v_entry and org_id = v_line_org/);
+  assert.match(migration, /e\.id = l\.entry_id and e\.org_id = l\.org_id/);
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {
