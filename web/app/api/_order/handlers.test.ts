@@ -513,6 +513,16 @@ const mockSources = new Map<string, string>([
     const state = ${stateExpression}
     export async function submitAndReleaseIfUngated() { return state.submit() }
   `],
+  ['mock:sales-orders', `
+    export class SalesOrderIssueError extends Error {
+      constructor(message, code, status = 422, details) {
+        super(message); this.code = code; this.status = status; this.details = details
+      }
+    }
+    export async function issueSalesOrder() {
+      throw new Error('quote route must not invoke sales-order issuance')
+    }
+  `],
   ['mock:document-void', `
     const state = ${stateExpression}
     export class DocumentVoidError extends Error {}
@@ -549,6 +559,7 @@ const resolutionMocks = new Map<string, string>([
   ['@openbooks/engine/src/crm.ts', 'mock:crm'],
   ['../../../lib/features', 'mock:features'],
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
+  ['@openbooks/engine/src/sales-orders.ts', 'mock:sales-orders'],
   ['@openbooks/engine/src/document-void.ts', 'mock:document-void'],
   ['@/lib/api/json', 'mock:json'],
 ])

@@ -111,6 +111,7 @@ export default async function SalesOrders({
             .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
             .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` }))}
           canManage={canManage}
+          canOverrideCredit={can(authz, 'ar.approve')}
           layout={resolvedForm?.layout}
         />
       ) : null}
