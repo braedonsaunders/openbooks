@@ -6,6 +6,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass } from "./db.ts";
 import {
   computeNextSyncAt,
+  FxProviderError,
   normalizeFxSnapshots,
   parseBankOfCanadaJson,
   parseEcbCsv,
@@ -90,6 +91,19 @@ test("FX provider observation window uses the org business day, not UTC today", 
   assert.match(body, /from: addDays\(today, -6\), to: today/);
   assert.match(body, /syncRange\(config, today\)/);
   assert.doesNotMatch(body, /isoDate\(now\)/);
+});
+
+test("FX run conflicts inspect wrapped database causes before returning a domain refusal", () => {
+  const detectorStart = source.indexOf("function isFxRunInProgressConflict");
+  const createRunStart = source.indexOf("async function createRun", detectorStart);
+  assert.ok(detectorStart >= 0 && createRunStart > detectorStart, "the run-conflict detector is defined");
+  const detector = source.slice(detectorStart, createRunStart);
+  assert.match(detector, /candidate\.code === "23505" && candidate\.constraint === "fx_provider_runs_one_running"/);
+  assert.match(detector, /current = candidate\.cause/);
+  assert.match(
+    source.slice(createRunStart, source.indexOf("\nexport async function runFxProvider", createRunStart)),
+    /if \(isFxRunInProgressConflict\(error\)\) throw new FxProviderError\("an FX provider run is already in progress"\)/,
+  );
 });
 
 test("weekday schedules skip weekends and weekly schedules remain seven days apart", () => {
@@ -377,7 +391,14 @@ test(
 
       // Control: a fresh running row still excludes concurrent runs.
       await plantRunningRow(sql`now()`);
-      await assert.rejects(runFxProvider(org.orgId, "test"), /already in progress/);
+      await assert.rejects(
+        runFxProvider(org.orgId, "test"),
+        (error: unknown) => {
+          assert.ok(error instanceof FxProviderError, "the insert race must remain a controlled domain refusal");
+          assert.equal(error.message, "an FX provider run is already in progress");
+          return true;
+        },
+      );
       // Age the control past the recovery budget so the next run reclaims it,
       // exactly as time itself would.
       await db.execute(sql`
