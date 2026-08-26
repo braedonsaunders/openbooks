@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { cmp, fromUnits, mul, roundDiv, toUnits } from "./money.ts";
-import { getOnHand, postInventoryEntry } from "./inventory.ts";
+import { fromUnits, mul, roundDiv, toUnits } from "./money.ts";
+import { getOnHandForEntity, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
 
 /**
@@ -34,6 +34,7 @@ const valueAt = (quantityUnits: bigint, rateUnits: bigint): bigint =>
   roundDiv(quantityUnits * rateUnits, SCALE);
 type RemainingLayer = {
   id: string;
+  subsidiary_id: string;
   source_movement_id: string;
   received_at: string;
   remaining_quantity: string;
@@ -108,9 +109,9 @@ async function setLayerValueExactly(
      where id = ${layer.id} and org_id = ${orgId}`);
   await tx.execute(sql`
     insert into cost_layers
-      (id, org_id, item_id, stock_location_id, source_movement_id, received_at,
+      (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
        original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
-    select ${splitLayerId}, org_id, item_id, stock_location_id,
+    select ${splitLayerId}, org_id, subsidiary_id, item_id, stock_location_id,
            ${layer.source_movement_id}, ${layer.received_at},
            '1.0000', '1.0000', ${fromUnits(roundingValue)}, ${actorId}, ${actorId}
       from cost_layers
@@ -143,12 +144,15 @@ async function remainingLayers(
   orgId: string,
   itemId: string,
   stockLocationId: string,
+  subsidiaryId?: string,
 ): Promise<RemainingLayer[]> {
+  const ownerScope = subsidiaryId ? sql`and subsidiary_id = ${subsidiaryId}` : sql``;
   const r = (await tx.execute<RemainingLayer>(sql`
-    select id, source_movement_id, received_at::text as received_at,
+    select id, subsidiary_id, source_movement_id, received_at::text as received_at,
            remaining_quantity::text as remaining_quantity, unit_cost::text as unit_cost
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
+       ${ownerScope}
        and remaining_quantity > 0
      order by received_at, id
      for update`));
@@ -181,11 +185,25 @@ async function postingContext(orgId: string, subsidiaryId: string, date: string)
 export interface NrvWritedownInput {
   itemId: string;
   stockLocationId: string;
+  /**
+   * The requesting entity. Revaluation follows LAYER OWNERSHIP: every legal
+   * entity holding the position is remeasured and journals under itself.
+   */
   subsidiaryId: string;
   date: string;
   /** Net realisable value PER UNIT. The target carrying amount is qty × NRV. */
   nrvPerUnit: string;
   memo?: string | null;
+}
+
+/** One owning entity's share of a remeasurement, with its own evidence ids. */
+export interface NrvEntityPosting {
+  subsidiaryId: string;
+  writedownId: string;
+  entryId: string;
+  previousValue: string;
+  newValue: string;
+  amount: string;
 }
 
 export interface NrvResult {
@@ -196,12 +214,23 @@ export interface NrvResult {
   newValue: string;
   amount: string;
   framework: ReportingFramework;
+  /**
+   * One record per owning legal entity remeasured. `writedownId`/`entryId`
+   * above are the FIRST posting's evidence; the array carries every owner's.
+   */
+  entities: NrvEntityPosting[];
 }
 
 /**
  * Write inventory down to net realisable value. Value-only: quantity is
  * untouched. Refuses a "write-down" whose target is at or above current cost —
  * that is either a no-op or a reversal, and reversals have their own rules.
+ *
+ * A shared warehouse can hold the item's layers under several legal entities.
+ * Each owner is measured on ITS OWN quantity and carrying amount, only its
+ * layers are re-written, and its loss journals under ITSELF — one set of
+ * layer writes plus one journal per entity — so per-entity GL always equals
+ * per-entity layers.
  */
 export async function writeDownInventoryToNrv(
   orgId: string,
@@ -210,67 +239,126 @@ export async function writeDownInventoryToNrv(
 ): Promise<NrvResult> {
   const framework = await orgReportingFramework(orgId);
   const accounts = await itemAccounts(orgId, input.itemId);
-  const ctx = await postingContext(orgId, input.subsidiaryId, input.date);
 
   return await db.transaction(async (tx) => {
     const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to write down");
 
-    const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
-    const previousUnits = toUnits(onHand.value);
-    const targetUnits = toUnits(mul(onHand.quantity, input.nrvPerUnit));
-    const deltaUnits = targetUnits - previousUnits;
-    if (deltaUnits >= 0n) {
+    // Group the locked layers by owning legal entity, first-seen order.
+    const owners: { subsidiaryId: string; layers: RemainingLayer[] }[] = [];
+    const byOwner = new Map<string, RemainingLayer[]>();
+    for (const layer of layers) {
+      let group = byOwner.get(layer.subsidiary_id);
+      if (!group) {
+        group = [];
+        byOwner.set(layer.subsidiary_id, group);
+        owners.push({ subsidiaryId: layer.subsidiary_id, layers: group });
+      }
+      group.push(layer);
+    }
+
+    // Measure each owner separately: an entity is written down only when ITS
+    // carrying amount exceeds ITS quantity × NRV.
+    type OwnerPlan = (typeof owners)[number] & {
+      quantityUnits: bigint;
+      previousUnits: bigint;
+      targetUnits: bigint;
+      deltaUnits: bigint;
+    };
+    const plans: OwnerPlan[] = [];
+    for (const owner of owners) {
+      const onHand = await getOnHandForEntity(
+        tx,
+        orgId,
+        input.itemId,
+        input.stockLocationId,
+        owner.subsidiaryId,
+      );
+      const previousUnits = toUnits(onHand.value);
+      const targetUnits = toUnits(mul(onHand.quantity, input.nrvPerUnit));
+      const deltaUnits = targetUnits - previousUnits;
+      if (deltaUnits < 0n) {
+        plans.push({
+          ...owner,
+          quantityUnits: toUnits(onHand.quantity),
+          previousUnits,
+          targetUnits,
+          deltaUnits,
+        });
+      }
+    }
+    if (plans.length === 0) {
       throw new InventoryNrvError(
         "net realisable value is not below cost — nothing to write down (a recovery is a reversal, not a write-down)",
       );
     }
 
-    const enriched = layers.map((layer) => ({
-      layer,
-      value: valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost)),
-    }));
-    const shares = shareByValue(enriched, deltaUnits);
-    for (let i = 0; i < enriched.length; i++) {
-      await setLayerValueExactly(tx, orgId, enriched[i]!.layer, enriched[i]!.value + shares[i]!, actorId);
+    let totalQuantityUnits = 0n;
+    let totalPreviousUnits = 0n;
+    let totalTargetUnits = 0n;
+    const entities: NrvEntityPosting[] = [];
+    for (const plan of plans) {
+      const enriched = plan.layers.map((layer) => ({
+        layer,
+        value: valueAt(toUnits(layer.remaining_quantity), toUnits(layer.unit_cost)),
+      }));
+      const shares = shareByValue(enriched, plan.deltaUnits);
+      for (let i = 0; i < enriched.length; i++) {
+        await setLayerValueExactly(tx, orgId, enriched[i]!.layer, enriched[i]!.value + shares[i]!, actorId);
+      }
+
+      const ctx = await postingContext(orgId, plan.subsidiaryId, input.date);
+      const amount = fromUnits(-plan.deltaUnits);
+      const memo = input.memo ?? `NRV write-down — carrying value to ${fromUnits(plan.targetUnits)}`;
+      const entryId = await postInventoryEntry(tx, {
+        orgId,
+        bookId: ctx.bookId,
+        subsidiaryId: plan.subsidiaryId,
+        currency: ctx.currency,
+        periodId: ctx.periodId,
+        date: input.date,
+        entryNumber: `NRV-${randomUUID().slice(0, 8)}`,
+        memo,
+        lines: [
+          { accountId: accounts.adjustment, amount, memo },
+          { accountId: accounts.asset, amount: fromUnits(plan.deltaUnits), memo },
+        ],
+      });
+
+      const writedownId = randomUUID();
+      await tx.execute(sql`
+        insert into inventory_writedowns
+          (id, org_id, item_id, stock_location_id, subsidiary_id, kind, date, quantity,
+           previous_value, new_value, amount, reversed_amount, framework, journal_entry_id, memo,
+           created_by, updated_by)
+        values (${writedownId}, ${orgId}, ${input.itemId}, ${input.stockLocationId}, ${plan.subsidiaryId},
+                'writedown', ${input.date}, ${fromUnits(plan.quantityUnits)}, ${fromUnits(plan.previousUnits)},
+                ${fromUnits(plan.targetUnits)}, ${amount}, '0', ${framework}, ${entryId}, ${memo},
+                ${actorId}, ${actorId})`);
+
+      totalQuantityUnits += plan.quantityUnits;
+      totalPreviousUnits += plan.previousUnits;
+      totalTargetUnits += plan.targetUnits;
+      entities.push({
+        subsidiaryId: plan.subsidiaryId,
+        writedownId,
+        entryId,
+        previousValue: fromUnits(plan.previousUnits),
+        newValue: fromUnits(plan.targetUnits),
+        amount,
+      });
     }
 
-    const amount = fromUnits(-deltaUnits);
-    const memo = input.memo ?? `NRV write-down — carrying value to ${fromUnits(targetUnits)}`;
-    const entryId = await postInventoryEntry(tx, {
-      orgId,
-      bookId: ctx.bookId,
-      subsidiaryId: input.subsidiaryId,
-      currency: ctx.currency,
-      periodId: ctx.periodId,
-      date: input.date,
-      entryNumber: `NRV-${randomUUID().slice(0, 8)}`,
-      memo,
-      lines: [
-        { accountId: accounts.adjustment, amount, memo },
-        { accountId: accounts.asset, amount: fromUnits(deltaUnits), memo },
-      ],
-    });
-
-    const writedownId = randomUUID();
-    await tx.execute(sql`
-      insert into inventory_writedowns
-        (id, org_id, item_id, stock_location_id, subsidiary_id, kind, date, quantity,
-         previous_value, new_value, amount, reversed_amount, framework, journal_entry_id, memo,
-         created_by, updated_by)
-      values (${writedownId}, ${orgId}, ${input.itemId}, ${input.stockLocationId}, ${input.subsidiaryId},
-              'writedown', ${input.date}, ${onHand.quantity}, ${fromUnits(previousUnits)},
-              ${fromUnits(targetUnits)}, ${amount}, '0', ${framework}, ${entryId}, ${memo},
-              ${actorId}, ${actorId})`);
-
     return {
-      writedownId,
-      entryId,
-      quantity: onHand.quantity,
-      previousValue: fromUnits(previousUnits),
-      newValue: fromUnits(targetUnits),
-      amount,
+      writedownId: entities[0]!.writedownId,
+      entryId: entities[0]!.entryId,
+      quantity: fromUnits(totalQuantityUnits),
+      previousValue: fromUnits(totalPreviousUnits),
+      newValue: fromUnits(totalTargetUnits),
+      // Positive write-down magnitude, matching each entity posting.
+      amount: fromUnits(totalPreviousUnits - totalTargetUnits),
       framework,
+      entities,
     };
   });
 }
@@ -278,6 +366,7 @@ export async function writeDownInventoryToNrv(
 export interface NrvReversalInput {
   itemId: string;
   stockLocationId: string;
+  /** The recovering legal entity — only ITS layers and write-downs are touched. */
   subsidiaryId: string;
   date: string;
   /** Revised net realisable value PER UNIT. */
@@ -292,9 +381,11 @@ export interface NrvReversalInput {
  * (ASC 330-10-35-14) and this function refuses under that framework.
  *
  * The IAS 2.33 cap: the increase is limited BOTH by the revised NRV target and
- * by the unreversed remainder of prior write-downs for this item/location, so
- * cumulative reversals can never exceed cumulative write-downs and the
- * carrying amount can never exceed what cost would have been.
+ * by the unreversed remainder of THIS entity's prior write-downs for the
+ * item/location, so cumulative reversals can never exceed cumulative
+ * write-downs and the carrying amount can never exceed what cost would have
+ * been. Layers, open write-downs, and the journal are all scoped to the
+ * requesting entity, so one owner's recovery never releases another's.
  */
 export async function reverseInventoryWritedown(
   orgId: string,
@@ -311,7 +402,13 @@ export async function reverseInventoryWritedown(
   const ctx = await postingContext(orgId, input.subsidiaryId, input.date);
 
   return await db.transaction(async (tx) => {
-    const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
+    const layers = await remainingLayers(
+      tx,
+      orgId,
+      input.itemId,
+      input.stockLocationId,
+      input.subsidiaryId,
+    );
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to remeasure");
 
     const open = (await tx.execute<{ id: string; remaining: string }>(sql`
@@ -319,15 +416,24 @@ export async function reverseInventoryWritedown(
         from inventory_writedowns
        where org_id = ${orgId} and item_id = ${input.itemId}
          and stock_location_id = ${input.stockLocationId}
+         and subsidiary_id = ${input.subsidiaryId}
          and kind = 'writedown' and amount > reversed_amount
        order by date, created_at
        for update`));
     const reversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
     if (reversible <= 0n) {
-      throw new InventoryNrvError("no unreversed write-down exists for this item and location");
+      throw new InventoryNrvError(
+        "no unreversed write-down exists for this item, location, and legal entity",
+      );
     }
 
-    const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
+    const onHand = await getOnHandForEntity(
+      tx,
+      orgId,
+      input.itemId,
+      input.stockLocationId,
+      input.subsidiaryId,
+    );
     const previousUnits = toUnits(onHand.value);
     const targetByNrv = toUnits(mul(onHand.quantity, input.nrvPerUnit));
     const requested = targetByNrv - previousUnits;
@@ -399,6 +505,17 @@ export async function reverseInventoryWritedown(
       newValue: fromUnits(targetUnits),
       amount,
       framework,
+      // A reversal remeasures exactly one owner — the requesting entity.
+      entities: [
+        {
+          subsidiaryId: input.subsidiaryId,
+          writedownId: reversalId,
+          entryId,
+          previousValue: fromUnits(previousUnits),
+          newValue: fromUnits(targetUnits),
+          amount,
+        },
+      ],
     };
   });
 }
