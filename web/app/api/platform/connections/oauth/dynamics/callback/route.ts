@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { isDeepStrictEqual } from 'node:util'
+import { and, eq } from 'drizzle-orm'
+import { db, schema } from '@openbooks/engine/src/db.ts'
 import { sealJson, unsealJson } from '@openbooks/engine/src/secrets.ts'
 import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine/src/dynamics.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
+import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
 import { guardPermission } from '../../../../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -48,13 +50,55 @@ export async function GET(req: Request) {
     if (!company) return back('nocompany')
 
     const mergedSecrets = sealJson({ clientId: secret.clientId, clientSecret: secret.clientSecret, ...tokens })
-    const mergedConfig = JSON.stringify({ ...conn.config, companyId: company.id, companyName: company.displayName ?? company.name })
     const displayName = `${company.displayName ?? company.name} (Business Central)`
-    await db.execute(sql`
-      update connections
-         set secrets = ${mergedSecrets}, config = ${mergedConfig}::jsonb,
-             display_name = ${displayName}, status = 'active', last_error = null, updated_at = now()
-       where id = ${conn.id} and org_id = ${st.orgId}`)
+    const connected = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(schema.connections)
+        .where(and(eq(schema.connections.id, conn.id), eq(schema.connections.orgId, st.orgId)))
+        .for('update')
+      if (
+        !current ||
+        current.source !== 'dynamics' ||
+        current.secrets !== conn.secrets ||
+        current.displayName !== conn.displayName ||
+        current.status !== conn.status ||
+        !isDeepStrictEqual(current.config, conn.config)
+      ) return false
+      const [updated] = await tx
+        .update(schema.connections)
+        .set({
+          secrets: mergedSecrets,
+          config: {
+            ...(current.config as Record<string, unknown>),
+            companyId: company.id,
+            companyName: company.displayName ?? company.name,
+          },
+          displayName,
+          status: 'active',
+          lastError: null,
+          updatedAt: new Date(),
+          updatedBy: gate.user.id,
+        })
+        .where(and(eq(schema.connections.id, conn.id), eq(schema.connections.orgId, st.orgId)))
+        .returning()
+      if (!updated) throw new Error('connection update returned no row')
+      await tx.insert(schema.auditLog).values({
+        orgId: st.orgId,
+        tableName: 'connections',
+        rowId: conn.id,
+        action: 'update',
+        changes: connectionAuditChanges({
+          event: 'oauth_connected',
+          before: current,
+          after: updated,
+          credentialsChanged: true,
+        }),
+        actorId: gate.user.id,
+      })
+      return true
+    })
+    if (!connected) return back('error')
     return back('connected')
   } catch {
     return back('error')
