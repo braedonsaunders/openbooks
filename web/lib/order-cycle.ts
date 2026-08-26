@@ -124,7 +124,7 @@ export async function convertOrder(
     const lines = (await tx.execute(sql`
       select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
              amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
-             is_billable, quantity_billed
+             stock_location_id, is_billable, quantity_billed
         from document_lines where document_id = ${sourceId} and org_id = ${orgId} order by line_number
     `))
 
@@ -203,11 +203,11 @@ export async function convertOrder(
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
-              location_id, class_id, extra_dims, is_billable, created_by)
+              location_id, class_id, extra_dims, stock_location_id, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
               ${r.remainder.quantity}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
-              ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.is_billable}, ${userId})
+              ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable}, ${userId})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id
