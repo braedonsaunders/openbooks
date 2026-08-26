@@ -40,6 +40,8 @@ const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
 const subscriptionConfigurationInvariantsMigrationPath =
   "schema/migrations/generated/0041_subscription_configuration_invariants.sql";
+const taxRateDomainConstraintsMigrationPath =
+  "schema/migrations/generated/0042_tax_rate_domain_constraints.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -75,6 +77,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0039_document_tenant_coherent_foreign_keys.sql",
     "0040_payroll_commit_selection_fence.sql",
     "0041_subscription_configuration_invariants.sql",
+    "0042_tax_rate_domain_constraints.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
     "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
@@ -146,6 +149,55 @@ test("base subscription configuration fails closed at the storage boundary", () 
   ]) {
     assert.match(migration, new RegExp(`VALIDATE CONSTRAINT ${constraint}`));
   }
+});
+
+test("tax rates stay in the calculation engine's domain and setup codes stay unique per tenant", () => {
+  const migration = readFileSync(taxRateDomainConstraintsMigrationPath, "utf8");
+
+  // Fail closed on legacy violations instead of guessing a correction.
+  assert.match(migration, /legacy data violates tax rate domain invariant/i);
+  assert.match(migration, /This migration never rewrites tax policy/);
+  assert.match(migration, /legacy setup rows duplicate a natural key/i);
+  assert.match(migration, /never picks a winning duplicate/i);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+  // The rate-domain scan must name the exact offending row before DDL runs.
+  assert.match(migration, /FROM public\.tax_rates r\s+WHERE r\.rate_percent < 0/);
+  // The duplicate scan matches the constraint semantics exactly: NULL codes
+  // are distinct under UNIQUE, so only non-null codes can duplicate.
+  assert.match(migration, /code IS NOT NULL/);
+  assert.match(migration, /HAVING count\(\*\) > 1/);
+
+  // Storage mirrors the calculation engine's contract: a nonnegative exact
+  // numeric(19,4) rate. A statutory 0% rate remains representable.
+  assert.match(
+    migration,
+    /ADD CONSTRAINT tax_rates_rate_percent_domain\s+CHECK \(rate_percent >= 0\) NOT VALID/,
+  );
+  assert.match(migration, /VALIDATE CONSTRAINT tax_rates_rate_percent_domain/);
+
+  // Every authoritative setup table named by the audit gets tenant natural-key
+  // uniqueness; tables that already had database uniqueness are untouched.
+  for (const table of [
+    "tax_codes",
+    "tax_groups",
+    "classes",
+    "departments",
+    "locations",
+    "worker_comp_groups",
+  ]) {
+    assert.match(
+      migration,
+      new RegExp(`ADD CONSTRAINT ${table}_org_code_unique\\s+UNIQUE \\(org_id, code\\)`),
+    );
+    assert.match(
+      migration,
+      new RegExp(`COMMENT ON CONSTRAINT ${table}_org_code_unique`),
+    );
+  }
+  assert.match(
+    migration,
+    /COMMENT ON CONSTRAINT tax_rates_rate_percent_domain/,
+  );
 });
 
 test("document financial references are tenant-coherent without rewriting history", () => {

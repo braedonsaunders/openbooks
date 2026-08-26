@@ -76,9 +76,29 @@ function validateConfig(
         `tax code ${c.taxCodeId} occurs more than once`,
       );
     seen.add(c.taxCodeId);
-    if (toUnits(c.ratePercent) < 0n)
+    // The rate domain is stated once here: a nonnegative exact decimal with at
+    // most 4 decimal places (tax_rates.rate_percent is numeric(19,4)). Setup
+    // validates the same contract before writes; this is the calculation-time
+    // backstop, and it fails closed with the engine's error type instead of a
+    // raw coercion fault.
+    let rateUnits: bigint;
+    try {
+      rateUnits = toUnits(c.ratePercent);
+    } catch {
+      throw new TaxCalculationError(
+        "tax rate must be an exact decimal with at most 4 decimal places",
+      );
+    }
+    if (rateUnits < 0n)
       throw new TaxCalculationError("tax rate cannot be negative");
-    const recoverable = toUnits(c.recoverablePercent ?? "100");
+    let recoverable: bigint;
+    try {
+      recoverable = toUnits(c.recoverablePercent ?? "100");
+    } catch {
+      throw new TaxCalculationError(
+        "recoverable percentage must be an exact decimal between 0 and 100",
+      );
+    }
     if (recoverable < 0n || recoverable > toUnits("100")) {
       throw new TaxCalculationError(
         "recoverable percentage must be between 0 and 100",

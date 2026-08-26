@@ -195,3 +195,34 @@ test("a lapsed rate schedule is refused while a statutory zero rate stays legal"
   // rate (zero-rated supplies exist) and flows through unchanged.
   assert.equal(requireEffectiveRateRow("GB-VAT-ZERO", "2026-07-01", "0.0000"), "0.0000");
 });
+
+test("negative and non-exact tax rates are refused at the calculation boundary", () => {
+  // The rate domain is one contract with the setup API and storage
+  // (numeric(19,4), nonnegative): what cannot be configured must not
+  // calculate either, and the refusal is the engine's own error type.
+  assert.throws(
+    () => computeLineTaxes("100", [code({ ratePercent: "-13" })]),
+    (e: unknown) => e instanceof TaxCalculationError && /tax rate cannot be negative/.test(e.message),
+  );
+  for (const invalid of ["not-a-rate", "", "13.00005"]) {
+    assert.throws(
+      () => computeLineTaxes("100", [code({ ratePercent: invalid })]),
+      (e: unknown) =>
+        e instanceof TaxCalculationError && /exact decimal with at most 4 decimal places/.test(e.message),
+      `rate "${invalid}" must be refused`,
+    );
+  }
+  assert.throws(
+    () => computeLineTaxes("100", [code({ recoverablePercent: "a few" })]),
+    (e: unknown) => e instanceof TaxCalculationError && /recoverable percentage/.test(e.message),
+  );
+});
+
+test("a statutory zero rate calculates exact zero tax", () => {
+  const result = computeLineTaxes("100.0000", [code({ ratePercent: "0" })]);
+  assert.equal(result.netAmount, "100.0000");
+  assert.equal(result.taxTotal, "0.0000");
+  assert.equal(result.total, "100.0000");
+  assert.equal(result.components[0]!.ratePercent, "0.0000");
+  assert.equal(result.components[0]!.taxAmount, "0.0000");
+});
