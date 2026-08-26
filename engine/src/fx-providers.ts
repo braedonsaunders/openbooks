@@ -377,11 +377,32 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
  * budget: each provider request times out after 20 seconds and even the
  * worst case (Open Exchange Rates, one request per lookback day, 31 days)
  * finishes far inside it, so an older 'running' row belongs to a dead
- * process, not a busy one. Same freshness idiom as continuous-close runs.
+ * process, not a busy one — it is reclaimed, not awaited. Same freshness
+ * idiom as continuous-close runs.
  */
-const FX_RUN_STALE_AFTER = sql.raw("interval '30 minutes'");
+const FX_RUN_LEASE_TTL = sql.raw("interval '30 minutes'");
 const FX_RUN_ABANDONED_MESSAGE =
   "abandoned: the synchronization process crashed or was killed before recording an outcome; the stalled run was reclaimed automatically";
+
+/**
+ * A claim's run row can be reclaimed while its owner is still alive (the row
+ * aged past FX_RUN_LEASE_TTL and another attempt took over). The loser must
+ * surface that instead of silently pretending success: every effect of the
+ * stale attempt is fenced on its lease token, so by construction nothing was
+ * applied after losing ownership.
+ */
+export class FxRunLeaseLostError extends FxProviderError {
+  constructor() {
+    super("this synchronization run lost its lease and was reclaimed; retry from scratch");
+    this.name = "FxRunLeaseLostError";
+  }
+}
+
+/** One running-run claim: the row id plus the fencing token minted with it. */
+interface FxRunClaim {
+  runId: string;
+  leaseToken: string;
+}
 
 /** The storage-enforced single-running-provider conflict, anywhere in a cause chain. */
 function isFxRunInProgressConflict(error: unknown): boolean {
@@ -396,27 +417,46 @@ function isFxRunInProgressConflict(error: unknown): boolean {
   return false;
 }
 
-async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<string> {
-  // Reclaim a crashed run's slot before claiming it: without this the partial
-  // unique index turns one crash into a permanent synchronization outage.
-  // Rows younger than the budget — genuinely running elsewhere — stay put,
-  // so concurrent runs remain mutually exclusive.
+async function createRun(config: FxProviderConfigRow, trigger: FxRunTrigger, from: string, to: string, actorId?: string): Promise<FxRunClaim> {
+  // Take over a crashed run's lease before claiming it: without this the
+  // partial unique index turns one crash into a permanent synchronization
+  // outage. Rows younger than the TTL — genuinely running elsewhere — stay
+  // put, so concurrent runs remain mutually exclusive. Clearing the old
+  // token is what fences a still-alive former holder out of completing.
   await db.execute(sql`
     update fx_provider_runs set status = 'failed',
-      error_message = ${FX_RUN_ABANDONED_MESSAGE}, finished_at = now()
+      error_message = ${FX_RUN_ABANDONED_MESSAGE}, finished_at = now(),
+      lease_token = null
      where org_id = ${config.orgId} and provider_config_id = ${config.id}
-       and status = 'running' and started_at <= now() - ${FX_RUN_STALE_AFTER}
+       and status = 'running' and started_at <= now() - ${FX_RUN_LEASE_TTL}
   `);
   try {
-    const r = (await db.execute<{ id: string }>(sql`
-      insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by)
-      values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}) returning id
+    const r = (await db.execute<{ id: string; leaseToken: string }>(sql`
+      insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by, lease_token)
+      values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}, gen_random_uuid())
+      returning id, lease_token as "leaseToken"
     `));
-    return r.rows[0]!.id;
+    return { runId: r.rows[0]!.id, leaseToken: r.rows[0]!.leaseToken };
   } catch (error) {
     if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
     throw error;
   }
+}
+
+/**
+ * Operator-readable failure reason across Drizzle/pg wrappers: a wrapped
+ * storage fault would otherwise be recorded as "Failed query: …", hiding the
+ * actual PostgreSQL error from last_error and the run row.
+ */
+function fxStorageMessage(error: unknown): string {
+  let best = error instanceof Error ? error.message : "FX provider synchronization failed";
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { message?: string; cause?: unknown };
+    if (candidate.message) best = candidate.message;
+    current = candidate.cause;
+  }
+  return best;
 }
 
 export async function runFxProvider(
@@ -440,7 +480,7 @@ export async function runFxProvider(
   const range = trigger === "test"
     ? { from: addDays(today, -6), to: today }
     : syncRange(config, today);
-  const runId = await createRun(config, trigger, range.from, range.to, actorId);
+  const claim = await createRun(config, trigger, range.from, range.to, actorId);
   await db.execute(sql`update fx_provider_configs set last_attempt_at = now() where id = ${config.id} and org_id = ${orgId}`);
   try {
     const snapshots = await fetchProviderSnapshots(config, range.from, range.to);
@@ -455,8 +495,20 @@ export async function runFxProvider(
       manualOverridesPreserved: 0,
       latestObservationDate,
     };
-    if (trigger !== "test") {
-      await db.transaction(async (tx) => {
+    const next = config.isEnabled ? computeNextSyncAt(config.schedule, config.syncHourUtc, now) : null;
+    await db.transaction(async (tx) => {
+      // Lease fence first: hold this run's row for the whole unit and refuse
+      // to write anything unless the current running claim is still ours. The
+      // row lock also serializes a concurrent stale-claim takeover — it waits
+      // for this transaction's outcome instead of racing inside it.
+      const owned = (await tx.execute<{ id: string }>(sql`
+        select id from fx_provider_runs
+         where id = ${claim.runId} and org_id = ${orgId}
+           and lease_token = ${claim.leaseToken} and status = 'running'
+         for update
+      `));
+      if (!owned.rows.length) throw new FxRunLeaseLostError();
+      if (trigger !== "test") {
         const existing = (await tx.execute<{ from_currency: string; to_currency: string; as_of: string; source: string }>(sql`
           select from_currency, to_currency, as_of::text, source from fx_rates
            where org_id = ${orgId} and rate_type = 'spot'
@@ -486,34 +538,50 @@ export async function runFxProvider(
             result.ratesInserted++;
           }
         }
-      });
-    }
-    const next = config.isEnabled ? computeNextSyncAt(config.schedule, config.syncHourUtc, now) : null;
-    // Fenced on status: if this run was already reclaimed as abandoned by a
-    // newer attempt, it must not resurrect its row, and schedule ownership
-    // (last_success_at / watermark / next_sync_at) stays with that newer run.
-    const stamped = await db.execute(sql`
-      update fx_provider_runs set status = 'ok', finished_at = now(),
-        observations_received = ${result.observationsReceived}, rates_inserted = ${result.ratesInserted},
-        rates_updated = ${result.ratesUpdated}, manual_overrides_preserved = ${result.manualOverridesPreserved}
-       where id = ${runId} and org_id = ${orgId} and status = 'running'
-    `);
-    if (stamped.rowCount) {
-      await db.execute(sql`
+      }
+      // The completion stamp shares the rates' transaction, so a crash can
+      // never leave rates applied while the run/config still say running —
+      // both commit together or neither did. Fenced on the lease token: a
+      // reclaimed attempt cannot resurrect its row or promote ownership of
+      // the schedule (last_success_at / watermark / next_sync_at).
+      const stamped = await tx.execute(sql`
+        update fx_provider_runs set status = 'ok', finished_at = now(), lease_token = null,
+          observations_received = ${result.observationsReceived}, rates_inserted = ${result.ratesInserted},
+          rates_updated = ${result.ratesUpdated}, manual_overrides_preserved = ${result.manualOverridesPreserved}
+         where id = ${claim.runId} and org_id = ${orgId} and lease_token = ${claim.leaseToken} and status = 'running'
+      `);
+      if (!stamped.rowCount) throw new FxRunLeaseLostError();
+      await tx.execute(sql`
         update fx_provider_configs set
           last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
           last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
           last_error = null, next_sync_at = ${next}, updated_at = now()
          where id = ${config.id} and org_id = ${orgId}
       `);
-    }
+    });
     return result;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "FX provider synchronization failed";
+    const message = fxStorageMessage(error);
     const retryAt = config.isEnabled && config.schedule !== "manual" ? new Date(now.getTime() + 60 * 60 * 1000) : null;
-    const stamped = await db.execute(sql`update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)}, finished_at = now() where id = ${runId} and org_id = ${orgId} and status = 'running'`);
-    if (stamped.rowCount) {
-      await db.execute(sql`update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt}, updated_at = now() where id = ${config.id} and org_id = ${orgId}`);
+    // Fenced on the token: an attempt that already lost its claim must not
+    // record its own outcome nor overwrite the winner's schedule state. The
+    // run row and the config acknowledgment go in one atomic unit so this
+    // recovery stage is also crash-consistent.
+    try {
+      await db.transaction(async (tx) => {
+        const stamped = await tx.execute(sql`
+          update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)},
+                 finished_at = now(), lease_token = null
+           where id = ${claim.runId} and org_id = ${orgId} and lease_token = ${claim.leaseToken} and status = 'running'
+        `);
+        if (!stamped.rowCount) return;
+        await tx.execute(sql`
+          update fx_provider_configs set last_error = ${message.slice(0, 1000)}, next_sync_at = ${retryAt},
+                 updated_at = now() where id = ${config.id} and org_id = ${orgId}
+        `);
+      });
+    } catch (markFailure) {
+      console.error(`[fx-provider] could not record the failed outcome for run ${claim.runId}:`, markFailure);
     }
     throw error;
   }
