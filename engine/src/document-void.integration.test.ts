@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
+import { setPeriodLockState } from "./close.ts";
 import { db } from "./db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
@@ -84,6 +85,129 @@ async function countRows(query: ReturnType<typeof sql>): Promise<number> {
   const result = await db.execute<{ count: number }>(query);
   return Number(result.rows[0]!.count);
 }
+
+async function seedPostedCheck(
+  org: ScratchOrg,
+  actorId: string,
+  documentNumber: string,
+): Promise<{ documentId: string; entryId: string }> {
+  const documentId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, subsidiary_id, document_date,
+       posting_date, currency, status, subtotal, tax_total, total, created_by)
+    values (
+      ${documentId}, ${org.orgId}, 'check', ${documentNumber},
+      ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 'approved',
+      '25', '0', '25', ${actorId}
+    )
+  `);
+  await db.execute(sql`
+    insert into document_lines
+      (org_id, document_id, line_number, account_id, subsidiary_id,
+       quantity, unit_price, amount, tax_amount, created_by)
+    values (
+      ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs},
+      ${org.subsidiaryId}, '1', '25', '25', '0', ${actorId}
+    )
+  `);
+  const entryId = await postDocument(
+    documentId,
+    {
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    },
+    { audit: { actorId, source: "test" } },
+  );
+  return { documentId, entryId };
+}
+
+test("a check void shares the source AP lock and leaves no effects when it is closed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Cash Void Controller", "admin");
+    const openCheck = await seedPostedCheck(org, actorId, "CHECK-VOID-OPEN-1");
+    const lockedCheck = await seedPostedCheck(org, actorId, "CHECK-VOID-LOCKED-1");
+
+    const control = await requestDocumentVoid({
+      documentId: openCheck.documentId,
+      orgId: org.orgId,
+      actorId,
+      reason: "Open-period check void control",
+      reversalDate: org.date,
+      source: "api",
+    });
+    assert.equal(control.status, "voided");
+    assert.ok(control.reversalEntryId, "the open AP period admits the check reversal");
+
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "ap",
+      state: "closed",
+      actorId,
+      reason: "cash void period-lock regression",
+    });
+
+    await assert.rejects(
+      requestDocumentVoid({
+        documentId: lockedCheck.documentId,
+        orgId: org.orgId,
+        actorId,
+        reason: "Closed AP period must refuse this check void",
+        reversalDate: org.date,
+        source: "api",
+      }),
+      (error: unknown) =>
+        error instanceof DocumentVoidError && /AP is closed/.test(error.message),
+    );
+
+    const refused = await db.execute<{
+      document_status: string;
+      void_requested_at: Date | null;
+      reversal_entry_id: string | null;
+      source_entry_status: string;
+      reversal_count: number;
+      void_audit_count: number;
+    }>(sql`
+      select document.status as document_status,
+             document.void_requested_at,
+             document.reversal_entry_id,
+             source_entry.status as source_entry_status,
+             (select count(*)::int
+                from journal_entries reversal
+               where reversal.org_id = ${org.orgId}
+                 and reversal.reverses_entry_id = ${lockedCheck.entryId}) as reversal_count,
+             (select count(*)::int
+                from audit_log audit
+               where audit.org_id = ${org.orgId}
+                 and audit.table_name = 'documents'
+                 and audit.row_id = ${lockedCheck.documentId}
+                 and (audit.action = 'void'
+                      or audit.changes->>'mode' = 'void_request')) as void_audit_count
+        from documents document
+        join journal_entries source_entry
+          on source_entry.id = document.posted_entry_id
+         and source_entry.org_id = document.org_id
+       where document.id = ${lockedCheck.documentId}
+         and document.org_id = ${org.orgId}
+    `);
+    assert.deepEqual(refused.rows[0], {
+      document_status: "posted",
+      void_requested_at: null,
+      reversal_entry_id: null,
+      source_entry_status: "posted",
+      reversal_count: 0,
+      void_audit_count: 0,
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("controlled void preserves the source and posts an exact open-period reversal", { skip: !DB }, async () => {
   const org = await createScratchOrg();

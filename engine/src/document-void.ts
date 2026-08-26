@@ -2,6 +2,11 @@ import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
+import {
+  assertPeriodModulesOpen,
+  CloseError,
+  closeModuleForDocument,
+} from "./close.ts";
 import { reversalJournalLines } from "./reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -336,23 +341,26 @@ export async function completeRequestedDocumentVoid(
         if (!period.rows[0]) {
           throw new DocumentVoidError(`no accounting period covers ${reversalDate}`);
         }
-        const blocked = (await tx.execute(sql`
-          select 1
-            from (
-              select distinct subsidiary_id
-                from journal_lines
-               where entry_id = ${entryId} and org_id = ${orgId}
-            ) s
-           where period_module_is_closed(
-             ${orgId}, ${period.rows[0].id}, ${String(entry.book_id)},
-             s.subsidiary_id, 'gl'
-           )
-           limit 1
+        const subsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
+          select distinct subsidiary_id
+            from journal_lines
+           where entry_id = ${entryId} and org_id = ${orgId}
         `));
-        if (blocked.rows.length > 0) {
-          throw new DocumentVoidError(
-            `the reversal period for ${reversalDate} is closed for GL posting`,
-          );
+        try {
+          await assertPeriodModulesOpen(tx, {
+            orgId,
+            periodId: period.rows[0].id,
+            bookId: String(entry.book_id),
+            subsidiaryIds: subsidiaries.rows.map((row) => row.subsidiary_id),
+            modules: [closeModuleForDocument(String(doc.kind))],
+          });
+        } catch (error) {
+          if (error instanceof CloseError) {
+            throw new DocumentVoidError(
+              `the reversal period for ${reversalDate} is closed: ${error.message}`,
+            );
+          }
+          throw error;
         }
 
         const outgoingFx = (await tx.execute<{ id: string }>(sql`
