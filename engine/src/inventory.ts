@@ -343,9 +343,11 @@ export async function assertCostingPolicyChangeAllowed(
 
 /**
  * Bring every open cost layer of an item onto its standard cost and post one
- * balanced revaluation entry (inventory asset vs variance account) so issues
- * relieve layers exactly at standard after a controlled switch to standard
- * costing. Returns the entry id, or null when nothing needed revaluing.
+ * balanced revaluation entry (inventory asset vs variance account) per OWNING
+ * legal entity, so issues relieve layers exactly at standard after a
+ * controlled switch to standard costing and each entity's GL keeps equalling
+ * its own layers. Returns one entry id per revalued entity (null when nothing
+ * needed revaluing).
  */
 export async function revalueOpenLayersToStandardCost(
   tx: Runner,
@@ -357,7 +359,7 @@ export async function revalueOpenLayersToStandardCost(
     assetAccountId: string;
     varianceAccountId: string | null;
   },
-): Promise<string | null> {
+): Promise<string[] | null> {
   if (p.standardCost == null) {
     throw new InventoryError(
       "a standard cost must be configured before switching this item to standard costing",
@@ -365,53 +367,60 @@ export async function revalueOpenLayersToStandardCost(
   }
   const layers = (await tx.execute<{
       id: string;
+      subsidiary_id: string;
       remaining_quantity: string;
       unit_cost: string;
     }>(sql`
-    select id, remaining_quantity, unit_cost
+    select id, subsidiary_id, remaining_quantity, unit_cost
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
      order by received_at, id
      for update`));
-  let deltaUnits = 0n;
+  // Measure per owner while rewriting every layer onto standard cost.
+  const deltasByOwner = new Map<string, bigint>();
   for (const layer of layers.rows) {
-    deltaUnits +=
+    const delta =
       toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
       toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
+    deltasByOwner.set(
+      layer.subsidiary_id,
+      (deltasByOwner.get(layer.subsidiary_id) ?? 0n) + delta,
+    );
     await tx.execute(sql`
       update cost_layers set unit_cost = ${p.standardCost}, updated_at = now(), updated_by = ${actorId}
        where id = ${layer.id} and org_id = ${orgId}`);
   }
-  if (deltaUnits === 0n) return null;
+  const changed = [...deltasByOwner].filter(([, delta]) => delta !== 0n);
+  if (changed.length === 0) return null;
 
   const date = await businessToday(orgId);
   const periodId = await periodForDate(orgId, date, tx);
   if (!periodId) throw new InventoryError(`no accounting period for ${date}`);
   const bookId = await primaryBookId(orgId, tx);
-  const root = (await tx.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
-  if (!root.rows[0]) throw new InventoryError("no root subsidiary configured");
-  const subsidiaryId = root.rows[0].id;
-  const currency = await subsidiaryCurrency(orgId, subsidiaryId, tx);
   const memo = "Costing method revaluation to standard";
-  return await postInventoryEntry(tx, {
-    orgId,
-    bookId,
-    subsidiaryId,
-    currency,
-    periodId,
-    date,
-    entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
-    memo,
-    lines: [
-      { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
-      {
-        accountId: p.varianceAccountId ?? p.assetAccountId,
-        amount: fromUnits(-deltaUnits),
-        memo,
-      },
-    ],
-  });
+  const entryIds: string[] = [];
+  for (const [ownerSubsidiaryId, deltaUnits] of changed) {
+    const currency = await subsidiaryCurrency(orgId, ownerSubsidiaryId, tx);
+    entryIds.push(await postInventoryEntry(tx, {
+      orgId,
+      bookId,
+      subsidiaryId: ownerSubsidiaryId,
+      currency,
+      periodId,
+      date,
+      entryNumber: `INV-RCST-${date}-${itemId.slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+      memo,
+      lines: [
+        { accountId: p.assetAccountId, amount: fromUnits(deltaUnits), memo },
+        {
+          accountId: p.varianceAccountId ?? p.assetAccountId,
+          amount: fromUnits(-deltaUnits),
+          memo,
+        },
+      ],
+    }));
+  }
+  return entryIds;
 }
 
 /** Primary accounting book id. */
@@ -455,6 +464,21 @@ export async function getOnHand(
   stockLocationId: string,
 ): Promise<{ quantity: string; value: string; unitCost: string }> {
   return getOnHandWith(db, orgId, itemId, stockLocationId);
+}
+
+/**
+ * On-hand quantity and value for ONE legal entity's layers at a position.
+ * Revaluation measures each owner separately so a shared warehouse's other
+ * entities never feed another's carrying-amount math.
+ */
+export async function getOnHandForEntity(
+  runner: Runner,
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+  subsidiaryId: string,
+): Promise<{ quantity: string; value: string; unitCost: string }> {
+  return getOnHandWith(runner, orgId, itemId, stockLocationId, { subsidiaryId });
 }
 
 async function getOnHandWith(
