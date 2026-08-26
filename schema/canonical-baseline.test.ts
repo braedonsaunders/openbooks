@@ -54,6 +54,8 @@ const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 const scriptRunActorMigrationPath =
   "schema/migrations/generated/0056_script_run_actor.sql";
+const camPoolSourceAccountOverlapMigrationPath =
+  "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -106,6 +108,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0057_close_automation_claim_lease.sql",
     "0058_fx_provider_run_lease_fencing.sql",
     "0059_email_delivery_identity_reconciliation.sql",
+    "0061_cam_pool_source_account_overlap.sql",
   ]);  assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
@@ -114,6 +117,51 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("CAM pools cannot bill one GL expense twice through shared sources", () => {
+  const migration = readFileSync(camPoolSourceAccountOverlapMigrationPath, "utf8");
+
+  // Exclusivity lives at the storage boundary inside a trigger: the advisory
+  // fence must precede every read so mutually uncommitted writers serialize
+  // instead of each passing an application-level check (0051's race class).
+  const guard = migration.match(
+    /CREATE FUNCTION public\.cam_pool_source_account_guard\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(guard, "0061 must install a storage-side CAM pool guard");
+  const fenceAt = guard.indexOf("pg_advisory_xact_lock(");
+  const overlapReadAt = guard.indexOf("FROM public.cam_pools other");
+  assert.ok(fenceAt >= 0 && overlapReadAt > fenceAt, "the fence must precede the overlap read");
+  assert.match(
+    guard,
+    /hashtextextended\('cam-pool:' \|\| new\.org_id::text \|\| ':' \|\| new\.property_id::text, 0\)/,
+  );
+  // Inclusive window overlap plus account intersection, self-excluded on update.
+  assert.match(guard, /other\.period_starts_on <= new\.period_ends_on/);
+  assert.match(guard, /other\.period_ends_on >= new\.period_starts_on/);
+  assert.match(guard, /\(TG_OP = 'INSERT' OR other\.id <> new\.id\)/);
+  assert.match(guard, /jsonb_array_elements_text\(new\.expense_account_ids\)/);
+  // Retiring always succeeds; both creation and updates are arbitrated.
+  assert.match(guard, /IF new\.status = 'cancelled' THEN/);
+  assert.match(
+    migration,
+    /CREATE TRIGGER cam_pool_source_account_guard\s+BEFORE INSERT OR UPDATE ON public\.cam_pools/i,
+  );
+  assert.match(migration, /COMMENT ON FUNCTION public\.cam_pool_source_account_guard\(\) IS/);
+
+  // Repair runs before enforcement is installed, and the only situations it
+  // refuses to heal automatically are financially committed on both sides —
+  // the non-destructive review policy. Nothing else rewrites history.
+  const firstRepair = migration.search(/DO \$cam_pool_source_overlap_repair\$/);
+  const firstEnforcement = migration.search(/CREATE FUNCTION public\.cam_pool_source_account_guard/);
+  assert.ok(firstRepair >= 0 && firstRepair < firstEnforcement, "repair must precede the trigger");
+  assert.match(migration, /resolve them manually before migrating/);
+  // The repair's only writes are CAM pool cancellations; no history is
+  // deleted or re-dated.
+  const updateTargets = [...migration.matchAll(/^\s*UPDATE\s+(?:ONLY\s+)?(?:public\.)?([a-z_]+)/gm)].map((m) => m[1]);
+  assert.notEqual(updateTargets.length, 0);
+  assert.deepEqual(updateTargets.filter((target) => target !== "cam_pools"), []);
+  assert.doesNotMatch(migration, /DELETE FROM/i);
 });
 
 test("script runs attribute their trigger at the storage boundary", () => {
