@@ -441,12 +441,16 @@ export function DocumentDrawer({
         subsidiaryId: multiSub ? subsidiaryId || null : undefined,
         extraDims,
         custom: customValues,
-        lines: transfer
-          ? [
-              { accountId: transfer.toAccount, amount: transfer.amount, description: null },
-              { accountId: transfer.fromAccount, amount: transfer.amount, description: null },
-            ].filter((l) => l.accountId && positiveAmount(l.amount))
-          : [],
+        // Kernel contract: the amount rides ONLY the destination line; the
+        // source line names its account and carries zero — the same shape
+        // every native importer emits. Two full-amount legs post 2x.
+        lines:
+          transfer && transfer.toAccount && transfer.fromAccount && positiveAmount(transfer.amount)
+            ? [
+                { accountId: transfer.toAccount, amount: transfer.amount, description: null },
+                { accountId: transfer.fromAccount, amount: '0', description: null },
+              ]
+            : [],
       }
     }
     return {

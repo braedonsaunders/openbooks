@@ -196,3 +196,121 @@ test("tax profiles cannot post without cross-footing component evidence", () => 
     /do not match stored tax total/,
   );
 });
+
+const transferDoc = {
+  id: "trf",
+  kind: "transfer",
+  subsidiaryId: "sub",
+  currency: "CAD",
+  fxRate: "1",
+  extraDims: null,
+} as unknown as PostingDocument;
+
+const transferLine = (
+  lineNumber: number,
+  accountId: string,
+  amount: string,
+) =>
+  ({ id: `l${lineNumber}`, lineNumber, accountId, amount }) as unknown as PostingDocumentLine;
+
+test("transfer moves exactly the entered amount between the two named accounts", () => {
+  // Canonical contract — the shape every native importer emits: the
+  // destination line carries the amount, the source line carries zero.
+  const projected = RULES.transfer!(
+    transferDoc,
+    [transferLine(1, "bank-b", "100.0000"), transferLine(2, "bank-a", "0")],
+    { control: { ap: "ap", ar: "ar", bank: "bank" } },
+  );
+  assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
+    ["bank-b", "100.0000"],
+    ["bank-a", "-100.0000"],
+  ]);
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance(projected.map((row) => ({ ...row, subsidiaryId: "sub" }))),
+  );
+});
+
+test("transfer rejects a full-amount source leg instead of summing both legs", () => {
+  // The old drawer emitted the amount on BOTH lines; summing them posted a
+  // $100 transfer as DR 200 / CR 200 while still balancing.
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [
+          transferLine(1, "bank-b", "100.0000"),
+          transferLine(2, "bank-a", "100.0000"),
+        ],
+        { control: { ap: "ap", ar: "ar", bank: "bank" } },
+      ),
+    (error: Error) =>
+      error instanceof PostingError && /exactly one line/.test(error.message),
+  );
+});
+
+test("transfer rejects differing legs rather than averaging or summing them", () => {
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [
+          transferLine(1, "bank-b", "100.0000"),
+          transferLine(2, "bank-a", "80.0000"),
+        ],
+        { control: { ap: "ap", ar: "ar", bank: "bank" } },
+      ),
+    (error: Error) =>
+      error instanceof PostingError && /exactly one line/.test(error.message),
+  );
+});
+
+test("transfer requires exactly two lines naming distinct accounts and a positive amount", () => {
+  const control = { control: { ap: "ap", ar: "ar", bank: "bank" } };
+  assert.throws(
+    () => RULES.transfer!(transferDoc, [transferLine(1, "bank-b", "100.0000")], control),
+    /exactly two lines/,
+  );
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [
+          transferLine(1, "bank-b", "100.0000"),
+          transferLine(2, "bank-a", "0"),
+          transferLine(3, "bank-c", "0"),
+        ],
+        control,
+      ),
+    /exactly two lines/,
+  );
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [transferLine(1, "bank-b", "100.0000"), transferLine(2, "", "0")],
+        control,
+      ),
+    /name both/,
+  );
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [
+          transferLine(1, "bank-b", "100.0000"),
+          transferLine(2, "bank-b", "0"),
+        ],
+        control,
+      ),
+    /different accounts/,
+  );
+  assert.throws(
+    () =>
+      RULES.transfer!(
+        transferDoc,
+        [transferLine(1, "bank-b", "0"), transferLine(2, "bank-a", "0")],
+        control,
+      ),
+    /must be positive/,
+  );
+});
