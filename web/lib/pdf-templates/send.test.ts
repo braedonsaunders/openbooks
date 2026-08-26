@@ -87,10 +87,14 @@ const mockSources = new Map<string, string>([
         return { provider: 'test' }
       }
 
-      export async function sendVia(transport, message) {
+      export async function sendVia(transport, message, identity) {
         if (harness.state.sendError) throw harness.state.sendError
         harness.state.deliveries.push({ to: message.to, subject: message.subject })
-        return { id: 'provider-message-1' }
+        return { kind: 'sent', providerMessageId: 'provider-message-1' }
+      }
+
+      export function deriveEmailDeliveryKey() {
+        return \`obem_\${'a'.repeat(40)}\`
       }
 
       export function sealSecret(secret) {

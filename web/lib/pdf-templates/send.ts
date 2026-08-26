@@ -3,10 +3,11 @@ import { cookies } from 'next/headers'
 import { sql } from 'drizzle-orm'
 import type { EmailActor } from '@openbooks/schema'
 import { db } from '@openbooks/engine/src/db.ts'
-import { documentEmail, sendVia } from '@openbooks/emails'
+import { documentEmail, deriveEmailDeliveryKey, sendVia } from '@openbooks/emails'
 import {
   insertEmailLog,
   markEmailFailed,
+  markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/email-config.ts'
@@ -200,14 +201,22 @@ export async function sendRecordPdfEmail(args: {
     actor,
   })
   try {
-    const { id } = await sendVia(transport, {
+    const outcome = await sendVia(transport, {
       to,
       subject: body.subject,
       html: body.html,
       text: body.text,
       attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
-    })
-    await markEmailSent(args.orgId, logId, id)
+      // The log row scope keeps this direct send's identity durable and
+      // distinct from every other send to the same mailbox.
+    }, { deliveryKey: deriveEmailDeliveryKey({ orgId: args.orgId, scope: `direct:${logId}`, to }) })
+    if (outcome.kind === 'sent') {
+      await markEmailSent(args.orgId, logId, outcome.providerMessageId)
+    } else {
+      // Acceptance state unknown — record it, never claim success or failure.
+      await markEmailUncertain(args.orgId, logId, outcome.reason)
+      throw new Error(outcome.reason)
+    }
   } catch (e) {
     await markEmailFailed(args.orgId, logId, e instanceof Error ? e.message : String(e))
     throw e

@@ -48,6 +48,8 @@ const taxRateDomainConstraintsMigrationPath =
   "schema/migrations/generated/0042_tax_rate_domain_constraints.sql";
 const effectiveDateOverlapExclusionMigrationPath =
   "schema/migrations/generated/0051_effective_date_overlap_exclusion_constraints.sql";
+const emailDeliveryIdentityReconciliationMigrationPath =
+  "schema/migrations/generated/0059_email_delivery_identity_reconciliation.sql";
 const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 const scriptRunActorMigrationPath =
@@ -103,6 +105,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0056_script_run_actor.sql",
     "0057_close_automation_claim_lease.sql",
     "0058_fx_provider_run_lease_fencing.sql",
+    "0059_email_delivery_identity_reconciliation.sql",
   ]);  assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
@@ -571,6 +574,22 @@ test("transactional flow emails defer through the durable scheduler outbox", () 
   )?.[1];
   assert.ok(scopeCheck, "migration must (re)create the scheduler_outbox_scope check");
   assert.match(scopeCheck, /\(kind = 'flow_email'\) AND \(org_id IS NOT NULL\) AND \(subject_id IS NOT NULL\) AND \(payload IS NOT NULL\)/);
+});
+
+test("email delivery attempts share one canonical identity and uncertain outcomes are representable", () => {
+  const migration = readFileSync(emailDeliveryIdentityReconciliationMigrationPath, "utf8");
+
+  // One stable per-delivery identity, unique when present, so a retried
+  // attempt claims the same canonical email_log row instead of minting
+  // parallel histories.
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS delivery_key text/);
+  assert.match(
+    migration,
+    /CREATE UNIQUE INDEX IF NOT EXISTS email_log_delivery_key\s+ON public\.email_log USING btree \(delivery_key\)\s+WHERE delivery_key IS NOT NULL/,
+  );
+  assert.match(migration, /COMMENT ON COLUMN public\.email_log\.delivery_key IS/);
+  // Historical rows are never assigned a guessed identity.
+  assert.doesNotMatch(migration, /^\s*UPDATE\s/im);
 });
 
 test("document header totals are enforced against the document's own lines", () => {

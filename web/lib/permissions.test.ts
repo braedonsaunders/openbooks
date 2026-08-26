@@ -186,6 +186,9 @@ const mockSources = new Map<string, string>([
       export async function markEmailFailed(orgId, id, error) {
         state.engineCalls.push({ fn: 'markEmailFailed', orgId, id, error })
       }
+      export async function markEmailUncertain(orgId, id, reason) {
+        state.engineCalls.push({ fn: 'markEmailUncertain', orgId, id, reason })
+      }
     `,
   ],
 ])
@@ -206,9 +209,9 @@ const hooks = registerHooks({
     if (url === 'mock:emails') {
       const source = `export * from '${realEmailsUrl}'
 const state = globalThis[Symbol.for('openbooks.email-route-permission-test')]
-export async function sendVia(transport, input) {
-  state.sendCalls.push({ transport, input })
-  return { id: 'msg-1' }
+export async function sendVia(transport, input, identity) {
+  state.sendCalls.push({ transport, input, identity })
+  return { kind: 'sent', providerMessageId: 'msg-1' }
 }
 `
       return { format: 'module', source, shortCircuit: true }

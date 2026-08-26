@@ -5,6 +5,12 @@
 // `resolveEmailTransport` unseals it into an `EmailTransport` (plaintext secret);
 // `sendVia` performs the network send, switching on provider. HTTP providers go
 // through `fetch` (no SDKs); SMTP uses nodemailer (dynamically imported).
+//
+// Every send carries a stable per-delivery identity (./outcome). Definite
+// failures still throw; an attempt whose acceptance state cannot be proven
+// (timeout mid-flight, confirmation lost, unusable success body) resolves to
+// `uncertain` instead of throwing — recording it as a failure would invite a
+// blind BullMQ retry that duplicates a possibly-accepted message (#52).
 
 import { resolvePublicHost, unsealSecret } from './crypto'
 import { isEmailProvider, type EmailProvider } from './providers'
@@ -14,6 +20,14 @@ import {
   type EmailAttachmentPayload,
   type EmailDeliveryInput,
 } from './delivery-input'
+import {
+  assertEmailDeliveryKey,
+  buildSmtpIdentity,
+  classifyNetworkFailure,
+  classifySmtpFailure,
+  EMAIL_DELIVERY_ID_HEADER,
+  type EmailSendOutcome,
+} from './outcome'
 
 export type EmailAttachment = EmailAttachmentPayload
 export type SendEmailInput = EmailDeliveryInput
@@ -182,6 +196,9 @@ type HttpProvider = 'Resend' | 'SendGrid' | 'Mailgun' | 'Postmark'
 type ProviderLabel = HttpProvider | 'SMTP'
 const TRANSPORT_TIMEOUT_MS = 30_000
 
+/** The stable identity every attempt of one logical delivery must carry. */
+export type EmailDeliveryIdentity = { deliveryKey: string }
+
 function sanitizedText(value: string, redactions: string[] = []): string {
   let printable = ''
   for (const character of value) {
@@ -219,13 +236,54 @@ function providerHttpError(provider: HttpProvider, response: Response, body: unk
   const detail = errorDetail(body, redactions)
   return new Error(`${provider}: HTTP ${response.status}${detail ? ` — ${detail}` : ''}`)
 }
-function providerContractError(provider: ProviderLabel, detail: string): Error {
-  return new Error(`${provider}: invalid success response — ${detail}`)
-}
 function providerNetworkError(provider: HttpProvider, error: unknown): Error {
   const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : undefined
   const reason = name === 'TimeoutError' || name === 'AbortError' ? `request timed out after ${TRANSPORT_TIMEOUT_MS / 1000} seconds` : 'network request failed'
   return new Error(`${provider}: ${reason}`)
+}
+
+/**
+ * An unresolved outcome masquerades as an exception until `sendVia` converts it
+ * into its honest return form. Definite rejections keep throwing normally.
+ */
+class UncertainSend extends Error {
+  readonly outcome: EmailSendOutcome
+  constructor(detail: string) {
+    super(detail)
+    this.name = 'UncertainSend'
+    this.outcome = { kind: 'uncertain', reason: detail }
+  }
+}
+
+/**
+ * Perform the dispatch phase of one attempt. Pre-transmission failures
+ * (connect/DNS/TLS/refused) are definite non-sends and throw as before;
+ * anything that may have crossed the wire — deadlines, aborts, socket loss —
+ * surfaces as uncertainty so the caller records it and reconciliation blocks
+ * a duplicate transmit.
+ */
+async function providerDispatch(provider: HttpProvider, url: string, init: RequestInit): Promise<Response> {
+  try {
+    // Provider API keys ride Authorization headers (and POSTs carry the whole
+    // customer message); a followed redirect would replay both to whatever host
+    // the Location names. The raw fetch error is preserved on purpose: its
+    // cause chain is what distinguishes a definite pre-transmission failure
+    // from an unresolved one.
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS), redirect: 'error' })
+  } catch (error) {
+    const verdict = classifyNetworkFailure(error)
+    if (verdict.outcome === 'notSent') throw new Error(`${provider}: network request failed`)
+    throw new UncertainSend(`${provider}: ${verdict.reason}`)
+  }
+}
+
+/**
+ * After the provider answered with the SUCCESS status it becomes impossible to
+ * prove non-acceptance: lost bodies and unusable success payloads are open
+ * questions, not failures.
+ */
+function uncertainConfirmation(provider: HttpProvider, detail: string): UncertainSend {
+  return new UncertainSend(`${provider}: accepted the message but ${detail} — acceptance state unresolved`)
 }
 async function readResponseBody(provider: HttpProvider, response: Response): Promise<unknown> {
   let text: string
@@ -241,16 +299,6 @@ async function readResponseBody(provider: HttpProvider, response: Response): Pro
     return text
   }
 }
-async function providerFetch(provider: HttpProvider, url: string, init: RequestInit): Promise<Response> {
-  try {
-    // Provider API keys ride Authorization headers (and POSTs carry the whole
-    // customer message); a followed redirect would replay both to whatever host
-    // the Location names.
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(TRANSPORT_TIMEOUT_MS), redirect: 'error' })
-  } catch (error) {
-    throw providerNetworkError(provider, error)
-  }
-}
 function responseString(body: unknown, key: string): string {
   if (!body || typeof body !== 'object') return ''
   const value = (body as Record<string, unknown>)[key]
@@ -262,29 +310,57 @@ function providerOperationError(provider: ProviderLabel, error: unknown, redacti
   return new Error(`${provider}: ${detail}`)
 }
 
-/** Send an email through a resolved transport. Throws on provider error. */
-export async function sendVia(transport: EmailTransport, input: SendEmailInput): Promise<{ id: string }> {
+/**
+ * Send an email through a resolved transport.
+ *
+ * Returns `sent` with the provider message id, or `uncertain` when the attempt
+ * ended without provable acceptance (timeout mid-flight, confirmation lost,
+ * unusable success payload) — reconciliation must decide before the same
+ * logical delivery is transmitted again. Definite rejections still throw, so
+ * existing error handling and messages are preserved.
+ */
+export async function sendVia(
+  transport: EmailTransport,
+  input: SendEmailInput,
+  identity: EmailDeliveryIdentity,
+): Promise<EmailSendOutcome> {
+  assertEmailDeliveryKey(identity.deliveryKey)
   const from = transport.from
   const replyTo = transport.replyTo
   const normalizedInput = normalizeEmailDeliveryInput(input, { requireSingleRecipient: true })
-  switch (transport.provider) {
-    case 'resend':
-      return sendResend(transport, normalizedInput, from, replyTo)
-    case 'sendgrid':
-      return sendSendgrid(transport, normalizedInput, from, replyTo)
-    case 'mailgun':
-      return sendMailgun(transport, normalizedInput, from, replyTo)
-    case 'postmark':
-      return sendPostmark(transport, normalizedInput, from, replyTo)
-    case 'smtp':
-      return sendSmtp(transport, normalizedInput, from, replyTo)
+  const run = (): Promise<EmailSendOutcome> => {
+    switch (transport.provider) {
+      case 'resend':
+        return sendResend(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+      case 'sendgrid':
+        return sendSendgrid(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+      case 'mailgun':
+        return sendMailgun(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+      case 'postmark':
+        return sendPostmark(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+      case 'smtp':
+        return sendSmtp(transport, normalizedInput, from, replyTo, identity.deliveryKey)
+    }
+  }
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof UncertainSend) return error.outcome
+    throw error
   }
 }
 
-async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, input: SendEmailInput, from: string, replyTo?: string): Promise<{ id: string }> {
-  const res = await providerFetch('Resend', 'https://api.resend.com/emails', {
+async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+  const res = await providerDispatch('Resend', 'https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${t.apiKey}`, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${t.apiKey}`,
+      'Content-Type': 'application/json',
+      // Provider-side duplicate suppression: replays of one logical delivery
+      // present the same key, so an already-processed request returns its
+      // original result instead of sending twice.
+      ...(deliveryKey ? { 'Idempotency-Key': deliveryKey } : {}),
+    },
     body: JSON.stringify({
       from,
       to: toArray(input.to),
@@ -293,23 +369,34 @@ async function sendResend(t: Extract<EmailTransport, { provider: 'resend' }>, in
       text: input.text,
       reply_to: replyTo,
       attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, content_type: a.contentType })),
+      ...(deliveryKey ? { headers: { [EMAIL_DELIVERY_ID_HEADER]: deliveryKey } } : {}),
     }),
   })
-  const body = await readResponseBody('Resend', res)
+  let body: unknown
   if (res.status !== 200) {
-    if (res.ok) throw providerContractError('Resend', `expected HTTP 200, received HTTP ${res.status}`)
+    try {
+      body = await readResponseBody('Resend', res)
+    } catch {
+      body = null
+    }
     throw providerHttpError('Resend', res, body, [t.apiKey])
   }
+  // Acceptance status received: only uncertainty remains possible here.
+  try {
+    body = await readResponseBody('Resend', res)
+  } catch {
+    throw uncertainConfirmation('Resend', 'its confirmation response could not be read')
+  }
   const id = responseString(body, 'id')
-  if (!id) throw providerContractError('Resend', 'missing id')
-  return { id }
+  if (!id) throw uncertainConfirmation('Resend', 'the id was missing from the success response')
+  return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>, input: SendEmailInput, from: string, replyTo?: string): Promise<{ id: string }> {
+async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const content: { type: string; value: string }[] = []
   content.push({ type: 'text/plain', value: input.text || ' ' })
   if (input.html) content.push({ type: 'text/html', value: input.html })
-  const res = await providerFetch('SendGrid', 'https://api.sendgrid.com/v3/mail/send', {
+  const res = await providerDispatch('SendGrid', 'https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: { Authorization: `Bearer ${t.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -319,19 +406,24 @@ async function sendSendgrid(t: Extract<EmailTransport, { provider: 'sendgrid' }>
       subject: input.subject,
       content,
       attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content, type: a.contentType, disposition: 'attachment' })),
+      ...(deliveryKey ? { headers: { [EMAIL_DELIVERY_ID_HEADER]: deliveryKey } } : {}),
     }),
   })
   if (res.status !== 202) {
-    const body = await readResponseBody('SendGrid', res)
-    if (res.ok) throw providerContractError('SendGrid', `expected HTTP 202, received HTTP ${res.status}`)
+    let body: unknown
+    try {
+      body = await readResponseBody('SendGrid', res)
+    } catch {
+      body = null
+    }
     throw providerHttpError('SendGrid', res, body, [t.apiKey])
   }
   const id = res.headers.get('x-message-id')?.trim()
-  if (!id) throw providerContractError('SendGrid', 'missing x-message-id header')
-  return { id }
+  if (!id) throw uncertainConfirmation('SendGrid', 'the x-message-id confirmation header was missing')
+  return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, input: SendEmailInput, from: string, replyTo?: string): Promise<{ id: string }> {
+async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   const form = new FormData()
   form.set('from', from)
   for (const to of toArray(input.to)) form.append('to', to)
@@ -339,28 +431,38 @@ async function sendMailgun(t: Extract<EmailTransport, { provider: 'mailgun' }>, 
   if (input.text) form.set('text', input.text)
   if (input.html) form.set('html', input.html)
   if (replyTo) form.set('h:Reply-To', replyTo)
+  if (deliveryKey) form.set(`h:${EMAIL_DELIVERY_ID_HEADER}`, deliveryKey)
   for (const a of input.attachments ?? []) {
     const blob = new Blob([Buffer.from(a.content, 'base64')], { type: a.contentType || 'application/octet-stream' })
     form.append('attachment', blob, a.filename)
   }
   const base = t.region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net'
-  const res = await providerFetch('Mailgun', `${base}/v3/${t.domain}/messages`, {
+  const res = await providerDispatch('Mailgun', `${base}/v3/${t.domain}/messages`, {
     method: 'POST',
     headers: { Authorization: `Basic ${Buffer.from(`api:${t.apiKey}`).toString('base64')}` },
     body: form,
   })
-  const body = await readResponseBody('Mailgun', res)
+  let body: unknown
   if (res.status !== 200) {
-    if (res.ok) throw providerContractError('Mailgun', `expected HTTP 200, received HTTP ${res.status}`)
+    try {
+      body = await readResponseBody('Mailgun', res)
+    } catch {
+      body = null
+    }
     throw providerHttpError('Mailgun', res, body, [t.apiKey])
   }
+  try {
+    body = await readResponseBody('Mailgun', res)
+  } catch {
+    throw uncertainConfirmation('Mailgun', 'its confirmation response could not be read')
+  }
   const id = responseString(body, 'id')
-  if (!id) throw providerContractError('Mailgun', 'missing id')
-  return { id }
+  if (!id) throw uncertainConfirmation('Mailgun', 'the id was missing from the success response')
+  return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>, input: SendEmailInput, from: string, replyTo?: string): Promise<{ id: string }> {
-  const res = await providerFetch('Postmark', 'https://api.postmarkapp.com/email', {
+async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
+  const res = await providerDispatch('Postmark', 'https://api.postmarkapp.com/email', {
     method: 'POST',
     headers: { 'X-Postmark-Server-Token': t.serverToken, 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -371,21 +473,31 @@ async function sendPostmark(t: Extract<EmailTransport, { provider: 'postmark' }>
       TextBody: input.text || undefined,
       ReplyTo: replyTo,
       Attachments: input.attachments?.map((a) => ({ Name: a.filename, Content: a.content, ContentType: a.contentType || 'application/octet-stream' })),
+      Headers: deliveryKey ? [{ Name: EMAIL_DELIVERY_ID_HEADER, Value: deliveryKey }] : undefined,
     }),
   })
-  const body = await readResponseBody('Postmark', res)
+  let body: unknown
   if (res.status !== 200) {
-    if (res.ok) throw providerContractError('Postmark', `expected HTTP 200, received HTTP ${res.status}`)
+    try {
+      body = await readResponseBody('Postmark', res)
+    } catch {
+      body = null
+    }
     throw providerHttpError('Postmark', res, body, [t.serverToken])
+  }
+  try {
+    body = await readResponseBody('Postmark', res)
+  } catch {
+    throw uncertainConfirmation('Postmark', 'its confirmation response could not be read')
   }
   const json = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
   if (!json || json.ErrorCode !== 0) throw providerHttpError('Postmark', res, body, [t.serverToken])
   const id = responseString(body, 'MessageID')
-  if (!id) throw providerContractError('Postmark', 'missing MessageID')
-  return { id }
+  if (!id) throw uncertainConfirmation('Postmark', 'the MessageID was missing from the success response')
+  return { kind: 'sent', providerMessageId: id }
 }
 
-async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input: SendEmailInput, from: string, replyTo?: string): Promise<{ id: string }> {
+async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input: SendEmailInput, from: string, replyTo?: string, deliveryKey?: string): Promise<EmailSendOutcome> {
   if (Boolean(t.username) !== Boolean(t.password)) {
     throw new Error('SMTP: username and password must both be provided, or both omitted for an unauthenticated relay')
   }
@@ -425,6 +537,10 @@ async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input:
     }
   }
   const nodemailer = (await import('nodemailer')).default
+  // A stable Message-ID plus our audit header keep duplicate SMTP deliveries
+  // attributable and downstream-dedupable.
+  const identity = deliveryKey ? buildSmtpIdentity(deliveryKey, from) : null
+  if (identity) redactions.push(identity.messageId)
   let info: { messageId?: unknown }
   try {
     const tx = nodemailer.createTransport(connectionOptions)
@@ -435,12 +551,15 @@ async function sendSmtp(t: Extract<EmailTransport, { provider: 'smtp' }>, input:
       text: input.text,
       html: input.html,
       replyTo,
+      ...(identity ? { messageId: identity.messageId, headers: identity.headers } : {}),
       attachments: input.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content, 'base64'), contentType: a.contentType })),
     })
   } catch (error) {
-    throw providerOperationError('SMTP', error, redactions)
+    const verdict = classifySmtpFailure(error)
+    if (verdict.outcome === 'notSent') throw providerOperationError('SMTP', error, redactions)
+    throw new UncertainSend(`SMTP: ${verdict.reason}`)
   }
   const id = typeof info.messageId === 'string' ? info.messageId.trim() : ''
-  if (!id) throw providerContractError('SMTP', 'missing messageId')
-  return { id }
+  if (!id) throw new UncertainSend('SMTP: accepted end-of-data but no messageId was returned — acceptance state unresolved')
+  return { kind: 'sent', providerMessageId: id }
 }

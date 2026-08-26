@@ -2,10 +2,11 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/src/db.ts";
-import { passwordResetEmail, sendVia } from "@openbooks/emails";
+import { deriveEmailDeliveryKey, passwordResetEmail, sendVia } from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
+  markEmailUncertain,
   markEmailSent,
   resolveOrgEmailTransport,
 } from "@openbooks/engine/src/email-config.ts";
@@ -97,13 +98,21 @@ export async function requestPasswordReset(
       categoryKey: "password_reset",
     });
     try {
-      const sent = await sendVia(transport, {
+      const outcome = await sendVia(transport, {
         to: user.email,
         subject: message.subject,
         html: message.html,
         text: message.text,
-      });
-      await markEmailSent(user.org_id, logId, sent.id);
+      }, { deliveryKey: deriveEmailDeliveryKey({ orgId: user.org_id, scope: `direct:${logId}`, to: user.email }) });
+      if (outcome.kind === "sent") {
+        await markEmailSent(user.org_id, logId, outcome.providerMessageId);
+      } else {
+        // Acceptance state unknown: the reset link may or may not be in the
+        // mailbox. Record uncertainty instead of inventing an outcome; the
+        // issued token's own expiry bounds any attacker window.
+        await markEmailUncertain(user.org_id, logId, outcome.reason);
+        console.warn(`[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`);
+      }
     } catch (error) {
       await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
     }

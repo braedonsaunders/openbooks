@@ -18,6 +18,7 @@ interface ResetHarnessState {
   deliveries: Array<{ transport: unknown; message: Record<string, unknown> }>;
   sentMarks: Array<Record<string, unknown>>;
   failedMarks: Array<Record<string, unknown>>;
+  uncertainMarks: Array<Record<string, unknown>>;
   execute(query: Query): Promise<{ rows: unknown[] }>;
 }
 
@@ -31,6 +32,7 @@ const state: ResetHarnessState = {
   deliveries: [],
   sentMarks: [],
   failedMarks: [],
+  uncertainMarks: [],
   async execute(query) {
     this.queries.push(query);
     if (query.text.includes("from users u")) {
@@ -74,7 +76,10 @@ const mockSources = new Map<string, string>([
       }
       export async function sendVia(transport, message) {
         state.deliveries.push({ transport, message })
-        return { id: 'provider-message-1' }
+        return { kind: 'sent', providerMessageId: 'provider-message-1' }
+      }
+      export function deriveEmailDeliveryKey() {
+        return \`obem_\${'a'.repeat(40)}\`
       }
     `,
   ],
@@ -95,6 +100,9 @@ const mockSources = new Map<string, string>([
       }
       export async function markEmailFailed(orgId, logId, error) {
         state.failedMarks.push({ orgId, logId, error })
+      }
+      export async function markEmailUncertain(orgId, logId, reason) {
+        state.uncertainMarks.push({ orgId, logId, reason })
       }
     `,
   ],
@@ -161,6 +169,7 @@ function resetState(): void {
   state.deliveries.length = 0;
   state.sentMarks.length = 0;
   state.failedMarks.length = 0;
+  state.uncertainMarks.length = 0;
 }
 
 function resetMutations(): Query[] {
