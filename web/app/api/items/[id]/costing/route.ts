@@ -29,7 +29,16 @@ export const runtime = 'nodejs'
  * (never defaulted), and once an item holds cost layers or movements a change
  * needs a recostingAuthorization reason, with before/after audit evidence
  * either way.
+ *
+ * Evidence contract: the policy mutation and its audit row commit or roll back
+ * together (one transaction), and the audit row records the exact before and
+ * after rows, the actor, the re-costing reason whenever one was given, and the
+ * revision tokens (updated_at) on both sides of the change. Callers may fence
+ * their save by echoing GET's updated_at as expectedUpdatedAt — a stale token
+ * is a 409 conflict that writes nothing.
  */
+
+class ProfileRevisionConflictError extends Error {}
 
 async function loadItem(id: string, orgId: string) {
   const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
@@ -43,11 +52,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  // updated_at doubles as the optimistic-concurrency revision token callers
+  // echo back as expectedUpdatedAt.
   const profile = ((await db.execute(sql`
     select costing_method, tracking, asset_account_id, cogs_account_id,
            adjustment_account_id, variance_account_id, received_not_billed_account_id,
            standard_cost, base_unit, reorder_point, preferred_stock_level,
-           allow_negative_inventory, negative_cost_basis, provisional_unit_cost
+           allow_negative_inventory, negative_cost_basis, provisional_unit_cost, updated_at
       from item_inventory_profiles
      where org_id = ${gate.user.orgId} and item_id = ${id}`)))
   return NextResponse.json({ profile: profile.rows[0] ?? null })
@@ -97,6 +108,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     recostingAuthorization = body.recostingAuthorization
   }
+  // Optional optimistic-concurrency fence: echo GET's updated_at verbatim.
+  let expectedRevision: string | null = null
+  if (body.expectedUpdatedAt !== undefined && body.expectedUpdatedAt !== null) {
+    if (
+      typeof body.expectedUpdatedAt !== 'string'
+      || Number.isNaN(new Date(body.expectedUpdatedAt).getTime())
+    ) {
+      return NextResponse.json(
+        { error: 'expectedUpdatedAt must be the exact updatedAt revision previously read for this profile' },
+        { status: 422 },
+      )
+    }
+    expectedRevision = body.expectedUpdatedAt
+  }
   const assetAccountId = accountRef(body.assetAccountId)
   const cogsAccountId = accountRef(body.cogsAccountId)
   if (!assetAccountId || !cogsAccountId) {
@@ -132,6 +157,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const result = await db.transaction(async (tx) => {
       const before = await lockItemInventoryProfile(tx, orgId, id)
+      // The row is locked, so this revision read cannot race with a concurrent
+      // writer: compare it against the caller's token to fence the save.
+      const storedRevision = ((await tx.execute<{ updated_at: Date | string }>(sql`
+        select updated_at from item_inventory_profiles
+         where org_id = ${orgId} and item_id = ${id}`))).rows[0]?.updated_at ?? null
+      if (expectedRevision !== null) {
+        const storedMs = storedRevision == null ? null : new Date(storedRevision as string).getTime()
+        if (storedMs === null || Number.isNaN(storedMs) || storedMs !== new Date(expectedRevision).getTime()) {
+          throw new ProfileRevisionConflictError()
+        }
+      }
       const assessment = await assertCostingPolicyChangeAllowed(
         tx,
         orgId,
@@ -179,19 +215,40 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           updated_at = now(), updated_by = ${actorId}
         where item_inventory_profiles.org_id = ${orgId}
         returning *`)))
-      const changes: Record<string, unknown> = { before: before ?? null, after: afterRows.rows[0] ?? null }
+      const after = afterRows.rows[0] ?? null
+      // Full mutation evidence in the same transaction as the mutation: exact
+      // before/after rows, requested policy, actor (audit_log.actor_id), the
+      // reason whenever one was supplied, and the revision on both sides.
+      const changes: Record<string, unknown> = {
+        requested: { costingMethod, tracking },
+        before: before ?? null,
+        after,
+        revision: { before: storedRevision, after: after?.updated_at ?? null },
+      }
+      if (recostingAuthorization?.trim()) {
+        changes.recostingAuthorization = recostingAuthorization.trim()
+      }
       if (authorizedFlip) {
-        changes.recostingAuthorization = recostingAuthorization!.trim()
         changes.revaluationEntryId = revaluationEntryId
       }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'item_inventory_profiles', ${id}, ${before ? 'update' : 'create'},
                 ${JSON.stringify(changes)}, ${actorId})`)
-      return { policyChanged: assessment.changed, revaluationEntryId }
+      return {
+        policyChanged: assessment.changed,
+        revaluationEntryId,
+        updatedAt: (after?.updated_at as Date | string | undefined) ?? null,
+      }
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
+    if (e instanceof ProfileRevisionConflictError) {
+      return NextResponse.json(
+        { error: 'the costing profile changed after you opened it; reload and review the latest revision' },
+        { status: 409 },
+      )
+    }
     if (e instanceof CostingPolicyChangeBlockedError) {
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
