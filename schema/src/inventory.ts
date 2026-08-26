@@ -334,6 +334,24 @@ export const landedCostAllocations = pgTable(
   (t) => [index("landed_cost_source").on(t.sourceDocumentLineId)],
 );
 
+/**
+ * Immutable build-time evidence stored on the posted inventory journal under
+ * `custom.assemblyBuild`. Cost layers retain their source movement, and that
+ * movement retains the journal, so a finished layer can always disclose the
+ * exact recipe and content-addressed revision that produced it even though the
+ * live BOM remains editable.
+ */
+export interface AssemblyBomRevisionEvidence {
+  format: "openbooks.inventory-bom.v1";
+  revision: `sha256:${string}`;
+  assemblyItemId: string;
+  components: Array<{
+    componentItemId: string;
+    quantityPer: string;
+    sortOrder: number;
+  }>;
+}
+
 /** Bill of materials for light assembly (kits / builds). */
 export const bomComponents = pgTable(
   "bom_components",
