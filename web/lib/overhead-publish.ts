@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { trueCostData } from './analytics/true-cost-data'
@@ -38,24 +38,31 @@ export async function publishOverheadRates(
   if (toPublish.length === 0) toPublish = await computeLiveOverheadRates(orgId)
   if (toPublish.length === 0) return { published: 0 }
 
-  for (const r of toPublish) {
-    await db.execute(sql`
-      update overhead_rates set effective_to = (${effectiveFrom}::date - 1)
-       where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
-         and (effective_to is null or effective_to >= ${effectiveFrom}::date)
-         and effective_from < ${effectiveFrom}::date`)
-    await db.execute(sql`
-      delete from overhead_rates
-       where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
-         and effective_from >= ${effectiveFrom}::date`)
-    await db.execute(sql`
-      insert into overhead_rates (org_id, department_id, category, method, rate_kind, rate_percent, effective_from, created_by, updated_by)
-      values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${actorId}, ${actorId})`)
-  }
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'overhead_rates', ${orgId}, 'insert',
-            ${JSON.stringify({ publish: { effectiveFrom, rates: toPublish, actor: actorId ?? 'scheduler' } })}, ${actorId})`)
+  // Every department's close/delete/insert AND the audit row are one atomic
+  // unit: a failure on any department must leave the previous rate card fully
+  // intact, never a mixed-generation card with some rows replaced and others
+  // untouched and no canonical publish audit. Joins an org boundary's pinned
+  // transaction when the caller already owns one.
+  await inDbTransaction(async (tx) => {
+    for (const r of toPublish) {
+      await tx.execute(sql`
+        update overhead_rates set effective_to = (${effectiveFrom}::date - 1)
+         where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
+           and (effective_to is null or effective_to >= ${effectiveFrom}::date)
+           and effective_from < ${effectiveFrom}::date`)
+      await tx.execute(sql`
+        delete from overhead_rates
+         where org_id = ${orgId} and department_id = ${r.departmentId} and rate_kind = 'per_hour'
+           and effective_from >= ${effectiveFrom}::date`)
+      await tx.execute(sql`
+        insert into overhead_rates (org_id, department_id, category, method, rate_kind, rate_percent, effective_from, created_by, updated_by)
+        values (${orgId}, ${r.departmentId}, 'Published', 'standard', 'per_hour', ${r.ratePerHour}, ${effectiveFrom}, ${actorId}, ${actorId})`)
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'overhead_rates', ${orgId}, 'insert',
+              ${JSON.stringify({ publish: { effectiveFrom, rates: toPublish, actor: actorId ?? 'scheduler' } })}, ${actorId})`)
+  })
   return { published: toPublish.length }
 }
 
