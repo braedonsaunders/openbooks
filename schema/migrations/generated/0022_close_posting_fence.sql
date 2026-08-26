@@ -47,9 +47,8 @@ BEGIN
   -- held until this transaction commits or rolls back, pinning the
   -- [period-state check -> commit] window of every journal mutation against
   -- concurrent lock-state transitions taken through the exclusive side.
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended('period-lock:' || p_org::text || ':' || p_period::text || ':' || p_book::text, 0),
-    false
+  PERFORM pg_advisory_xact_lock_shared(
+    hashtextextended('period-lock:' || p_org::text || ':' || p_period::text || ':' || p_book::text, 0)
   );
 END;
 $$;
