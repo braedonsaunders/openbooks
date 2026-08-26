@@ -1,6 +1,8 @@
 import { strict as assert } from "node:assert";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { backupFileBaseName, computeNextRunAt } from "./backup.ts";
+import { auditBackupEvent, backupFileBaseName, computeNextRunAt } from "./backup.ts";
+import { db } from "./db.ts";
 
 const DAILY = { frequency: "daily", hourUtc: 2, dayOfWeek: 1, dayOfMonth: 1 } as const;
 const WEEKLY = { frequency: "weekly", hourUtc: 3, dayOfWeek: 1, dayOfMonth: 1 } as const; // Mondays
@@ -64,4 +66,38 @@ test("backup file base name: slugged, stamped, header-safe", () => {
     "acme-holdings-inc-backup-20260724-101500",
   );
   assert.equal(backupFileBaseName("!!!", new Date(Date.UTC(2026, 0, 2, 3, 4, 5))), "org-backup-20260102-030405");
+});
+
+test("auditBackupEvent fails closed when the audit-log write fails", async (t) => {
+  t.mock.method(db, "execute", async () => {
+    throw new Error("injected audit_log outage");
+  });
+  // A security/material operation must never be allowed to report success
+  // without its evidence: the audit write failure has to reach the caller.
+  await assert.rejects(
+    auditBackupEvent({
+      orgId: randomUUID(),
+      tableName: "backup_runs",
+      rowId: randomUUID(),
+      actorId: null,
+      changes: { event: "backup_completed" },
+    }),
+    /injected audit_log outage/,
+  );
+});
+
+test("auditBackupEvent resolves and issues its evidence insert on success", async (t) => {
+  let inserts = 0;
+  t.mock.method(db, "execute", async () => {
+    inserts += 1;
+    return { rows: [] };
+  });
+  await auditBackupEvent({
+    orgId: randomUUID(),
+    tableName: "backup_runs",
+    rowId: randomUUID(),
+    actorId: null,
+    changes: { event: "backup_completed", sha256: "abc" },
+  });
+  assert.equal(inserts, 1);
 });

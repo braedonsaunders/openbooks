@@ -14,7 +14,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { sql } from "drizzle-orm";
-import { db, longPool, withBypassContext, withOrgContext } from "./db.ts";
+import { db, longPool, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
 import { getS3Client, s3Bucket, s3Enabled } from "./file-storage.ts";
 import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
 import {
@@ -386,7 +386,10 @@ export async function deleteBackupObject(key: string): Promise<void> {
 /**
  * Backup-lifecycle evidence in audit_log. The action enum has no backup verbs,
  * so the specific event rides in changes.event (the file-audit convention).
- * Best-effort: a logging failure must never fail the user action.
+ * Evidence is mandatory, never best-effort: callers must pair every material
+ * mutation or disclosure with this write inside their own transaction — or
+ * call it before serving external data — so a failed insert refuses the whole
+ * operation instead of completing it without durable actor/evidence.
  */
 export async function auditBackupEvent(args: {
   orgId: string;
@@ -395,14 +398,10 @@ export async function auditBackupEvent(args: {
   actorId: string | null;
   changes: Record<string, unknown>;
 }): Promise<void> {
-  try {
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${args.orgId}, ${args.tableName}, ${args.rowId}, 'update',
-              ${JSON.stringify(args.changes)}, ${args.actorId})`);
-  } catch (err) {
-    console.error("[backup] audit write failed:", (err as Error).message);
-  }
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${args.orgId}, ${args.tableName}, ${args.rowId}, 'update',
+            ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }
 
 /**
@@ -506,13 +505,37 @@ export async function executeBackupRun(runId: string): Promise<void> {
       await rm(tmp, { recursive: true, force: true });
     }
 
-    const finalized = (await db.execute<{ id: string }>(sql`
-      update backup_runs
-         set status = 'completed', completed_at = now(), updated_at = now(),
-             error = null
-       where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
-       returning id`));
-    if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
+    // Completion and its evidence are one atomic unit: the ledger may only
+    // show 'completed' together with the durable audit row describing what
+    // was stored, so an evidence failure rolls the run back to 'running'
+    // where the failure handler (or scheduler reconciliation) retries it.
+    await withOrgTransaction(run.org_id, async () => {
+      const finalized = (await db.execute<{ id: string }>(sql`
+        update backup_runs
+           set status = 'completed', completed_at = now(), updated_at = now(),
+               error = null
+         where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
+         returning id`));
+      if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
+      if (!stats || !fileName || byteSize === null || !sha256) {
+        throw new Error("backup run finished without export statistics");
+      }
+      await auditBackupEvent({
+        orgId: run.org_id,
+        tableName: "backup_runs",
+        rowId: run.id,
+        actorId: run.actor_id,
+        changes: {
+          event: "backup_completed",
+          kind: run.kind,
+          fileName,
+          byteSize,
+          sha256,
+          rowCount: stats.totalRows,
+          tableCount: stats.tables.length,
+        },
+      });
+    });
     completed = true;
   } catch (err) {
     const message = ((err as Error).message || String(err)).slice(0, 2000);
@@ -548,17 +571,22 @@ export async function executeBackupRun(runId: string): Promise<void> {
         }
       }
       if (cleaned) {
-        await db.execute(sql`
-          update backup_runs
-             set status = 'failed', object_key = null, error = ${message},
-                 completed_at = now(), updated_at = now()
-           where id = ${runId} and org_id = ${run.org_id} and status = 'running'`);
-        await auditBackupEvent({
-          orgId: run.org_id,
-          tableName: "backup_runs",
-          rowId: run.id,
-          actorId: run.actor_id,
-          changes: { event: "backup_failed", kind: run.kind, error: message },
+        // The failed stamp and its evidence commit atomically: an audit outage
+        // rolls back to 'running', where reconciliation retries the decision
+        // instead of leaving a failed run nobody can account for.
+        await withOrgTransaction(run.org_id, async () => {
+          await db.execute(sql`
+            update backup_runs
+               set status = 'failed', object_key = null, error = ${message},
+                   completed_at = now(), updated_at = now()
+             where id = ${runId} and org_id = ${run.org_id} and status = 'running'`);
+          await auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: run.actor_id,
+            changes: { event: "backup_failed", kind: run.kind, error: message },
+          });
         });
       } else {
         await db.execute(sql`
@@ -571,21 +599,6 @@ export async function executeBackupRun(runId: string): Promise<void> {
 
   if (!completed || !stats || !fileName || byteSize === null || !sha256) return;
 
-  await auditBackupEvent({
-    orgId: run.org_id,
-    tableName: "backup_runs",
-    rowId: run.id,
-    actorId: run.actor_id,
-    changes: {
-      event: "backup_completed",
-      kind: run.kind,
-      fileName,
-      byteSize,
-      sha256,
-      rowCount: stats.totalRows,
-      tableCount: stats.tables.length,
-    },
-  });
   try {
     await db.execute(sql`
       update backup_policies set last_run_at = now(), updated_at = now()
@@ -641,21 +654,26 @@ export async function rotateBackups(orgId: string): Promise<void> {
         continue;
       }
     }
-    await db.execute(sql`
-      update backup_runs
-         set purged_at = now(), purge_reason = 'rotated', updated_at = now()
-       where id = ${run.id} and org_id = ${orgId}`);
-    await auditBackupEvent({
-      orgId,
-      tableName: "backup_runs",
-      rowId: run.id,
-      actorId: null,
-      changes: {
-        event: "backup_rotated",
-        fileName: run.file_name,
-        byteSize: run.byte_size,
-        maxKeep,
-      },
+    // Stamp + evidence commit atomically: an audit failure rolls the purge
+    // stamp back so the next rotation retries this run instead of having
+    // destroyed its object without any durable record of why.
+    await withOrgTransaction(orgId, async () => {
+      await db.execute(sql`
+        update backup_runs
+           set purged_at = now(), purge_reason = 'rotated', updated_at = now()
+         where id = ${run.id} and org_id = ${orgId}`);
+      await auditBackupEvent({
+        orgId,
+        tableName: "backup_runs",
+        rowId: run.id,
+        actorId: null,
+        changes: {
+          event: "backup_rotated",
+          fileName: run.file_name,
+          byteSize: run.byte_size,
+          maxKeep,
+        },
+      });
     });
   }
   if (excess.rows.length > 0) {
