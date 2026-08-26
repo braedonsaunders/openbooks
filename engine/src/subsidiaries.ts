@@ -32,7 +32,19 @@ export interface SubsidiaryContext {
 export class SubsidiaryError extends Error {}
 
 /** Bind a uuid list as ONE pg-array param — drizzle expands raw JS arrays. */
-const uuidArray = (ids: string[]) => `{${ids.join(",")}}`;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function uuidArray(ids: readonly unknown[]): string {
+  for (const [index, id] of ids.entries()) {
+    if (typeof id !== "string" || !UUID_RE.test(id)) {
+      throw new SubsidiaryError(
+        `uuid array element ${index + 1} is not a valid UUID`,
+      );
+    }
+  }
+  return `{${ids.join(",")}}`;
+}
 
 export async function loadSubsidiaryContext(
   runner: Runner,

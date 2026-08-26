@@ -270,6 +270,19 @@ async function resolveTaxComponents(
 
 type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
 
+/** Resolve a document line's posting account before it reaches any SQL binder. */
+function resolvedLineAccount(
+  line: DocLine,
+  resolved: unknown = line.accountId,
+): string {
+  if (typeof resolved !== "string" || resolved.length === 0) {
+    throw new PostingError(
+      `document line ${line.lineNumber} has no resolvable account`,
+    );
+  }
+  return resolved;
+}
+
 /**
  * Card charge / refund. A charge DRs its expense lines and CRs the card's
  * liability control account; a refund is the arithmetic reverse and rides the
@@ -279,7 +292,7 @@ type RuleFn = (doc: Doc, lines: DocLine[], deps: PostingDeps) => KernelLine[];
  */
 const cardRule: RuleFn = (doc, lines, deps) => {
   const expense: KernelLine[] = lines.map((l) => ({
-    accountId: l.accountId!,
+    accountId: resolvedLineAccount(l),
     amount: purchaseBaseAmount(l, deps),
     memo: l.description,
     partyId: l.partyId ?? doc.partyId,
@@ -344,17 +357,16 @@ export function projectChargeKernelLines(
 ): KernelLine[] {
   const out: KernelLine[] = [];
   for (const line of lines) {
-    if (!line.accountId)
-      throw new PostingError("project charge requires a cost account");
+    const accountId = resolvedLineAccount(line);
     if (!line.recoveryAccountId)
       throw new PostingError("project charge requires a cost recovery account");
-    if (line.recoveryAccountId === line.accountId) {
+    if (line.recoveryAccountId === accountId) {
       throw new PostingError(
         "project charge cost and recovery accounts must be different",
       );
     }
     out.push({
-      accountId: line.accountId,
+      accountId,
       amount: line.amount,
       memo: line.description,
       ...dims(doc, line),
@@ -597,7 +609,10 @@ export const RULES: Record<string, RuleFn> = {
     const expense: KernelLine[] = lines.map((l) => ({
       // Inventory item lines DR the clearing/asset account (subledger receives
       // the stock); all other lines DR their expense account.
-      accountId: deps.inventoryAssetByLine?.get(l.id) ?? l.accountId!,
+      accountId: resolvedLineAccount(
+        l,
+        deps.inventoryAssetByLine?.get(l.id) ?? l.accountId,
+      ),
       amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -623,7 +638,10 @@ export const RULES: Record<string, RuleFn> = {
     const income: KernelLine[] = lines.map((l) => ({
       // Rev-rec lines credit deferred revenue; recognition drains it over the
       // term. All other lines credit income directly.
-      accountId: deps.deferralAccountByLine?.get(l.id) ?? l.accountId!,
+      accountId: resolvedLineAccount(
+        l,
+        deps.deferralAccountByLine?.get(l.id) ?? l.accountId,
+      ),
       amount: neg(l.amount), // credit income / deferred revenue
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -729,7 +747,7 @@ export const RULES: Record<string, RuleFn> = {
 
   expense_report: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
+      accountId: resolvedLineAccount(l),
       amount: purchaseBaseAmount(l, deps),
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -774,8 +792,9 @@ export const RULES: Record<string, RuleFn> = {
       // systems put the entity on the LINE, e.g. opening-balance journals).
       // Falls back to the header party when the line has none.
       const partyId = l.partyId ?? doc.partyId;
+      const accountId = resolvedLineAccount(l);
       return {
-        accountId: l.accountId!,
+        accountId,
         amount: l.amount,
         subsidiaryId: l.subsidiaryId,
         memo: l.description,
@@ -784,7 +803,7 @@ export const RULES: Record<string, RuleFn> = {
         // a direct GL control-account posting and intentionally stays outside
         // aging; manufacturing an anonymous subledger balance would be false.
         isOpenItem: controlLineIsOpenItem(
-          l.accountId!,
+          accountId,
           partyId,
           deps.openItemAccountIds,
         ),
@@ -800,10 +819,10 @@ export const RULES: Record<string, RuleFn> = {
    */
   pay_run: (doc, lines) =>
     lines.map((l) => {
-      if (!l.accountId) throw new PostingError("pay run line is missing an account");
+      const accountId = resolvedLineAccount(l);
       const partyId = l.partyId ?? null;
       return {
-        accountId: l.accountId,
+        accountId,
         amount: l.amount,
         memo: l.description,
         partyId,
@@ -821,23 +840,26 @@ export const RULES: Record<string, RuleFn> = {
    * is the document's own line accounts. Purchase-side tax (taxPaid).
    */
   check: (doc, lines, deps) => {
-    const expense: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
-      amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
-      memo: l.description,
-      partyId: l.partyId ?? doc.partyId,
-      // A check written against an AR/AP control account settles the open
-      // items it pays (the bills behind that balance) exactly like the AP leg
-      // of a vendor_payment: the entity-bearing control leg must carry
-      // is_open_item to be a valid application source. A party-less leg is a
-      // direct GL control posting and stays outside aging.
-      isOpenItem: controlLineIsOpenItem(
-        l.accountId!,
-        l.partyId ?? doc.partyId,
-        deps.openItemAccountIds,
-      ),
-      ...dims(doc, l),
-    }));
+    const expense: KernelLine[] = lines.map((l) => {
+      const accountId = resolvedLineAccount(l);
+      return {
+        accountId,
+        amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
+        memo: l.description,
+        partyId: l.partyId ?? doc.partyId,
+        // A check written against an AR/AP control account settles the open
+        // items it pays (the bills behind that balance) exactly like the AP leg
+        // of a vendor_payment: the entity-bearing control leg must carry
+        // is_open_item to be a valid application source. A party-less leg is a
+        // direct GL control posting and stays outside aging.
+        isOpenItem: controlLineIsOpenItem(
+          accountId,
+          l.partyId ?? doc.partyId,
+          deps.openItemAccountIds,
+        ),
+        ...dims(doc, l),
+      };
+    });
     const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
     return [
@@ -859,8 +881,9 @@ export const RULES: Record<string, RuleFn> = {
   deposit: (doc, lines, deps) => {
     const sources: KernelLine[] = lines.map((l) => {
       const partyId = l.partyId ?? doc.partyId;
+      const accountId = resolvedLineAccount(l);
       return {
-        accountId: l.accountId!,
+        accountId,
         amount: neg(l.amount), // credit each source
         memo: l.description,
         partyId,
@@ -868,7 +891,7 @@ export const RULES: Record<string, RuleFn> = {
         // a vendor credit). Preserve that entity-bearing control leg as an
         // application source; ordinary income/clearing sources stay non-open.
         isOpenItem: controlLineIsOpenItem(
-          l.accountId!,
+          accountId,
           partyId,
           deps.openItemAccountIds,
         ),
@@ -934,7 +957,10 @@ export const RULES: Record<string, RuleFn> = {
   /** Vendor credit memo: DR AP / CR expense or inventory-return variance + tax. */
   vendor_credit: (doc, lines, deps) => {
     const expense: KernelLine[] = lines.map((l) => ({
-      accountId: deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId!,
+      accountId: resolvedLineAccount(
+        l,
+        deps.inventoryReturnOffsetByLine?.get(l.id) ?? l.accountId,
+      ),
       amount: neg(purchaseBaseAmount(l, deps)), // credit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
@@ -959,7 +985,7 @@ export const RULES: Record<string, RuleFn> = {
   /** Customer credit memo: the reverse of customer_invoice. DR income / CR AR + tax. */
   customer_credit: (doc, lines, deps) => {
     const income: KernelLine[] = lines.map((l) => ({
-      accountId: l.accountId!,
+      accountId: resolvedLineAccount(l),
       amount: l.amount, // debit income (reverse of invoice)
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
