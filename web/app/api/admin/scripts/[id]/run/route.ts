@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { runScheduledScript, runBulkScript, computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
+import {
+  computeScheduledScriptNextRunAt,
+  InvalidScheduledScriptCronError,
+  INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+  runBulkScript,
+  runScheduledScript,
+} from '@openbooks/engine/src/scripting.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
+
+function invalidCronResponse(error: InvalidScheduledScriptCronError): NextResponse {
+  return NextResponse.json(
+    { error: error.message, code: INVALID_SCHEDULED_SCRIPT_CRON_CODE, field: 'cron' },
+    { status: 422 },
+  )
+}
 
 /**
  * POST — manual "Run now".
@@ -37,15 +50,26 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
+    // Parse before the execution boundary: an invalid legacy schedule returns
+    // a repairable client error without running source or mutating its cursor.
+    let next: Date | null = null
+    if (kind === 'scheduled') {
+      try {
+        next = computeScheduledScriptNextRunAt(existing.rows[0].cron)
+      } catch (error) {
+        if (!(error instanceof InvalidScheduledScriptCronError)) throw error
+        return invalidCronResponse(error)
+      }
+    }
+
     const outcome = await runScheduledScript(id, user.orgId)
     // Advance next_run_at for scheduled scripts
-    const cron = existing.rows[0].cron
-    const next = cron ? computeNextRunAt(cron) : null
     if (next) {
       await db.execute(sql`update user_scripts set next_run_at = ${next} where id = ${id} and org_id = ${user.orgId}`)
     }
     return NextResponse.json(outcome)
   } catch (e) {
+    if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e)
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
 }

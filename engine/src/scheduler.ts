@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "./db.ts";
 import { WEB_TICK_LOCK_KEY, withTickClaim } from "./scheduler-lock.ts";
-import { runScheduledScript, computeNextRunAt } from "./scripting.ts";
+import {
+  computeScheduledScriptNextRunAt,
+  InvalidScheduledScriptCronError,
+  quarantineInvalidScheduledScript,
+  runScheduledScript,
+} from "./scripting.ts";
 
 /**
  * Scheduled-script runner — a real cron-driven loop that polls every 60 s for
@@ -136,7 +141,24 @@ async function finalizeOccurrence(
  * occurrence commit together or not at all.
  */
 export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOccurrence | null> {
-  const next = s.cron ? computeNextRunAt(s.cron) : null;
+  let next: Date;
+  try {
+    next = computeScheduledScriptNextRunAt(s.cron);
+  } catch (error) {
+    if (!(error instanceof InvalidScheduledScriptCronError)) throw error;
+    // No occurrence is claimed and no source is dispatched. The CAS inside
+    // quarantineInvalidScheduledScript means a concurrent admin repair wins
+    // cleanly instead of being overwritten by this stale scan result.
+    await withBypassContext(() =>
+      quarantineInvalidScheduledScript({
+        id: s.id,
+        orgId: s.orgId,
+        cron: s.cron,
+        nextRunAt: s.nextRunAt,
+      }),
+    );
+    return null;
+  }
   const occurrenceKey = scriptOccurrenceKey(s.id, s.nextRunAt);
   const scheduledForIso = asDbDate(s.nextRunAt).toISOString();
   const claimed = await withBypassContext(() =>

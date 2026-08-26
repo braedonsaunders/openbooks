@@ -17,6 +17,7 @@ import {
   runDueScripts,
   scriptOccurrenceKey,
 } from "./scheduler.ts";
+import { SCHEDULED_SCRIPT_SCHEDULER_IDENTITY } from "./scripting.ts";
 import { SCHEDULER_OUTBOX_WORKER_IDENTITY, TERMINAL_FAILURE_LOG_EVENT } from "./terminal-failure.ts";
 import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 
@@ -320,6 +321,9 @@ type OccurrenceEventRow = {
   attempt?: number;
   scheduledFor?: string;
   job?: string;
+  markedBy?: string;
+  cron?: string | null;
+  nextRunAt?: string | null;
 };
 
 /** Open the scripts feature gate and seed one active scheduled script due now. */
@@ -361,7 +365,135 @@ async function countScheduledRuns(scriptId: string): Promise<number> {
   ).rows[0]!.n;
 }
 
-test("a scheduled-script claim commits its durable occurrence with the cursor advance", { skip: !DB }, async () => {
+test("a malformed legacy scheduled script is durably quarantined and runs after repair", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const invalidCron = "definitely not a cron expression";
+  const validCron = "*/5 * * * *";
+  try {
+    const scriptId = await seedDueScheduledScript(
+      org.orgId,
+      'function main(ctx) { ob.log("must not run before repair"); return "repaired"; }',
+    );
+    const dueAt = new Date(Date.now() - 60_000);
+    await db.execute(sql`
+      update user_scripts
+         set cron = ${invalidCron}, next_run_at = ${dueAt}
+       where id = ${scriptId}
+    `);
+
+    await runDueScripts();
+
+    // The invalid occurrence never executes and never silently disappears:
+    // the exact repairable cron/cursor survive while the row is explicitly
+    // deactivated. A later scan is idempotent because inactive rows are not due.
+    const quarantined = (
+      await db.execute<{
+        cron: string | null;
+        nextRunAt: Date | string | null;
+        isActive: boolean;
+        lastRunAt: Date | string | null;
+      }>(sql`
+        select cron, next_run_at as "nextRunAt", is_active as "isActive",
+               last_run_at as "lastRunAt"
+          from user_scripts
+         where id = ${scriptId}
+      `)
+    ).rows[0]!;
+    assert.equal(quarantined.cron, invalidCron);
+    assert.equal(new Date(quarantined.nextRunAt!).toISOString(), dueAt.toISOString());
+    assert.equal(quarantined.isActive, false);
+    assert.equal(quarantined.lastRunAt, null);
+    assert.equal(await countScheduledRuns(scriptId), 0, "invalid configuration must not execute source");
+
+    const failure = (
+      await db.execute<{
+        id: string;
+        status: string;
+        errorMessage: string | null;
+        logs: OccurrenceEventRow[];
+      }>(sql`
+        select id, status, error_message as "errorMessage", logs
+          from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_configuration'
+      `)
+    ).rows[0]!;
+    assert.equal(failure.status, "error");
+    assert.match(failure.errorMessage ?? "", /invalid cron expression/);
+    assert.equal(failure.logs[0]?.event, "invalid_cron_quarantined");
+    assert.equal(failure.logs[0]?.markedBy, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
+    assert.equal(failure.logs[0]?.cron, invalidCron);
+    assert.equal(new Date(failure.logs[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
+
+    const audit = (
+      await db.execute<{
+        actorId: string | null;
+        changes: {
+          event: string;
+          actorKind: string;
+          actor: string;
+          reason: string;
+          scriptRunId: string;
+          before: { isActive: boolean; cron: string; nextRunAt: string };
+          after: { isActive: boolean; cron: string; nextRunAt: string };
+        };
+      }>(sql`
+        select actor_id as "actorId", changes
+          from audit_log
+         where table_name = 'user_scripts' and row_id = ${scriptId}
+           and changes->>'event' = 'invalid_cron_quarantined'
+      `)
+    ).rows[0]!;
+    assert.equal(audit.actorId, null, "the system quarantine must not impersonate a human actor");
+    assert.equal(audit.changes.actorKind, "system");
+    assert.equal(audit.changes.actor, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
+    assert.equal(audit.changes.scriptRunId, failure.id);
+    assert.equal(audit.changes.before.cron, invalidCron);
+    assert.equal(new Date(audit.changes.before.nextRunAt).toISOString(), dueAt.toISOString());
+    assert.equal(audit.changes.before.isActive, true);
+    assert.equal(audit.changes.after.isActive, false);
+    assert.equal(audit.changes.after.cron, invalidCron);
+    assert.equal(new Date(audit.changes.after.nextRunAt).toISOString(), dueAt.toISOString());
+
+    await runDueScripts();
+    const evidenceCount = (
+      await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_configuration'
+      `)
+    ).rows[0]!.n;
+    assert.equal(evidenceCount, 1, "quarantine evidence is written once");
+
+    // A controlled repair explicitly supplies a valid expression and
+    // reactivates the row. The ordinary claim/dispatch path then runs once and
+    // advances from the repaired due tick.
+    const repairedDueAt = new Date(Date.now() - 30_000);
+    await db.execute(sql`
+      update user_scripts
+         set cron = ${validCron}, next_run_at = ${repairedDueAt},
+             is_active = true, updated_at = now()
+       where id = ${scriptId}
+    `);
+    await runDueScripts();
+
+    assert.equal(await countScheduledRuns(scriptId), 1);
+    assert.equal((await loadOccurrence(scriptId)).status, "ok");
+    const repaired = (
+      await db.execute<{ cron: string; nextRunAt: Date | string; isActive: boolean }>(sql`
+        select cron, next_run_at as "nextRunAt", is_active as "isActive"
+          from user_scripts
+         where id = ${scriptId}
+      `)
+    ).rows[0]!;
+    assert.equal(repaired.cron, validCron);
+    assert.equal(repaired.isActive, true);
+    assert.ok(new Date(repaired.nextRunAt).getTime() > repairedDueAt.getTime());
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a valid scheduled-script control commits its durable occurrence with the cursor advance", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const scriptId = await seedDueScheduledScript(
