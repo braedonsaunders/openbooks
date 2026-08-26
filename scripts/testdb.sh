@@ -34,7 +34,9 @@ CONTAINER=openbooks-testdb
 PORT=${OPENBOOKS_TESTDB_PORT:-5599}
 SUPER=openbooks
 SUPERPASS=openbooks
-TEMPLATE=openbooks_template
+# Overridable so the harness's own concurrency regression can exercise publish
+# and copy against a throwaway template instead of the shared one.
+TEMPLATE=${OPENBOOKS_TESTDB_TEMPLATE:-openbooks_template}
 RUNTIME_ROLE=openbooks_app
 RUNTIME_PASS=openbooks-runtime-test-password
 
@@ -67,8 +69,68 @@ start_container() {
   exit 1
 }
 
+# One global template, many worktrees, and `flock` is not installed on macOS —
+# so the old `flock 9 2>/dev/null || true` was a silent no-op on every developer
+# machine and nothing was ever serialized. mkdir is atomic on every filesystem
+# this runs on, needs no extra binary, and cannot fail open.
+LOCK_DIR="${TMPDIR:-/tmp}/openbooks-testdb-${TEMPLATE}.lock.d"
+LOCK_HELD=0
+STAGING=""
+
+release_lock() {
+  [ "$LOCK_HELD" = 1 ] || return 0
+  rm -rf "$LOCK_DIR"
+  LOCK_HELD=0
+}
+
+cleanup() {
+  # A half-built staging database must never outlive the run that made it.
+  if [ -n "$STAGING" ]; then
+    psql_super -c "drop database if exists ${STAGING} with (force)" >/dev/null 2>&1 || true
+    STAGING=""
+  fi
+  release_lock
+}
+
+acquire_lock() {
+  # Reentrant: `new` takes the lock, then may call build_template inside it.
+  [ "$LOCK_HELD" = 1 ] && return 0
+  local waited=0 owner
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    # A crashed build otherwise wedges every worktree on the machine forever.
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "testdb: clearing template lock left behind by dead pid $owner" >&2
+      rm -rf "$LOCK_DIR"
+      continue
+    fi
+    if [ "$waited" -ge "${OPENBOOKS_TESTDB_LOCK_WAIT:-900}" ]; then
+      echo "testdb: gave up after ${waited}s waiting for the template lock (held by pid ${owner:-unknown})" >&2
+      echo "testdb: if that process is gone, remove $LOCK_DIR" >&2
+      exit 1
+    fi
+    [ "$waited" -eq 0 ] && echo "testdb: waiting for the template lock (held by pid ${owner:-unknown})" >&2
+    sleep 1
+    waited=$((waited + 1))
+  done
+  printf '%s' "$$" >"$LOCK_DIR/pid"
+  LOCK_HELD=1
+  trap cleanup EXIT INT TERM
+}
+
 template_exists() {
   [ "$(psql_super -tAc "select 1 from pg_database where datname='${TEMPLATE}'" 2>/dev/null)" = "1" ]
+}
+
+# Existing is not the same as usable. build_template used to `create database`
+# and only then run migrations, so for the length of a bootstrap the published
+# name existed while holding nothing. `new` checked existence alone, copied that
+# empty database, and its suite reported missing columns as product failures —
+# false test evidence, which is worse than a slow run. The build record is
+# written last, so its presence is what "ready" means.
+template_ready() {
+  template_exists || return 1
+  [ -n "$(template_meta fingerprint)" ] || return 1
 }
 
 # Identity of the schema a template was built from: every generated migration
@@ -106,36 +168,47 @@ drop_template() {
 build_template() {
   local repo
   repo=$(git rev-parse --show-toplevel)
-  # One global template, many worktrees. Without this lock two concurrent
-  # rebuilds interleave and the loser's schema wins silently.
-  exec 9>"${TMPDIR:-/tmp}/openbooks-testdb-template.lock"
-  flock 9 2>/dev/null || true
+  acquire_lock
+  # Build under a name nothing copies from, then publish by rename. A reader can
+  # then only ever see the published name fully built, whether or not it took
+  # the lock, so this holds even against a caller that predates this script.
+  STAGING="${TEMPLATE}_staging_$$"
   echo "testdb: building $TEMPLATE (migrations run once, then every new database is a copy)" >&2
-  drop_template
-  psql_super -c "create database ${TEMPLATE}" >/dev/null
+  psql_super -c "drop database if exists ${STAGING} with (force)" >/dev/null
+  psql_super -c "create database ${STAGING}" >/dev/null
   (
     cd "$repo"
     NODE_ENV=test \
-    OPENBOOKS_DB_URL="$(url_for "$TEMPLATE")" \
-    OPENBOOKS_RUNTIME_DB_URL="$(runtime_url_for "$TEMPLATE")" \
+    OPENBOOKS_DB_URL="$(url_for "$STAGING")" \
+    OPENBOOKS_RUNTIME_DB_URL="$(runtime_url_for "$STAGING")" \
     OPENBOOKS_DB_PASSWORD="$RUNTIME_PASS" \
     OPENBOOKS_DATA_KEY=${OPENBOOKS_DATA_KEY:-000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f} \
     SESSION_SECRET=${SESSION_SECRET:-openbooks-test-secret-not-production} \
     ORG_COUNTRY=${ORG_COUNTRY:-US} ORG_CURRENCY=${ORG_CURRENCY:-USD} \
     npx tsx scripts/bootstrap.ts >&2
   )
-  # A template must have no other sessions, and marking it as one keeps a stray
-  # connection from silently breaking every later copy.
   # Record which schema built this template so a stale checkout cannot rebuild
-  # it backwards without saying so.
-  psql_super -d "$TEMPLATE" -c "
+  # it backwards without saying so. Written last: it is the readiness signal.
+  psql_super -d "$STAGING" -c "
     create table if not exists openbooks_testdb_meta (
       fingerprint text not null, migration_count int not null, built_at timestamptz not null default now());
     delete from openbooks_testdb_meta;
     insert into openbooks_testdb_meta (fingerprint, migration_count)
     values ('$(schema_fingerprint)', $(migration_count));" >/dev/null
+  local built
+  built=$(psql_super -d "$STAGING" -tAc "select fingerprint from openbooks_testdb_meta limit 1" 2>/dev/null | tr -d " ")
+  if [ "$built" != "$(schema_fingerprint)" ]; then
+    echo "testdb: refusing to publish — the staging template has no usable build record" >&2
+    exit 1
+  fi
+  # Publish. Rename is atomic in the catalog; the old template is dropped first
+  # because the name has to be free, and both happen under the lock.
+  drop_template
+  psql_super -c "alter database ${STAGING} rename to ${TEMPLATE}" >/dev/null
   psql_super -c "update pg_database set datistemplate = true where datname = '${TEMPLATE}'" >/dev/null
+  STAGING=""
   echo "testdb: template ready ($(migration_count) migrations)" >&2
+  release_lock
 }
 
 # Warn loudly when the template was built from a different schema than the
@@ -144,7 +217,14 @@ build_template() {
 check_template_freshness() {
   local mine theirs mine_n theirs_n
   mine=$(schema_fingerprint); theirs=$(template_meta fingerprint)
-  [ -z "$theirs" ] && return 0
+  # Silence here is what let a half-built template pass as usable. Every
+  # template this script publishes carries a build record, so its absence means
+  # the database is not one — never that it is old and fine.
+  if [ -z "$theirs" ]; then
+    echo "testdb: the template has no build record, so its schema is unknown." >&2
+    echo "testdb: refusing to hand back a database copied from it. Run: scripts/testdb.sh reset" >&2
+    exit 1
+  fi
   [ "$mine" = "$theirs" ] && return 0
   mine_n=$(migration_count); theirs_n=$(template_meta migration_count)
   echo "testdb: WARNING — the template was built from a different schema than this checkout" >&2
@@ -175,14 +255,17 @@ case "$cmd" in
   up)
     require_docker
     start_container
-    template_exists || build_template
+    template_ready || build_template
     echo "testdb: ready on port $PORT" >&2
     ;;
 
   new)
     require_docker
     start_container
-    template_exists || build_template
+    # Held across the readiness check AND the copy: otherwise a concurrent reset
+    # can drop the template between deciding it is good and reading from it.
+    acquire_lock
+    template_ready || build_template
     check_template_freshness
     # Default to the worktree's own name so two agents never collide and a
     # human can tell whose database is whose.
@@ -192,6 +275,16 @@ case "$cmd" in
     db=$(printf '%s' "ob_$raw" | tr -c 'a-zA-Z0-9_' '_' | cut -c1-60 | tr 'A-Z' 'a-z')
     psql_super -c "drop database if exists ${db} with (force)" >/dev/null
     psql_super -c "create database ${db} template ${TEMPLATE}" >/dev/null
+    # Prove the copy carries the schema the template advertised. A suite that
+    # fails on a missing column should be able to blame the product, not us.
+    want=$(template_meta fingerprint)
+    got=$(psql_super -d "$db" -tAc "select fingerprint from openbooks_testdb_meta limit 1" 2>/dev/null | tr -d " ")
+    if [ -z "$got" ] || [ "$got" != "$want" ]; then
+      psql_super -c "drop database if exists ${db} with (force)" >/dev/null 2>&1 || true
+      echo "testdb: the copy did not match the template it came from; refusing to hand it back." >&2
+      exit 1
+    fi
+    release_lock
     echo "testdb: $db ready (copied from $TEMPLATE)" >&2
     print_env "$db"
     ;;
@@ -216,7 +309,13 @@ case "$cmd" in
       echo "container: not running"
       exit 0
     fi
-    template_exists && echo "template:  $TEMPLATE present" || echo "template:  MISSING — run 'scripts/testdb.sh up'"
+    if template_ready; then
+      echo "template:  $TEMPLATE ready ($(template_meta migration_count) migrations, fingerprint $(template_meta fingerprint | cut -c1-12))"
+    elif template_exists; then
+      echo "template:  $TEMPLATE PRESENT BUT NOT READY — no build record; run 'scripts/testdb.sh reset'"
+    else
+      echo "template:  MISSING — run 'scripts/testdb.sh up'"
+    fi
     echo "databases:"
     psql_super -tAc "select datname, pg_size_pretty(pg_database_size(datname)) from pg_database where datname like 'ob\\_%' order by datname" \
       | sed 's/|/  /' | sed 's/^/  /'
@@ -245,7 +344,7 @@ case "$cmd" in
     start_container
     # One global template shared by every worktree: a stale checkout rebuilding
     # it would silently regress everyone else's schema.
-    theirs_n=$(template_exists && template_meta migration_count || echo 0)
+    theirs_n=$(template_ready && template_meta migration_count || echo 0)
     mine_n=$(migration_count)
     if [ "${2:-}" != "--force" ] && [ "${theirs_n:-0}" -gt "${mine_n:-0}" ]; then
       echo "testdb: refusing to rebuild backwards — the template has ${theirs_n} migrations and this checkout has ${mine_n}." >&2
