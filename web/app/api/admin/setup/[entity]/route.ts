@@ -15,6 +15,8 @@ import {
   describeDbError,
   idColumn,
   multirefField,
+  pgErrorCode,
+  taxRatePercentProblem,
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
@@ -193,6 +195,25 @@ async function validateEntityIntegrity(
     } catch {
       return 'invalid-url'
     }
+  }
+  if (entity.key === 'tax-rates') {
+    // One exact-decimal contract with the calculation engine
+    // (engine/src/tax.ts): a rate is a nonnegative exact decimal with at most
+    // 4 decimal places. Without this check the generic percent coercer admits
+    // FX-scale values PostgreSQL silently rounds into numeric(19,4), and a
+    // negative rate saves "successfully" only to fail every later document at
+    // calculation time. A statutory 0% rate stays legal.
+    const current = rowId
+      ? (((await db.execute(sql`
+          select rate_percent::text as rate_percent from tax_rates
+           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const raw = body.ratePercent !== undefined ? body.ratePercent : current?.rate_percent
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return 'ratePercent is required'
+    }
+    return taxRatePercentProblem(raw)
   }
   if (entity.key === 'tax-codes') {
     const current = rowId
@@ -765,6 +786,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
     })
     return NextResponse.json({ id: newId })
   } catch (e) {
+    // The natural-key preflight above is an autocommit read, so two concurrent
+    // creates can both pass it; the storage UNIQUE constraint is the authority
+    // and surfaces here as a deterministic 409, with no partial row or audit
+    // (the insert and its audit share one transaction).
+    if (pgErrorCode(e) === '23505') {
+      return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
+    }
     return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
   }
 }
@@ -956,6 +984,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
     if (!found) return NextResponse.json({ error: 'not found' }, { status: 404 })
     return NextResponse.json({ id })
   } catch (e) {
+    // Same storage-authority mapping as POST: an edit that moves a row onto an
+    // occupied natural key (codes are editable on several entities) is a
+    // duplicate conflict, not a generic save failure.
+    if (pgErrorCode(e) === '23505') {
+      return NextResponse.json({ error: 'duplicate', code: 'duplicate' }, { status: 409 })
+    }
     return NextResponse.json({ error: describeDbError(e) }, { status: 400 })
   }
 }
@@ -997,7 +1031,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
     return NextResponse.json({ ok: true })
   } catch (e) {
     // Foreign-key violation → the record is referenced elsewhere.
-    if ((e as { code?: string })?.code === '23503') {
+    if (pgErrorCode(e) === '23503') {
       return NextResponse.json({ error: 'in-use', code: 'in-use' }, { status: 409 })
     }
     return NextResponse.json({ error: describeDbError(e) }, { status: 400 })

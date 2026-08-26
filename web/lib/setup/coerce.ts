@@ -8,13 +8,31 @@
  * parameter values. This is the same whitelist that keeps the generic API safe.
  */
 
-import { normalizeDecimal } from '@openbooks/engine/src/money.ts'
+import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money.ts'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupField } from './registry'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
 const SETUP_DECIMAL_SCALE = 10
+
+/** The tax-rate domain, stated once and shared with the calculation engine
+ * (engine/src/tax.ts): a rate is a nonnegative exact decimal with at most 4
+ * decimal places — tax_rates.rate_percent is numeric(19,4), and the engine's
+ * toUnits refuses anything finer. The generic percent coercer deliberately
+ * accepts FX-scale (10dp) values, so this is the boundary that keeps a rate
+ * the engine can actually calculate with. A statutory 0% rate is legal.
+ * Returns a client error code, or null when the value is in domain. */
+export function taxRatePercentProblem(raw: unknown): string | null {
+  const exact = canonicalDecimal(raw, 4)
+  if (exact === null) return 'invalid-tax-rate'
+  try {
+    if (toUnits(exact) < 0n) return 'negative-tax-rate'
+  } catch {
+    return 'invalid-tax-rate'
+  }
+  return null
+}
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -176,9 +194,17 @@ export function buildRow(
   return { cols }
 }
 
+/** Drizzle wraps node-postgres failures in DrizzleQueryError with the driver
+ * error as `cause`; surface the driver's SQLSTATE either way so callers can
+ * map constraint violations deterministically. */
+export function pgErrorCode(e: unknown): string | undefined {
+  const error = e as { code?: string; cause?: { code?: string } }
+  return error?.code ?? error?.cause?.code
+}
+
 /** Translate a few common Postgres error codes into stable, client-friendly strings. */
 export function describeDbError(e: unknown): string {
-  const code = (e as { code?: string })?.code
+  const code = pgErrorCode(e)
   if (code === '23505') return 'duplicate' // unique_violation
   if (code === '23503') return 'in-use' // foreign_key_violation
   if (code === '23502') return 'missing-required' // not_null_violation

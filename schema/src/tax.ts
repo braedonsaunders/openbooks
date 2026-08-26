@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -179,7 +180,11 @@ export const taxCodes = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("tax_codes_org_id_id_unique").on(t.orgId, t.id)],
+  (t) => [
+    uniqueIndex("tax_codes_org_id_id_unique").on(t.orgId, t.id),
+    // Mirrors migration 0042: one authoritative tax code per (org, code).
+    unique("tax_codes_org_code_unique").on(t.orgId, t.code),
+  ],
 );
 
 export const taxRates = pgTable(
@@ -193,7 +198,13 @@ export const taxRates = pgTable(
     effectiveTo: date("effective_to"),
     ...auditColumns,
   },
-  (t) => [index("tax_rates_code").on(t.taxCodeId)],
+  (t) => [
+    index("tax_rates_code").on(t.taxCodeId),
+    // Mirrors migration 0042: the calculation engine (engine/src/tax.ts)
+    // refuses negative rates, so a negative rate can never be usable —
+    // storage rejects it at the write boundary. A statutory 0% rate is legal.
+    check("tax_rates_rate_percent_domain", sql`${t.ratePercent} >= 0`),
+  ],
 );
 
 export const taxGroups = pgTable(
@@ -206,7 +217,11 @@ export const taxGroups = pgTable(
     priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
   },
-  (t) => [uniqueIndex("tax_groups_org_id_id_unique").on(t.orgId, t.id)],
+  (t) => [
+    uniqueIndex("tax_groups_org_id_id_unique").on(t.orgId, t.id),
+    // Mirrors migration 0042: one authoritative tax group per (org, code).
+    unique("tax_groups_org_code_unique").on(t.orgId, t.code),
+  ],
 );
 
 export const taxGroupMembers = pgTable(
