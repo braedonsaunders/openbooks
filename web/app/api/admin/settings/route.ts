@@ -14,7 +14,10 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
 import { normalizeCountryCode } from "../../../../lib/countries";
-import { periodDerivationSql } from "../../../../lib/fiscal-periods";
+import {
+  periodDerivationSql,
+  periodDerivationStagingSql,
+} from "../../../../lib/fiscal-periods";
 
 export const runtime = "nodejs";
 
@@ -30,14 +33,24 @@ export const runtime = "nodejs";
  * identity-only payload shares one authoritative settings mutation boundary
  * with ledger policy and must never inherit user-administration authority.
  *
- * Changing the fiscal-year start month re-derives every accounting period's
- * fiscal_year / period_number / name from its start date, inside a transaction
- * that drops and recreates the (org_id, fiscal_year, period_number) unique
- * index so the intermediate state can't collide.
+ * A fresh organization may change its fiscal-year start month. Once its active
+ * default calendar has posted/reversed journals or a non-open period lock, the
+ * fiscal foundation is immutable and the transaction refuses the entire PUT.
  */
 
 const SETTINGS_READ_PERMISSION = "admin.users.manage";
 const SETTINGS_WRITE_PERMISSION = "admin.setup.manage";
+
+function fiscalCalendarLockedResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      error: "fiscal-calendar-locked",
+      message:
+        "Cannot change the fiscal calendar after postings or period closure.",
+    },
+    { status: 409 },
+  );
+}
 
 export async function GET() {
   const gate = await guardPermission(SETTINGS_READ_PERMISSION);
@@ -392,23 +405,120 @@ export async function PUT(req: Request) {
     // every period. Audit evidence is the final statement in this SAME
     // transaction, so its failure rolls back org, calendar, and period changes.
     const effectiveStart = nextStartMonth ?? curStartMonth;
+
+    if (startMonthChanged) {
+      // Lock the target calendar and its periods before inspecting activity.
+      // New journals/locks must acquire a foreign-key key-share lock on one of
+      // these rows, so they cannot race the eligibility decision. Existing
+      // lock and journal rows are locked below so close/post status changes are
+      // equally fenced until this transaction commits.
+      const calendar = await tx.execute<{ id: string }>(sql`
+        select id
+          from fiscal_calendars
+         where org_id = ${orgId} and is_default and is_active
+         for update`);
+      const calendarId = calendar.rows[0]?.id;
+      if (!calendarId) {
+        return NextResponse.json(
+          {
+            error: "fiscal-calendar-not-found",
+            message: "An active default fiscal calendar is required.",
+          },
+          { status: 409 },
+        );
+      }
+
+      await tx.execute(sql`
+        select id
+          from accounting_periods
+         where org_id = ${orgId} and fiscal_calendar_id = ${calendarId}
+         for update`);
+
+      // Established calendars can contain millions of journals. Refuse them
+      // with index-backed existence probes before taking row locks; only a
+      // candidate fresh calendar reaches the concurrency fence below.
+      const activity = await tx.execute<{
+        posted: boolean;
+        closed: boolean;
+      }>(sql`
+        select exists (
+                 select 1
+                   from journal_entries entry
+                   join accounting_periods period
+                     on period.org_id = entry.org_id
+                    and period.id = entry.period_id
+                  where period.org_id = ${orgId}
+                    and period.fiscal_calendar_id = ${calendarId}
+                    and entry.status in ('posted', 'reversed')
+                  limit 1
+               ) as posted,
+               exists (
+                 select 1
+                   from period_locks period_lock
+                   join accounting_periods period
+                     on period.org_id = period_lock.org_id
+                    and period.id = period_lock.period_id
+                  where period.org_id = ${orgId}
+                    and period.fiscal_calendar_id = ${calendarId}
+                    and (
+                      period_lock.state <> 'open'
+                      or period_lock.reopen_expires_at <= now()
+                    )
+                  limit 1
+               ) as closed`);
+      if (activity.rows[0]?.posted || activity.rows[0]?.closed) {
+        return fiscalCalendarLockedResponse();
+      }
+
+      const periodLocks = await tx.execute<{
+        state: string;
+        reopenExpired: boolean;
+      }>(sql`
+        select period_lock.state,
+               period_lock.reopen_expires_at <= now() as "reopenExpired"
+          from period_locks period_lock
+          join accounting_periods period
+            on period.org_id = period_lock.org_id
+           and period.id = period_lock.period_id
+         where period.org_id = ${orgId}
+           and period.fiscal_calendar_id = ${calendarId}
+         for update of period_lock`);
+      const calendarClosed = periodLocks.rows.some(
+        (periodLock) => periodLock.state !== "open" || periodLock.reopenExpired,
+      );
+
+      const journals = await tx.execute<{ status: string }>(sql`
+        select entry.status
+          from journal_entries entry
+          join accounting_periods period
+            on period.org_id = entry.org_id
+           and period.id = entry.period_id
+         where period.org_id = ${orgId}
+           and period.fiscal_calendar_id = ${calendarId}
+         for update of entry`);
+      const calendarPosted = journals.rows.some(
+        (entry) => entry.status === "posted" || entry.status === "reversed",
+      );
+
+      if (calendarPosted || calendarClosed) {
+        return fiscalCalendarLockedResponse();
+      }
+    }
+
     await tx.execute(sql`
     update orgs
        set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
      where id = ${orgId}`);
 
     if (startMonthChanged) {
-      // Drop the (org_id, fiscal_year, period_number) unique index so the
-      // in-flight re-labelling can't collide, re-derive, then recreate it.
-      await tx.execute(sql`drop index if exists periods_org_year_num`);
+      // Move existing labels outside the canonical range first so a calendar
+      // rotation cannot collide with another period's old unique key.
+      await tx.execute(periodDerivationStagingSql(orgId));
       await tx.execute(periodDerivationSql(orgId, effectiveStart));
       await tx.execute(sql`
       update fiscal_calendars
          set year_start_month = ${effectiveStart}, updated_at = now(), updated_by = ${actor.id}
        where org_id = ${orgId} and is_default`);
-      await tx.execute(sql`
-      create unique index periods_org_year_num
-        on accounting_periods (org_id, fiscal_year, period_number)`);
     }
 
     await tx.execute(sql`
