@@ -71,11 +71,47 @@ template_exists() {
   [ "$(psql_super -tAc "select 1 from pg_database where datname='${TEMPLATE}'" 2>/dev/null)" = "1" ]
 }
 
+# Identity of the schema a template was built from: every generated migration
+# filename and its content hash. Cheap to compute, and it changes the moment a
+# slice adds or edits an ordinal.
+schema_fingerprint() {
+  local repo
+  repo=$(git rev-parse --show-toplevel)
+  ( cd "$repo/schema/migrations/generated" 2>/dev/null && ls -1 *.sql 2>/dev/null | sort | while read -r f; do
+      printf '%s:%s\n' "$f" "$(shasum -a 256 "$f" | cut -d" " -f1)"
+    done ) | shasum -a 256 | cut -d" " -f1
+}
+
+migration_count() {
+  local repo
+  repo=$(git rev-parse --show-toplevel)
+  ls -1 "$repo"/schema/migrations/generated/*.sql 2>/dev/null | wc -l | tr -d " "
+}
+
+template_meta() {
+  # $1 = column. Empty when the template predates the metadata table.
+  psql_super -d "$TEMPLATE" -tAc \
+    "select ${1} from openbooks_testdb_meta limit 1" 2>/dev/null | tr -d " " || true
+}
+
+drop_template() {
+  # PostgreSQL refuses to drop a database flagged as a template, and
+  # build_template sets that flag — so every reset after the first failed with
+  # "cannot drop a template database" and silently left the OLD schema in place.
+  # Migration slices then copied a template missing their own migration.
+  psql_super -c "update pg_database set datistemplate = false where datname = '${TEMPLATE}'" >/dev/null 2>&1 || true
+  psql_super -c "drop database if exists ${TEMPLATE} with (force)" >/dev/null
+}
+
 build_template() {
   local repo
   repo=$(git rev-parse --show-toplevel)
+  # One global template, many worktrees. Without this lock two concurrent
+  # rebuilds interleave and the loser's schema wins silently.
+  exec 9>"${TMPDIR:-/tmp}/openbooks-testdb-template.lock"
+  flock 9 2>/dev/null || true
   echo "testdb: building $TEMPLATE (migrations run once, then every new database is a copy)" >&2
-  psql_super -c "drop database if exists ${TEMPLATE} with (force)" >/dev/null
+  drop_template
   psql_super -c "create database ${TEMPLATE}" >/dev/null
   (
     cd "$repo"
@@ -90,8 +126,34 @@ build_template() {
   )
   # A template must have no other sessions, and marking it as one keeps a stray
   # connection from silently breaking every later copy.
+  # Record which schema built this template so a stale checkout cannot rebuild
+  # it backwards without saying so.
+  psql_super -d "$TEMPLATE" -c "
+    create table if not exists openbooks_testdb_meta (
+      fingerprint text not null, migration_count int not null, built_at timestamptz not null default now());
+    delete from openbooks_testdb_meta;
+    insert into openbooks_testdb_meta (fingerprint, migration_count)
+    values ('$(schema_fingerprint)', $(migration_count));" >/dev/null
   psql_super -c "update pg_database set datistemplate = true where datname = '${TEMPLATE}'" >/dev/null
-  echo "testdb: template ready" >&2
+  echo "testdb: template ready ($(migration_count) migrations)" >&2
+}
+
+# Warn loudly when the template was built from a different schema than the
+# caller's checkout. Silence here is what let a worker copy a template missing
+# its own migration and conclude the migration did not work.
+check_template_freshness() {
+  local mine theirs mine_n theirs_n
+  mine=$(schema_fingerprint); theirs=$(template_meta fingerprint)
+  [ -z "$theirs" ] && return 0
+  [ "$mine" = "$theirs" ] && return 0
+  mine_n=$(migration_count); theirs_n=$(template_meta migration_count)
+  echo "testdb: WARNING — the template was built from a different schema than this checkout" >&2
+  echo "testdb:   template: ${theirs_n} migrations   this checkout: ${mine_n} migrations" >&2
+  if [ "${mine_n:-0}" -gt "${theirs_n:-0}" ]; then
+    echo "testdb:   your migrations are NOT in the template. Run: scripts/testdb.sh reset" >&2
+  else
+    echo "testdb:   your checkout is behind the template. Rebase before trusting a run." >&2
+  fi
 }
 
 print_env() {
@@ -121,6 +183,7 @@ case "$cmd" in
     require_docker
     start_container
     template_exists || build_template
+    check_template_freshness
     # Default to the worktree's own name so two agents never collide and a
     # human can tell whose database is whose.
     raw=${2:-$(basename "$(git rev-parse --show-toplevel)")_$(git rev-parse --short HEAD 2>/dev/null || echo local)}
@@ -180,6 +243,15 @@ case "$cmd" in
   reset)
     require_docker
     start_container
+    # One global template shared by every worktree: a stale checkout rebuilding
+    # it would silently regress everyone else's schema.
+    theirs_n=$(template_exists && template_meta migration_count || echo 0)
+    mine_n=$(migration_count)
+    if [ "${2:-}" != "--force" ] && [ "${theirs_n:-0}" -gt "${mine_n:-0}" ]; then
+      echo "testdb: refusing to rebuild backwards — the template has ${theirs_n} migrations and this checkout has ${mine_n}." >&2
+      echo "testdb: rebase this worktree, or pass --force if you really mean to drop the newer schema." >&2
+      exit 1
+    fi
     build_template
     ;;
 
