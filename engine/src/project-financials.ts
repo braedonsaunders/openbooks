@@ -1,5 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from './db.ts'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { db, orgContext, pool } from './db.ts'
 import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups.ts'
 import { add, cmp, fromUnits, mul, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from './money.ts'
@@ -127,7 +128,15 @@ async function projectFinancialAdjustments(
   return adjustments
 }
 
-export async function resolveProjectFinancials(
+/**
+ * Resolve the full measure catalog against whichever database surface the
+ * ambient tenant context provides. Callers never invoke this directly —
+ * `resolveProjectFinancials` decides the transaction boundary; this function
+ * only guarantees that every statement it issues shares one connection, one
+ * tenant scope, and (when that boundary is a fresh snapshot) one PostgreSQL
+ * snapshot.
+ */
+async function resolveProjectFinancialsInSnapshot(
   orgId: string,
   projectId: string,
   profile: FinancialProfile,
@@ -477,5 +486,76 @@ export async function resolveProjectFinancials(
     documents: docRes.rows.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
     projectType: proj.project_type,
     contractValue,
+  }
+}
+
+/**
+ * Resolve a project's full financial report as ONE generation of the ledger.
+ *
+ * The read graph spans the project header, posted GL cost/revenue, open
+ * commitments, billable time and lines, overhead, hours, cost-by-account,
+ * documents, and every adjustment table. Run as independent pooled queries
+ * (READ COMMITTED, one snapshot per statement), a posting or time approval
+ * committing mid-call tears the report apart: the headline total_cost would
+ * disagree with cost-by-account and invoice totals with the document list.
+ *
+ * The whole graph therefore runs inside one transaction:
+ *
+ *  - When the caller already owns a tenant transaction (a posting command
+ *    rendering financials in the same atomic unit), participate in it — its
+ *    isolation level already governs every read below, and opening a second
+ *    transaction would hide that caller's uncommitted writes.
+ *  - Otherwise pin one connection in a REPEATABLE READ READ ONLY snapshot (the
+ *    same boundary `web/lib/custom-reports` draws for governed reports): the
+ *    snapshot is taken at the first statement, so every measure — headline and
+ *    detail alike — observes exactly one committed generation, and READ ONLY
+ *    makes any future write into this path fail loudly instead of silently
+ *    splitting the report across transactions. A concurrent commit during the
+ *    call is absorbed by the NEXT generation, never half-into this one.
+ *
+ * The pinned connection is published through the tenant context's `txDb`, so
+ * helper queries (account groups, subcontract commitments, rate-engine and
+ * adjustment sums) resolve the org-scoped proxy automatically — org context is
+ * preserved for every helper without each one re-deriving it, and an ambient
+ * bypass scope can never leak into this report's reads.
+ */
+export async function resolveProjectFinancials(
+  orgId: string,
+  projectId: string,
+  profile: FinancialProfile,
+): Promise<ProjectFinancials> {
+  const active = orgContext.getStore()
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error("cannot change organization inside an active tenant transaction")
+    }
+    // Reuse the caller's pinned transaction; its snapshot governs.
+    return resolveProjectFinancialsInSnapshot(orgId, projectId, profile)
+  }
+  const client = await pool.connect()
+  try {
+    await client.query("begin isolation level repeatable read read only")
+    // Transaction-local tenant scope: set after BEGIN so the GUCs reset on
+    // commit/rollback, and so the snapshot this transaction pins belongs to
+    // exactly this org under deny-by-default RLS.
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    )
+    const txDb = drizzle({ client })
+    const report = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
+      await resolveProjectFinancialsInSnapshot(orgId, projectId, profile),
+    )
+    await client.query("commit")
+    return report
+  } catch (error) {
+    try {
+      await client.query("rollback")
+    } catch {
+      // A broken connection is discarded when released.
+    }
+    throw error
+  } finally {
+    client.release()
   }
 }
