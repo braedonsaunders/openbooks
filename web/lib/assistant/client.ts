@@ -231,12 +231,16 @@ export function validateAiBaseUrl(
   return canonical || submitted.origin;
 }
 
-/** Bounded fetch for org-configured OpenAI-compatible endpoints. */
+/**
+ * Bounded fetch for org-configured OpenAI-compatible endpoints. Refuses
+ * redirects: these requests bear provider API keys, which must never cross an
+ * HTTP redirect boundary to a host the Location names.
+ */
 export const boundedAiFetch: typeof globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
   const timeout = AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS);
   const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
-  return fetch(new Request(request, { signal }));
+  return fetch(new Request(request, { signal, redirect: "error" }));
 };
 
 export function defaultModel(provider: AiProvider, tier: ModelTier): string {
