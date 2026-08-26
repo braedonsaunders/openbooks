@@ -129,8 +129,8 @@ test("a failing class persists nothing — the whole year rolls back atomically"
     // Poison the NEXT year: class 8 stays fine, but class 9's additions sum to
     // 16 integer digits — beyond numeric(19,4). The failure surfaces mid-persist,
     // AFTER class 8's period and roll-forward have been staged.
-    await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-02-01");
-    await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-03-01");
+    const poison1 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-02-01");
+    const poison2 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-03-01");
     await assert.rejects(
       runYear(scope, actorId, "ca_cca", 2024),
       (error: unknown) => {
@@ -148,6 +148,30 @@ test("a failing class persists nothing — the whole year rolls back atomically"
     const openings = new Map((await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]));
     assert.equal(openings.get("8"), "9000.0000");
     assert.equal(openings.get("9"), "4500.0000");
+
+    // Retry after removing the poison commits ONE complete year: both classes'
+    // periods chained from the untouched 2023 closings, plus their roll-forwards.
+    await db.execute(sql`delete from fixed_assets where id in (${poison1}, ${poison2})`);
+    const retry = await runYear(scope, actorId, "ca_cca", 2024);
+    assert.equal(retry.taxYear, 2024);
+    assert.deepEqual(retry.lines.map((l) => [l.classCode, l.allowance, l.closingBalance]), [
+      ["8", "1800.00", "7200.00"], // 9000 × 20%, nothing new placed in service
+      ["9", "450.00", "4050.00"], // 4500 × 10%
+    ]);
+    const afterRetry = await periodsFor(org.orgId);
+    assert.equal(afterRetry.length, 4, "two classes × two complete years");
+    const byClass = new Map(
+      (await db.execute<{ class_code: string; opening_balance: string; closing_balance: string; tax_year: number }>(sql`
+        select tp.class_code, pp.opening_balance::text, pp.closing_balance::text, pp.tax_year
+          from tax_pool_periods pp
+          join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
+         where pp.org_id = ${org.orgId} and pp.tax_year = 2024`)).rows.map((r) => [r.class_code, r]),
+    );
+    assert.equal(byClass.get("8")!.opening_balance, "9000.0000", "retry opens from the pre-failure close");
+    assert.equal(byClass.get("9")!.opening_balance, "4500.0000");
+    const rolledForward = new Map((await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]));
+    assert.equal(rolledForward.get("8"), byClass.get("8")!.closing_balance);
+    assert.equal(rolledForward.get("9"), byClass.get("9")!.closing_balance);
   } finally {
     await dropScratchOrg(org.orgId);
   }
