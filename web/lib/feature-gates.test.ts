@@ -1332,7 +1332,7 @@ test('the surfaces this test was written for are covered', () => {
   )
   assert.match(
     read('../engine/src/property-management.ts'),
-    /export async function addLeaseCharge[\s\S]{0,400}await assertEnabled\(db, input\.orgId\)/,
+    /export async function addLeaseCharge[\s\S]{0,1500}await assertEnabled\(tx, input\.orgId\)/,
     'lease-charge writes must refuse when Property Management is off — existing charges stay',
   )
   assert.match(
