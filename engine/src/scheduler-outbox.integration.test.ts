@@ -386,13 +386,15 @@ test("a scheduled-script claim commits its durable occurrence with the cursor ad
     assert.equal(await countScheduledRuns(scriptId), 1);
 
     // The cron cursor advanced past the claimed tick — future schedule advance
-    // stays recoverable and due again on time.
+    // stays recoverable and due again on time. The raw driver value is
+    // normalized first so the assertion tests financial state, not whether the
+    // pg driver happened to hand back a Date or its text form.
     const cursor = (
-      await db.execute<{ nextRunAt: Date }>(sql`
+      await db.execute<{ nextRunAt: Date | string }>(sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
       `)
     ).rows[0]!.nextRunAt;
-    assert.ok(cursor > dueAt, "the cron cursor advanced past the claimed tick");
+    assert.ok(new Date(cursor).getTime() > dueAt.getTime(), "the cron cursor advanced past the claimed tick");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -454,11 +456,64 @@ test("a crash-orphaned occurrence is recovered exactly once and the cursor is no
     // The cursor keeps its claimed advance: the missed tick is recovered
     // without being re-armed as due.
     const cursor = (
-      await db.execute<{ nextRunAt: Date }>(sql`
+      await db.execute<{ nextRunAt: Date | string }>(sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${crashedId}
       `)
     ).rows[0]!.nextRunAt;
     assert.equal(new Date(cursor).toISOString(), advancedTo.toISOString());
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// Recovery must also absorb REAL worker evidence: when the dispatched run
+// actually executed, the worker-written target_kind='scheduled' row (the exact
+// shape runScheduledScript persists) closes the open occurrence with its
+// terminal outcome instead of recovery burning the one allowed retry on top.
+test("worker-written terminal evidence closes an orphaned occurrence without a retry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = randomUUID();
+    const scheduledFor = new Date(Date.now() - 30 * 60_000);
+    await db.execute(sql`
+      insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+      values (${scriptId}, ${org.orgId}, ${`Scratch cron ${scriptId.slice(0, 8)}`}, 'scheduled',
+              'function main(ctx) { return "ran-on-worker"; }', '*/5 * * * *',
+              ${new Date(Date.now() + 3_600_000)}, 2000, true)
+    `);
+    // The same crash state as above — but this time the worker DID execute:
+    // a real scheduled-run row landed after the claim committed.
+    await db.execute(sql`
+      insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
+              jsonb_build_array(jsonb_build_object(
+                'event', 'claimed',
+                'occurrence', ${scriptOccurrenceKey(scriptId, scheduledFor)}::text,
+                'scheduledFor', ${scheduledFor.toISOString()}::text,
+                'attempt', 1)),
+              ${scheduledFor})
+    `);
+    await db.execute(sql`
+      insert into script_runs (org_id, script_id, target_kind, status, duration_ms, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled', 'ok', 120, '[{"event":"done"}]'::jsonb,
+              ${new Date(scheduledFor.getTime() + 5_000)})
+    `);
+
+    await recoverLostScriptOccurrences();
+
+    // The occurrence mirrored the worker's terminal outcome instead of
+    // re-dispatching: absorbed status, durable absorb marker, no retry events,
+    // and still exactly one real execution behind it.
+    const closed = await loadOccurrence(scriptId);
+    assert.equal(closed.status, "ok");
+    assert.equal(closed.errorMessage, null);
+    assert.ok(closed.logs.some((e) => e.event === "completed_on_worker"), "the absorb is durably logged");
+    assert.ok(!closed.logs.some((e) => e.event === "recover"), "no retry was consumed");
+    assert.equal(await countScheduledRuns(scriptId), 1);
+
+    // A later tick neither resurrects nor re-retries it — eventually exactly once.
+    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+    assert.equal(await countScheduledRuns(scriptId), 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

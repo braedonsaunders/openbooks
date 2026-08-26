@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "./db.ts";
+import { WEB_TICK_LOCK_KEY, withTickClaim } from "./scheduler-lock.ts";
 import { runScheduledScript, computeNextRunAt } from "./scripting.ts";
 
 /**
@@ -29,6 +30,16 @@ import { runScheduledScript, computeNextRunAt } from "./scripting.ts";
  * CTE serializes concurrent scanners across replicas — exactly one wins each
  * occurrence; losers observe an empty claim and move on. The module-local
  * `running` flag only stops overlap within one process.
+ *
+ * Cross-replica: the whole tick is claimed with the same session-level Postgres
+ * advisory lock primitive the report scheduler uses (engine/src/scheduler-lock.ts),
+ * under this topology's own WEB_TICK_LOCK_KEY. Every Next.js replica calls
+ * ensureScheduler, so without the claim N replicas would each run SFTP imports,
+ * bank feeds, and every other global scan on each 60 s boundary — multiplied
+ * provider/storage traffic and nondeterministic operational evidence. The claim
+ * is per-topology: it never suppresses the worker's distinct duties, and the
+ * per-duty CAS/lease claims below stay as the fine-grained safety net for any
+ * duty shared with another topology.
  */
 
 const TICK_INTERVAL_MS = 60_000;
@@ -251,35 +262,47 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
 
   // 1) A real scheduled-run row written since the claim is terminal evidence.
   //    Only the OLDEST open occurrence of a script may absorb it, so two open
-  //    occurrences can never consume each other's evidence.
+  //    occurrences can never consume each other's evidence. The lateral join
+  //    lives inside the CTE because PostgreSQL forbids an UPDATE ... FROM item
+  //    from referencing the update target (42P10); as an ordinary FROM item
+  //    the same correlated lookup is legal, and the statement stays atomic.
   await withBypassContext(() =>
     db.execute(sql`
+      with evidence as (
+        select occ.id,
+               run.status,
+               run.error_message,
+               run.duration_ms
+          from script_runs occ
+          join lateral (
+            select r.status, r.error_message, r.duration_ms
+              from script_runs r
+             where r.script_id = occ.script_id
+               and r.org_id = occ.org_id
+               and r.target_kind = 'scheduled'
+               and r.at >= occ.at
+             order by r.at desc
+             limit 1
+          ) run on true
+         where occ.target_kind = 'scheduled_occurrence'
+           and occ.status in ('queued', 'dispatch_retry')
+           and occ.at < ${staleBefore}
+           and not exists (
+             select 1
+               from script_runs newer
+              where newer.script_id = occ.script_id
+                and newer.org_id = occ.org_id
+                and newer.target_kind = 'scheduled_occurrence'
+                and newer.at > occ.at
+                and newer.status in ('queued', 'dispatch_retry'))
+      )
       update script_runs occ
-         set status = run.status,
-             error_message = run.error_message,
-             duration_ms = run.duration_ms,
+         set status = evidence.status,
+             error_message = evidence.error_message,
+             duration_ms = evidence.duration_ms,
              logs = occ.logs || ${JSON.stringify([{ event: "completed_on_worker" }])}::jsonb
-        from lateral (
-          select r.status, r.error_message, r.duration_ms
-            from script_runs r
-           where r.script_id = occ.script_id
-             and r.org_id = occ.org_id
-             and r.target_kind = 'scheduled'
-             and r.at >= occ.at
-           order by r.at desc
-           limit 1
-        ) run
-       where occ.target_kind = 'scheduled_occurrence'
-         and occ.status in ('queued', 'dispatch_retry')
-         and occ.at < ${staleBefore}
-         and not exists (
-           select 1
-             from script_runs newer
-            where newer.script_id = occ.script_id
-              and newer.org_id = occ.org_id
-              and newer.target_kind = 'scheduled_occurrence'
-              and newer.at > occ.at
-              and newer.status in ('queued', 'dispatch_retry'))
+        from evidence
+       where occ.id = evidence.id
     `));
 
   // 2) An occurrence that already consumed its single retry and still shows no
@@ -334,82 +357,86 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    await recoverLostScriptOccurrences();
-    await runDueScripts();
+    // One cross-replica claim around the ENTIRE scan set: a replica that loses
+    // the race skips every duty below, not merely one subsystem.
+    await withTickClaim(WEB_TICK_LOCK_KEY, async () => {
+      await recoverLostScriptOccurrences();
+      await runDueScripts();
 
-    // Inbound SFTP bank feeds: scan watch folders and import new statement files.
-    try {
-      const { runDueSftpImports } = await import("./sftp/import-job.ts");
-      await runDueSftpImports();
-    } catch (e) {
-      console.error("[scheduler] sftp import scan failed:", e);
-    }
+      // Inbound SFTP bank feeds: scan watch folders and import new statement files.
+      try {
+        const { runDueSftpImports } = await import("./sftp/import-job.ts");
+        await runDueSftpImports();
+      } catch (e) {
+        console.error("[scheduler] sftp import scan failed:", e);
+      }
 
-    // Live bank feeds (Plaid / GoCardless / TrueLayer): pull each due connection
-    // and import through the same statement pipeline. Claimed per-connection.
-    try {
-      const { runDueBankFeeds } = await import("./bank-feed-providers.ts");
-      await runDueBankFeeds();
-    } catch (e) {
-      console.error("[scheduler] bank feed sync failed:", e);
-    }
+      // Live bank feeds (Plaid / GoCardless / TrueLayer): pull each due connection
+      // and import through the same statement pipeline. Claimed per-connection.
+      try {
+        const { runDueBankFeeds } = await import("./bank-feed-providers.ts");
+        await runDueBankFeeds();
+      } catch (e) {
+        console.error("[scheduler] bank feed sync failed:", e);
+      }
 
-    // Tenant-configured payment schedules: create draft runs or submit them.
-    try {
-      const { runDuePaymentSchedules } = await import("./payment-operations.ts");
-      await runDuePaymentSchedules();
-    } catch (e) {
-      console.error("[scheduler] payment schedule scan failed:", e);
-    }
+      // Tenant-configured payment schedules: create draft runs or submit them.
+      try {
+        const { runDuePaymentSchedules } = await import("./payment-operations.ts");
+        await runDuePaymentSchedules();
+      } catch (e) {
+        console.error("[scheduler] payment schedule scan failed:", e);
+      }
 
-    // Recurring documents: clone each due template into a fresh draft (and post
-    // it when the schedule is set to auto-post). Self-throttles on next_run_on.
-    try {
-      const { runDueRecurringSchedules } = await import("./recurring.ts");
-      await runDueRecurringSchedules();
-    } catch (e) {
-      console.error("[scheduler] recurring billing scan failed:", e);
-    }
+      // Recurring documents: clone each due template into a fresh draft (and post
+      // it when the schedule is set to auto-post). Self-throttles on next_run_on.
+      try {
+        const { runDueRecurringSchedules } = await import("./recurring.ts");
+        await runDueRecurringSchedules();
+      } catch (e) {
+        console.error("[scheduler] recurring billing scan failed:", e);
+      }
 
-    // Dunning, subscription/property billing, FX scans, and approval
-    // escalations go through scheduler_outbox (claim / run / fail+reason /
-    // backoff). A crash leaves the row — Redis is not the source of truth.
-    try {
-      const { ensureScanOutboxRows, processDueSchedulerOutbox } = await import("./scheduler-outbox.ts");
-      await withBypassContext(() => ensureScanOutboxRows());
-      const { processGateTimers } = await import("./flows/gates.ts");
-      await processGateTimers();
-      await withBypassContext(() => processDueSchedulerOutbox());
-      const { processDuePostingEffects } = await import("./posting-effects.ts");
-      await withBypassContext(() => processDuePostingEffects());
-    } catch (e) {
-      console.error("[scheduler] durable outbox tick failed:", e);
-    }
+      // Dunning, subscription/property billing, FX scans, and approval
+      // escalations go through scheduler_outbox (claim / run / fail+reason /
+      // backoff). A crash leaves the row — Redis is not the source of truth.
+      try {
+        const { ensureScanOutboxRows, processDueSchedulerOutbox } = await import("./scheduler-outbox.ts");
+        await withBypassContext(() => ensureScanOutboxRows());
+        const { processGateTimers } = await import("./flows/gates.ts");
+        await processGateTimers();
+        await withBypassContext(() => processDueSchedulerOutbox());
+        const { processDuePostingEffects } = await import("./posting-effects.ts");
+        await withBypassContext(() => processDuePostingEffects());
+      } catch (e) {
+        console.error("[scheduler] durable outbox tick failed:", e);
+      }
 
-    // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
-    try {
-      const { runDueScheduledFlows } = await import("./flows/scheduled.ts");
-      await runDueScheduledFlows();
-    } catch (e) {
-      console.error("[scheduler] scheduled flows scan failed:", e);
-    }
+      // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
+      try {
+        const { runDueScheduledFlows } = await import("./flows/scheduled.ts");
+        await runDueScheduledFlows();
+      } catch (e) {
+        console.error("[scheduler] scheduled flows scan failed:", e);
+      }
 
-    // Period close: expire temporary reopen windows and execute deadline rules.
-    try {
-      const { recloseExpiredReopens, runDueCloseAutomations } = await import("./close.ts");
-      await recloseExpiredReopens();
-      await runDueCloseAutomations();
-    } catch (e) {
-      console.error("[scheduler] close automation scan failed:", e);
-    }
+      // Period close: expire temporary reopen windows and execute deadline rules.
+      try {
+        const { recloseExpiredReopens, runDueCloseAutomations } = await import("./close.ts");
+        await recloseExpiredReopens();
+        await runDueCloseAutomations();
+      } catch (e) {
+        console.error("[scheduler] close automation scan failed:", e);
+      }
 
-    // Tenant-controlled Accounting and Finance continuous-close agents.
-    try {
-      const { runDueContinuousCloseAgents } = await import("./continuous-close.ts");
-      await runDueContinuousCloseAgents();
-    } catch (e) {
-      console.error("[scheduler] continuous-close scan failed:", e);
-    }
+      // Tenant-controlled Accounting and Finance continuous-close agents.
+      try {
+        const { runDueContinuousCloseAgents } = await import("./continuous-close.ts");
+        await runDueContinuousCloseAgents();
+      } catch (e) {
+        console.error("[scheduler] continuous-close scan failed:", e);
+      }
+    });
   } catch (e) {
     // Never let a tick rejection escape setInterval — an unhandled rejection
     // would take down the whole server process on a transient DB error.
