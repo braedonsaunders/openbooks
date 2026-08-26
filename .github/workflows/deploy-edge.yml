@@ -36,7 +36,7 @@ jobs:
           version="edge-${short_sha}"
           dispatch_payload="$(
             jq --compact-output --null-input \
-              --arg ref "$TRIGGER_SHA" \
+              --arg ref "main" \
               --arg version "$version" \
               --arg commitSha "$TRIGGER_SHA" \
               '{
