@@ -6,7 +6,10 @@ import { isEmailProvider } from '@openbooks/emails'
 
 export const runtime = 'nodejs'
 
-const PERMISSION = 'admin.users.manage'
+// The org-wide outbound transport serves every workflow (invoices, dunning,
+// password resets), so redirecting it is setup authority, not user
+// administration — same gate as the rest of org configuration.
+const PERMISSION = 'admin.setup.manage'
 
 /** GET — the org's email config view (never the sealed secret, only hasSecret). */
 export async function GET() {

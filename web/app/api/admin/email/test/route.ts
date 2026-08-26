@@ -11,7 +11,8 @@ export const runtime = 'nodejs'
  * the admin sees the outcome immediately). Records an email_log row either way.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('admin.users.manage')
+  // Sending through (and probing) the org transport is setup authority.
+  const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
 
