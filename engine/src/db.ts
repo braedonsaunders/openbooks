@@ -86,8 +86,8 @@ governedReadPool.on("error", (err) => {
   );
 });
 
-// A separate pool for long-running, org-spanning units of work (the sandbox
-// clone engine, refresh, and org wipes) run via withOrg. These single
+// A separate pool for long-running maintenance units (the sandbox clone
+// engine, promotion, refresh, and org wipes). These single
 // transactions can far exceed the request pool's 120s client query_timeout —
 // e.g. deleting a large ledger fires per-row kernel triggers — so this pool
 // disables the client- and server-side statement timeouts. Small, since only a
@@ -314,14 +314,15 @@ export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
 }
 
 /**
- * Run `fn` with every `db` query scoped to `orgId` at the database (RLS). Used
- * for multi-statement atomic units (the clone engine, refresh, change-set
- * apply): pins ONE connection and one transaction with the GUCs set LOCAL, so
- * every statement shares the connection (required for `set constraints all
- * deferred` + batched inserts) and the GUCs auto-reset on commit/rollback.
- * Pass `null` to run with bypass — trusted code that must span orgs.
+ * Run an explicitly long-running maintenance unit in one timeout-free
+ * transaction. Sandbox clone, promotion and wipe work opts into this boundary;
+ * ordinary tenant commands must use `withOrgTransaction` (or `withOrg`, which
+ * delegates to it). Pass `null` only for trusted work that must span orgs.
  */
-export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Promise<T> {
+export async function withMaintenanceTransaction<T>(
+  orgId: string | null,
+  fn: () => Promise<T>,
+): Promise<T> {
   const active = orgContext.getStore();
   if (active?.txDb && !active.bypass) {
     if (orgId !== active.orgId) {
@@ -331,7 +332,6 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
     // hide the caller's uncommitted aggregate writes and break atomicity.
     return fn();
   }
-  // Long-running, timeout-free pool — a clone/wipe is one big transaction.
   const client = await rawLongConnect();
   const bypass = orgId === null;
   try {
@@ -360,14 +360,24 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
 }
 
 /**
- * Run a normal request-sized unit of work in one tenant-scoped transaction.
- *
- * `withOrg` intentionally uses the timeout-free long-running pool for backups,
- * clones, and destructive maintenance. Interactive application commands need
- * the opposite contract: the regular pool's connection/query/statement
- * timeouts, one pinned connection, and transaction-local RLS settings. This
- * helper is the authoritative boundary for API/MCP idempotency and other
- * multi-step financial commands.
+ * Compatibility entry point for tenant transactions and trusted bypass work.
+ * Every non-null tenant participates in the bounded request transaction
+ * contract; only an explicit null bypass reaches the maintenance boundary.
+ */
+export async function withOrg<T>(
+  orgId: string | null,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (orgId === null) return withMaintenanceTransaction(null, fn);
+  return withOrgTransaction(orgId, fn);
+}
+
+/**
+ * Run a normal request-sized unit of work in one tenant-scoped transaction on
+ * the regular pool: bounded connection/query/statement timeouts, one pinned
+ * connection, and transaction-local RLS settings. This helper is the
+ * authoritative boundary for API/MCP idempotency and other multi-step
+ * financial commands.
  */
 export async function withOrgTransaction<T>(
   orgId: string,
@@ -406,7 +416,7 @@ export async function withOrgTransaction<T>(
 
 /** Trusted, org-spanning bypass block (seeds, cross-org maintenance). */
 export function withBypass<T>(fn: () => Promise<T>): Promise<T> {
-  return withOrg(null, fn);
+  return withMaintenanceTransaction(null, fn);
 }
 
 /**
@@ -461,8 +471,8 @@ async function runInOrgContext<T>(ctx: OrgCtx, fn: () => Promise<T>): Promise<T>
 
 /**
  * The app-wide database handle. Inside a `withOrg` block it routes to the pinned
- * transaction connection; otherwise to the pool (which carries the RLS GUCs from
- * the active AsyncLocalStorage context on every query).
+ * transaction connection; otherwise to the pool (which carries the RLS GUCs
+ * from the active AsyncLocalStorage context on every query).
  */
 export const db = new Proxy(poolDb, {
   get(target, prop, receiver) {
@@ -485,7 +495,7 @@ type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
 
 /**
  * Anything a raw statement can run on: the pooled `db`, a transaction handed
- * out by `db.transaction`, or the transaction `withOrg` pins.
+ * out by `db.transaction`, or a transaction an org boundary pins.
  *
  * Helpers that work either inside or outside a transaction used to declare this
  * inline as `{ execute: (query: any) => Promise<unknown> }` — a dozen separate
@@ -496,8 +506,8 @@ type DbTransaction = Parameters<Parameters<typeof poolDb.transaction>[0]>[0];
 export type SqlExecutor = { execute: typeof poolDb.execute };
 
 /**
- * Run one database transaction, reusing the transaction pinned by `withOrg`
- * when the caller already owns the atomic boundary. This prevents nested
+ * Run one database transaction, reusing the transaction pinned by an org
+ * boundary when the caller already owns the atomic unit. This prevents nested
  * helpers from issuing a second BEGIN/COMMIT on the same PostgreSQL client and
  * accidentally committing only part of a larger accounting operation.
  */
