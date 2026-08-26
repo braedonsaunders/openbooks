@@ -534,9 +534,11 @@ export async function reverseAssetLifecycleEvent(
 /**
  * Revalue (write-up) or impair (write-down) an asset to a new carrying value:
  * post the adjustment through the kernel (origin='revaluation'), record the
- * event, and rebuild the remaining unposted schedule so future depreciation runs
- * off the new basis (straight-line over the remaining periods) rather than
- * double-counting the adjustment.
+ * event, and rebuild the remaining unposted schedule IN THE SAME TRANSACTION so
+ * future depreciation runs off the new basis (straight-line over the remaining
+ * periods) rather than double-counting the adjustment. A failure anywhere rolls
+ * the journal, the event, and every rebuilt line back together — a posted
+ * remeasurement can never sit on an old or partially rebuilt schedule.
  */
 export async function remeasureAsset(
   orgId: string,
@@ -592,7 +594,7 @@ export async function remeasureAsset(
 
   const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
-  const entryId = await db.transaction(async (tx) => {
+  const { entryId, rebuiltLines } = await db.transaction(async (tx) => {
     // An asset can be remeasured repeatedly; the entry number must be unique
     // per physical journal under journal_entries_org_number.
     const entryNumber = `${kind === "impaired" ? "IMPR" : "REVAL"}-${asset.asset_number}-${randomUUID().slice(0, 8)}`;
@@ -621,28 +623,30 @@ export async function remeasureAsset(
     await tx.execute(sql`
       insert into asset_events (org_id, asset_id, kind, occurred_on, amount, journal_entry_id, created_by)
       values (${orgId}, ${assetId}, ${kind}, ${opts.date}, ${delta}, ${eid}, ${opts.actorId})`);
-    return eid;
-  });
 
-  // Rebuild remaining unposted lines: straight-line (newCV − salvage) over them.
-  const remaining = (await db.execute<{ id: string }>(sql`
-    select l.id from depreciation_schedule_lines l
-      join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
-     where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
-     order by l.sequence`));
-  const count = remaining.rows.length;
-  let rebuilt = 0;
-  if (count > 0) {
-    const depreciable = toUnits(add(opts.newCarryingValue, neg(asset.salvage_value)));
+    // Rebuild remaining unposted lines INSIDE this transaction: straight-line
+    // (newCV − salvage) over them. Journal, event, and future schedule commit
+    // atomically or not at all, and the row locks serialize the rebuild against
+    // a concurrent depreciation run claiming the same lines.
+    const remaining = (await tx.execute<{ id: string }>(sql`
+      select l.id from depreciation_schedule_lines l
+        join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id and s.book_id = ${bookId}
+       where l.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is null
+       order by l.sequence
+       for update of l`));
+    const count = remaining.rows.length;
+    let rebuilt = 0;
+    const depreciable = count > 0 ? toUnits(add(opts.newCarryingValue, neg(asset.salvage_value))) : 0n;
     const per = depreciable > 0n ? depreciable / BigInt(count) : 0n;
     let allocated = 0n;
     for (let i = 0; i < count; i++) {
       const amt = i === count - 1 ? depreciable - allocated : per;
       allocated += amt;
-      await db.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
+      await tx.execute(sql`update depreciation_schedule_lines set planned_amount = ${fromUnits(amt < 0n ? 0n : amt)}, updated_at = now(), updated_by = ${opts.actorId} where id = ${remaining.rows[i]!.id} and org_id = ${orgId}`);
       rebuilt++;
     }
-  }
+    return { entryId: eid, rebuiltLines: rebuilt };
+  });
 
-  return { assetId, entryId, delta, kind, rebuiltLines: rebuilt };
+  return { assetId, entryId, delta, kind, rebuiltLines };
 }
