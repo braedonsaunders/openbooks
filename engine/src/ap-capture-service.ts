@@ -11,7 +11,7 @@ import {
   type NormalizedCapture,
 } from "./ap-capture.ts";
 import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
-import { permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
+import { actorHasPermission } from "./actor-permissions.ts";
 import { getS3Blob } from "./file-storage.ts";
 import { runRecordFlows } from "./flows/index.ts";
 
@@ -515,33 +515,6 @@ export class CaptureMaterializationError extends Error {
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /** Effective permission check for engine-side authority gates (role grants + overrides). */
-async function actorHasPermission(
-  tx: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  permission: string,
-): Promise<boolean> {
-  const assignments = (await tx.execute<{ permissions: string[] | null }>(sql`
-    select r.permissions
-      from role_assignments a
-      join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-      join users u on u.id = a.user_id and u.org_id = a.org_id and u.is_active
-     where a.user_id = ${actorId} and a.org_id = ${orgId}
-  `));
-  const overrides = (await tx.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
-    select permission, effect from user_permission_overrides
-     where user_id = ${actorId} and org_id = ${orgId}
-  `));
-  return permissionSetCovers(
-    resolveEffectivePermissions({
-      rolePermissionSets: assignments.rows.map((row) =>
-        Array.isArray(row.permissions) ? row.permissions : [],
-      ),
-      overrides: overrides.rows,
-    }),
-    permission,
-  );
-}
 
 export async function materializeCapture(input: {
   orgId: string;

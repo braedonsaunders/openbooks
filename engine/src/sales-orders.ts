@@ -1,10 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgTransaction } from "./db.ts";
 import { add, cmp, normalizeMoney } from "./money.ts";
-import {
-  permissionSetCovers,
-  resolveEffectivePermissions,
-} from "./permissions.ts";
+import { actorHasPermission } from "./actor-permissions.ts";
 import {
   submitAndReleaseIfUngated,
   type SubmissionReleaseResult,
@@ -69,42 +66,7 @@ interface CustomerRoleRow extends Record<string, unknown> {
   hold_reason: string | null;
 }
 
-/** Effective permission check for engine-side authority gates. */
-async function actorHasPermission(
-  tx: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  permission: string,
-): Promise<boolean> {
-  const assignments = (await tx.execute<{ permissions: string[] | null }>(sql`
-    select role.permissions
-      from role_assignments assignment
-      join app_roles role
-        on role.id = assignment.role_id and role.org_id = assignment.org_id
-      join users actor
-        on actor.id = assignment.user_id
-       and actor.org_id = assignment.org_id
-       and actor.is_active
-     where assignment.user_id = ${actorId} and assignment.org_id = ${orgId}
-  `));
-  const overrides = (await tx.execute<{
-    permission: string;
-    effect: "grant" | "deny";
-  }>(sql`
-    select permission, effect
-      from user_permission_overrides
-     where user_id = ${actorId} and org_id = ${orgId}
-  `));
-  return permissionSetCovers(
-    resolveEffectivePermissions({
-      rolePermissionSets: assignments.rows.map((row) =>
-        Array.isArray(row.permissions) ? row.permissions : [],
-      ),
-      overrides: overrides.rows,
-    }),
-    permission,
-  );
-}
+/** Effective permission check for engine-side authority gates: engine/src/actor-permissions.ts. */
 
 function sameRevision(expected: string, actual: Date): boolean {
   const expectedTime = new Date(expected).getTime();
