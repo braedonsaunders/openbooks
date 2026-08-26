@@ -18,6 +18,7 @@ export async function renderReportPdf(
   const token = process.env.OPENBOOKS_INTERNAL_TOKEN || "";
   const qs = new URLSearchParams({ orgId, definitionId, ...params });
   const res = await fetch(`${appBaseUrl()}/api/internal/reports/render?${qs.toString()}`, {
+    redirect: "error",
     headers: { "x-internal-token": token },
     redirect: "error",
     signal: AbortSignal.timeout(60_000),
