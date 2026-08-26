@@ -110,10 +110,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0058_fx_provider_run_lease_fencing.sql",
     "0059_email_delivery_identity_reconciliation.sql",
     "0061_cam_pool_source_account_overlap.sql",
-  ]);  assert.deepEqual(
-    readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
-    ["environments.sql"],
-  );
+  ]);
+  assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
   );
