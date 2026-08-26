@@ -563,11 +563,11 @@ async function makeDue(connectionId: string): Promise<void> {
   `);
 }
 
-interface ConnectionRow {
+type ConnectionRow = {
   last_sync_at: Date | null;
   status: string;
   last_error: string | null;
-}
+};
 
 async function loadConnection(connectionId: string): Promise<ConnectionRow> {
   const r = (await db.execute<ConnectionRow>(sql`
@@ -639,10 +639,10 @@ function myOutcome(outcomes: Awaited<ReturnType<typeof runDueBankFeeds>>, connec
   return mine[0]!;
 }
 
-interface StatementLineRow {
+type StatementLineRow = {
   id: string;
   bank_transaction_id: string | null;
-}
+};
 
 async function loadStatementLines(orgId: string, accountId: string): Promise<StatementLineRow[]> {
   const r = (await db.execute<StatementLineRow>(sql`
@@ -654,11 +654,11 @@ async function loadStatementLines(orgId: string, accountId: string): Promise<Sta
   return r.rows;
 }
 
-interface FeedImportActors {
+type FeedImportActors = {
   statementActor: string | null;
   lineActor: string | null;
   auditActor: string | null;
-}
+};
 
 async function loadLatestFeedImportActors(orgId: string): Promise<FeedImportActors> {
   const r = (await db.execute<FeedImportActors>(sql`
