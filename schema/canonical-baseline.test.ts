@@ -54,6 +54,8 @@ const bankFeedAttemptWatermarkMigrationPath =
   "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 const scriptRunActorMigrationPath =
   "schema/migrations/generated/0056_script_run_actor.sql";
+const leaseBaseRentWindowExclusiveMigrationPath =
+  "schema/migrations/generated/0060_lease_base_rent_window_exclusive.sql";
 const camPoolSourceAccountOverlapMigrationPath =
   "schema/migrations/generated/0061_cam_pool_source_account_overlap.sql";
 
@@ -109,6 +111,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0057_close_automation_claim_lease.sql",
     "0058_fx_provider_run_lease_fencing.sql",
     "0059_email_delivery_identity_reconciliation.sql",
+    "0060_lease_base_rent_window_exclusive.sql",
     "0061_cam_pool_source_account_overlap.sql",
   ]);
   assert.deepEqual(
@@ -177,6 +180,27 @@ test("script runs attribute their trigger at the storage boundary", () => {
   assert.match(migration, /interactive triggers persist users\.id; NULL means the system triggered/);
   // Actor provenance is an additive column, never a history rewrite.
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("base-rent windows are exclusive at the storage boundary", () => {
+  const migration = readFileSync(leaseBaseRentWindowExclusiveMigrationPath, "utf8");
+
+  // One partial GiST exclusion constraint owns base-rent exclusivity for
+  // every writer — API, import, and direct SQL alike (0051's pattern).
+  assert.match(
+    migration,
+    /ADD CONSTRAINT lease_charges_base_rent_no_overlap\s+EXCLUDE USING gist \(\s+org_id WITH =,\s+lease_id WITH =,\s+\(daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&\s+\)\s+WHERE \(charge_type = 'base_rent'\)/,
+  );
+  // The repair runs before the constraint is added, never deletes billed
+  // history (only orphanless duplicates), and escalations' adjacent-window
+  // supersede convention stays representable under inclusive ranges.
+  assert.match(migration, /lease_charges_base_rent_repair\$/);
+  assert.match(migration, /status = 'scheduled'/);
+  assert.doesNotMatch(
+    migration,
+    /DELETE FROM public\.lease_schedule_lines/,
+    "repair must not delete schedule lines",
+  );
 });
 
 test("account classification edits serialize with first journal-line inserts", () => {

@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import type { PoolClient, QueryResult } from "pg";
+import { db, pool } from "./db.ts";
 import {
+  addLeaseCharge,
+  addLeaseEscalation,
+  applyLeaseEscalation,
   assessLeaseLateFees,
   billDueLeaseCharges,
+  createPropertyLease,
   runDuePropertyBilling,
   scheduleLeaseCharges,
+  updatePropertyLease,
 } from "./property-management.ts";
 import {
   createScratchOrg,
@@ -347,6 +353,447 @@ test(
         )::int as n`)).rows[0]!.n;
       assert.equal(impersonated, 0, "nothing in this org ever credits the historical author again");
     } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);
+
+interface Statement {
+  text: string;
+  params?: unknown[];
+}
+
+type StatementResult = PromiseSettledResult<QueryResult>;
+
+async function openSession(): Promise<{ client: PoolClient; pid: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.bypass_rls', 'on', true)");
+    const backend = await client.query<{ pid: number }>("select pg_backend_pid() as pid");
+    return { client, pid: Number(backend.rows[0]!.pid) };
+  } catch (error) {
+    client.release(error as Error);
+    throw error;
+  }
+}
+
+const settle = (promise: Promise<QueryResult>): Promise<StatementResult> =>
+  promise.then(
+    (value): StatementResult => ({ status: "fulfilled", value }),
+    (reason): StatementResult => ({ status: "rejected", reason }),
+  );
+
+/**
+ * The second writer must WAIT on the storage guard while the first
+ * transaction is open, then be rejected once it commits (0051's race shape).
+ * Both sessions always roll back or commit nothing at the end.
+ */
+async function raceConflict(
+  first: Statement,
+  second: Statement,
+): Promise<{ blocked: boolean; second: StatementResult }> {
+  const sessionA = await openSession();
+  const sessionB = await openSession();
+  let openA = true;
+  let openB = true;
+  try {
+    await sessionA.client.query(first.text, first.params ?? []);
+    let settled: StatementResult | undefined;
+    const secondPromise = settle(sessionB.client.query(second.text, second.params ?? []));
+    void secondPromise.then((value) => {
+      settled = value;
+    });
+    let blocked = false;
+    for (let attempt = 0; attempt < 500 && settled === undefined && !blocked; attempt += 1) {
+      const state = await pool.query<{ blocked: boolean }>(
+        "select $1::int = any(pg_blocking_pids($2::int)) as blocked",
+        [sessionA.pid, sessionB.pid],
+      );
+      if (state.rows[0]?.blocked) blocked = true;
+      else await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    if (!blocked && settled === undefined) {
+      throw new Error(`conflict race never reached a decision (blocker ${sessionA.pid}, waiter ${sessionB.pid})`);
+    }
+    await sessionA.client.query("commit");
+    openA = false;
+    const result = settled ?? (await secondPromise);
+    await sessionB.client.query("rollback").catch(() => undefined);
+    openB = false;
+    return { blocked, second: result };
+  } finally {
+    if (openA) await sessionA.client.query("rollback").catch(() => undefined);
+    if (openB) await sessionB.client.query("rollback").catch(() => undefined);
+    sessionA.client.release();
+    sessionB.client.release();
+  }
+}
+
+/** Drizzle wraps driver errors, so the PostgreSQL message lives on `cause`. */
+function pgMessage(error: unknown): string {
+  const cause = (error as { cause?: { message?: string } })?.cause;
+  return String(cause?.message ?? error);
+}
+
+const baseRentInsertFor = (orgId: string, leaseId: string, from: string) => ({
+  text: `insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
+         values ($1, $2, 'base_rent', 'Base rent', '1000.0000', 'monthly', $3)`,
+  params: [orgId, leaseId, from] as unknown[],
+});
+
+test(
+  "overlapping base-rent intervals are rejected at storage — even raced — while adjacent escalation windows commit",
+  { skip: !DB },
+  async () => {
+    const fx = await seedPropertyFixture();
+    try {
+      const orgId = fx.org.orgId;
+      const leaseId = fx.leases.authoredLeaseId;
+
+      // Direct SQL (the path that bypasses every service precheck) cannot add
+      // a second overlapping base_rent beside the canonical row.
+      const rejected = await db.execute(sql`
+        insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
+        values (${orgId}, ${leaseId}, 'base_rent', 'Second rent', '1000.0000', 'monthly', '2026-05-01')`)
+        .then(() => null, (error: unknown) => error);
+      assert.match(pgMessage(rejected), /lease_charges_base_rent_no_overlap/, "storage refuses a mid-window duplicate");
+
+      // Two concurrent writers both racing an overlapping base_rent onto one
+      // lease: exactly one commits, the other waits on and loses to the index.
+      const orphanLease = randomUUID();
+      await db.execute(sql`
+        insert into property_leases (id, org_id, property_id, tenant_id, lease_number, status, starts_on, billing_day,
+          payment_terms_days, late_fee_type, late_fee_value, grace_days, auto_invoice, auto_post)
+        values (${orphanLease}, ${orgId}, ${fx.propertyId}, ${fx.org.customerId}, 'L-RACE', 'active', '2026-04-01',
+                1, 0, 'none', '0', 0, false, false)`);
+      const raced = await raceConflict(
+        baseRentInsertFor(orgId, orphanLease, "2026-01-01"),
+        baseRentInsertFor(orgId, orphanLease, "2026-03-15"),
+      );
+      assert.equal(raced.blocked, true, "the conflicting write must wait on the storage guard");
+      assert.equal(raced.second.status, "rejected", "the losing writer must be rejected once the blocker commits");
+      assert.match(
+        String((raced.second.status === "rejected" ? raced.second.reason : null)),
+        /exclusion constraint/,
+      );
+      await db.execute(sql`delete from lease_charges where lease_id = ${orphanLease} and org_id = ${orgId}`);
+      await db.execute(sql`delete from property_leases where id = ${orphanLease} and org_id = ${orgId}`);
+
+      // A controlled escalation's supersede convention stays representable:
+      // close the old window at day X-1 and insert its successor at X.
+      const predecessor = (await db.execute<{ id: string }>(sql`
+        select id from lease_charges
+         where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' limit 1`)).rows[0]!.id;
+      const escalated = await db.transaction(async (tx) => {
+        await tx.execute(sql`
+          update lease_charges set effective_to = date '2026-05-31'
+           where id = ${predecessor} and org_id = ${orgId}`);
+        return (await tx.execute(sql`
+          insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
+          values (${orgId}, ${leaseId}, 'base_rent', 'Escalated rent', '1100.0000', 'monthly', '2026-06-01')
+          returning id`)).rows.length;
+      });
+      assert.equal(escalated, 1, "adjacent escalation windows are not overlap");
+
+      // A different lease of the same property never competes with this one.
+      await db.execute(sql`
+        insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
+        values (${orgId}, ${fx.leases.unauthoredLeaseId}, 'base_rent', 'Sibling rent', '900.0000', 'monthly', '2026-05-01')`);
+    } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);
+
+test(
+  "a duplicated-rent injection attempt still bills exactly one rent line per period",
+  { skip: !DB },
+  async () => {
+    const fx = await seedPropertyFixture();
+    try {
+      const orgId = fx.org.orgId;
+      const operatorId = await createScratchUser(orgId, "Rent Controller", "admin");
+      const leaseId = fx.leases.authoredLeaseId;
+
+      // The exact request the old API accepted and then double-billed is now
+      // refused by storage before any schedule line can be generated from it.
+      const injection = await db.execute(sql`
+        insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
+        values (${orgId}, ${leaseId}, 'base_rent', 'Duplicate rent', '1000.0000', 'monthly', '2026-04-01')`)
+        .then(() => "inserted", (error: unknown) => pgMessage(error));
+      assert.match(String(injection), /lease_charges_base_rent_no_overlap/, "duplicate rent never reaches scheduling");
+
+      // Canonical rent evolution through a controlled escalation: May closes
+      // the day before June begins, June bills at the escalated amount.
+      const escalation = await addLeaseEscalation({
+        orgId,
+        actorId: operatorId,
+        leaseId,
+        effectiveOn: "2026-06-01",
+        method: "fixed",
+        value: "100",
+        requestId: `escalation-${randomUUID()}`,
+      });
+      const applied = await applyLeaseEscalation(orgId, operatorId, escalation.id);
+      assert.equal(applied.newAmount, "1100.0000");
+
+      // Scheduler ticks over two months under system provenance.
+      await runDuePropertyBilling("2026-04-20");
+      await runDuePropertyBilling("2026-06-20");
+
+      const rentLines = (await db.execute<{ period: string; lines: number; amounts: number; invoiced: number }>(sql`
+        select s.period_starts_on::text as period, count(*)::int as lines,
+               count(distinct s.amount)::int as amounts,
+               count(*) filter (where s.status = 'invoiced')::int as invoiced
+          from lease_schedule_lines s join lease_charges c on c.id = s.charge_id and c.org_id = s.org_id
+         where s.org_id = ${orgId} and s.lease_id = ${leaseId} and c.charge_type = 'base_rent'
+           and s.period_starts_on < date '2026-07-01'
+         group by s.period_starts_on order by s.period_starts_on`)).rows;
+      assert.deepEqual(
+        rentLines.map((row) => [row.period, row.lines, row.amounts]),
+        [
+          ["2026-04-01", 1, 1],
+          ["2026-05-01", 1, 1],
+          ["2026-06-01", 1, 1],
+        ],
+        "exactly one rent line per period, ever",
+      );
+      assert.deepEqual(rentLines.map((row) => row.invoiced), [1, 1, 1], "every period billed once");
+      const juneAmount = await db.execute<{ amount: string }>(sql`
+        select s.amount::text as amount from lease_schedule_lines s join lease_charges c on c.id = s.charge_id and c.org_id = s.org_id
+         where s.org_id = ${orgId} and s.lease_id = ${leaseId} and c.charge_type = 'base_rent'
+           and s.period_starts_on = date '2026-06-01'`);
+      assert.equal(juneAmount.rows[0]?.amount, "1100.0000", "June carries the escalated rent");
+
+      // Scheduler lineage marker survives unchanged: system provenance for
+      // scheduler-generated batches, no editor impersonation anywhere.
+      const markers = (await db.execute<{ systemMarkers: number; impersonated: number }>(sql`
+        select count(*) filter (where changes->>'source' = 'scheduler' and actor_id is null)::int as "systemMarkers",
+               count(*) filter (where actor_id = ${fx.historicalAuthorId})::int as impersonated
+          from audit_log
+         where org_id = ${orgId} and table_name = 'property_leases'
+           and row_id = ${leaseId} and action = 'schedule_generated'`)).rows[0]!;
+      assert.ok(markers.systemMarkers > 0, "scheduler batches keep their system lineage marker");
+      assert.equal(markers.impersonated, 0, "scheduler lines never impersonate the editor");
+    } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);
+
+test(
+  "every financial-term write records complete canonical audit evidence in its own transaction",
+  { skip: !DB },
+  async () => {
+    const fx = await seedPropertyFixture();
+    try {
+      const orgId = fx.org.orgId;
+      const actorId = await createScratchUser(orgId, "Term Auditor", "admin");
+      await db.execute(sql`
+        insert into customer_roles (org_id, party_id, ar_account_id, credit_limit, currency, is_on_hold, created_by, updated_by)
+        values (${orgId}, ${fx.org.customerId}, ${fx.org.accounts.ar}, '0', 'CAD', false, ${actorId}, ${actorId})`);
+
+      const requestId = `lease-create-${randomUUID()}`;
+      const lease = await createPropertyLease({
+        orgId,
+        actorId,
+        propertyId: fx.propertyId,
+        tenantId: fx.org.customerId,
+        leaseNumber: "L-AUDIT-1",
+        startsOn: "2026-07-01",
+        endsOn: "2027-06-30",
+        baseRent: "2100",
+        billingDay: 5,
+        paymentTermsDays: 12,
+        securityDepositRequired: "1500",
+        camMethod: "pro_rata",
+        camSharePercent: "12.5",
+        lateFeeType: "fixed",
+        lateFeeValue: "30",
+        graceDays: 3,
+        autoInvoice: true,
+        autoPost: true,
+        requestId,
+      });
+
+      // Surface 1: create lease — full after-state, actor, request correlation.
+      const created = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+        select actor_id::text as actor, request_id as "requestId", changes->'after' as after
+          from audit_log
+         where org_id = ${orgId} and table_name = 'property_leases' and row_id = ${lease.id}
+           and action = 'insert'`)).rows;
+      assert.equal(created.length, 1);
+      assert.equal(created[0]!.actor, actorId);
+      assert.equal(created[0]!.requestId, requestId);
+      const createAfter = created[0]!.after;
+      assert.deepEqual(
+        Object.keys(createAfter).sort(),
+        ["autoInvoice", "autoPost", "baseRent", "billingDay", "camMethod", "camSharePercent", "endsOn", "graceDays",
+          "lateFeeType", "lateFeeValue", "leaseNumber", "paymentTermsDays", "propertyId", "securityDepositRequired",
+          "startsOn", "tenantId", "unitId"].sort(),
+        "create audit covers every financial term",
+      );
+      assert.equal(String(createAfter.baseRent), "2100.0000");
+
+      // Surface 2: update lease — canonical before/after plus changed fields.
+      const updateRequestId = `lease-update-${randomUUID()}`;
+      await updatePropertyLease({
+        orgId,
+        actorId,
+        leaseId: lease.id,
+        propertyId: fx.propertyId,
+        tenantId: fx.org.customerId,
+        leaseNumber: "L-AUDIT-2",
+        startsOn: "2026-07-01",
+        endsOn: "2027-09-30",
+        baseRent: "2200",
+        billingDay: 8,
+        paymentTermsDays: 20,
+        securityDepositRequired: "1800",
+        camMethod: "pro_rata",
+        camSharePercent: "15",
+        lateFeeType: "percent",
+        lateFeeValue: "5",
+        graceDays: 4,
+        autoInvoice: true,
+        autoPost: false,
+        requestId: updateRequestId,
+      });
+      const updated = (await db.execute<{
+        before: Record<string, unknown>; after: Record<string, unknown>;
+        changedFields: string[]; actor: string | null; requestId: string | null;
+      }>(sql`
+        select changes->'before' as before, changes->'after' as after, changes->'changedFields' as "changedFields",
+               actor_id::text as actor, request_id as "requestId"
+          from audit_log
+         where org_id = ${orgId} and table_name = 'property_leases' and row_id = ${lease.id}
+           and action = 'update'`)).rows;
+      assert.equal(updated.length, 1);
+      assert.equal(updated[0]!.actor, actorId);
+      assert.equal(updated[0]!.requestId, updateRequestId);
+      const changed = (updated[0]!.changedFields ?? []) as string[];
+      for (const field of ["leaseNumber", "endsOn", "baseRent", "billingDay", "paymentTermsDays",
+        "securityDepositRequired", "camSharePercent", "lateFeeType", "lateFeeValue", "graceDays", "autoPost"]) {
+        assert.ok(changed.includes(field), `${field} appears in changedFields (got ${JSON.stringify(changed)})`);
+      }
+      assert.equal(String(updated[0]!.before.baseRent), "2100.0000");
+      assert.equal(String(updated[0]!.after.baseRent), "2200.0000");
+      assert.equal(String(updated[0]!.before.lateFeeValue), "30.0000");
+      assert.equal(String(updated[0]!.after.lateFeeValue), "5.0000");
+
+      // Surface 3: addCharge writes the material row only together with its
+      // audit evidence in one transaction.
+      const chargeRequestId = `charge-add-${randomUUID()}`;
+      const charge = await addLeaseCharge({
+        orgId,
+        actorId,
+        leaseId: lease.id,
+        chargeType: "parking",
+        description: "Reserved stall",
+        amount: "85",
+        frequency: "monthly",
+        effectiveFrom: "2026-08-01",
+        requestId: chargeRequestId,
+      });
+      const chargeAudit = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+        select actor_id::text as actor, request_id as "requestId", changes->'after' as after
+          from audit_log
+         where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${charge.id}
+           and action = 'insert'`)).rows;
+      assert.equal(chargeAudit.length, 1);
+      assert.equal(chargeAudit[0]!.actor, actorId);
+      assert.equal(chargeAudit[0]!.requestId, chargeRequestId);
+      assert.equal(String(chargeAudit[0]!.after.chargeType), "parking");
+      assert.equal(String(chargeAudit[0]!.after.amount), "85.0000");
+
+      // Surface 4: addEscalation persists audit evidence beside the scheduled
+      // change (apply-side before/after already audits previousAmount/newAmount).
+      const escRequestId = `escalation-add-${randomUUID()}`;
+      const escalation = await addLeaseEscalation({
+        orgId,
+        actorId,
+        leaseId: lease.id,
+        effectiveOn: "2027-01-01",
+        method: "percent",
+        value: "4",
+        requestId: escRequestId,
+      });
+      const escalationAudit = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+        select actor_id::text as actor, request_id as "requestId", changes->'after' as after
+          from audit_log
+         where org_id = ${orgId} and table_name = 'lease_escalations' and row_id = ${escalation.id}
+           and action = 'insert'`)).rows;
+      assert.equal(escalationAudit.length, 1);
+      assert.equal(escalationAudit[0]!.actor, actorId);
+      assert.equal(escalationAudit[0]!.requestId, escRequestId);
+      assert.deepEqual(
+        Object.keys(escalationAudit[0]!.after).sort().map(String),
+        ["effectiveOn", "leaseId", "method", "value"],
+      );
+
+      // Forced audit failure rolls the material term change back: with this
+      // org's audit_log inserts vetoed, the parking-style charge must vanish
+      // again — proof that audit evidence commits inside the write's own
+      // transaction instead of being best-effort afterwards. The veto trigger
+      // fires only for this scratch org, so nothing else sharing the database
+      // template instance is affected.
+      const chargeCount = async () => Number((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from lease_charges where org_id = ${orgId} and lease_id = ${lease.id}`)).rows[0]!.n);
+      const chargesBeforeVeto = await chargeCount();
+      try {
+        // CREATE TRIGGER is a utility statement: its WHEN clause cannot use
+        // bind parameters, so the scratch org id is interpolated literally.
+        await db.execute(sql.raw([
+          "create function openbooks_test_audit_veto() returns trigger language plpgsql as $fn$",
+          "begin",
+          "  raise exception 'forced audit failure (test veto)' using errcode = 'P0001';",
+          "end;",
+          "$fn$",
+        ].join("\n")));
+        await db.execute(sql.raw(
+          `create trigger openbooks_test_audit_veto_trg before insert on audit_log\n`
+          + `  for each row when (new.org_id = '${orgId}'::uuid) execute function openbooks_test_audit_veto()`,
+        ));
+
+        await assert.rejects(
+          addLeaseCharge({
+            orgId,
+            actorId,
+            leaseId: lease.id,
+            chargeType: "storage",
+            description: "Cage unit",
+            amount: "40",
+            frequency: "monthly",
+            effectiveFrom: "2026-08-01",
+          }),
+          /forced audit failure \(test veto\)/,
+        );
+        assert.equal(await chargeCount(), chargesBeforeVeto, "the material charge rolled back with its failed audit");
+      } finally {
+        await db.execute(sql`drop trigger if exists openbooks_test_audit_veto_trg on audit_log`);
+        await db.execute(sql`drop function if exists openbooks_test_audit_veto() cascade`);
+      }
+
+      // Without the veto the identical write succeeds and carries its audit.
+      const retried = await addLeaseCharge({
+        orgId,
+        actorId,
+        leaseId: lease.id,
+        chargeType: "storage",
+        description: "Cage unit",
+        amount: "40",
+        frequency: "monthly",
+        effectiveFrom: "2026-08-01",
+      });
+      const retriedAudit = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from audit_log
+         where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${retried.id} and action = 'insert'`)).rows[0]!.n;
+      assert.equal(retriedAudit, 1);
+      assert.equal(await chargeCount(), chargesBeforeVeto + 2);
+    } finally {
+      await db.execute(sql`drop trigger if exists openbooks_test_audit_veto_trg on audit_log`);
+      await db.execute(sql`drop function if exists openbooks_test_audit_veto() cascade`);
       await dropScratchOrgReporting(fx.org.orgId);
     }
   },

@@ -506,10 +506,20 @@ export async function createPropertyLease(input: {
   startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number;
   securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
   lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean;
+  requestId?: string | null;
 }): Promise<{ id: string }> {
   const leaseNumber = input.leaseNumber.trim(); const startsOn = validDate(input.startsOn, "Lease start")!;
   const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = exactMoney(input.baseRent, "Base rent");
   const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : exactMoney(input.camSharePercent, "CAM share");
+  const deposit = exactMoney(input.securityDepositRequired ?? "0", "Security deposit");
+  const lateFeeValue = exactMoney(input.lateFeeValue ?? "0", "Late-fee value");
+  const billingDay = input.billingDay ?? 1;
+  const paymentTermsDays = input.paymentTermsDays ?? 0;
+  const graceDays = input.graceDays ?? 0;
+  const camMethod = input.camMethod ?? "none";
+  const lateFeeType = input.lateFeeType ?? "none";
+  const autoInvoice = input.autoInvoice ?? true;
+  const autoPost = input.autoPost ?? false;
   if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
   if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
   if (camShare != null && (cmp(camShare, "0") < 0 || cmp(camShare, "100") > 0)) throw new PropertyManagementError("CAM share must be between 0 and 100");
@@ -529,14 +539,22 @@ export async function createPropertyLease(input: {
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
         security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
-      values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${input.billingDay ?? 1},
-        ${input.paymentTermsDays ?? 0},${exactMoney(input.securityDepositRequired ?? "0", "Security deposit")},${input.camMethod ?? "none"},${camShare},
-        ${input.lateFeeType ?? "none"},${exactMoney(input.lateFeeValue ?? "0", "Late-fee value")},${input.graceDays ?? 0},${input.autoInvoice ?? true},${input.autoPost ?? false},${input.actorId},${input.actorId}) returning id
+      values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${billingDay},
+        ${paymentTermsDays},${deposit},${camMethod},${camShare},
+        ${lateFeeType},${lateFeeValue},${graceDays},${autoInvoice},${autoPost},${input.actorId},${input.actorId}) returning id
     `));
     const id = inserted.rows[0]!.id;
     await tx.execute(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
       values(${input.orgId},${id},'base_rent','Base rent',${baseRent},'monthly',${startsOn},${endsOn},${property.rent_income_account_id},${input.actorId},${input.actorId})`);
-    await audit(tx, input.orgId, "property_leases", id, "insert", input.actorId, { leaseNumber, propertyId: input.propertyId, tenantId: input.tenantId, baseRent });
+    // Every financial term commits with its complete after-state in the same
+    // transaction: the terms below drive future invoices and postings, so a
+    // forced audit failure rolls the whole lease back rather than leaving an
+    // unaudited money-moving row behind.
+    await audit(tx, input.orgId, "property_leases", id, "insert", input.actorId, { after: {
+      leaseNumber, propertyId: input.propertyId, unitId: input.unitId ?? null, tenantId: input.tenantId,
+      startsOn, endsOn, baseRent, billingDay, paymentTermsDays, securityDepositRequired: deposit,
+      camMethod, camSharePercent: camShare, lateFeeType, lateFeeValue, graceDays, autoInvoice, autoPost,
+    } }, input.requestId ?? null);
     return { id };
   });
 }
@@ -546,6 +564,7 @@ export async function updatePropertyLease(input: {
   startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number;
   securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
   lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean;
+  requestId?: string | null;
 }): Promise<{ id: string }> {
   const leaseNumber = input.leaseNumber.trim();
   const startsOn = validDate(input.startsOn, "Lease start")!;
@@ -568,9 +587,17 @@ export async function updatePropertyLease(input: {
   if (input.lateFeeType === "percent" && cmp(lateFeeValue, "100") > 0) throw new PropertyManagementError("Late-fee percent cannot exceed 100");
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
-    const currentResult = (await tx.execute<{ id: string; status: string; propertyId: string; unitId: string | null; tenantId: string; startsOn: string; endsOn: string | null; billingDay: number; baseRent: string }>(sql`
-      select l.id,l.status,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.starts_on as "startsOn",
-        l.ends_on as "endsOn",l.billing_day as "billingDay",
+    const currentResult = (await tx.execute<{
+      id: string; status: string; propertyId: string; unitId: string | null; tenantId: string; startsOn: string; endsOn: string | null;
+      billingDay: number; baseRent: string; leaseNumber: string; paymentTermsDays: number; securityDepositRequired: string;
+      camMethod: string; camSharePercent: string | null; lateFeeType: string; lateFeeValue: string; graceDays: number;
+      autoInvoice: boolean; autoPost: boolean;
+    }>(sql`
+      select l.id,l.status,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.starts_on::text as "startsOn",
+        l.ends_on::text as "endsOn",l.billing_day as "billingDay",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",
+        l.security_deposit_required::text as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent::text as "camSharePercent",
+        l.late_fee_type as "lateFeeType",l.late_fee_value::text as "lateFeeValue",l.grace_days as "graceDays",
+        l.auto_invoice as "autoInvoice",l.auto_post as "autoPost",
         (select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as "baseRent"
       from property_leases l where l.org_id=${input.orgId} and l.id=${input.leaseId} for update
     `));
@@ -611,7 +638,36 @@ export async function updatePropertyLease(input: {
           updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and lease_id=${input.leaseId} and charge_type='base_rent'
       `);
     }
-    await audit(tx, input.orgId, "property_leases", input.leaseId, "update", input.actorId, { leaseNumber, propertyId: input.propertyId, unitId: input.unitId ?? null, status: current.status });
+    await audit(tx, input.orgId, "property_leases", input.leaseId, "update", input.actorId, (() => {
+      // The before/after pair covers every money-moving term: term dates,
+      // tenant, base rent, payment terms, deposit, CAM policy, late-fee
+      // policy, grace days, and the auto-invoice/auto-post switches. These
+      // values drive future invoices and postings, so a partial audit cannot
+      // reconstruct what changed.
+      const before = {
+        leaseNumber: current.leaseNumber, propertyId: current.propertyId, unitId: current.unitId,
+        tenantId: current.tenantId, startsOn: current.startsOn, endsOn: current.endsOn,
+        billingDay: current.billingDay, paymentTermsDays: current.paymentTermsDays,
+        securityDepositRequired: normalizeMoney(current.securityDepositRequired), camMethod: current.camMethod,
+        camSharePercent: current.camSharePercent == null ? null : normalizeMoney(current.camSharePercent),
+        lateFeeType: current.lateFeeType, lateFeeValue: normalizeMoney(current.lateFeeValue),
+        graceDays: current.graceDays, autoInvoice: current.autoInvoice, autoPost: current.autoPost,
+        baseRent: current.baseRent == null ? null : normalizeMoney(current.baseRent),
+      };
+      const after = {
+        leaseNumber, propertyId: input.propertyId, unitId: input.unitId ?? null, tenantId: input.tenantId,
+        startsOn, endsOn, billingDay: input.billingDay, paymentTermsDays: input.paymentTermsDays,
+        securityDepositRequired: deposit, camMethod: input.camMethod,
+        camSharePercent: camShare, lateFeeType: input.lateFeeType, lateFeeValue,
+        graceDays: input.graceDays, autoInvoice: input.autoInvoice, autoPost: input.autoPost,
+        baseRent,
+      };
+      return {
+        before,
+        after,
+        changedFields: Object.keys(after).filter((key) => JSON.stringify(after[key as keyof typeof after]) !== JSON.stringify(before[key as keyof typeof before])),
+      };
+    })(), input.requestId ?? null);
     return { id: input.leaseId };
   });
 }
@@ -628,20 +684,40 @@ export async function cancelPropertyLease(orgId: string, actorId: string, leaseI
   });
 }
 
-export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<{ id: string }> {
-  await assertEnabled(db, input.orgId);
+export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; requestId?: string | null }): Promise<{ id: string }> {
+  // Base rent versions exclusively through the lease term and its controlled
+  // escalations; a caller-supplied second base_rent beside the canonical row
+  // would double-bill every covered period (storage constraint 0060 refuses
+  // it too, so even direct writes cannot create the overlap).
+  if (input.chargeType === "base_rent") {
+    throw new PropertyManagementError("Base rent changes belong on the lease and its controlled escalations");
+  }
   const amount = exactMoney(input.amount, "Charge amount");
   if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
-  const result = (await db.execute<{ id: string }>(sql`
-    insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
-    select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${input.effectiveFrom},${input.effectiveTo ?? null},
-      coalesce(${input.incomeAccountId ?? null},case when ${input.chargeType}='cam' then p.cam_income_account_id else p.rent_income_account_id end),
-      ${input.itemId ?? null},${input.taxCodeId ?? null},${input.actorId},${input.actorId}
-      from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
-     where l.org_id=${input.orgId} and l.id=${input.leaseId} and l.status in ('draft','active') returning id
-  `));
-  if (!result.rows[0]) throw new PropertyManagementError("Editable lease not found");
-  return { id: result.rows[0].id };
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const result = (await tx.execute<{
+      id: string; chargeType: string; description: string; amount: string; frequency: string;
+      effectiveFrom: string; effectiveTo: string | null; incomeAccountId: string | null;
+    }>(sql`
+      insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
+      select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${input.effectiveFrom},${input.effectiveTo ?? null},
+        coalesce(${input.incomeAccountId ?? null},case when ${input.chargeType}='cam' then p.cam_income_account_id else p.rent_income_account_id end)::uuid,
+        ${input.itemId ?? null},${input.taxCodeId ?? null},${input.actorId},${input.actorId}
+        from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+       where l.org_id=${input.orgId} and l.id=${input.leaseId} and l.status in ('draft','active')
+       returning id,charge_type as "chargeType",description,amount::text,frequency,effective_from::text as "effectiveFrom",
+         effective_to::text as "effectiveTo",income_account_id::text as "incomeAccountId"
+    `));
+    const charge = result.rows[0];
+    if (!charge) throw new PropertyManagementError("Editable lease not found");
+    // The schedule this row generates invoices the tenant: it commits only if
+    // its audit evidence commits in the same transaction.
+    await audit(tx, input.orgId, "lease_charges", charge.id, "insert", input.actorId,
+      { after: { leaseId: input.leaseId, chargeType: charge.chargeType, description: charge.description, amount: charge.amount, frequency: charge.frequency, effectiveFrom: charge.effectiveFrom, effectiveTo: charge.effectiveTo, incomeAccountId: charge.incomeAccountId } },
+      input.requestId ?? null);
+    return { id: charge.id };
+  });
 }
 
 async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: string, actorId: string | null, leaseId: string, throughOn?: string): Promise<number> {
@@ -717,15 +793,26 @@ export async function terminatePropertyLease(orgId: string, actorId: string, lea
   });
 }
 
-export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string }): Promise<{ id: string }> {
+export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; requestId?: string | null }): Promise<{ id: string }> {
   const effectiveOn = validDate(input.effectiveOn, "Escalation date")!;
   const value = exactMoney(input.value, "Escalation value");
   if (cmp(value, "0") <= 0) throw new PropertyManagementError("Escalation value must be positive");
-  await assertEnabled(db, input.orgId);
-  const result = (await db.execute<{ id: string }>(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
-    select ${input.orgId},id,${effectiveOn},${input.method},${value},${input.actorId},${input.actorId}
-      from property_leases where org_id=${input.orgId} and id=${input.leaseId} and status in ('draft','active','notice') returning id`));
-  if (!result.rows[0]) throw new PropertyManagementError("Lease not found"); return { id: result.rows[0].id };
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const result = (await tx.execute<{ id: string; method: string; effectiveFrom: string }>(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
+      select ${input.orgId},id,${effectiveOn},${input.method},${value},${input.actorId},${input.actorId}
+        from property_leases where org_id=${input.orgId} and id=${input.leaseId} and status in ('draft','active','notice')
+      returning id,method,effective_on::text as "effectiveFrom"`));
+    const escalation = result.rows[0];
+    if (!escalation) throw new PropertyManagementError("Lease not found");
+    // A scheduled escalation changes future rent when applied: like every
+    // financial-term write here, the row and its audit evidence commit as
+    // one unit.
+    await audit(tx, input.orgId, "lease_escalations", escalation.id, "insert", input.actorId,
+      { after: { leaseId: input.leaseId, effectiveOn: escalation.effectiveFrom, method: escalation.method, value } },
+      input.requestId ?? null);
+    return { id: escalation.id };
+  });
 }
 
 export async function applyLeaseEscalation(orgId: string, actorId: string, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
