@@ -363,21 +363,39 @@ async function validateEntityIntegrity(
   if (entity.key === 'segment-values') {
     const existing = rowId
       ? (((await db.execute(sql`
-          select segment_id from segment_values where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+          select segment_id, parent_id from segment_values where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
       : null
     if (rowId && !existing) return 'not found'
     const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
+    if (!UUID_RE.test(segmentId)) return 'Values can only be created for a custom segment'
     const segment = ((await db.execute(sql`
       select id, is_hierarchical from segment_definitions
        where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)))
     if (!segment.rows[0]) return 'Values can only be created for a custom segment'
-    const parentId = body.parentId === undefined ? null : body.parentId || null
+    const parentId = body.parentId === undefined ? existing?.parent_id ?? null : body.parentId || null
     if (parentId) {
       if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
+      if (!UUID_RE.test(String(parentId))) return 'Choose a parent value from the same segment'
       const parent = ((await db.execute(sql`
         select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
          and segment_id = ${segmentId}`)))
       if (!parent.rows[0]) return 'Choose a parent value from the same segment'
+      if (rowId) {
+        // This is the early, user-facing check. segment_value_guard repeats it
+        // after taking the per-tenant/per-segment storage fence, which closes
+        // the concurrent cross-reparent window for this route and every other
+        // writer (bulk import and direct SQL included).
+        const cycle = ((await db.execute(sql`
+          with recursive descendants as (
+            select id from segment_values
+             where id = ${rowId} and org_id = ${orgId} and segment_id = ${segmentId}
+            union
+            select value.id from segment_values value
+            join descendants descendant on value.parent_id = descendant.id
+             where value.org_id = ${orgId} and value.segment_id = ${segmentId}
+          ) select 1 from descendants where id = ${String(parentId)} limit 1`)))
+        if (cycle.rows.length) return 'A segment value cannot be parented beneath itself'
+      }
     }
   }
 
