@@ -247,10 +247,16 @@ async function countRows(query: SQL): Promise<number> {
  * never receive overlapping queries. Sequential is always safe; the counts are
  * cheap indexed aggregates.
  */
-async function sequential<T>(fns: (() => Promise<T>)[]): Promise<T[]> {
-  const out: T[] = []
+type Results<Fns extends readonly (() => Promise<unknown>)[]> = {
+  [Index in keyof Fns]: Awaited<ReturnType<Fns[Index]>>
+}
+
+async function sequential<const Fns extends readonly (() => Promise<unknown>)[]>(
+  fns: Fns,
+): Promise<Results<Fns>> {
+  const out: unknown[] = []
   for (const fn of fns) out.push(await fn())
-  return out
+  return out as Results<Fns>
 }
 
 /**
