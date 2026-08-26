@@ -107,10 +107,24 @@ const mockSources = new Map<string, string>([
           hostKey: 'test-host-key',
         }
       }
+      export async function ensureSftpServer() {}
       export function hostKeyFingerprint(hostKey) {
         return 'fp:' + hostKey
       }
       export const encryptSecret = (plain) => 'enc:' + plain
+      export const SFTP_AUDIT_REDACTED = '[redacted]'
+      export function sftpServerAuditSnapshot(row) {
+        return {
+          name: row.name, username: row.username, backend: row.backend, bucket: row.bucket,
+          root_prefix: row.root_prefix, is_active: row.is_active,
+          password_encrypted: row.password_encrypted === null ? null : SFTP_AUDIT_REDACTED,
+          authorized_keys: row.authorized_keys === null ? null : SFTP_AUDIT_REDACTED,
+          created_by: row.created_by, updated_by: row.updated_by,
+        }
+      }
+      export function sftpDaemonConfigAuditSnapshot(cfg) {
+        return { enabled: cfg.enabled, port: cfg.port, advertised_host: cfg.advertisedHost }
+      }
     `,
   ],
   [
@@ -133,6 +147,9 @@ const mockSources = new Map<string, string>([
         execute(query) {
           state.inserts.push({ text: sqlText(query) })
           return Promise.resolve({ rows: [{ id: 'server-1' }] })
+        },
+        transaction(fn) {
+          return fn(db)
         },
       }
       export const schema = {}
@@ -255,12 +272,18 @@ test('ordinary tenant SFTP server management stays available and org-scoped', as
   assert.ok(body.password.length > 0)
   // The create still consults the per-tenant Bank Feeds gate…
   assert.deepEqual(routeState.gateCalls, [{ permission: 'admin.setup.manage', featureKey: 'bankFeeds' }])
-  // …and writes the server row scoped to the caller's organization.
-  assert.equal(routeState.inserts.length, 1)
+  // …and writes the server row scoped to the caller's organization, together
+  // with its secret-free audit evidence in the same transaction.
+  assert.equal(routeState.inserts.length, 2)
   assert.match(routeState.inserts[0]!.text, /insert into sftp_servers/)
   assert.ok(
     routeState.inserts[0]!.text.includes('org-1'),
     `server insert must be scoped to the caller's org, got: ${routeState.inserts[0]!.text}`,
+  )
+  assert.match(routeState.inserts[1]!.text, /insert into audit_log/)
+  assert.ok(
+    routeState.inserts[1]!.text.includes('sftp_servers'),
+    `login creation must leave audit evidence on sftp_servers, got: ${routeState.inserts[1]!.text}`,
   )
 })
 
