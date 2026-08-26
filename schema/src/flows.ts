@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -25,6 +26,8 @@ import { auditColumns, id, orgRef } from "./helpers";
  * document to pending_approval. There is no separate approval engine.
  *
  *   flows
+ *     ├─ flow_scheduled_occurrences (per-occurrence durability ledger for
+ *     │                              scheduled triggers; crash-resumable claims)
  *     └─ flow_runs            (one per trigger firing; run history)
  *          ├─ flow_run_effects (idempotency checkpoints)
  *          └─ flow_gates       (paused human approvals; quorum any/all)
@@ -48,6 +51,13 @@ export const FLOW_GATE_STATUSES = [
 ] as const;
 
 export const FLOW_GATE_QUORUMS = ["any", "all"] as const;
+
+export const FLOW_SCHEDULED_OCCURRENCE_STATUSES = [
+  "open",
+  "firing",
+  "fired",
+  "lost",
+] as const;
 
 export const flows = pgTable(
   "flows",
@@ -96,6 +106,15 @@ export const flowRuns = pgTable(
     context: jsonb("context").$type<Record<string, unknown>>().notNull().default({}),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    /**
+     * Deterministic retry identity for scheduled firings:
+     * `sched|<flowId>|<nodeId>|<occurredAt ISO>|<subjectId>`. A resumed
+     * occurrence adopts the row that already carries its key — effect
+     * checkpoints and email deferrals are keyed off the run id, so a retry
+     * can never double-send. Set only by the scheduled runner; unique when
+     * present (migration 0052).
+     */
+    occurrenceKey: text("occurrence_key"),
     ...auditColumns,
   },
   (t) => [
@@ -268,6 +287,47 @@ export const notifications = pgTable(
   ],
 );
 
+/**
+ * Per-occurrence durability ledger for scheduled flows (one row per flow ×
+ * scheduled trigger node × cron occurrence). The claim commits atomically
+ * WITH the last_scheduled_run_at cursor advance, so a crash between claiming
+ * and firing leaves the occurrence recoverable instead of lost:
+ *
+ *   CLAIM   — INSERT … ON CONFLICT DO NOTHING alongside the cursor CTE; only
+ *             rows the scanner itself inserted are fired.
+ *   FIRE    — a bounded-attempt attempt takes the open claim ('open' →
+ *             'firing'), runs the fan-out, and closes 'fired' inside the
+ *             same tenant transaction as the runs/effects/outbox emails it
+ *             produced — delivery and completion commit or roll back together.
+ *   RECOVER — claims stuck 'firing' past the stale window resume by
+ *             occurrence key (same flow_runs rows → no double-send), with a
+ *             visible terminal 'lost' after the retry budget is spent.
+ */
+export const flowScheduledOccurrences = pgTable(
+  "flow_scheduled_occurrences",
+  {
+    id: id(),
+    orgId: orgRef(),
+    flowId: uuid("flow_id").notNull(),
+    /** The scheduled trigger node in the flow's graph this claim names. */
+    nodeId: text("node_id").notNull(),
+    /** The cron occurrence this firing covers (the cursor value it claimed). */
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    status: text("status", { enum: FLOW_SCHEDULED_OCCURRENCE_STATUSES })
+      .notNull()
+      .default("open"),
+    /** Number of firings started against this claim (initial + recovery retries). */
+    attemptCount: integer("attempt_count").notNull().default(0),
+    result: jsonb("result").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("flow_scheduled_occurrences_once").on(t.flowId, t.nodeId, t.occurredAt),
+    index("flow_scheduled_occurrences_recovery").on(t.status, t.updatedAt),
+  ],
+);
+
 /*
 FOREIGN KEYS (added by the integrator's migration pass to
 schema/migrations/referential-integrity.sql):
@@ -288,4 +348,6 @@ schema/migrations/referential-integrity.sql):
   flow_locks.flow_id            → flows.id (on delete cascade)
   notifications.org_id          → orgs.id (on delete cascade)
   notifications.user_id         → users.id (on delete cascade)
+  flow_scheduled_occurrences.org_id  → orgs.id
+  flow_scheduled_occurrences.flow_id → flows.id (on delete cascade)
 */
