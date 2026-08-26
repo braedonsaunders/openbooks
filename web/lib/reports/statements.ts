@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import { db } from "@openbooks/engine/src/db.ts";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
@@ -111,6 +112,11 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
     boundaries: [],
     bookId,
   });
+  // Split boundary months come back as individual lines for the whole month;
+  // the bucket date is therefore the authoritative inclusive report window.
+  const dateFilter = from === null
+    ? sql`b.d <= ${to}`
+    : sql`b.d >= ${from} and b.d <= ${to}`;
   // Aggregate the buckets FIRST, then join accounts to the tiny per-account
   // result — joining accounts against the raw union invites a plan that
   // re-executes the union once per account.
@@ -121,7 +127,7 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
       left join (
         select b.account_id, sum(b.amount) as raw
           from ${buckets} b
-         where true ${bucketSubsidiaryFilter(subsidiaryIds)}
+         where ${dateFilter} ${bucketSubsidiaryFilter(subsidiaryIds)}
          group by b.account_id
       ) s on s.account_id = a.id
      where a.org_id = ${orgId}
@@ -187,7 +193,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
           select b.account_id, sum(b.debit_total) as debits, sum(b.credit_total) as credits,
                  sum(b.amount) as balance
             from ${buckets} b
-           where true ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
+           where b.d <= ${asOf} ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
            group by b.account_id having abs(sum(b.amount)) > 0
         ) s
         join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
@@ -218,13 +224,25 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
   return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
 }
 
-export async function partnerBalances(kind: "receivable" | "payable", orgId?: string) {
+/**
+ * Outstanding control-account balances through one inclusive business date.
+ * Interactive callers default to the org's business day; exports and other
+ * reproducible reads can pin that same boundary explicitly.
+ */
+export async function partnerBalances(kind: "receivable" | "payable", orgId?: string, asOf?: string) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
+  const resolvedAsOf = asOf ?? (await businessToday(resolvedOrgId));
   const type = kind === "receivable" ? "asset_receivable" : "liability_payable";
   const r = (await db.execute(sql`
+    with e as materialized (
+      select id from journal_entries
+       where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and posting_date <= ${resolvedAsOf}
+    )
     select p.id, p.display_name, sum(l.amount) as balance, count(*) as line_count,
            max(l.due_date) as latest_due
       from journal_lines l
+      join e on e.id = l.entry_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = ${resolvedOrgId}
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
