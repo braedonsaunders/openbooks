@@ -49,11 +49,6 @@ const ts = requireFromRoot("typescript-eslint-typescript");
 
 const SELF_PATH = "scripts/check-credential-fetch-redirects.mjs";
 
-// This file ships in the public product tree, so connector names never appear
-// verbatim in it; the one baseline path that needs one is assembled at runtime
-// (same technique check-product-neutrality.mjs uses on itself).
-const LEDGER_PARITY_ERP_CLIENT = ["engine/src/harness/ledger-parity/", "erp", "next-client.ts"].join("");
-
 const CREDENTIAL_PATTERN =
   /(authorization|x-internal-token|["']?bearer["']?|basic\s|apikey|api_key|apisecret|api_secret|clientsecret|client_secret|accesstoken|access_token|refreshtoken|refresh_token|apppassword|app_password|app_id|hmac)/i;
 
@@ -65,14 +60,7 @@ const REFUSAL_IN_TEXT_PATTERN = /redirect\s*:\s*["'](error|manual)["']/;
  * (path, nearest named enclosing function). Never add an entry without a
  * finding id; never keep one past its fix — the audit fails on stale entries.
  */
-const KNOWN_UNSAFE = [
-  {
-    path: LEDGER_PARITY_ERP_CLIENT,
-    fn: "request",
-    findingId: "fnd_mt9jrpuy_4c7az9",
-    reason: "ledger-parity ERP harness sends `Authorization: token key:secret` through a redirect-following fetch",
-  },
-];
+const KNOWN_UNSAFE = [];
 
 function discoverServerSources() {
   return execFileSync(

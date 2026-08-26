@@ -14,6 +14,7 @@ export class ErpNextParityClient {
     for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
     const response = await fetch(url, {
       ...init,
+      redirect: "error",
       headers: {
         Accept: "application/json",
         Authorization: `token ${this.config.apiKey}:${this.config.apiSecret}`,
