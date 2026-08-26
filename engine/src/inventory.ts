@@ -1362,6 +1362,10 @@ export interface IssueInput {
   projectId?: string | null;
   locationId?: string | null;
   memo?: string | null;
+  /** Join the caller's transaction instead of opening one. Fulfillment is a
+   * single accounting unit: its document, source-line advance, inventory
+   * movement and COGS journal either all commit or all roll back. */
+  tx?: SqlExecutor;
 }
 
 /**
@@ -1374,21 +1378,22 @@ export async function issueInventory(
   actorId: string | null,
   input: IssueInput,
 ): Promise<MovementResult> {
+  const runner = input.tx ?? db;
   const idempotencyKey = normalizeMovementIdempotencyKey(input.idempotencyKey);
   if (cmp(input.quantity, "0") <= 0)
     throw new InventoryError("issue quantity must be positive");
-  const profile = await resolveProfile(orgId, input.itemId);
+  const profile = await resolveProfile(orgId, input.itemId, runner);
   assertTracking(
     profile,
     { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
     "issue",
   );
-  const period = await periodForDate(orgId, input.date);
+  const period = await periodForDate(orgId, input.date, runner);
   if (!period)
     throw new InventoryError(`no accounting period for ${input.date}`);
-  const bookId = await primaryBookId(orgId);
-  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
-  const ctx = await loadSubsidiaryContext(db, orgId);
+  const bookId = await primaryBookId(orgId, runner);
+  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, runner);
+  const ctx = await loadSubsidiaryContext(runner, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
   const offset = input.offsetAccountId ?? profile.cogsAccountId;
   const dims = {
@@ -1397,7 +1402,7 @@ export async function issueInventory(
     locationId: input.locationId ?? null,
   };
 
-  return await db.transaction(async (tx) => {
+  const apply = async (tx: Runner): Promise<MovementResult> => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertStockLocationAdmitsSubsidiary(
       tx,
@@ -1539,7 +1544,8 @@ export async function issueInventory(
       `);
     }
     return { movementId, entryId, value: neg(cost) };
-  });
+  };
+  return input.tx ? apply(input.tx) : db.transaction(apply);
 }
 
 async function resolveProvisionalUnitCost(
@@ -3349,7 +3355,11 @@ export async function loadDocumentInventoryLines(
            dl.stock_location_id, d.subsidiary_id as document_subsidiary_id,
            p.asset_account_id, p.received_not_billed_account_id,
            p.adjustment_account_id, p.variance_account_id, p.costing_method,
-           p.tracking, dl.department_id, dl.project_id, dl.location_id, dl.custom
+           p.tracking,
+           coalesce(dl.department_id, d.department_id) as department_id,
+           coalesce(dl.project_id, d.project_id) as project_id,
+           coalesce(dl.location_id, d.location_id) as location_id,
+           dl.custom
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
       join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
@@ -4084,10 +4094,97 @@ export async function applyInventoryReturnsForVendorCredit(
   );
 }
 
+function salesFulfillmentTrackingSelection(
+  line: DocumentInventoryLine,
+): { lotId: string | null; serialId: string | null } {
+  const evidence = isJsonRecord(line.custom) ? line.custom.fulfillment : null;
+  const label = `sales-fulfillment line ${line.lineNumber} (item ${line.itemId})`;
+  if (!isJsonRecord(evidence)) {
+    throw new InventoryError(`${label} requires immutable fulfillment evidence`);
+  }
+  const sourceLineId = evidence.sourceLineId;
+  const lotId = evidence.lotId ?? null;
+  const serialId = evidence.serialId ?? null;
+  if (typeof sourceLineId !== "string" || !UUID_RE.test(sourceLineId)) {
+    throw new InventoryError(`${label} requires a valid source sales-order line`);
+  }
+  if (lotId !== null && (typeof lotId !== "string" || !UUID_RE.test(lotId))) {
+    throw new InventoryError(`${label} lotId must be a UUID`);
+  }
+  if (
+    serialId !== null &&
+    (typeof serialId !== "string" || !UUID_RE.test(serialId))
+  ) {
+    throw new InventoryError(`${label} serialId must be a UUID`);
+  }
+  return { lotId, serialId };
+}
+
 /**
- * After a customer invoice posts (revenue booked), issue each inventory line to
- * COGS: DR COGS / CR inventory at the item's costed value. Independent of the
- * revenue entry. Idempotent per line.
+ * Issue every inventory line on an approved sales-fulfillment document in the
+ * caller's transaction. The fulfillment writer locks source order lines; this
+ * function additionally locks inventory positions before checking movement
+ * evidence, so a retry waits for the winning shipment and then observes its
+ * committed movement instead of consuming a second layer.
+ */
+export async function applySalesFulfillmentInventoryIssues(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string | null,
+  documentId: string,
+  date: string,
+  subsidiaryId: string | null,
+): Promise<number> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
+  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  if (lines.length === 0) return 0;
+  const ctx = await loadSubsidiaryContext(runner, orgId);
+  const movementSubsidiaryId = subsidiaryId ?? ctx.rootId;
+  assertMovementOwner(ctx, movementSubsidiaryId);
+  for (const key of [
+    ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
+  ].sort()) {
+    const separator = key.indexOf(":");
+    await lockInventoryPosition(
+      runner,
+      key.slice(0, separator),
+      key.slice(separator + 1),
+    );
+  }
+  let count = 0;
+  for (const line of lines) {
+    const seen = (await runner.execute(sql`
+      select 1 from inventory_movements
+       where org_id = ${orgId} and document_line_id = ${line.lineId}
+         and kind = 'issue'
+       limit 1`));
+    if (seen.rows[0]) continue;
+    const selection = salesFulfillmentTrackingSelection(line);
+    await issueInventory(orgId, actorId, {
+      itemId: line.itemId,
+      stockLocationId: line.stockLocationId,
+      quantity: line.quantity,
+      subsidiaryId: movementSubsidiaryId,
+      date,
+      documentLineId: line.lineId,
+      idempotencyKey: inventoryPostingEffectKey(line.lineId, "issue"),
+      lotId: selection.lotId,
+      serialId: selection.serialId,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      locationId: line.locationId,
+      memo: "COGS (sales fulfillment)",
+      tx: runner,
+    });
+    count++;
+  }
+  return count;
+}
+
+/**
+ * A standalone invoice can represent a combined ship-and-bill policy, so it
+ * retains the legacy issue hook. An invoice converted from a sales order is
+ * governed by explicit fulfillment and must never move stock a second time.
  */
 export async function applyInventoryIssuesForInvoice(
   orgId: string,
@@ -4097,6 +4194,15 @@ export async function applyInventoryIssuesForInvoice(
   subsidiaryId: string,
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
+  const governed = (await db.execute(sql`
+    select 1
+      from document_links link
+      join documents source
+        on source.id = link.from_document_id and source.org_id = link.org_id
+     where link.org_id = ${orgId} and link.to_document_id = ${documentId}
+       and link.link_type = 'bills' and source.kind = 'sales_order'
+     limit 1`));
+  if (governed.rows[0]) return 0;
   const lines = await loadDocumentInventoryLines(db, orgId, documentId);
   let count = 0;
   for (const l of lines) {
