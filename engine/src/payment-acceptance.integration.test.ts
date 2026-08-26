@@ -1106,10 +1106,15 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     });
     assert.equal(configuredLink.surchargeAmount, "3.0000");
 
-    // Same-tier ties resolve deterministically: identical effective dates are
-    // broken by id, and repeated resolution answers identically.
+    // One active surcharge window per identity is a storage invariant
+    // (migration 0023): retire the stripe/card lane's incumbent first, then
+    // a same-tier, same-window rival is rejected outright and resolution
+    // stays deterministic on the sole surviving rule.
     await db.execute(
       sql`update psp_provider_configs set surcharge_rule_id = null where org_id = ${org.orgId} and provider = 'stripe'`,
+    );
+    await db.execute(
+      sql`update payment_surcharge_rules set is_active = false where id = ${stripeOnlyCardRuleId}`,
     );
     const tieA = randomUUID();
     const tieB = randomUUID();
@@ -1117,13 +1122,25 @@ test("surcharge resolution honors the payment method across card and bank-debit 
       insert into payment_surcharge_rules
         (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
       values
-        (${tieA}, ${org.orgId}, 'Tie A', 'percent', '6', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId}),
-        (${tieB}, ${org.orgId}, 'Tie B', 'percent', '7', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId})
+        (${tieA}, ${org.orgId}, 'Tie A', 'percent', '6', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId})
     `);
-    const expectedTie = [tieA, tieB].sort()[1];
+    await assert.rejects(
+      db.execute(sql`
+        insert into payment_surcharge_rules
+          (id, org_id, name, calculation, percent, fixed_amount, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
+        values
+          (${tieB}, ${org.orgId}, 'Tie B', 'percent', '7', null, ${org.accounts.revenue}, 'stripe', 'card', ${today}, ${userId}, ${userId})
+      `),
+      (error: unknown) => {
+        // Drizzle wraps the driver error; the guard's identity lives on cause.
+        const message = String((error as { cause?: { message?: string } })?.cause?.message ?? error);
+        return /payment_surcharge_rules_no_active_overlap|exclusion/i.test(message);
+      },
+      "a same-window rival is refused by the storage guard",
+    );
     const tieFirst = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
     const tieSecond = await resolveSurcharge(org.orgId, { provider: "stripe", amount: "100.0000", onDate });
-    assert.equal(tieFirst.ruleId, expectedTie, "same-date ties pick the greatest rule id");
+    assert.equal(tieFirst.ruleId, tieA, "resolution deterministically keeps the sole surviving rule");
     assert.equal(tieSecond.ruleId, tieFirst.ruleId);
 
     // Frozen quote evidence: the rule landscape moves hard after link
