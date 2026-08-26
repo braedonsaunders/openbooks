@@ -255,8 +255,22 @@ export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: stri
   return out;
 }
 
+/**
+ * FX provider secrets must never cross an HTTP redirect boundary. Open
+ * Exchange Rates carries its `app_id` as a query parameter, and a query
+ * parameter is part of the URL: unlike the Authorization header, which the
+ * fetch spec strips on a cross-origin redirect, it would be replayed intact
+ * to whichever host a 3xx Location names — handing the tenant's API key to
+ * an attacker. Even the credential-free ECB and Bank of Canada feeds must
+ * not follow redirects, or a hijacked answer could impersonate the provider.
+ * Every outbound FX call goes through here so any redirect fails closed.
+ */
+function fxFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 async function fetchText(url: URL): Promise<string> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { Accept: "application/json,text/csv" } });
+  const response = await fxFetch(url, { signal: AbortSignal.timeout(20_000), headers: { Accept: "application/json,text/csv" } });
   if (!response.ok) throw new FxProviderError(`provider request failed with HTTP ${response.status}`);
   const text = await response.text();
   if (text.length > 20_000_000) throw new FxProviderError("provider response exceeded 20 MB");
@@ -339,9 +353,12 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
   for (let date = from; date <= to; date = addDays(date, 1)) {
     const url = new URL(`https://openexchangerates.org/api/historical/${date}.json`);
     url.searchParams.set("app_id", apiKey);
+    // Only a malformed body is a payload fault; transport failures — refused
+    // redirects included — must surface verbatim instead of being relabeled.
+    const text = await fetchText(url);
     let payload: { base?: string; rates?: Record<string, number> };
     try {
-      payload = JSON.parse(await fetchText(url)) as typeof payload;
+      payload = JSON.parse(text) as typeof payload;
     } catch {
       throw new FxProviderError("Open Exchange Rates returned an invalid payload");
     }
