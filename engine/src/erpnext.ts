@@ -13,11 +13,19 @@ export interface ErpNextCreds {
   apiSecret: string;
 }
 
+/** ERPNext credentials must never cross an HTTP redirect boundary. Even a
+ *  trusted tenant origin can otherwise redirect a request — carrying its
+ *  `Authorization: token key:secret` header — to a host the operator never
+ *  configured, where Frappe would happily accept the Administrator key. */
+function erpNextFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 export class ErpNextClient {
   constructor(private creds: ErpNextCreds) {}
 
   private async req<T>(path: string): Promise<T> {
-    const res = await fetch(`${this.creds.url.replace(/\/$/, "")}${path}`, {
+    const res = await erpNextFetch(`${this.creds.url.replace(/\/$/, "")}${path}`, {
       headers: {
         Authorization: `token ${this.creds.apiKey}:${this.creds.apiSecret}`,
         Accept: "application/json",
