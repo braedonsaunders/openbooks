@@ -23,7 +23,7 @@ const sourceIdempotencyMigration = readFileSync(
     "schema",
     "migrations",
     "generated",
-    "0010_bank_statement_source_idempotency.sql",
+    "0036_bank_statement_source_idempotency.sql",
   ),
   "utf8",
 );

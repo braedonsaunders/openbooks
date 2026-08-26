@@ -161,7 +161,7 @@ export const reportRuns = pgTable(
      * Stamped exactly once, by the attempt whose failure exhausts the run
      * retry ceiling. Null while the run can still be retried, so operators
      * can alert on poison runs without noise from transient failures
-     * (migration 0006_terminal_failure_surfacing).
+     * (migration 0035_terminal_failure_surfacing).
      */
     terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
     /** System identity of the worker attempt that recorded the terminal failure. */
@@ -229,7 +229,7 @@ export const reportDeliveryOutbox = pgTable(
      * Stamped exactly once when the queue gave up and attempt_count has also
      * reached the delivery ceiling — after that no path re-enqueues the row.
      * The operator alert query keys on this column
-     * (migration 0006_terminal_failure_surfacing).
+     * (migration 0035_terminal_failure_surfacing).
      */
     terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
     /** System identity of the worker attempt that recorded the terminal failure. */

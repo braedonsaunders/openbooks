@@ -29,6 +29,48 @@ import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationsDir = join(repoRoot, "schema", "migrations");
 
+type MigrationFilenameIdentity = {
+  filename: string;
+  sha256: string;
+};
+
+type MigrationFilenameTransition = {
+  from: MigrationFilenameIdentity;
+  to: MigrationFilenameIdentity;
+  reason: string;
+};
+
+/**
+ * A published migration rename is not a new migration and must never re-run
+ * its body. Each transition therefore binds both filenames to the exact same
+ * reviewed bytes. Existing ledgers move only the primary-key filename; their
+ * digest is neither rewritten nor restamped.
+ */
+export const APPROVED_MIGRATION_FILENAME_TRANSITIONS: ReadonlyArray<MigrationFilenameTransition> = [
+  {
+    from: {
+      filename: "generated/0006_terminal_failure_surfacing.sql",
+      sha256: "df5db290b100f7bfd51cb4301b86a81442d6031c5efb451df28ad667f6ed3991",
+    },
+    to: {
+      filename: "generated/0035_terminal_failure_surfacing.sql",
+      sha256: "df5db290b100f7bfd51cb4301b86a81442d6031c5efb451df28ad667f6ed3991",
+    },
+    reason: "give terminal-failure surfacing a unique migration ordinal",
+  },
+  {
+    from: {
+      filename: "generated/0010_bank_statement_source_idempotency.sql",
+      sha256: "a78e9e61ea2860192304c4a254e86f57ecd70c92bd6c5225f7bbaa425c80788e",
+    },
+    to: {
+      filename: "generated/0036_bank_statement_source_idempotency.sql",
+      sha256: "a78e9e61ea2860192304c4a254e86f57ecd70c92bd6c5225f7bbaa425c80788e",
+    },
+    reason: "give bank-statement source idempotency a unique migration ordinal",
+  },
+];
+
 type RuntimeDatabaseConfig = {
   connectionString: string;
   roleName: string;
@@ -105,6 +147,139 @@ async function assertConstrainedSchemaOwnerMigrationRole(
 
 function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
+}
+
+function generatedMigrationFiles(): string[] {
+  const generated = readdirSync(join(migrationsDir, "generated"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  const seenOrdinals = new Map<number, string>();
+  let previousOrdinal = -1;
+
+  for (const file of generated) {
+    const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(file);
+    if (!match) {
+      throw new Error(
+        `[bootstrap] generated migration ${file} does not have a four-digit ordinal`,
+      );
+    }
+    const ordinal = Number(match[1]);
+    const duplicate = seenOrdinals.get(ordinal);
+    if (duplicate) {
+      throw new Error(
+        `[bootstrap] generated migrations ${duplicate} and ${file} share ordinal ${match[1]}`,
+      );
+    }
+    if (ordinal <= previousOrdinal) {
+      throw new Error(
+        `[bootstrap] generated migration ${file} is not in strictly increasing ordinal order`,
+      );
+    }
+    seenOrdinals.set(ordinal, file);
+    previousOrdinal = ordinal;
+  }
+
+  return generated;
+}
+
+function assertMigrationFilenameTransitionTargets(generated: readonly string[]): void {
+  const generatedSet = new Set(generated.map((file) => `generated/${file}`));
+  for (const transition of APPROVED_MIGRATION_FILENAME_TRANSITIONS) {
+    if (transition.from.sha256 !== transition.to.sha256) {
+      throw new Error(
+        `[bootstrap] migration filename transition ${transition.from.filename} -> ${transition.to.filename} changes its digest`,
+      );
+    }
+    if (generatedSet.has(transition.from.filename)) {
+      throw new Error(
+        `[bootstrap] legacy migration filename ${transition.from.filename} is still published`,
+      );
+    }
+    if (!generatedSet.has(transition.to.filename)) {
+      throw new Error(
+        `[bootstrap] renamed migration ${transition.to.filename} is not published`,
+      );
+    }
+    const target = readFileSync(join(repoRoot, transition.to.filename), "utf8");
+    if (sha256(target) !== transition.to.sha256) {
+      throw new Error(
+        `[bootstrap] renamed migration ${transition.to.filename} does not match its approved digest`,
+      );
+    }
+  }
+}
+
+type MigrationLedgerClient = Pick<pg.PoolClient, "query">;
+
+// BEGIN migration-filename-convergence-test-surface
+export async function reconcileMigrationFilenameTransitions(
+  client: MigrationLedgerClient,
+  transitions: ReadonlyArray<MigrationFilenameTransition> = APPROVED_MIGRATION_FILENAME_TRANSITIONS,
+): Promise<void> {
+  for (const transition of transitions) {
+    if (transition.from.sha256 !== transition.to.sha256) {
+      throw new Error(
+        `[bootstrap] migration filename transition ${transition.from.filename} -> ${transition.to.filename} changes its digest`,
+      );
+    }
+
+    const recorded = await client.query<{ filename: string; sha256: string }>(
+      `select filename, sha256
+         from public._applied_migrations
+        where filename in ($1, $2)
+        order by filename
+        for update`,
+      [transition.from.filename, transition.to.filename],
+    );
+    const legacy = recorded.rows.find(
+      (row) => row.filename === transition.from.filename,
+    );
+    if (!legacy) continue;
+    if (legacy.sha256 !== transition.from.sha256) {
+      throw new Error(
+        `[bootstrap] ${transition.from.filename} changed after it was applied; refusing migration filename convergence`,
+      );
+    }
+    const canonical = recorded.rows.find(
+      (row) => row.filename === transition.to.filename,
+    );
+    if (canonical) {
+      throw new Error(
+        `[bootstrap] migration history contains both ${transition.from.filename} and ${transition.to.filename}`,
+      );
+    }
+
+    const updated = await client.query(
+      `update public._applied_migrations
+          set filename = $1
+        where filename = $2 and sha256 = $3`,
+      [transition.to.filename, transition.from.filename, transition.from.sha256],
+    );
+    if (updated.rowCount !== 1) {
+      throw new Error(
+        `[bootstrap] ${transition.from.filename} changed during migration filename convergence`,
+      );
+    }
+    console.log(
+      `[bootstrap] migration history renamed ${transition.from.filename} -> ${transition.to.filename}`,
+    );
+    console.log(`[bootstrap]   ${transition.reason}`);
+  }
+}
+// END migration-filename-convergence-test-surface
+
+async function convergeMigrationFilenames(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await reconcileMigrationFilenameTransitions(client);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -236,6 +411,8 @@ async function applyTracked(
 }
 
 async function migrate(): Promise<void> {
+  const generated = generatedMigrationFiles();
+  assertMigrationFilenameTransitionTargets(generated);
   await db.execute(sql`
     create table if not exists public._applied_migrations (
       filename text primary key,
@@ -243,9 +420,7 @@ async function migrate(): Promise<void> {
       applied_at timestamptz not null default now()
     )
   `);
-  const generated = readdirSync(join(migrationsDir, "generated"))
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  await convergeMigrationFilenames();
 
   for (const f of generated) {
     const filename = `generated/${f}`;

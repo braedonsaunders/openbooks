@@ -3,7 +3,7 @@
  *
  * The claim/run/fail/retry loops in scheduler-outbox.ts and report-delivery.ts
  * stop touching a row once its attempt ceiling is reached; before migration
- * 0006_terminal_failure_surfacing that transition was silent. Every surface
+ * 0035_terminal_failure_surfacing that transition was silent. Every surface
  * now stamps `terminal_failed_at` / `terminal_failed_by` on the poison row
  * itself — exactly once, from the single attempt whose failure exhausts the
  * ceiling, guarded by `coalesce`/`is null` inside the same UPDATE that records
