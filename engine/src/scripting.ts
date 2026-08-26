@@ -363,6 +363,15 @@ export async function runScheduledScript(
     );
   if (!s) throw new Error("script not found");
 
+  // This is the deepest execution boundary shared by the web scheduler, the
+  // queue worker, and manual Run now. A stored scheduled script must still
+  // satisfy today's parser contract immediately before its source is loaded
+  // into QuickJS; callers can therefore never execute a legacy-invalid row by
+  // bypassing the admin route.
+  if (s.triggerPoint === "scheduled") {
+    computeScheduledScriptNextRunAt(s.cron);
+  }
+
   const [org] = await db
     .select()
     .from(schema.orgs)
@@ -502,11 +511,27 @@ export async function runBulkScript(
   return outcome;
 }
 
-export function computeNextRunAt(
-  cron: string,
+export const INVALID_SCHEDULED_SCRIPT_CRON_CODE = "invalid_scheduled_script_cron";
+
+export class InvalidScheduledScriptCronError extends Error {
+  readonly code = INVALID_SCHEDULED_SCRIPT_CRON_CODE;
+
+  constructor() {
+    super("invalid cron expression");
+    this.name = "InvalidScheduledScriptCronError";
+  }
+}
+
+/**
+ * Strict parser contract for every user_scripts write and execution boundary.
+ * Invalid input is a domain error, never a nullable scheduling decision.
+ */
+export function computeScheduledScriptNextRunAt(
+  cron: string | null,
   from: Date = new Date(),
   timezone = "UTC",
-): Date | null {
+): Date {
+  if (!cron?.trim()) throw new InvalidScheduledScriptCronError();
   try {
     const expr = CronExpressionParser.parse(cron, {
       currentDate: from,
@@ -514,8 +539,96 @@ export function computeNextRunAt(
     });
     return expr.next().toDate();
   } catch {
-    return null;
+    throw new InvalidScheduledScriptCronError();
   }
+}
+
+/**
+ * Compatibility policy for payment/recurring callers that already consume a
+ * nullable result. Their behavior remains unchanged; user_scripts must use the
+ * strict contract above.
+ */
+export function computeNextRunAt(
+  cron: string,
+  from: Date = new Date(),
+  timezone = "UTC",
+): Date | null {
+  try {
+    return computeScheduledScriptNextRunAt(cron, from, timezone);
+  } catch (error) {
+    if (error instanceof InvalidScheduledScriptCronError) return null;
+    throw error;
+  }
+}
+
+export const SCHEDULED_SCRIPT_SCHEDULER_IDENTITY =
+  "scheduled-script-scheduler";
+
+/**
+ * Atomically quarantine one malformed active scheduled script and preserve
+ * both pieces of repairable configuration (cron and next_run_at). The error
+ * run is explicitly configuration evidence, not a claimed execution, while
+ * audit_log attributes the system mutation and links back to that run.
+ */
+export async function quarantineInvalidScheduledScript(input: {
+  id: string;
+  orgId: string;
+  cron: string | null;
+  nextRunAt: Date | string | null;
+}): Promise<boolean> {
+  const errorMessage = "scheduled script quarantined: invalid cron expression";
+  const quarantined = await db.execute<{ runId: string }>(sql`
+    with quarantined as (
+      update user_scripts
+         set is_active = false,
+             updated_at = now()
+       where id = ${input.id}
+         and org_id = ${input.orgId}
+         and trigger_point = 'scheduled'
+         and is_active
+         and cron is not distinct from ${input.cron}
+         and next_run_at is not distinct from ${input.nextRunAt}
+      returning id, org_id, cron, next_run_at
+    ), failure as (
+      insert into script_runs
+        (org_id, script_id, target_kind, target_id, status, logs, error_message, duration_ms, at)
+      select org_id, id, 'scheduled_configuration', null, 'error',
+             jsonb_build_array(jsonb_build_object(
+               'event', 'invalid_cron_quarantined',
+               'markedBy', ${SCHEDULED_SCRIPT_SCHEDULER_IDENTITY}::text,
+               'cron', cron,
+               'nextRunAt', next_run_at)),
+             ${errorMessage}, null, now()
+        from quarantined
+      returning id, org_id, script_id
+    ), audited as (
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      select quarantined.org_id, 'user_scripts', quarantined.id, 'update',
+             jsonb_build_object(
+               'event', 'invalid_cron_quarantined',
+               'actorKind', 'system',
+               'actor', ${SCHEDULED_SCRIPT_SCHEDULER_IDENTITY}::text,
+               'reason', ${errorMessage}::text,
+               'scriptRunId', failure.id,
+               'before', jsonb_build_object(
+                 'isActive', true,
+                 'cron', quarantined.cron,
+                 'nextRunAt', quarantined.next_run_at),
+               'after', jsonb_build_object(
+                 'isActive', false,
+                 'cron', quarantined.cron,
+                 'nextRunAt', quarantined.next_run_at)),
+             null
+        from quarantined
+        join failure on failure.script_id = quarantined.id
+      returning id
+    )
+    select failure.id as "runId"
+      from failure
+      cross join audited
+  `);
+  return quarantined.rows.length === 1;
 }
 
 export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
@@ -539,14 +652,20 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
     );
 
   for (const s of scripts) {
-    const cron = (s).cron as string | null;
-    if (!cron) {
-      await db.execute(
-        sql`update user_scripts set next_run_at = null where id = ${s.id} and org_id = ${orgId}`,
-      );
+    const cron = s.cron;
+    let next: Date;
+    try {
+      next = computeScheduledScriptNextRunAt(cron);
+    } catch (error) {
+      if (!(error instanceof InvalidScheduledScriptCronError)) throw error;
+      await quarantineInvalidScheduledScript({
+        id: s.id,
+        orgId,
+        cron,
+        nextRunAt: s.nextRunAt,
+      });
       continue;
     }
-    const next = computeNextRunAt(cron);
     await db.execute(
       sql`update user_scripts set next_run_at = ${next} where id = ${s.id} and org_id = ${orgId}`,
     );

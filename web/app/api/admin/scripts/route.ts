@@ -2,7 +2,11 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
+import {
+  computeScheduledScriptNextRunAt,
+  InvalidScheduledScriptCronError,
+  INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+} from '@openbooks/engine/src/scripting.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
@@ -10,24 +14,54 @@ export const runtime = 'nodejs'
 const TRIGGERS = ['before_submit', 'before_post', 'after_post', 'before_void', 'scheduled', 'endpoint', 'bulk', 'client']
 const SLUG_RE = /^[a-z][a-z0-9-]*$/
 
-function validate(body: Record<string, unknown>): string | null {
-  if (!body.name || String(body.name).length > 200) return 'name required'
-  if (!TRIGGERS.includes(String(body.triggerPoint))) return 'invalid trigger point'
+type ValidationError = { message: string; code?: string; field?: string }
+
+function validate(body: Record<string, unknown>): ValidationError | null {
+  if (!body.name || String(body.name).length > 200) return { message: 'name required' }
+  if (!TRIGGERS.includes(String(body.triggerPoint))) return { message: 'invalid trigger point' }
   const src = String(body.source ?? '')
-  if (!src || src.length > 100_000) return 'source required (max 100k chars)'
-  if (!/function\s+main\s*\(/.test(src)) return 'script must define function main(ctx)'
+  if (!src || src.length > 100_000) return { message: 'source required (max 100k chars)' }
+  if (!/function\s+main\s*\(/.test(src)) return { message: 'script must define function main(ctx)' }
   if (String(body.triggerPoint) === 'scheduled') {
     const cron = String(body.cron ?? '').trim()
-    if (!cron) return 'scheduled scripts require a cron expression'
-    if (cron.length > 200) return 'cron expression too long'
-    if (!computeNextRunAt(cron)) return 'invalid cron expression'
+    if (!cron) {
+      return {
+        message: 'scheduled scripts require a cron expression',
+        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+        field: 'cron',
+      }
+    }
+    if (cron.length > 200) {
+      return {
+        message: 'cron expression too long',
+        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+        field: 'cron',
+      }
+    }
+    try {
+      computeScheduledScriptNextRunAt(cron)
+    } catch (error) {
+      if (!(error instanceof InvalidScheduledScriptCronError)) throw error
+      return {
+        message: error.message,
+        code: INVALID_SCHEDULED_SCRIPT_CRON_CODE,
+        field: 'cron',
+      }
+    }
   }
   if (String(body.triggerPoint) === 'endpoint') {
     const slug = String(body.endpointSlug ?? '').trim()
-    if (!slug) return 'endpoint scripts require a URL slug'
-    if (slug.length > 80 || !SLUG_RE.test(slug)) return 'slug must be lowercase letters, digits, hyphens'
+    if (!slug) return { message: 'endpoint scripts require a URL slug' }
+    if (slug.length > 80 || !SLUG_RE.test(slug)) return { message: 'slug must be lowercase letters, digits, hyphens' }
   }
   return null
+}
+
+function validationResponse(error: ValidationError): NextResponse {
+  return NextResponse.json(
+    { error: error.message, code: error.code, field: error.field },
+    { status: error.code === INVALID_SCHEDULED_SCRIPT_CRON_CODE ? 422 : 400 },
+  )
 }
 
 export async function POST(req: Request) {
@@ -38,10 +72,10 @@ export async function POST(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   const err = validate(body)
-  if (err) return NextResponse.json({ error: err }, { status: 400 })
+  if (err) return validationResponse(err)
 
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
-  const nextRunAt = cron && body.isActive !== false ? computeNextRunAt(cron) : null
+  const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
   // A script can mint or mutate posted documents on every matching event, so
   // its creation is audited with the full row in the same transaction.
@@ -74,10 +108,10 @@ export async function PATCH(req: Request) {
   const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const err = validate(body)
-  if (err) return NextResponse.json({ error: err }, { status: 400 })
+  if (err) return validationResponse(err)
 
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
-  const nextRunAt = cron && body.isActive !== false ? computeNextRunAt(cron) : null
+  const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
   const missing = await db.transaction(async (tx) => {
     const before = (await tx.execute<Record<string, unknown>>(sql`
