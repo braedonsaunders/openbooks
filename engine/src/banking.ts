@@ -72,6 +72,16 @@ export interface BankingContext {
   [CTX]?: never;
 }
 
+/**
+ * Explicit actor for engine-initiated financial writes that no signed-in human
+ * performed — scheduled bank-feed pulls and other background jobs. Persistence
+ * sites must carry this documented id so provenance stays queryable and is
+ * never confused with a real operator; the zero UUID means "no actor at all"
+ * and must never be persisted. It has no users row and must never be granted a
+ * session, role, or credential.
+ */
+export const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000001";
+
 // ---------------------------------------------------------------------------
 // Source decoding
 // ---------------------------------------------------------------------------

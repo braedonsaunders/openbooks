@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import {
   importStatement,
+  SYSTEM_ACTOR_ID,
   type ParsedStatementLine,
   type StatementSourceEvidence,
 } from "./banking.ts";
@@ -383,15 +384,23 @@ export interface FeedSyncOutcome {
   error?: string;
 }
 
-async function syncOne(row: {
-  id: string;
-  orgId: string;
-  provider: string;
-  accountId: string;
-  credentials: string | null;
-  externalAccountId: string | null;
-  lastSyncAt: Date | string | null;
-}): Promise<FeedSyncOutcome> {
+/**
+ * Fetch and import one connection. `actorId` is the persisted provenance for
+ * every statement/audit write: the interactive caller's user id, or
+ * {@link SYSTEM_ACTOR_ID} on the scheduled path — never a placeholder.
+ */
+async function syncOne(
+  row: {
+    id: string;
+    orgId: string;
+    provider: string;
+    accountId: string;
+    credentials: string | null;
+    externalAccountId: string | null;
+    lastSyncAt: Date | string | null;
+  },
+  actorId: string,
+): Promise<FeedSyncOutcome> {
   const adapter = getBankFeedAdapter(row.provider);
   if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
   const creds = unsealJson<Record<string, string>>(row.credentials) ?? {};
@@ -416,13 +425,47 @@ async function syncOne(row: {
           currency: currency ?? undefined,
           sourceEvidence,
         },
-        { orgId: row.orgId, userId: "00000000-0000-0000-0000-000000000000" },
+        { orgId: row.orgId, userId: actorId },
       ),
     );
     imported = result.imported;
     duplicates = result.duplicates;
   }
   return { connectionId: row.id, imported, duplicates };
+}
+
+/**
+ * Record one sync attempt. `last_sync_at` is the SUCCESS watermark that
+ * `sinceFor` derives the next pull window from, so it may only move when the
+ * sync completed without error — advancing it over a failed window would make
+ * the next sync start after transactions that were never imported, dropping
+ * them permanently and invisibly. Attempt bookkeeping (result payload, error,
+ * status) is recorded either way. An empty-but-successful pull also advances:
+ * the provider provably had nothing in the window.
+ */
+async function recordSyncOutcome(
+  connection: { id: string; orgId: string },
+  outcome: FeedSyncOutcome,
+): Promise<void> {
+  const lastResult = JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates });
+  await withBypass(async () => {
+    await db.execute(outcome.error
+      ? sql`
+        update bank_feed_connections
+           set last_result = ${lastResult}::jsonb,
+               last_error = ${outcome.error},
+               status = 'error'
+         where id = ${connection.id} and org_id = ${connection.orgId}
+      `
+      : sql`
+        update bank_feed_connections
+           set last_sync_at = now(),
+               last_result = ${lastResult}::jsonb,
+               last_error = null,
+               status = 'connected'
+         where id = ${connection.id} and org_id = ${connection.orgId}
+      `);
+  });
 }
 
 /**
@@ -473,20 +516,11 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
 
     let outcome: FeedSyncOutcome;
     try {
-      outcome = await syncOne(row);
+      outcome = await syncOne(row, SYSTEM_ACTOR_ID);
     } catch (e) {
       outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
     }
-    await withBypass(async () => {
-      await db.execute(sql`
-        update bank_feed_connections
-           set last_sync_at = now(),
-               last_result = ${JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates })}::jsonb,
-               last_error = ${outcome.error ?? null},
-               status = ${outcome.error ? "error" : "connected"}
-         where id = ${row.id} and org_id = ${row.orgId}
-      `);
-    });
+    await recordSyncOutcome(row, outcome);
     outcomes.push(outcome);
   }
   return outcomes;
@@ -495,11 +529,12 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
 /**
  * Force-sync one connection now (the "Sync now" button). ctx.orgId scopes the
  * lookup: a foreign connection id fails closed before any tenant escalation
- * or statement write can occur.
+ * or statement write can occur. ctx.userId is the authenticated operator and
+ * becomes the persisted actor for every statement/audit write this sync makes.
  */
 export async function syncBankFeedNow(
   connectionId: string,
-  ctx: { orgId: string },
+  ctx: { orgId: string; userId: string },
 ): Promise<FeedSyncOutcome> {
   const row = await withBypass(async () =>
     (await db.execute<{
@@ -527,20 +562,11 @@ export async function syncBankFeedNow(
   if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   let outcome: FeedSyncOutcome;
   try {
-    outcome = await syncOne(conn);
+    outcome = await syncOne(conn, ctx.userId);
   } catch (e) {
     outcome = { connectionId, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
   }
-  await withBypass(async () => {
-    await db.execute(sql`
-      update bank_feed_connections
-         set last_sync_at = now(),
-             last_result = ${JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates })}::jsonb,
-             last_error = ${outcome.error ?? null},
-             status = ${outcome.error ? "error" : "connected"}
-       where id = ${connectionId} and org_id = ${conn.orgId}
-    `);
-  });
+  await recordSyncOutcome(conn, outcome);
   return outcome;
 }
 
