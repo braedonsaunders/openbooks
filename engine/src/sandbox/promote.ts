@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withOrg } from "../db.ts";
+import { db, schema, withMaintenanceTransaction } from "../db.ts";
 import { assertUuid } from "./catalog.ts";
 
 /**
@@ -137,7 +137,7 @@ export async function applyChangeSet(changeSetId: string): Promise<void> {
     select table_name, target_id, op, payload from change_set_items
      where change_set_id = ${changeSetId} and org_id = ${prod} order by created_at`);
 
-  await withOrg(prod, async () => {
+  await withMaintenanceTransaction(prod, async () => {
     for (const it of items.rows) {
       const t = it.table_name as string;
       const target = assertUuid(it.target_id);

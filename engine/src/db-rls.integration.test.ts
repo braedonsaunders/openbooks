@@ -2,11 +2,91 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
-import { db, env, withBypass, withBypassContext } from "./db.ts";
+import {
+  db,
+  env,
+  longPool,
+  withBypass,
+  withBypassContext,
+  withMaintenanceTransaction,
+  withOrg,
+} from "./db.ts";
 import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 const RUNTIME_DB = process.env.OPENBOOKS_RUNTIME_DB_URL;
+
+test("tenant transactions remain isolated from saturated maintenance capacity", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  const originalName = await withBypassContext(async () => {
+    const result = await db.execute<{ name: string }>(
+      sql`select name from orgs where id = ${org.orgId}`,
+    );
+    return result.rows[0]!.name;
+  });
+  const maintenanceClients = await Promise.all(
+    Array.from({ length: 4 }, () => longPool.connect()),
+  );
+  const releaseMaintenanceClients = () => {
+    for (const client of maintenanceClients.splice(0)) client.release();
+  };
+
+  try {
+    const tenantAttempt = withOrg(org.orgId, async () => {
+      const gucs = await db.execute<{ org: string; bypass: string }>(sql`
+        select current_setting('app.current_org', true) as org,
+               current_setting('app.bypass_rls', true) as bypass
+      `);
+      assert.deepEqual(gucs.rows[0], { org: org.orgId, bypass: "off" });
+
+      await withOrg(org.orgId, () =>
+        db.execute(sql`update orgs set name = 'must roll back' where id = ${org.orgId}`),
+      );
+      await assert.rejects(
+        withOrg("00000000-0000-0000-0000-000000000000", async () => {}),
+        /cannot change organization inside an active tenant transaction/,
+      );
+      throw new Error("rollback sentinel");
+    });
+
+    const tenantMaintenanceWaiters = longPool.waitingCount;
+    if (tenantMaintenanceWaiters !== 0) {
+      // Settle the accidentally queued transaction before failing so this test
+      // never leaves a waiter or relies on the pool's 30-second timeout.
+      releaseMaintenanceClients();
+      await tenantAttempt.catch(() => {});
+    }
+    assert.equal(
+      tenantMaintenanceWaiters,
+      0,
+      "a normal tenant transaction queued behind the saturated maintenance pool",
+    );
+    await assert.rejects(tenantAttempt, /rollback sentinel/);
+
+    const afterRollback = await withBypassContext(() =>
+      db.execute<{ name: string }>(sql`select name from orgs where id = ${org.orgId}`),
+    );
+    assert.equal(afterRollback.rows[0]!.name, originalName);
+
+    const maintenanceAttempt = withMaintenanceTransaction(org.orgId, async () => {
+      const gucs = await db.execute<{ org: string; bypass: string }>(
+        sql`select current_setting('app.current_org', true) as org,
+                   current_setting('app.bypass_rls', true) as bypass`,
+      );
+      assert.deepEqual(gucs.rows[0], { org: org.orgId, bypass: "off" });
+    });
+    assert.equal(
+      longPool.waitingCount,
+      1,
+      "the explicit maintenance transaction did not queue on the maintenance pool",
+    );
+    maintenanceClients.shift()!.release();
+    await maintenanceAttempt;
+  } finally {
+    releaseMaintenanceClients();
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test("database access without an explicit organization context fails closed", { skip: !DB || !RUNTIME_DB }, async () => {
   const first = await withBypass(() => createScratchOrg());
