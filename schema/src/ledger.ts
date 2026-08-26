@@ -199,8 +199,8 @@ export const journalLines = pgTable(
 );
 
 /**
- * Derived GL aggregate: per (org, account, posting month, subsidiary) debit
- * and credit totals over posted+reversed entries. Maintained by the
+ * Derived GL aggregate: per (org, account, book, posting month, subsidiary)
+ * debit and credit totals over posted+reversed entries. Maintained by the
  * order-independent journal triggers (entry insert/status-flip/date-move plus
  * per-line DML — see 0001_baseline.sql openbooks_gl_activity_*), so bulk
  * copies that interleave entries and lines still count each line exactly
@@ -215,6 +215,8 @@ export const glMonthActivity = pgTable(
   {
     orgId: orgRef(),
     accountId: uuid("account_id").notNull(),
+    /** The entry's accounting book — statements always read one book at a time. */
+    bookId: uuid("book_id").notNull(),
     /** First day of the entry's posting month (date_trunc('month', …)). */
     month: date("month").notNull(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
@@ -223,7 +225,7 @@ export const glMonthActivity = pgTable(
     lineCount: bigint("line_count", { mode: "number" }).notNull().default(0),
   },
   (t) => [
-    primaryKey({ columns: [t.orgId, t.accountId, t.month, t.subsidiaryId] }),
+    primaryKey({ columns: [t.orgId, t.accountId, t.bookId, t.month, t.subsidiaryId] }),
   ],
 );
 

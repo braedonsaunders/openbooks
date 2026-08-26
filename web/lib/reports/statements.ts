@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter } from "../gl-summary";
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
 import { ZERO, decimalSubtract } from "./decimals";
@@ -29,7 +29,7 @@ export const CREDIT_NORMAL = new Set([
   "equity",
 ]);
 
-async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string) {
+async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = await resolveOrgId(orgId);
   // The qualifying entry set (org + status + the caller's e.* predicates,
   // which reference only e.posting_date / e.org_id) materializes once via an
@@ -37,11 +37,13 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
   // inside the CTE: applied at the outer join they leave the CTE unfiltered
   // and the planner falls back to a per-account nested loop over it. The old
   // per-line join to journal_entries re-fetched the entry heap for every
-  // journal line in the tenant.
+  // journal line in the tenant. Statements answer for one accounting book —
+  // entries are book-mandatory and an unscoped read would fuse parallel books.
   const r = (await db.execute(sql`
     with e as materialized (
       select e.id from journal_entries e
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
+         and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
@@ -102,11 +104,12 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
  * accountBalances answered from the gl_month_activity summary — same row
  * shape, whole months from the aggregate, split boundary months from lines.
  */
-async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[]) {
+async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[], bookId?: string | null) {
   const buckets = glActivityBuckets(orgId, {
     minDate: from,
     maxDate: to,
     boundaries: [],
+    bookId,
   });
   // Aggregate the buckets FIRST, then join accounts to the tiny per-account
   // result — joining accounts against the raw union invites a plan that
@@ -127,14 +130,15 @@ async function summaryAccountBalances(orgId: string, from: string | null, to: st
   return r.rows as Awaited<ReturnType<typeof accountBalances>>;
 }
 
-export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string) {
+export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = await resolveOrgId(orgId);
   const rows = glSummaryEligibleDims(dims)
-    ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds)
+    ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds, bookId)
     : await accountBalances(
         sql`e.posting_date >= ${from} and e.posting_date <= ${to} and e.org_id = ${resolvedOrgId}`,
         dims,
         resolvedOrgId,
+        bookId,
       );
   const items = treeify(rows, PNL_TYPES);
   const total = (types: string[]) =>
@@ -146,9 +150,9 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
   return { items, revenue, cogs, grossProfit, expenses, netIncome: decimalSubtract(grossProfit, expenses) };
 }
 
-export async function balanceSheet(asOf: string, orgId?: string) {
+export async function balanceSheet(asOf: string, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf);
+  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf, undefined, bookId);
   const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
@@ -172,11 +176,11 @@ export async function balanceSheet(asOf: string, orgId?: string) {
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
 
-export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string) {
+export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string, bookId?: string | null) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
   if (glSummaryEligibleDims(dims)) {
     // Whole months from gl_month_activity, boundary sliver from lines.
-    const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [] });
+    const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [], bookId });
     const r = (await db.execute(sql`
       select a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
         from (
@@ -197,6 +201,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
          and posting_date <= ${asOf}
+         and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
     select a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 then l.amount else 0 end) as debits,

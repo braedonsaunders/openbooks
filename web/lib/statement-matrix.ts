@@ -3,7 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
-import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, type ActivityBoundary } from './gl-summary'
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -227,8 +227,11 @@ async function buildAmountColumns(opts: {
   dims: StatementDimFilter | undefined
   subsidiary: StatementSubsidiaryContext | undefined
   periodLabel: string
+  /** Which accounting book the columns answer for (primary when omitted). */
+  bookId?: string | null
 }): Promise<{ cols: AmountColumn[]; truncated: boolean }> {
   const { orgId, mode, period, breakout, compare, dims, subsidiary, periodLabel } = opts
+  const bookProbe = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
 
   if (breakout === 'month' || breakout === 'quarter') {
     const ranges =
@@ -262,14 +265,14 @@ async function buildAmountColumns(opts: {
            select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             where l.extra_dims ->> ${segmentKey} = sv.id::text
               and l.org_id = ${orgId}
-              and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+              and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
     `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId}
-         and not (l.extra_dims ? ${segmentKey}) and ${periodWhere}
+         and not (l.extra_dims ? ${segmentKey}) and ${periodWhere} ${bookProbe}
          and ${dimFilterSql(dims, subsidiary)} limit 1
     `))
     const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
@@ -309,14 +312,14 @@ async function buildAmountColumns(opts: {
          and exists (
          select 1 from journal_lines l
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-          where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+          where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
     `))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} and ${dimFilterSql(dims, subsidiary)}
+       where l.org_id = ${orgId} and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        limit 1
     `))
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
@@ -450,6 +453,8 @@ export async function statementMatrix(opts: {
   dims?: StatementDimFilter
   subsidiary?: StatementSubsidiaryContext
   showZero?: boolean
+  /** Which accounting book to report (the org's primary book when omitted). */
+  bookId?: string | null
   /** Emit variance columns for a compare pair (default true when comparing). */
   variance?: boolean
 }): Promise<StatementMatrix> {
@@ -468,12 +473,16 @@ export async function statementMatrix(opts: {
     dims: opts.dims,
     subsidiary: opts.subsidiary,
     periodLabel: opts.periodLabel,
+    bookId: opts.bookId,
   })
 
   // Overall window spanning every column, used to bound the base join.
   const froms = cols.map((c) => c.from).filter((x): x is string => !!x)
   const overallFrom = froms.length ? froms.reduce((a, b) => (a < b ? a : b)) : opts.period.from
   const overallTo = cols.map((c) => c.to).reduce((a, b) => (a > b ? a : b))
+  // Every report answers for exactly one accounting book — journal entries are
+  // book-mandatory and an unscoped read would fuse parallel books.
+  const baseBook = sql`and e.book_id = ${statementBookExpr(orgId, opts.bookId)}`
   const baseDate =
     opts.mode === 'balance'
       ? sql`e.posting_date <= ${overallTo}`
@@ -508,6 +517,7 @@ export async function statementMatrix(opts: {
       minDate: opts.mode === 'balance' ? null : overallFrom,
       maxDate: overallTo,
       boundaries,
+      bookId: opts.bookId,
     })
     const bucketCols = sql.join(
       cols.map((c, i) => {
@@ -554,7 +564,7 @@ export async function statementMatrix(opts: {
     res = (await db.execute<Record<string, unknown>>(sql`
       with e as materialized (
         select id, posting_date from journal_entries e
-         where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
+         where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
       )
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
         from accounts a
@@ -692,6 +702,8 @@ type MatrixOpts = {
   dims?: StatementDimFilter
   subsidiary?: StatementSubsidiaryContext
   showZero?: boolean
+  /** Which accounting book to report (the org's primary book when omitted). */
+  bookId?: string | null
 }
 
 function accountLines(matrix: StatementMatrix, types: string[]): StatementViewLine[] {
