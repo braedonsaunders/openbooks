@@ -108,6 +108,175 @@ async function rejectsInfo(fn: () => Promise<unknown>, pattern: RegExp): Promise
   });
 }
 
+type SourceFixtureOrg = Awaited<ReturnType<typeof createScratchOrg>>;
+
+/** One real posted cash source, with stable ids so lineage can be asserted. */
+async function seedInformationReturnPayment(
+  org: SourceFixtureOrg,
+  actorId: string,
+  amount: string,
+  suffix: string,
+): Promise<{ paymentId: string; journalEntryId: string; journalLineIds: string[] }> {
+  await db.execute(sql`
+    insert into vendor_roles
+      (org_id, party_id, is_t4a, information_return_form, tin_last4, tin_type,
+       created_by, updated_by)
+    values
+      (${org.orgId}, ${org.vendorId}, true, '1099-NEC', '1234', 'ein',
+       ${actorId}, ${actorId})
+    on conflict (party_id) do update set
+      is_t4a = true, information_return_form = '1099-NEC',
+      tin_last4 = '1234', tin_type = 'ein', updated_by = ${actorId}
+    where vendor_roles.org_id = ${org.orgId}
+  `);
+  const paymentId = randomUUID();
+  const journalEntryId = randomUUID();
+  const journalLineIds = [randomUUID(), randomUUID()];
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+         document_date, posting_date, currency, subtotal, tax_total, total,
+         custom, created_by, updated_by)
+      values
+        (${paymentId}, ${org.orgId}, 'vendor_payment', 'approved',
+         ${`IR-SOURCE-${suffix}`}, ${org.subsidiaryId}, ${org.vendorId},
+         ${org.date}, ${org.date}, 'CAD', ${amount}, '0', ${amount},
+         ${JSON.stringify({ bankAccountId: org.accounts.bank, allocations: [] })}::jsonb,
+         ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+         period_id, memo, status, source_document_id, origin, created_by, updated_by)
+      values
+        (${journalEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+         ${`IR-SOURCE-${suffix}`}, ${org.date}, ${org.periodId},
+         'Information-return source fixture', 'draft', ${paymentId}, 'document',
+         ${actorId}, ${actorId})
+    `);
+    await tx.execute(sql`
+      insert into journal_lines
+        (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, party_id, is_open_item, memo)
+      values
+        (${journalLineIds[0]!}, ${org.orgId}, ${journalEntryId}, 1,
+         ${org.accounts.ap}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1,
+         ${org.vendorId}, true, 'Information-return payment control'),
+        (${journalLineIds[1]!}, ${org.orgId}, ${journalEntryId}, 2,
+         ${org.accounts.bank}, ${org.subsidiaryId}, ${`-${amount}`}, 'CAD',
+         ${`-${amount}`}, 1, null, false, 'Information-return cash source')
+    `);
+    await tx.execute(sql`
+      update journal_entries
+         set status = 'posted', posted_at = now(), posted_by = ${actorId}
+       where org_id = ${org.orgId} and id = ${journalEntryId}
+    `);
+    await tx.execute(sql`
+      update documents
+         set status = 'posted', posted_entry_id = ${journalEntryId},
+             posting_period_id = ${org.periodId}
+       where org_id = ${org.orgId} and id = ${paymentId}
+    `);
+  });
+  return { paymentId, journalEntryId, journalLineIds };
+}
+
+test(
+  "finalize rejects a filing whose authoritative cash sources changed after recomputation",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const original = await seedInformationReturnPayment(org, actorId, "1000", "STALE-ORIGINAL");
+      const filing = await ensureFiling({
+        orgId: org.orgId,
+        taxYear: 2026,
+        formType: "1099-NEC",
+        currency: "CAD",
+        actorId,
+      });
+      await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+      const before = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
+        select recipient_snapshot from information_return_recipients
+         where org_id = ${org.orgId} and filing_id = ${filing.id}
+      `)).rows[0]!.recipient_snapshot;
+
+      const late = await seedInformationReturnPayment(org, actorId, "250", "STALE-LATE");
+      await rejectsInfo(
+        () => finalizeFiling({ orgId: org.orgId, filingId: filing.id, actorId }),
+        /authoritative cash-source evidence changed after computation/,
+      );
+
+      const state = await filingRow(org.orgId, filing.id);
+      assert.equal(state.status, "computed");
+      assert.equal(state.finalized_at, null);
+      assert.deepEqual(await auditActions(org.orgId, filing.id), ["compute"]);
+      const after = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
+        select recipient_snapshot from information_return_recipients
+         where org_id = ${org.orgId} and filing_id = ${filing.id}
+      `)).rows[0]!.recipient_snapshot;
+      assert.deepEqual(after, before, "stale refusal must not rewrite the reviewed evidence");
+      assert.deepEqual(after.paymentIds, [original.paymentId]);
+      assert.equal((after.paymentIds as string[]).includes(late.paymentId), false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "finalize accepts a current source generation and freezes its exact lineage",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const source = await seedInformationReturnPayment(org, actorId, "1000", "CURRENT");
+      const filing = await ensureFiling({
+        orgId: org.orgId,
+        taxYear: 2026,
+        formType: "1099-NEC",
+        currency: "CAD",
+        actorId,
+      });
+      const { computation } = await recomputeFiling({
+        orgId: org.orgId,
+        filingId: filing.id,
+        actorId,
+      });
+      assert.deepEqual(computation.recipients[0]!.paymentIds, [source.paymentId]);
+
+      const before = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
+        select recipient_snapshot from information_return_recipients
+         where org_id = ${org.orgId} and filing_id = ${filing.id}
+      `)).rows[0]!.recipient_snapshot;
+      assert.deepEqual(before.paymentIds, [source.paymentId]);
+      const traces = before.paymentTraces as Array<{
+        paymentId: string;
+        journalEntryId: string;
+        journalLineIds: string[];
+      }>;
+      assert.equal(traces[0]!.paymentId, source.paymentId);
+      assert.equal(traces[0]!.journalEntryId, source.journalEntryId);
+      assert.deepEqual(traces[0]!.journalLineIds, [...source.journalLineIds].sort());
+      assert.match(String(before.sourceFingerprint), /^[a-f0-9]{64}$/);
+
+      await finalizeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+      assert.equal((await filingRow(org.orgId, filing.id)).status, "finalized");
+      assert.deepEqual(await auditActions(org.orgId, filing.id), ["compute", "finalize"]);
+      const frozen = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
+        select recipient_snapshot from information_return_recipients
+         where org_id = ${org.orgId} and filing_id = ${filing.id}
+      `)).rows[0]!.recipient_snapshot;
+      assert.deepEqual(frozen, before);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test("the filing lifecycle refuses to cross finalize/file and leaves frozen storage untouched", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
