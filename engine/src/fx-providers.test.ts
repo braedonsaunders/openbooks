@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass } from "./db.ts";
 import {
   computeNextSyncAt,
@@ -293,6 +293,123 @@ test(
       globalThis.fetch = originalFetch;
       await close(redirector);
       await close(attacker);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+// A worker killed mid-run leaves its row at 'running', and
+// fx_provider_runs_one_running then rejects every future run for that config
+// forever — stale exchange rates plus an operator-facing "already in progress"
+// error. Recovery must reclaim crashed rows by age while a genuinely live run
+// still excludes concurrency.
+test(
+  "a crashed run's stale row is reclaimed instead of blocking synchronization forever",
+  { skip: !DB },
+  async () => {
+    const provider = createServer((req, res) => {
+      const today = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{ d: today, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      for (const code of ["USD", "EUR"]) {
+        await db.execute(sql`
+          insert into currencies (code, name, minor_units) values (${code}, ${code}, 2)
+          on conflict (code) do nothing`);
+      }
+      await db.execute(sql`
+        update orgs set settings = settings || '{"features":{"multiCurrency":true}}'::jsonb
+         where id = ${org.orgId}`);
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
+      await saveFxProviderConfig(org.orgId, actorId, {
+        provider: "bank_of_canada",
+        baseCurrency: "CAD",
+        currencies: ["USD", "EUR"],
+        schedule: "manual",
+        syncHourUtc: 0,
+        lookbackDays: 7,
+        isEnabled: true,
+        apiKey: null,
+      });
+      const config = await db.execute<{ id: string }>(sql`
+        select id from fx_provider_configs where org_id = ${org.orgId}`);
+      const configId = config.rows[0]!.id;
+
+      async function plantRunningRow(startedAt: SQL): Promise<void> {
+        await db.execute(sql`
+          insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, started_at)
+          values (${org.orgId}, ${configId}, 'scheduler', current_date - 7, current_date, ${startedAt})
+        `);
+      }
+      async function runRows(): Promise<Array<{ status: string; error_message: string | null }>> {
+        const r = await db.execute<{ status: string; error_message: string | null }>(sql`
+          select status, error_message from fx_provider_runs
+           where org_id = ${org.orgId} order by started_at asc, id asc`);
+        return r.rows;
+      }
+
+      // Crash stage one: the worker died before fetching anything.
+      await plantRunningRow(sql`now() - interval '45 minutes'`);
+      const recovered = await runFxProvider(org.orgId, "test");
+      assert.equal(recovered.observationsReceived, 1, "the stale row must not block the new run");
+
+      const rows = await runRows();
+      assert.equal(rows.length, 2);
+      assert.match(rows[0]!.error_message ?? "", /crashed|killed/i, "the abandonment must be operator-visible");
+      assert.equal(rows[0]!.status, "failed");
+      assert.equal(rows[1]!.status, "ok");
+
+      // Control: a fresh running row still excludes concurrent runs.
+      await plantRunningRow(sql`now()`);
+      await assert.rejects(runFxProvider(org.orgId, "test"), /already in progress/);
+      // Age the control past the recovery budget so the next run reclaims it,
+      // exactly as time itself would.
+      await db.execute(sql`
+        update fx_provider_runs set started_at = now() - interval '45 minutes'
+         where org_id = ${org.orgId} and status = 'running'`);
+
+      // Crash stage two: this time rates had already committed before the crash.
+      const firstSync = await runFxProvider(org.orgId, "manual");
+      assert.equal(firstSync.ratesInserted, 6, "CAD/EUR/USD materialize every directed pair");
+
+      await plantRunningRow(sql`now() - interval '45 minutes'`);
+      await db.execute(sql`
+        update fx_rates set source = 'manual', rate = 99.0
+         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`);
+
+      const secondSync = await runFxProvider(org.orgId, "manual");
+      assert.equal(secondSync.ratesInserted, 0, "retry after a post-commit crash stays idempotent");
+      assert.equal(secondSync.ratesUpdated, 5);
+      assert.equal(secondSync.manualOverridesPreserved, 1, "manual overrides survive the recovery path");
+      const overridden = await db.execute<{ rate: string }>(sql`
+        select rate::text from fx_rates
+         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`);
+      assert.ok(Number(overridden.rows[0]!.rate) > 90, "the manual override value must be untouched");
+
+      const finalRows = await runRows();
+      const abandoned = finalRows.filter((row) => (row.error_message ?? "").includes("abandoned"));
+      assert.equal(abandoned.length, 3, "every planted stale row ends reclaimed and failed");
+      assert.ok(abandoned.every((row) => row.status === "failed"));
+      assert.equal(finalRows.at(-1)!.status, "ok");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
