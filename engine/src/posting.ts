@@ -25,8 +25,10 @@ import {
   CloseError,
 } from "./close.ts";
 import {
+  applyBillInventoryReceipts,
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
+  assertBillReceiptsPostable,
   resolveBillInventoryAccounts,
 } from "./inventory.ts";
 import { createObligationsFromInvoice, revenueRecognitionFeatureEnabled } from "./revenue-recognition.ts";
@@ -1292,6 +1294,16 @@ export async function postDocument(
       ),
     };
   }
+  if (doc.kind === "vendor_bill" && !deps.migration) {
+    try {
+      await assertBillReceiptsPostable(db, doc.orgId, doc.id);
+    } catch (error) {
+      if (error instanceof PostingError) throw error;
+      throw new PostingError(
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
 
   const lines = await db
     .select()
@@ -1635,6 +1647,27 @@ export async function postDocument(
         before: auditBefore,
         after: auditAfter,
       });
+    }
+
+    // AP, the bill GL, and every inventory receipt are one accounting unit.
+    // A later receipt failure rolls back the document and all earlier stock.
+    if (doc.kind === "vendor_bill" && !deps.migration) {
+      try {
+        await applyBillInventoryReceipts(
+          tx,
+          doc.orgId,
+          options.audit?.actorId ?? null,
+          doc.id,
+          entry.id,
+          postingDate,
+          subApplied.docSubId,
+        );
+      } catch (error) {
+        if (error instanceof PostingError) throw error;
+        throw new PostingError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     // Product subledgers drain after commit. Write the outbox row in this

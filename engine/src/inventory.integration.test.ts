@@ -38,6 +38,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "./test-fixtures.ts";
+import { postDocument } from "./posting.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -70,6 +71,188 @@ async function assertInvariant(org: ScratchOrg): Promise<void> {
   assert.equal(toUnits(gl), toUnits(layers), `inventory GL ${gl} != Σ layer value ${layers}`);
   await assertAllEntriesBalance(org.orgId);
 }
+
+async function draftApprovedInventoryBill(
+  org: ScratchOrg,
+  lines: Array<{
+    itemId: string;
+    quantity: string;
+    unitPrice: string;
+    amount: string;
+    stockLocationId?: string;
+  }>,
+): Promise<string> {
+  const documentId = randomUUID();
+  const total = fromUnits(
+    lines.reduce((sum, line) => sum + toUnits(line.amount), 0n),
+  );
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, party_id, subsidiary_id,
+       document_date, posting_date, currency, fx_rate, status,
+       subtotal, tax_total, total, custom)
+    values (${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-RECEIPT-ATOMIC',
+            ${org.vendorId}, null, ${org.date}, ${org.date}, 'CAD', 1,
+            'approved', ${total}, '0', ${total}, '{}'::jsonb)`);
+  for (const [index, line] of lines.entries()) {
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, item_id, account_id, quantity,
+         unit_price, amount, tax_amount, is_billable, quantity_fulfilled,
+         quantity_billed, stock_location_id, custom, tax_overridden)
+      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${index + 1},
+              ${line.itemId}, null, ${line.quantity}, ${line.unitPrice},
+              ${line.amount}, '0', false, '0', '0',
+              ${line.stockLocationId ?? org.stockLocationId}, '{}'::jsonb,
+              false)`);
+  }
+  return documentId;
+}
+
+async function createSubsidiaryRestrictedStockLocation(
+  org: ScratchOrg,
+): Promise<string> {
+  const subsidiaryId = randomUUID();
+  const locationId = randomUUID();
+  const stockLocationId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries
+      (id, org_id, parent_id, name, base_currency, country, tax_ids,
+       is_elimination, is_active, custom)
+    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId},
+            'Receipt Failure Subsidiary', 'CAD', 'CA', '{}'::jsonb,
+            false, true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into locations
+      (id, org_id, code, name, is_active, custom,
+       subsidiary_include_children, subsidiary_id)
+    values (${locationId}, ${org.orgId}, 'FAIL-RECEIPT',
+            'Receipt Failure Warehouse', true, '{}'::jsonb, true,
+            ${subsidiaryId})`);
+  await db.execute(sql`
+    insert into stock_locations
+      (id, org_id, location_id, code, kind, is_active)
+    values (${stockLocationId}, ${org.orgId}, ${locationId}, 'RESTRICTED',
+            'warehouse', true)`);
+  return stockLocationId;
+}
+
+async function billInventoryResidue(
+  orgId: string,
+  documentId: string,
+): Promise<{
+  status: string;
+  movements: number;
+  layers: number;
+  sourceEntries: number;
+  effectRows: number;
+}> {
+  const result = (await db.execute<{
+    status: string;
+    movements: number;
+    layers: number;
+    source_entries: number;
+    effect_rows: number;
+  }>(sql`
+    select d.status,
+           (select count(*)::int
+              from inventory_movements m
+              join document_lines dl on dl.id = m.document_line_id
+             where dl.document_id = d.id and m.org_id = d.org_id) as movements,
+           (select count(*)::int
+              from cost_layers cl
+              join inventory_movements m on m.id = cl.source_movement_id
+              join document_lines dl on dl.id = m.document_line_id
+             where dl.document_id = d.id and cl.org_id = d.org_id) as layers,
+           (select count(*)::int from journal_entries e
+             where e.org_id = d.org_id and e.source_document_id = d.id) as source_entries,
+           (select count(*)::int from posting_effects pe
+             where pe.org_id = d.org_id and pe.document_id = d.id) as effect_rows
+      from documents d
+     where d.org_id = ${orgId} and d.id = ${documentId}`));
+  const row = result.rows[0]!;
+  return {
+    status: row.status,
+    movements: row.movements,
+    layers: row.layers,
+    sourceEntries: row.source_entries,
+    effectRows: row.effect_rows,
+  };
+}
+
+test("vendor-bill receipt lines post atomically and a repaired bill retries cleanly", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const restrictedLocationId =
+      await createSubsidiaryRestrictedStockLocation(org);
+    const billId = await draftApprovedInventoryBill(org, [
+      {
+        itemId: org.items.fifo,
+        quantity: "10",
+        unitPrice: "2",
+        amount: "20",
+      },
+      {
+        itemId: org.items.movingAvg,
+        quantity: "5",
+        unitPrice: "3",
+        amount: "15",
+        stockLocationId: restrictedLocationId,
+      },
+    ]);
+    const deps = {
+      control: {
+        ar: org.accounts.ar,
+        ap: org.accounts.ap,
+        bank: org.accounts.bank,
+      },
+    };
+
+    // The second line fails only after the first receipt has executed. The
+    // bill, every receipt/layer, its GL, and its durable effect must roll back.
+    await assert.rejects(() => postDocument(billId, deps), /restricted/i);
+    assert.deepEqual(await billInventoryResidue(org.orgId, billId), {
+      status: "approved",
+      movements: 0,
+      layers: 0,
+      sourceEntries: 0,
+      effectRows: 0,
+    });
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.ap)), 0n);
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.invAsset)), 0n);
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), 0n);
+
+    await db.execute(sql`
+      update locations
+         set subsidiary_id = null
+       where org_id = ${org.orgId}
+         and id = (
+           select location_id from stock_locations
+            where org_id = ${org.orgId} and id = ${restrictedLocationId}
+         )`);
+    assert.ok(await postDocument(billId, deps));
+
+    assert.deepEqual(await billInventoryResidue(org.orgId, billId), {
+      status: "posted",
+      movements: 2,
+      layers: 2,
+      sourceEntries: 1,
+      effectRows: 1,
+    });
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.ap)),
+      toUnits("-35"),
+    );
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.invAsset)),
+      toUnits("35"),
+    );
+    assert.equal(toUnits(await glBalance(org.orgId, org.accounts.clearing)), 0n);
+    await assertInvariant(org);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("inventory subledger posts, costs, and keeps GL = Σ layer value", { skip: !DB }, async () => {
   const org = await createScratchOrg();
