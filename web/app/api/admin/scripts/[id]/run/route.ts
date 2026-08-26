@@ -24,6 +24,11 @@ function invalidCronResponse(error: InvalidScheduledScriptCronError): NextRespon
  *   scheduled: run immediately, then advance the cron schedule.
  *   bulk:      hand to the worker via the scripts queue (durable, 30 s budget);
  *              when Redis is down the run happens inline as a fallback.
+ * The authenticated caller is attributed on every path — queued via
+ * ScriptJobData.actorId, inline via opts.actorId — and the runner re-resolves
+ * it into script_runs.created_by and any journal actor. This route never runs
+ * unattributed: without an actor its material operations would be
+ * indistinguishable from system automation.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
@@ -44,8 +49,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         const job = await enqueueScriptRun({ orgId: user.orgId, scriptId: id, kind: 'bulk', actorId: user.id })
         return NextResponse.json({ queued: true, jobId: job.id })
       } catch {
-        // Redis unavailable — run inline so "Run now" still works in dev.
-        const outcome = await runBulkScript(id, user.orgId)
+        // Redis unavailable — run inline so "Run now" still works in dev,
+        // under the same authenticated actor as the queued path.
+        const outcome = await runBulkScript(id, user.orgId, { actorId: user.id })
         return NextResponse.json({ queued: false, ...outcome })
       }
     }
@@ -62,7 +68,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    const outcome = await runScheduledScript(id, user.orgId)
+    const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id })
     // Advance next_run_at for scheduled scripts
     if (next) {
       await db.execute(sql`update user_scripts set next_run_at = ${next} where id = ${id} and org_id = ${user.orgId}`)

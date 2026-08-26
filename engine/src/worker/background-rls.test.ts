@@ -52,9 +52,15 @@ const ENTRY_POINTS: Array<{ file: string; entry: string }> = [
   { file: "./sandbox-scheduler.ts", entry: "export async function tick" },
   { file: "./overhead-scheduler.ts", entry: "export async function tick" },
   { file: "../backup.ts", entry: "export async function executeBackupRun" },
-  // BullMQ job handlers — a queue callback has no request store either
+  // BullMQ job handlers — a queue callback has no request store either.
+  // Where a handler's DB work lives behind one shared helper export, the
+  // helper itself is the load-bearing boundary and is what gets scanned
+  // (scanning the thin Worker constructor would verify nothing).
   { file: "./email-worker.ts", entry: "export function createEmailWorker" },
-  { file: "./scripts-worker.ts", entry: "export function createScriptsWorker" },
+  {
+    file: "./scripts-worker.ts",
+    entry: "export async function processScriptJobData",
+  },
   { file: "./ap-capture-worker.ts", entry: "export function createApCaptureWorker" },
   { file: "./close-delivery-worker.ts", entry: "export function createCloseDeliveryWorker" },
   { file: "./reports-worker.ts", entry: "export function createReportsWorker" },
