@@ -229,6 +229,7 @@ export function OrderDrawer({
   subsidiaries,
   segments,
   canManage,
+  canOverrideCredit = false,
   layout,
 }: {
   order: OrderPayload
@@ -244,6 +245,8 @@ export function OrderDrawer({
   subsidiaries: Opt[]
   segments: SegmentOption[]
   canManage: boolean
+  /** AR approvers may supply a reasoned credit-limit exception after refusal. */
+  canOverrideCredit?: boolean
   layout?: FormLayoutConfig
 }) {
   const { money } = useMoney()
@@ -446,16 +449,41 @@ export function OrderDrawer({
     setMode('view')
   }
 
-  async function setStatus(status: 'approved' | 'voided', reason?: string) {
+  async function setStatus(
+    status: 'approved' | 'voided',
+    reason?: string,
+    creditOverrideReason?: string,
+  ) {
     setBusy(true)
     const res = await fetch(`${apiBase}/${doc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, reason, expectedUpdatedAt: revisionRef.current }),
+      body: JSON.stringify({
+        status,
+        reason,
+        creditOverrideReason,
+        expectedUpdatedAt: revisionRef.current,
+      }),
     })
     const data = await res.json()
     setBusy(false)
     if (!res.ok) {
+      if (
+        status === 'approved'
+        && kind === 'sales_order'
+        && canOverrideCredit
+        && !creditOverrideReason
+        && data.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
+      ) {
+        const overrideReason = await promptDialog({
+          title: t('creditOverrideTitle'),
+          label: t('creditOverrideReasonLabel'),
+          placeholder: t('creditOverrideReasonPlaceholder'),
+          confirmLabel: t('creditOverrideConfirm'),
+        })
+        if (overrideReason) await setStatus(status, reason, overrideReason)
+        return
+      }
       toast.error(data.error ?? t('actionFailed'))
       return
     }
@@ -529,16 +557,39 @@ export function OrderDrawer({
     }
   }
 
-  async function convert(targetKind: string, label: string) {
+  async function convert(
+    targetKind: string,
+    label: string,
+    creditOverrideReason?: string,
+  ) {
     setBusy(true)
     const res = await fetch(`${apiBase}/${doc.id}/convert`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetKind, expectedUpdatedAt: revisionRef.current }),
+      body: JSON.stringify({
+        targetKind,
+        creditOverrideReason,
+        expectedUpdatedAt: revisionRef.current,
+      }),
     })
     const data = await res.json()
     setBusy(false)
     if (!res.ok) {
+      if (
+        targetKind === 'sales_order'
+        && canOverrideCredit
+        && !creditOverrideReason
+        && data.code === 'CUSTOMER_CREDIT_LIMIT_EXCEEDED'
+      ) {
+        const overrideReason = await promptDialog({
+          title: t('creditOverrideTitle'),
+          label: t('creditOverrideReasonLabel'),
+          placeholder: t('creditOverrideReasonPlaceholder'),
+          confirmLabel: t('creditOverrideConfirm'),
+        })
+        if (overrideReason) await convert(targetKind, label, overrideReason)
+        return
+      }
       toast.error(data.error ?? t('convertFailed'))
       return
     }

@@ -14,6 +14,10 @@ import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import {
+  issueSalesOrder,
+  SalesOrderIssueError,
+} from '@openbooks/engine/src/sales-orders.ts'
+import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/document-void.ts'
@@ -85,6 +89,8 @@ interface OrderPatchBody {
   lines?: OrderLineInput[]
   status?: 'approved' | 'voided'
   reason?: string
+  /** Reasoned, AR-approver-only exception when issuance exceeds customer credit. */
+  creditOverrideReason?: string
   reversalDate?: string | null
 }
 
@@ -216,24 +222,29 @@ export function makePATCH(cfg: OrderHandlerConfig) {
               { status: 422 },
             )
           }
+          let submission: Awaited<ReturnType<typeof submitAndReleaseIfUngated>>
           if (cfg.kind === 'sales_order') {
-            const hold = (await db.execute<{ hold_reason: string | null }>(sql`
-              select hold_reason
-                from customer_roles
-               where org_id = ${user.orgId} and party_id = ${current.party_id}
-                 and is_active and is_on_hold
-               limit 1
-            `))
-            if (hold.rows[0]) {
-              return NextResponse.json(
-                {
-                  error: `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ''}`,
-                },
-                { status: 422 },
-              )
+            try {
+              const issued = await issueSalesOrder({
+                orgId: user.orgId,
+                salesOrderId: id,
+                actorId: user.id,
+                expectedUpdatedAt: body.expectedUpdatedAt!,
+                creditOverrideReason: body.creditOverrideReason,
+              })
+              submission = issued.submission
+            } catch (error) {
+              if (error instanceof SalesOrderIssueError) {
+                return NextResponse.json(
+                  { error: error.message, code: error.code, credit: error.details },
+                  { status: error.status },
+                )
+              }
+              throw error
             }
+          } else {
+            submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
           }
-          const submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
           if (submission.flowError) {
             return NextResponse.json(
               { error: `approval could not be routed: ${submission.flowError}` },
@@ -486,7 +497,11 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     const { id } = await params
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as { targetKind?: string; expectedUpdatedAt?: string }
+    const body = parsedBody.data as {
+      targetKind?: string
+      expectedUpdatedAt?: string
+      creditOverrideReason?: string
+    }
     if (!body.targetKind) return NextResponse.json({ error: 'targetKind required' }, { status: 400 })
 
     // Scope check: the source must be this kind, in the caller's org, and
@@ -505,11 +520,19 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     }
 
     try {
-      const res = await convertOrder(user.orgId, user.id, id, body.targetKind)
+      const res = await convertOrder(user.orgId, user.id, id, body.targetKind, {
+        creditOverrideReason: body.creditOverrideReason,
+      })
       return NextResponse.json(res)
     } catch (e) {
       if (e instanceof ConversionError) {
         return NextResponse.json({ error: e.message }, { status: e.status })
+      }
+      if (e instanceof SalesOrderIssueError) {
+        return NextResponse.json(
+          { error: e.message, code: e.code, credit: e.details },
+          { status: e.status },
+        )
       }
       return NextResponse.json({ error: (e as Error).message }, { status: 500 })
     }

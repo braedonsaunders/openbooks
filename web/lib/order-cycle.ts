@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from './bills'
 import {
   ORDER_KINDS,
@@ -16,6 +16,7 @@ import { remainingOrderLine } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
 import { applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
+import { issueSalesOrder } from '@openbooks/engine/src/sales-orders.ts'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -452,12 +453,13 @@ export async function convertOrder(
   userId: string,
   sourceId: string,
   targetKind: string,
+  options: { creditOverrideReason?: string } = {},
 ): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
   if (targetKind === SALES_FULFILLMENT_KIND) {
     return fulfillSalesOrderRemainder(orgId, userId, sourceId)
   }
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
              subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method
@@ -549,8 +551,11 @@ export async function convertOrder(
 
     const documentNumber = await nextDocumentNumber(orgId, target.kind, target.prefix, doc.subsidiary_id)
     const isOrder = ORDER_KINDS.includes(target.kind as OrderKind)
-    // Downstream orders (quote→SO) start issued; posting docs start as drafts.
-    const targetStatus = isOrder ? 'approved' : 'draft'
+    // A quote→sales-order conversion crosses the same authoritative issuance
+    // boundary as the sales-order drawer below, so it starts draft and is
+    // issued only after the customer credit decision. Other downstream orders
+    // retain their established issued status; posting documents start draft.
+    const targetStatus = target.kind === 'sales_order' ? 'draft' : isOrder ? 'approved' : 'draft'
     // Keep the source commercial date. A UTC "today" here both shifted the
     // cutoff for orgs behind UTC and dropped the order's own date.
     const documentDate = String(doc.document_date)
@@ -678,6 +683,19 @@ export async function convertOrder(
       values (${orgId}, ${sourceId}, ${newId}, ${target.link}, ${userId})
     `)
 
+    if (target.kind === 'sales_order') {
+      const revision = (await tx.execute<{ updated_at: Date }>(sql`
+        select updated_at from documents where id = ${newId} and org_id = ${orgId}
+      `)).rows[0]!.updated_at
+      await issueSalesOrder({
+        orgId,
+        salesOrderId: newId,
+        actorId: userId,
+        expectedUpdatedAt: revision.toISOString(),
+        creditOverrideReason: options.creditOverrideReason,
+      })
+    }
+
     const opportunityLink = (await tx.execute<{ opportunity_id: string }>(sql`
       select opportunity_id from crm_opportunity_documents
        where document_id = ${sourceId} and org_id = ${orgId}
@@ -700,5 +718,5 @@ export async function convertOrder(
     }
 
     return { id: newId, documentNumber, kind: target.kind }
-  })
+  }))
 }
