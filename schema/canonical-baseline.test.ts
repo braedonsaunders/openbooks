@@ -40,6 +40,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0014_flow_email_outbox.sql",
     "0015_payment_instruction_posting_claim_fence.sql",
     "0016_gl_month_activity_book_id.sql",
+    "0020_inventory_subsidiary_ownership.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

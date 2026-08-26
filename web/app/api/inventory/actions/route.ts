@@ -12,6 +12,7 @@ import {
   reverseInventoryMovement,
   transferInventory,
   InventoryError,
+  InventoryOwnershipError,
 } from '@openbooks/engine/src/inventory.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -83,7 +84,8 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ ok: true, ...res })
     } catch (e: unknown) {
-      const status = e instanceof InventoryError ? 422 : 500
+      const status =
+        e instanceof InventoryOwnershipError ? 403 : e instanceof InventoryError ? 422 : 500
       return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
     }
   }
@@ -202,7 +204,10 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...res })
   } catch (e: unknown) {
-    const status = e instanceof InventoryError ? 422 : 500
+    // A cross-entity inventory attempt is refused as an authorization
+    // failure, mirroring the subsidiary permission gate above.
+    const status =
+      e instanceof InventoryOwnershipError ? 403 : e instanceof InventoryError ? 422 : 500
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
   }
 }

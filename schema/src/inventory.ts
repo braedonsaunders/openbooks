@@ -125,6 +125,10 @@ export const inventoryMovements = pgTable(
   {
     id: id(),
     orgId: orgRef(),
+    /** Owning legal entity: every movement books into exactly one subsidiary,
+     *  so a subledger position can always be corroborated against the
+     *  per-subsidiary GL balance the kernel trigger enforces. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     itemId: uuid("item_id").notNull(),
     kind: text("kind", {
       enum: ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "return"],
@@ -188,6 +192,10 @@ export const costLayers = pgTable(
   {
     id: id(),
     orgId: orgRef(),
+    /** Legal entity that owns this stock; equals the source receipt movement's
+     *  entity (storage-enforced), and every consumption of the layer must
+     *  carry the same entity. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     itemId: uuid("item_id").notNull(),
     stockLocationId: uuid("stock_location_id").notNull(),
     sourceMovementId: uuid("source_movement_id").notNull(),
@@ -208,6 +216,9 @@ export const costLayerConsumptions = pgTable(
   {
     id: id(),
     orgId: orgRef(),
+    /** Entity of BOTH the consumed layer and the consuming issue movement;
+     *  composite foreign keys make a cross-entity consumption unrepresentable. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
     costLayerId: uuid("cost_layer_id").notNull(),
     issueMovementId: uuid("issue_movement_id").notNull(),
     quantity: money("quantity").notNull(),
