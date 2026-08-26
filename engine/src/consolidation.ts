@@ -99,11 +99,19 @@ async function runOwnershipConsolidationIn(
   `));
   const bookId = bookResult.rows[0]?.id;
   if (!bookId) throw new ConsolidationError("no active primary accounting book is configured");
+  // FOR SHARE pins every policy row this generation consumes for the whole
+  // transaction: a material policy edit (ownership_interest_guard's
+  // immutability tuple) must own the row exclusively, so it waits until the
+  // run commits and then faces the used-policy check against the committed
+  // evidence — and under REPEATABLE READ an edit that already committed makes
+  // this locking read fail with a serialization error instead of silently
+  // computing a generation from superseded terms.
   const interests = (await tx.execute<OwnershipInterest>(sql`
     select * from subsidiary_ownership_interests
      where org_id=${orgId} and is_active and effective_from <= ${period.ends_on}
        and (effective_to is null or effective_to >= ${period.starts_on})
      order by subsidiary_id, effective_from
+     for share
   `));
   const run = (await tx.execute<{ id: string }>(sql`
     insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)

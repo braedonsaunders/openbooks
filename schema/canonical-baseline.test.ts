@@ -28,6 +28,8 @@ const subsidiaryTreeGuardSerializationMigrationPath =
   "schema/migrations/generated/0045_subsidiary_tree_guard_serialization.sql";
 const segmentValueHierarchySerializationMigrationPath =
   "schema/migrations/generated/0047_segment_value_hierarchy_serialization.sql";
+const ownershipPolicyFirstUseSerializationMigrationPath =
+  "schema/migrations/generated/0050_ownership_policy_first_use_serialization.sql";
 const documentTenantForeignKeysMigrationPath =
   "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
 const ledgerTenantCoherenceMigrationPath =
@@ -77,6 +79,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
     "0047_segment_value_hierarchy_serialization.sql",
+    "0050_ownership_policy_first_use_serialization.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -486,6 +489,29 @@ test("segment value hierarchy mutations serialize before their cycle recheck", (
     /WITH RECURSIVE descendants AS[\s\S]*WHERE value\.org_id = NEW\.org_id[\s\S]*AND value\.segment_id = NEW\.segment_id/,
   );
   assert.match(migration, /COMMENT ON FUNCTION public\.segment_value_guard\(\) IS/);
+});
+
+test("ownership evidence insertion serializes with the policy's first use", () => {
+  const migration = readFileSync(ownershipPolicyFirstUseSerializationMigrationPath, "utf8");
+
+  assert.match(
+    migration,
+    /CREATE OR REPLACE FUNCTION public\.ownership_evidence_policy_fence\(\) RETURNS trigger\s+LANGUAGE plpgsql VOLATILE/,
+  );
+  // The lock must precede every other read and be an explicit FOR SHARE:
+  // the FK's implicit FOR KEY SHARE does not conflict with material
+  // (non-key) policy updates, which is exactly the first-use race.
+  assert.match(
+    migration,
+    /FROM public\.subsidiary_ownership_interests policy\s+WHERE policy\.id = NEW\.interest_id\s+AND policy\.org_id = NEW\.org_id\s+FOR SHARE/,
+  );
+  assert.match(migration, /ERRCODE = '23503'/);
+  assert.match(
+    migration,
+    /CREATE TRIGGER ownership_evidence_policy_fence\s+BEFORE INSERT ON public\.ownership_consolidation_entries/,
+  );
+  assert.match(migration, /COMMENT ON FUNCTION public\.ownership_evidence_policy_fence\(\) IS/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("ledger headers, lines, and trigger reads are tenant coherent", () => {

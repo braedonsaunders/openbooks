@@ -9,17 +9,129 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  type ScratchOrg,
 } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 type TreeUpdateResult = PromiseSettledResult<QueryResult>;
 
+/** Poll until some other backend is waiting on a lock held by `blockerPid`. */
+async function waitForBlockedBy(blockerPid: number, hint: string): Promise<number> {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const state = await pool.query<{ pid: number }>(
+      "select pid from pg_stat_activity where pg_blocking_pids(pid) @> array[$1::int]::int[] and pid <> $1",
+      [blockerPid],
+    );
+    if (state.rows[0]) return Number(state.rows[0]!.pid);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for a backend blocked by ${blockerPid} (${hint})`);
+}
+
+/**
+ * Minimal first-use ownership fixture: one 80%-owned CAD child with posted
+ * opening equity (1000) and period profit (100), one elimination subsidiary,
+ * the seven consolidation accounts, and one active full-method policy.
+ */
+async function seedOwnershipConsolidationFixture(org: ScratchOrg): Promise<{
+  childId: string;
+  eliminationId: string;
+  interestId: string;
+  accounts: Map<string, string>;
+}> {
+  const childId = randomUUID();
+  const eliminationId = randomUUID();
+  await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${childId},${org.orgId},${org.subsidiaryId},'Owned Co','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+        (${eliminationId},${org.orgId},${org.subsidiaryId},'Ownership eliminations','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+  const defs = [
+    ["investment", "1400", "Investment in subsidiary", "asset_current_other"],
+    ["equityIncome", "4020", "Equity income", "income_other"],
+    ["nciEquity", "3100", "Non-controlling interest", "equity"],
+    ["nciIncome", "6100", "Profit attributable to NCI", "expense_other"],
+    ["goodwill", "1500", "Goodwill", "asset_fixed"],
+    ["fairValue", "1510", "Fair value adjustment", "asset_fixed"],
+    ["childEquity", "3000", "Child share capital", "equity"],
+  ] as const;
+  const accounts = new Map<string, string>();
+  for (const [key, number, name, type] of defs) {
+    const id = randomUUID();
+    accounts.set(key, id);
+    await db.execute(sql`
+        insert into accounts
+          (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${name},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+  }
+  const capital = randomUUID();
+  const profit = randomUUID();
+  await db.execute(sql`
+      insert into journal_entries
+        (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+      values
+        (${capital},${org.orgId},${org.bookId},${childId},'OWN-CAP','2026-07-01',${org.periodId},'Opening equity','draft','manual'),
+        (${profit},${org.orgId},${org.bookId},${childId},'OWN-PROFIT',${org.date},${org.periodId},'Period profit','draft','manual')
+    `);
+  await db.execute(sql`
+      insert into journal_lines
+        (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+      values
+        (${org.orgId},${capital},1,${org.accounts.bank},${childId},'1000','CAD','1000','1'),
+        (${org.orgId},${capital},2,${accounts.get("childEquity")!},${childId},'-1000','CAD','-1000','1'),
+        (${org.orgId},${profit},1,${org.accounts.bank},${childId},'100','CAD','100','1'),
+        (${org.orgId},${profit},2,${org.accounts.revenue},${childId},'-100','CAD','-100','1')
+    `);
+  await db.execute(sql`
+      update journal_entries set status='posted', posted_at=now()
+       where id in (${capital}, ${profit})
+    `);
+  const interestId = randomUUID();
+  await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values (${interestId},${org.orgId},${org.subsidiaryId},${childId},'2026-07-01','80','full',
+              '2026-07-01','900','1000','1','proportionate',${accounts.get("investment")!},
+              ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+              ${accounts.get("goodwill")!},${accounts.get("fairValue")!})
+    `);
+  return { childId, eliminationId, interestId, accounts };
+}
+
+/** Account-number to posted-amount totals for a set of ownership entries. */
+async function ownershipEntryBalances(entryIds: string[]): Promise<{ number: string; amount: string }[]> {
+  const balances = (await db.execute<{ number: string; amount: string }>(sql`
+      select a.number,coalesce(sum(l.amount),0)::text amount
+        from journal_lines l join journal_entries e on e.id=l.entry_id
+        join accounts a on a.id=l.account_id
+       where e.id=any(${`{${entryIds.join(",")}}`}::uuid[])
+       group by a.number order by a.number
+    `));
+  return balances.rows;
+}
+
 const settleTreeUpdate = (promise: Promise<QueryResult>): Promise<TreeUpdateResult> =>
   promise.then(
     (value): TreeUpdateResult => ({ status: "fulfilled", value }),
     (reason): TreeUpdateResult => ({ status: "rejected", reason }),
   );
+
+/** Node's assert rejects-regex matches only the top message; Drizzle wraps
+ * the database error in `cause`, so tests must unwrap it before matching. */
+const errorText = (error: unknown): string => {
+  const cause = (error as { cause?: unknown })?.cause;
+  return String(
+    (cause instanceof Error ? cause.message : undefined)
+      ?? (error instanceof Error ? error.message : error),
+  );
+};
 
 async function openTreeTransaction(): Promise<{ client: PoolClient; pid: number }> {
   const client = await pool.connect();
@@ -201,16 +313,16 @@ test(
       await assert.rejects(
         db.execute(sql`
           update subsidiaries set parent_id = ${validB} where id = ${org.subsidiaryId}`),
-        /the root subsidiary cannot be moved/,
+        (error: unknown) => /the root subsidiary cannot be moved/.test(errorText(error)),
       );
       await assert.rejects(
         db.execute(sql`
           update subsidiaries set is_active = false where id = ${org.subsidiaryId}`),
-        /the root subsidiary cannot be inactive/,
+        (error: unknown) => /the root subsidiary cannot be inactive/.test(errorText(error)),
       );
       await assert.rejects(
         db.execute(sql`delete from subsidiaries where id = ${org.subsidiaryId}`),
-        /the root subsidiary cannot be deleted/,
+        (error: unknown) => /the root subsidiary cannot be deleted/.test(errorText(error)),
       );
       const root = await db.execute<{ parent_id: string | null; is_active: boolean }>(sql`
       select parent_id::text as parent_id, is_active
@@ -473,7 +585,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
         values (${org.orgId},${org.subsidiaryId},${childId},'2026-07-15','100','full','2026-07-15',
                 ${accounts.get("investment")!},${accounts.get("equityIncome")!},${accounts.get("goodwill")!},${accounts.get("fairValue")!})
       `),
-      (error: any) => /overlap/.test(String(error?.cause?.message ?? error?.message)),
+        (error: unknown) => /overlap/.test(errorText(error)),
     );
   } finally {
     await dropScratchOrg(org.orgId);
@@ -866,7 +978,7 @@ test("a fault after the prior reversal rolls back entries and evidence together"
 
     await assert.rejects(
       runAutoElimination(org.orgId, org.periodId, actorId),
-      (error: any) => /journal_entries_org_number/.test(String(error?.cause?.message ?? error?.message)),
+        (error: unknown) => /journal_entries_org_number/.test(errorText(error)),
     );
 
     const gen1 = (await db.execute<{ status: string }>(sql`
@@ -980,7 +1092,7 @@ test("an ownership fault after the prior reversal rolls back entries, run status
       await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'on', false)`);
       await assert.rejects(
         runOwnershipConsolidation(org.orgId, org.periodId, actorId),
-        (error: any) => /injected consolidation fault during replacement/.test(String(error?.cause?.message ?? error?.message)),
+        (error: unknown) => /injected consolidation fault during replacement/.test(errorText(error)),
       );
     } finally {
       await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'off', false)`);
@@ -1013,3 +1125,173 @@ test("an ownership fault after the prior reversal rolls back entries, run status
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a first-use policy edit inside the consolidation window waits and is rejected as used", { skip: !DB }, async () => {
+  // Regression (fnd_mt97klqv_y5e7a4): the run reads the effective policy,
+  // computes, and inserts its first ownership_consolidation_entries later,
+  // while ownership_interest_guard freezes a policy row only once COMMITTED
+  // evidence exists. A material edit committing inside that window used to
+  // pass the guard's EXISTS check (the run's evidence was still
+  // uncommitted) and left posted journals calculated from the old terms
+  // beside a live policy recording new terms. The run now holds a FOR SHARE
+  // row lock on every policy row it consumes from the read until commit, so
+  // the edit waits for the run and then faces the immutability check against
+  // the now-committed evidence.
+  const org = await createScratchOrg();
+  const park = await openTreeTransaction();
+  const editor = await openTreeTransaction();
+  let runP: Promise<{ runId: string; entryIds: string[] }> | undefined;
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { interestId, accounts } = await seedOwnershipConsolidationFixture(org);
+
+    // Park the run AFTER its policy read but BEFORE its first evidence
+    // insert: every ownership journal line references one of these accounts,
+    // and the journal-line account guard takes FOR SHARE on the account row,
+    // which waits for this transaction's FOR UPDATE.
+    const accountIds = [...accounts.values()];
+    await park.client.query(
+      "select id from accounts where id = any($1::uuid[]) for update",
+      [accountIds],
+    );
+    runP = runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    void runP.catch(() => undefined);
+    const runPid = await waitForBlockedBy(
+      park.pid,
+      "ownership run parked between its policy read and first evidence insert",
+    );
+
+    // Material policy edit from a second live session, strictly before any
+    // evidence is committed: it must wait on the run's policy row lock.
+    const edit = settleTreeUpdate(
+      editor.client.query(
+        "update subsidiary_ownership_interests set ownership_percent = '60' where id = $1",
+        [interestId],
+      ),
+    );
+    const observation = await observeTreeFence(runPid, editor.pid, edit);
+    assert.equal(
+      observation.blocked,
+      true,
+      "the material policy edit must wait on the consolidation's policy row lock",
+    );
+
+    // Release the park: the run posts its first generation from the pinned
+    // 80% terms and commits. The editor then wakes and its guard re-check
+    // must reject the edit against the committed evidence.
+    await park.client.query("rollback");
+    const run = await runP;
+    assert.equal(run.entryIds.length, 2);
+    const editOutcome = await edit;
+    assert.equal(
+      editOutcome.status,
+      "rejected",
+      "the used-policy immutability check must reject the edit after the run commits",
+    );
+    if (editOutcome.status === "rejected") {
+      assert.match(String(editOutcome.reason), /used ownership policy is immutable/);
+    }
+    await editor.client.query("rollback").catch(() => undefined);
+
+    assert.deepEqual(await ownershipEntryBalances(run.entryIds), [
+      { number: "1400", amount: "-900.0000" },
+      { number: "1500", amount: "100.0000" },
+      { number: "3000", amount: "1000.0000" },
+      { number: "3100", amount: "-220.0000" },
+      { number: "6100", amount: "20.0000" },
+    ], "the committed generation was calculated from the pinned 80% terms");
+    const live = (await db.execute<{ ownership_percent: string }>(sql`
+      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`));
+    assert.equal(
+      live.rows[0]!.ownership_percent,
+      "80.0000000000",
+      "the live policy still records the terms the evidence was calculated from",
+    );
+
+    // Once first evidence exists, every material mutation is rejected at the
+    // storage level; only tuple-preserving rewrites pass.
+    await assert.rejects(
+      db.execute(sql`
+        update subsidiary_ownership_interests set ownership_percent = '60' where id = ${interestId}`),
+        (error: unknown) => /used ownership policy is immutable/.test(errorText(error)),
+    );
+    await db.execute(sql`
+      update subsidiary_ownership_interests set ownership_percent = ownership_percent where id = ${interestId}`);
+  } finally {
+    await park.client.query("rollback").catch(() => undefined);
+    if (runP) await runP.catch(() => undefined);
+    await editor.client.query("rollback").catch(() => undefined);
+    park.client.release();
+    editor.client.release();
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a policy edit committing before the run's snapshot fails the run closed and the retry adopts the new terms", { skip: !DB }, async () => {
+  // Regression (fnd_mt97klqv_y5e7a4), the other interleaving: the material
+  // edit commits while the run is still parked ahead of its first statement,
+  // so the pinned REPEATABLE READ snapshot predates the new policy terms.
+  // The locking policy read must refuse to compute a generation from a row
+  // that changed underneath it — serialization failure, run recorded failed,
+  // zero evidence — and the retry must consolidate the committed new terms.
+  const org = await createScratchOrg();
+  let holder: import("pg").PoolClient | undefined;
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { interestId } = await seedOwnershipConsolidationFixture(org);
+
+    const lockKey = `ownership:${org.orgId}:${org.periodId}`;
+    holder = await pool.connect();
+    await holder.query(`select pg_advisory_lock(hashtextextended($1, 0))`, [lockKey]);
+    const runP = runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.ok(
+      await waitForAdvisoryWait(),
+      "the run must park on its advisory lock before reading the policy",
+    );
+
+    // The material edit lands and commits before the run reads anything.
+    await db.execute(sql`
+      update subsidiary_ownership_interests set ownership_percent = '60' where id = ${interestId}`);
+    await holder.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [lockKey]);
+
+    await assert.rejects(
+      runP,
+        (error: unknown) => /could not serialize access/.test(errorText(error)),
+      "a run whose pinned policy row changed underneath it must fail closed",
+    );
+    const failedRuns = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from ownership_consolidation_runs
+       where org_id = ${org.orgId} and status = 'failed'`));
+    assert.equal(failedRuns.rows[0]!.n, 1, "the aborted attempt is recorded terminal-failed");
+    const evidence = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from ownership_consolidation_entries where org_id = ${org.orgId}`));
+    assert.equal(evidence.rows[0]!.n, 0, "no evidence survives the aborted run");
+    const strayJournals = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and origin = 'translation'`));
+    assert.equal(strayJournals.rows[0]!.n, 0, "no half-posted ownership journals survive the aborted run");
+
+    // The retry consolidates the committed 60% generation.
+    const retry = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(retry.entryIds.length, 2);
+    assert.deepEqual(await ownershipEntryBalances(retry.entryIds), [
+      { number: "1400", amount: "-900.0000" },
+      { number: "1500", amount: "300.0000" },
+      { number: "3000", amount: "1000.0000" },
+      { number: "3100", amount: "-440.0000" },
+      { number: "6100", amount: "40.0000" },
+    ], "the retry adopts the committed 60% terms");
+    const live = (await db.execute<{ ownership_percent: string }>(sql`
+      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`));
+    assert.equal(live.rows[0]!.ownership_percent, "60.0000000000");
+  } finally {
+    if (holder) {
+      await holder
+        .query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [`ownership:${org.orgId}:${org.periodId}`])
+        .catch(() => undefined);
+      holder.release();
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
