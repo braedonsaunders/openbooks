@@ -61,7 +61,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0005_posting_effects.sql",
     "0006_recurring_occurrence_guard.sql",
     "0007_posting_effects_terminal_lifecycle.sql",
-    "0008_durable_work_lease_fencing.sql",
+    "0008_scheduler_outbox_terminal_columns.sql",
     "0009_posting_effect_idempotency_keys.sql",
     "0010_bank_statement_source_evidence.sql",
     "0011_payment_run_live_selection.sql",
@@ -90,6 +90,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0049_payment_schedule_occurrence_durability.sql",
     "0050_ownership_policy_first_use_serialization.sql",
     "0051_effective_date_overlap_exclusion_constraints.sql",
+    "0052_durable_work_lease_fencing.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
