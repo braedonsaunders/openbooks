@@ -364,6 +364,12 @@ export async function POST(request: Request) {
   );
   if (inventoryGate) return inventoryGate;
   const common = { orgId: authz.user.orgId, actorId: authz.user.id };
+  // Audit correlation for financial-term writes (createLease, updateLease,
+  // addCharge, addEscalation): a caller-supplied correlation id lands in
+  // audit_log.request_id next to its actor.
+  const requestCorrelation = {
+    requestId: (request.headers.get("x-request-id") ?? "").trim().slice(0, 256) || null,
+  };
   try {
     let result: unknown;
     switch (action) {
@@ -424,6 +430,7 @@ export async function POST(request: Request) {
         result = await createPropertyLease({
           ...body,
           ...common,
+          ...requestCorrelation,
           baseRent: requireMoney(body.baseRent),
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
@@ -434,6 +441,7 @@ export async function POST(request: Request) {
         result = await updatePropertyLease({
           ...body,
           ...common,
+          ...requestCorrelation,
           baseRent: requireMoney(body.baseRent),
           securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
           camSharePercent: persistMoney(body.camSharePercent),
@@ -467,6 +475,7 @@ export async function POST(request: Request) {
         result = await addLeaseCharge({
           ...body,
           ...common,
+          ...requestCorrelation,
           amount: requireMoney(body.amount),
         } as unknown as { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
         break;
@@ -474,6 +483,7 @@ export async function POST(request: Request) {
         result = await addLeaseEscalation({
           ...body,
           ...common,
+          ...requestCorrelation,
           value: requireMoney(body.value),
         } as unknown as { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
         break;
@@ -580,13 +590,20 @@ export async function POST(request: Request) {
         { error: error.message },
         { status: error.status },
       );
-    const code = (error as { code?: string }).code;
+    // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.
+    const pgCode = error as { code?: string; cause?: { code?: string } };
+    const code = pgCode.code ?? pgCode.cause?.code;
     if (code === "23505")
       return NextResponse.json(
         {
           error:
             "That code, number, or active unit assignment is already in use",
         },
+        { status: 409 },
+      );
+    if (code === "23P01")
+      return NextResponse.json(
+        { error: "A base-rent charge already covers that effective window" },
         { status: 409 },
       );
     console.error("[property-management] action failed", error);

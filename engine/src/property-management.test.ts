@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   PropertyManagementError,
+  addLeaseCharge,
   depositBalance,
   depositReversalKind,
   depositPostingShape,
@@ -209,4 +210,25 @@ test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
   assert.equal(overlapDayCount("2026-01-15", "2026-03-15", "2026-01-01", "2026-12-31"), 60);
   assert.equal(overlapDayCount("2025-01-01", "2025-12-31", "2026-01-01", "2026-12-31"), 0);
   assert.equal(overlapDayCount("2026-12-31", "2027-01-31", "2026-01-01", "2026-12-31"), 1);
+});
+
+test("the generic lease-charge API refuses base_rent before touching storage", async () => {
+  // Lease creation and controlled escalations are the only valid paths to a
+  // base-rent row; the storage constraint (0057) backs this up for direct
+  // writes, and the guard fires before any database connection is needed.
+  await assert.rejects(
+    addLeaseCharge({
+      orgId: "00000000-0000-0000-0000-000000000000",
+      actorId: "00000000-0000-0000-0000-000000000001",
+      leaseId: "00000000-0000-0000-0000-000000000002",
+      chargeType: "base_rent",
+      description: "Second rent",
+      amount: "1200",
+      frequency: "monthly",
+      effectiveFrom: "2026-08-01",
+    }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError
+      && /Base rent changes belong on the lease/.test(error.message),
+  );
 });

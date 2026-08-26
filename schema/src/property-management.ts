@@ -125,6 +125,9 @@ export const leaseCharges = pgTable(
     description: text("description").notNull(),
     amount: money("amount").notNull(),
     frequency: text("frequency", { enum: ["monthly", "quarterly", "annually", "one_time"] }).notNull().default("monthly"),
+    /** Inclusive validity window. Base-rent windows may not overlap within a
+     *  lease identity (storage constraint 0060); escalations supersede
+     *  adjacent windows. */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     incomeAccountId: uuid("income_account_id"),
