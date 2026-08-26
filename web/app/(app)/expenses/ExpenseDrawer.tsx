@@ -270,7 +270,7 @@ export function ExpenseDrawer({
   // contract, so the canonical read below mints this editor's first usable
   // token; every later token comes from a save response. Until one exists,
   // saving fails closed instead of 409-ing.
-  const [documentRevision, setDocumentRevisionState] = useState<string | null>(null)
+  const [, setDocumentRevisionState] = useState<string | null>(null)
   const documentRevisionRef = useRef<string | null>(null)
   const seenPersistedRevisions = useRef(new Set<string>())
   const draftBaseline = useRef<PersistedDocumentSnapshot<ExpensePayload>>({
