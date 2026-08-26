@@ -143,7 +143,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(result);
   }
   if (body.action === "sync") {
-    const outcome = await syncBankFeedNow(id, { orgId: authz.user.orgId });
+    // The interactive operator is the audit actor for everything this sync
+    // imports; dropping user.id here would persist system provenance for a
+    // human-triggered import.
+    const outcome = await syncBankFeedNow(id, { orgId: authz.user.orgId, userId: authz.user.id });
     return NextResponse.json(outcome, { status: outcome.error ? 422 : 200 });
   }
   return NextResponse.json({ error: "unknown action" }, { status: 400 });
