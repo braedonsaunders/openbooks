@@ -1384,6 +1384,13 @@ async function capturePurgeEvidence(
  * Permanently delete a file with its versions, blobs, and attachment links.
  * Explicit deletes (not FK cascades) so nothing is orphaned.
  *
+ * Retention guard (fail closed): a file attached to an immutable/material
+ * record — a POSTED document, a compliance record that has not been superseded,
+ * or a fixed asset — can never be purged; the transaction refuses before any
+ * delete runs, so file, versions, blobs, and links all survive intact.
+ * Superseded compliance records do not block: renewal replaces the evidence,
+ * so the controlled supersession chain is what carries retention forward.
+ *
  * When `audit` is passed, the deletes commit together with durable redacted
  * before-evidence in one transaction: a failed audit insert aborts the purge
  * with every row intact. The S3 blob deletion stays strictly POST-commit —
@@ -1403,6 +1410,24 @@ export async function purgeFile(
       for update
     `))
     if (owned.rows.length === 0) return null
+    const material = (await tx.execute(sql`
+      select fa.id
+        from file_attachments fa
+       where fa.file_id = ${id} and fa.org_id = ${orgId}
+         and (
+           (fa.target_table = 'documents' and exists (
+             select 1 from documents d
+              where d.id = fa.target_id and d.org_id = fa.org_id and d.status = 'posted'))
+           or (fa.target_table = 'compliance_records' and exists (
+             select 1 from compliance_records cr
+              where cr.id = fa.target_id and cr.org_id = fa.org_id and cr.status <> 'superseded'))
+           or (fa.target_table = 'fixed_assets' and exists (
+             select 1 from fixed_assets a
+              where a.id = fa.target_id and a.org_id = fa.org_id))
+         )
+       limit 1
+    `))
+    if (material.rows.length > 0) return null
     const s3Versions = (await tx.execute<{ id: string }>(sql`
       select fv.id from file_versions fv
       join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
