@@ -43,10 +43,10 @@ test('general-ledger export mirrors the paper view with one section per account'
     'export.columns.balance',
   ])
   assert.equal(data.groups[0]?.rows[1]?.[1], 'JE-100')
-  assert.equal(data.groups[0]?.rows[1]?.[3], 125)
+  assert.equal(data.groups[0]?.rows[1]?.[3], '125.0000')
 })
 
-test('general-ledger export marks its money columns', () => {
+test('general-ledger export preserves exact money strings and their column flags', () => {
   const data = generalLedgerExportData({
     from: '2026-01-01',
     to: '2026-01-31',
@@ -56,13 +56,15 @@ test('general-ledger export marks its money columns', () => {
       number: '5210',
       name: 'Overhead Allowance',
       type: 'cogs',
-      opening: '0.0000',
-      closing: '125.0000',
+      opening: '125.0000',
+      closing: '9007199254740.9938',
       lines: [],
     }],
   }, 'General Ledger', t)
 
   assert.deepEqual(data.groups[0]?.money, [false, false, false, true, true, true])
+  assert.equal(data.groups[0]?.rows[0]?.[5], '125.0000')
+  assert.equal(data.groups[0]?.rows[1]?.[5], '9007199254740.9938')
 })
 
 test('pdfMoney prints exact ledger decimals IEEE-754 would corrupt', () => {

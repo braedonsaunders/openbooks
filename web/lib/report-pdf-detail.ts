@@ -1,4 +1,4 @@
-import type { PdfColumnAlign, PdfTableGroup } from '@openbooks/pdf'
+import type { PdfColumnAlign } from '@openbooks/pdf'
 import type { GeneralLedgerResult } from './reports'
 import type { ExportData, Translator } from './report-pdf'
 import type { ExactDecimal } from './statement-format'
@@ -30,12 +30,14 @@ export function isExactDecimalText(v: string): boolean {
 /** Format one exact ledger decimal for print: thousands separators and two
  *  fraction digits with no IEEE-754 round-trip (`2.675` really rounds to
  *  `2.68`). Non-numeric text renders raw — presentation mirrors
- *  createMoneyFormatter's fallback for non-numeric cells. */
-export function pdfMoney(v: ExactDecimal, locale = 'en'): string {
+ *  createMoneyFormatter's fallback for non-numeric cells. An optional currency
+ *  keeps the General Ledger paper view on this same exact-decimal path. */
+export function pdfMoney(v: ExactDecimal, locale = 'en', currency?: string): string {
   if (!EXACT_DECIMAL_TEXT.test(v)) return v
   // Collapse "-0"/"-0.0000" so a zeroed account never prints "-0.00".
   const normalized = NEGATIVE_ZERO_TEXT.test(v) ? '0' : v
   return new Intl.NumberFormat(locale, {
+    ...(currency ? { style: 'currency', currency } : {}),
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(normalized as never)
@@ -60,25 +62,24 @@ export function generalLedgerExportData(
     t('trialBalance.columns.credits'),
     t('export.columns.balance'),
   ]
-  const groups: PdfTableGroup[] = gl.accounts.map((account) => ({
+  const groups: ExportData['groups'] = gl.accounts.map((account) => ({
     kind: 'section',
     title: `${account.number ?? ''} ${account.name}`.trim(),
     columns,
     rows: [
-      ['', '', t('generalLedger.opening'), null, null, Number(account.opening)],
+      ['', '', t('generalLedger.opening'), null, null, account.opening],
       ...account.lines.map((line) => [
         line.date,
         line.entryNumber ?? '',
         [line.party, line.memo].filter(Boolean).join(' · '),
-        decimalIsZero(line.debit) ? null : Number(line.debit),
-        decimalIsZero(line.credit) ? null : Number(line.credit),
-        Number(line.balance),
+        decimalIsZero(line.debit) ? null : line.debit,
+        decimalIsZero(line.credit) ? null : line.credit,
+        line.balance,
       ]),
-      ['', '', t('generalLedger.closing'), null, null, Number(account.closing)],
+      ['', '', t('generalLedger.closing'), null, null, account.closing],
     ],
-    // Money columns are marked so consumers can tell amounts from text. The
-    // cells stay numeric: the on-screen General Ledger paper renderer
-    // (general-ledger-paper.ts) formats only `typeof cell === "number"` cells.
+    // Exact ledger strings stay marked through every print conversion so no
+    // renderer has to infer money columns or coerce their values to doubles.
     money: [false, false, false, true, true, true],
     align: LEDGER_ALIGN,
   }))

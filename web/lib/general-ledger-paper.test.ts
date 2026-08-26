@@ -19,10 +19,11 @@ test('general-ledger paper HTML mirrors ReportPaper typography and account hiera
       title: '5210 Overhead Allowance',
       columns: ['Date', 'Entry', 'Party / memo', 'Debits', 'Credits', 'Balance'],
       rows: [
-        ['', '', 'Opening balance', null, null, 0],
-        ['2026-01-31', 'JE-100', 'Overhead applied', 125, null, 125],
-        ['', '', 'Closing balance', null, null, 125],
+        ['', '', 'Opening balance', null, null, '125.0000'],
+        ['2026-01-31', 'JE-100', 'Overhead applied', '9007199254740.9938', null, '9007199254740.9938'],
+        ['', '', 'Closing balance', null, null, '9007199254740.9938'],
       ],
+      money: [false, false, false, true, true, true],
       align: ['left', 'left', 'left', 'right', 'right', 'right'],
     }],
   }, {
@@ -35,6 +36,8 @@ test('general-ledger paper HTML mirrors ReportPaper typography and account hiera
   assert.match(html, /class="account-title"/)
   assert.match(html, /5210 Overhead Allowance/)
   assert.match(html, /CA\$125\.00/)
+  assert.match(html, /CA\$9,007,199,254,740\.99/)
+  assert.doesNotMatch(html, /CA\$9,007,199,254,740\.994/)
   assert.match(html, /border-bottom:3px double/)
   assert.doesNotMatch(html, /→|–|—/)
 })
