@@ -162,6 +162,108 @@ test("posted status independently refuses entries with fewer than two lines", { 
   }
 });
 
+test("ledger storage rejects cross-organization headers, lines, accounts, and references", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const otherOrg = await createScratchOrg();
+    try {
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set constraints journal_entries_book_id_fkey deferred`);
+          await tx.execute(sql`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+            values (
+              ${randomUUID()}, ${org.orgId}, ${otherOrg.bookId}, ${org.subsidiaryId},
+              'CROSS-ORG-HEADER', ${org.date}, ${org.periodId}, 'draft', 'manual'
+            )
+          `);
+          await tx.execute(sql`set constraints journal_entries_book_id_fkey immediate`);
+        }),
+        (error: unknown) => errorChainMatches(error, /journal_entries_book_id_fkey|foreign key constraint/i),
+      );
+
+      const otherEntryId = await draftEntry(otherOrg, "CROSS-ORG-LINE-PARENT");
+      await assert.rejects(
+        db.execute(sql`
+          insert into journal_lines
+            (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values (
+            ${randomUUID()}, ${org.orgId}, ${otherEntryId},
+            1, ${org.accounts.bank}, ${org.subsidiaryId}, 10, 'CAD', 10, 1
+          )
+        `),
+        (error: unknown) => errorChainMatches(error, /does not exist in organization/i),
+      );
+
+      const accountEntryId = await draftEntry(org, "CROSS-ORG-ACCOUNT");
+      await assert.rejects(
+        db.execute(sql`
+          insert into journal_lines
+            (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+          values (
+            ${randomUUID()}, ${org.orgId}, ${accountEntryId}, 1,
+            ${otherOrg.accounts.bank}, ${org.subsidiaryId}, 10, 'CAD', 10, 1
+          )
+        `),
+        (error: unknown) => errorChainMatches(error, /account .* does not exist in organization/i),
+      );
+
+      const referenceEntryId = await draftEntry(org, "CROSS-ORG-REFERENCE");
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set constraints journal_lines_party_id_fkey deferred`);
+          await tx.execute(sql`
+            insert into journal_lines
+              (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+               amount, currency, txn_amount, fx_rate, party_id)
+            values
+              (${randomUUID()}, ${org.orgId}, ${referenceEntryId}, 1, ${org.accounts.bank},
+               ${org.subsidiaryId}, 10, 'CAD', 10, 1, ${otherOrg.customerId}),
+              (${randomUUID()}, ${org.orgId}, ${referenceEntryId}, 2, ${org.accounts.cogs},
+               ${org.subsidiaryId}, -10, 'CAD', -10, 1, null)
+          `);
+          await tx.execute(sql`set constraints journal_lines_party_id_fkey immediate`);
+        }),
+        (error: unknown) => errorChainMatches(error, /journal_lines_party_id_fkey|foreign key constraint/i),
+      );
+
+      const controlEntryId = await draftEntry(org, "TENANT-COHERENT-CONTROL");
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
+          insert into journal_lines
+            (id, org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate, party_id)
+          values
+            (${randomUUID()}, ${org.orgId}, ${controlEntryId}, 1, ${org.accounts.bank},
+             ${org.subsidiaryId}, 10, 'CAD', 10, 1, ${org.customerId}),
+            (${randomUUID()}, ${org.orgId}, ${controlEntryId}, 2, ${org.accounts.cogs},
+             ${org.subsidiaryId}, -10, 'CAD', -10, 1, ${org.customerId})
+        `);
+        await tx.execute(
+          sql`update journal_entries set status = 'posted' where id = ${controlEntryId} and org_id = ${org.orgId}`,
+        );
+        await tx.execute(sql`set constraints all immediate`);
+      });
+
+      const control = await db.execute<{ status: string; lines: number; balance: string }>(sql`
+        select e.status,
+               count(l.id)::int as lines,
+               coalesce(sum(l.amount), 0)::text as balance
+          from journal_entries e
+          join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+         where e.id = ${controlEntryId} and e.org_id = ${org.orgId}
+         group by e.status
+      `);
+      assert.deepEqual(control.rows, [{ status: "posted", lines: 2, balance: "0.0000" }]);
+    } finally {
+      await dropScratchOrg(otherOrg.orgId);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test(
   "reversed ledger history is amendable only through the guarded open-period path",
   { skip: !DB },

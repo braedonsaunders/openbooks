@@ -66,7 +66,10 @@ export const accountingBooks = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("books_org_code").on(t.orgId, t.code)],
+  (t) => [
+    uniqueIndex("accounting_books_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("books_org_code").on(t.orgId, t.code),
+  ],
 );
 
 /**
