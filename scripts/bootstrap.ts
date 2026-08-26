@@ -69,6 +69,20 @@ export const APPROVED_MIGRATION_FILENAME_TRANSITIONS: ReadonlyArray<MigrationFil
     },
     reason: "give bank-statement source idempotency a unique migration ordinal",
   },
+  {
+    from: {
+      filename: "generated/0008_durable_work_lease_fencing.sql",
+      sha256: "bd2ade3638423462d48b539afd9c18e77a9ad1301ca2bca3fb4e2e132f8e2011",
+    },
+    to: {
+      filename: "generated/0052_durable_work_lease_fencing.sql",
+      sha256: "bd2ade3638423462d48b539afd9c18e77a9ad1301ca2bca3fb4e2e132f8e2011",
+    },
+    reason:
+      "move the lease-fencing backfill after terminal-failure column creation; " +
+      "fresh installs otherwise fail at 0008 because the approved 0006-to-0035 " +
+      "canonicalization reordered the column DDL behind its backfill",
+  },
 ];
 
 type RuntimeDatabaseConfig = {

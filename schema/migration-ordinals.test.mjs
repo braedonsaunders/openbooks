@@ -136,12 +136,13 @@ test("bootstrap resolves renamed migrations to their published bodies and digest
     APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
     assertMigrationFilenameTransitionTargets,
   } = await bootstrapTransitionModule();
-  assert.equal(transitions.length, 2);
+  assert.equal(transitions.length, 3);
   assert.deepEqual(
     transitions.map((transition) => transition.to.filename),
     [
       "generated/0035_terminal_failure_surfacing.sql",
       "generated/0036_bank_statement_source_idempotency.sql",
+      "generated/0052_durable_work_lease_fencing.sql",
     ],
   );
   assert.doesNotThrow(() =>
@@ -186,13 +187,13 @@ test("old applied history converges once without replaying migration bodies", as
       ...transitions.map((transition) => ({ ...transition.to })),
     ].sort((left, right) => left.filename.localeCompare(right.filename)),
   );
-  assert.equal(ledger.updateCount, 2);
+  assert.equal(ledger.updateCount, 3);
   assert.equal(ledger.migrationBodyExecutions, 0);
 
   const converged = ledger.snapshot();
   await reconcileMigrationFilenameTransitions(ledger, transitions);
   assert.deepEqual(ledger.snapshot(), converged, "a second bootstrap is a no-op");
-  assert.equal(ledger.updateCount, 2, "canonical history must not be rewritten");
+  assert.equal(ledger.updateCount, 3, "canonical history must not be rewritten");
   assert.equal(ledger.migrationBodyExecutions, 0);
 });
 
