@@ -29,7 +29,7 @@ import type {
 import { resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
-import { isExactDecimalText, pdfMoney } from './report-pdf-detail'
+import { pdfMoney } from './report-pdf-detail'
 export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
@@ -40,9 +40,9 @@ export { generalLedgerExportData } from './report-pdf-detail'
  * Money columns carry the ledger's exact decimal STRINGS and are marked with
  * per-group `money` flags (mirroring ReportGroup.money). The PDF formats them
  * through Intl mathematical values — never IEEE-754, which loses precision
- * past 2^53; see report-pdf-detail.ts. Excel/CSV receive doubles produced once
- * at the spreadsheet boundary (exportDataToRunResult), because .xlsx stores
- * binary floats natively. Counts stay plain numbers.
+ * past 2^53; see report-pdf-detail.ts. Excel/CSV retain those strings verbatim;
+ * .xlsx uses text cells when a decimal cannot be represented exactly as a
+ * binary float. Counts stay plain numbers.
  */
 
 export type Translator = (key: string, values?: Record<string, string | number>) => string
@@ -144,19 +144,16 @@ export function runResultToExportData(
   }
 }
 
-/** ExportData → ReportRunResult for Excel/CSV. Flagged money columns hold the
- *  ledger's exact decimal strings; this boundary is where they become doubles
- *  (once per cell), because spreadsheet files store IEEE-754 natively — the
- *  same single conversion statementSheetToXlsx performs. */
+/** ExportData → ReportRunResult for Excel/CSV. Flagged money columns retain
+ *  the ledger's exact decimal strings so CSV text and XLSX text cells cannot
+ *  silently replace them with the nearest IEEE-754 value. */
 export function exportDataToRunResult(data: ExportData): ReportRunResult {
   const groups: ReportGroup[] = data.groups.map((g) => ({
     kind: g.kind,
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map((cell, i) =>
-      g.money?.[i] === true && typeof cell === 'string' && isExactDecimalText(cell) ? Number(cell) : cell,
-    )),
+    rows: g.rows.map((row) => [...row]),
     ...(g.money ? { money: g.money } : {}),
     isEmpty: g.isEmpty,
   }))
@@ -207,8 +204,8 @@ export function exportDataToCsv(data: ExportData, opts: { sectionHeader?: string
 }
 
 // --- financial-statement adapters ------------------------------------------
-// Each returns an ExportData with numeric cells (so Excel stays numeric).
-// Financial aggregation remains exact; conversion happens once per final cell.
+// Each returns an ExportData with exact money strings. Financial aggregation
+// and every export adapter therefore remain exact through the final cell.
 // Section/group titles and column headers come through the reports translator
 // (keys under reports.* — see web/messages/<locale>/reports.json).
 

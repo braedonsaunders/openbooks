@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
+import ExcelJS from 'exceljs'
 import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-pdf-detail.ts'
+
+// `report-pdf` is server-only in production. This suite runs it directly so
+// the shared CSV/XLSX boundary is covered without weakening that production
+// guard.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { url: 'data:text/javascript,export {}', shortCircuit: true }
+    }
+    return nextResolve(specifier, context)
+  },
+})
+
+const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx } = await import('./report-pdf.ts')
 
 const t = (key: string) => key
 
@@ -65,6 +81,62 @@ test('general-ledger export preserves exact money strings and their column flags
   assert.deepEqual(data.groups[0]?.money, [false, false, false, true, true, true])
   assert.equal(data.groups[0]?.rows[0]?.[5], '125.0000')
   assert.equal(data.groups[0]?.rows[1]?.[5], '9007199254740.9938')
+})
+
+async function generalLedgerAdapterValues(value: string): Promise<{
+  csv: string
+  runValue: string | number | null | undefined
+  xlsxValue: ExcelJS.CellValue
+}> {
+  const data = generalLedgerExportData({
+    from: '2026-01-01',
+    to: '2026-01-31',
+    truncated: false,
+    accounts: [{
+      id: 'account-1',
+      number: '5210',
+      name: 'Overhead Allowance',
+      type: 'cogs',
+      opening: value,
+      closing: '0.0000',
+      lines: [],
+    }],
+  }, 'General Ledger', t)
+
+  const result = exportDataToRunResult(data)
+  assert.deepEqual(result.groups[0]?.money, [false, false, false, true, true, true])
+
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(await exportDataToXlsx(data, {
+    reportName: 'General Ledger',
+    generatedAt: new Date('2026-01-31T00:00:00Z'),
+  }) as unknown as ArrayBuffer)
+
+  return {
+    csv: exportDataToCsv(data, {}),
+    runValue: result.groups[0]?.rows[0]?.[5],
+    xlsxValue: workbook.worksheets[0]?.getCell('F5').value ?? null,
+  }
+}
+
+test('general-ledger CSV/XLSX adapters preserve exact money beyond 2^53', async () => {
+  const exact = '9007199254740.9938'
+  const values = await generalLedgerAdapterValues(exact)
+
+  assert.equal(values.runValue, exact)
+  assert.match(values.csv, /\r\n,,generalLedger\.opening,,,9007199254740\.9938\r\n/)
+  assert.equal(values.xlsxValue, exact)
+  assert.equal(typeof values.xlsxValue, 'string')
+})
+
+test('general-ledger CSV/XLSX adapters preserve a normal exact money value', async () => {
+  const exact = '125.0000'
+  const values = await generalLedgerAdapterValues(exact)
+
+  assert.equal(values.runValue, exact)
+  assert.match(values.csv, /\r\n,,generalLedger\.opening,,,125\.0000\r\n/)
+  assert.equal(values.xlsxValue, exact)
+  assert.equal(typeof values.xlsxValue, 'string')
 })
 
 test('pdfMoney prints exact ledger decimals IEEE-754 would corrupt', () => {
