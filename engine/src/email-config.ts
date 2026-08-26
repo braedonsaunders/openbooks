@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { EmailActor } from "@openbooks/schema";
 import {
   resolveEmailTransport,
   sealSecret,
@@ -86,15 +87,34 @@ export async function insertEmailLog(row: {
   categoryKey?: string | null;
   meta?: Record<string, unknown>;
   errorMessage?: string | null;
+  /**
+   * Who caused this send. A user actor is written to the canonical
+   * created_by audit column; a system actor leaves created_by null and stamps
+   * explicit provenance (meta.actorKind + meta.actorReason). The markers are
+   * applied after the caller's meta so attribution evidence can be neither
+   * forged nor stripped by it.
+   */
+  actor?: EmailActor;
 }): Promise<string> {
+  if (row.actor?.kind === "user" && !row.actor.userId.trim()) {
+    throw new Error("email_log user attribution requires a non-empty user id");
+  }
+  const meta: Record<string, unknown> = { ...row.meta };
+  if (row.actor) {
+    meta.actorKind = row.actor.kind;
+    if (row.actor.kind === "system") meta.actorReason = row.actor.reason;
+    else delete meta.actorReason;
+  }
+  const createdBy = row.actor?.kind === "user" ? row.actor.userId : null;
   const r = (await db.execute<{ id: string }>(sql`
-    insert into email_log (org_id, job_id, provider, recipients, recipient_primary, from_addr, reply_to_addr, subject, status, category_key, meta, error_message, sent_at)
+    insert into email_log (org_id, job_id, provider, recipients, recipient_primary, from_addr, reply_to_addr, subject, status, category_key, meta, error_message, sent_at, created_by)
     values (
       ${row.orgId}, ${row.jobId ?? null}, ${row.provider ?? null},
       ${JSON.stringify(row.recipients)}::jsonb, ${row.recipients[0] ?? null},
       ${row.fromAddr ?? null}, ${row.replyToAddr ?? null}, ${row.subject},
-      ${row.status}, ${row.categoryKey ?? null}, ${JSON.stringify(row.meta ?? {})}::jsonb,
-      ${row.errorMessage ?? null}, ${row.status === "sent" ? sql`now()` : null}
+      ${row.status}, ${row.categoryKey ?? null}, ${JSON.stringify(meta)}::jsonb,
+      ${row.errorMessage ?? null}, ${row.status === "sent" ? sql`now()` : null},
+      ${createdBy}
     )
     returning id
   `));

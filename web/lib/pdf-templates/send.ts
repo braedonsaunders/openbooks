@@ -1,5 +1,7 @@
 import 'server-only'
+import { cookies } from 'next/headers'
 import { sql } from 'drizzle-orm'
+import type { EmailActor } from '@openbooks/schema'
 import { db } from '@openbooks/engine/src/db.ts'
 import { documentEmail, sendVia } from '@openbooks/emails'
 import {
@@ -78,6 +80,39 @@ export async function resolveRecordRecipient(
   return { to, docTitle: meta.docTitle, reference: record.reference, partyName }
 }
 
+/**
+ * True only inside a live Next.js request scope. cookies() throws everywhere
+ * else (workers, tests, scheduled jobs), which is exactly the boundary this
+ * module needs: the web auth graph is loaded lazily so a sessionless caller
+ * never pays for it — and never trips its server-only imports.
+ */
+async function hasRequestScope(): Promise<boolean> {
+  try {
+    await cookies()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Attribution for the email_log row a direct delivery produces. An
+ * interactive send names its acting user in the canonical created_by audit
+ * column; anything outside a signed-in request is recorded as EXPLICIT system
+ * provenance rather than an anonymous row — a null created_by must always
+ * mean "the system sent this", never "nobody recorded who sent it".
+ */
+async function resolveDeliveryActor(): Promise<EmailActor> {
+  if (!(await hasRequestScope())) {
+    return { kind: 'system', reason: 'direct document delivery ran without an interactive session' }
+  }
+  const { getAuthz } = await import('../authz')
+  const userId = (await getAuthz())?.user.id
+  return userId
+    ? { kind: 'user', userId }
+    : { kind: 'system', reason: 'direct document delivery had no signed-in session' }
+}
+
 export async function sendRecordPdfEmail(args: {
   recordType: string
   orgId: string
@@ -105,10 +140,11 @@ export async function sendRecordPdfEmail(args: {
     throw new Error('payroll compensation PDFs must be encrypted before email delivery')
   }
 
-  const [tpl, record, transport] = await Promise.all([
+  const [tpl, record, transport, actor] = await Promise.all([
     resolvePdfTemplate(args.orgId, args.recordType, args.templateId ?? null),
     loadPdfRecordValues(args.recordType, args.orgId, args.id),
     resolveOrgEmailTransport(args.orgId),
+    resolveDeliveryActor(),
   ])
   if (!tpl) throw new Error('no PDF template available for this record')
   if (!record) throw new Error('record not found')
@@ -161,6 +197,7 @@ export async function sendRecordPdfEmail(args: {
     status: 'queued',
     categoryKey: 'document',
     meta: { recordType: args.recordType, recordId: args.id },
+    actor,
   })
   try {
     const { id } = await sendVia(transport, {

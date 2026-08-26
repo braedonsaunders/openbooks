@@ -6,8 +6,24 @@ import { auditColumns, id, orgRef } from "./helpers";
  * sends, future notifications) is recorded here so an admin can answer "did the
  * report go out?" and replay when a provider hiccups. Org-scoped; the sealed
  * provider secret lives in orgs.settings.email, never here.
+ *
+ * Every row is attributable: an interactive send records its acting user in
+ * the canonical created_by audit column; an automated send leaves created_by
+ * null and stamps explicit system provenance onto meta (actorKind 'system' +
+ * actorReason). A null created_by therefore always means "the system sent
+ * this", never "nobody recorded who sent it".
  */
 export const EMAIL_LOG_STATUSES = ["queued", "sent", "failed", "suppressed"] as const;
+
+/**
+ * Who caused a message to be sent. A user actor is written to the canonical
+ * created_by audit column; a system actor leaves created_by null and carries
+ * its reason in meta.actorReason — identity state is never invented for a
+ * non-human sender.
+ */
+export type EmailActor =
+  | { readonly kind: "user"; readonly userId: string }
+  | { readonly kind: "system"; readonly reason: string };
 
 export const emailLog = pgTable(
   "email_log",
