@@ -3,18 +3,24 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  CloseError,
+  closeModuleForDocument,
   decidePeriodReopen,
   requestPeriodReopen,
   setPeriodLockState,
   periodLockBlocksPosting,
 } from "./close.ts";
-import { db } from "./db.ts";
+import { db, withBypass, withOrgTransaction } from "./db.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
+import { postDocument } from "./posting.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
 } from "./test-fixtures.ts";
+import { DOC_KINDS } from "../../web/lib/document-kinds.ts";
 
 const now = new Date("2026-07-20T12:00:00Z");
 
@@ -47,6 +53,36 @@ test("expired temporary reopening closes again", () => {
     reopenExpiresAt: "2026-07-20T12:00:01Z",
     reason: "controller_reopen",
   }, false, now), false);
+});
+
+test("cash documents map to their AP and banking close modules", () => {
+  assert.equal(closeModuleForDocument("check"), "ap");
+  assert.equal(closeModuleForDocument("deposit"), "banking");
+  assert.equal(closeModuleForDocument("transfer"), "banking");
+  // Card instruments deliberately ride the AP lock (their permission
+  // namespace is ap); a banking lock must not be their gate.
+  assert.equal(closeModuleForDocument("card_charge"), "ap");
+  assert.equal(closeModuleForDocument("card_refund"), "ap");
+});
+
+test("every drawer document kind carries a deliberate close-module decision", () => {
+  const registryKinds = Object.keys(DOC_KINDS);
+  assert.ok(registryKinds.length > 0);
+  for (const kind of registryKinds) {
+    const cfg = DOC_KINDS[kind]!;
+    assert.equal(
+      closeModuleForDocument(kind),
+      cfg.closeModule,
+      `document kind "${kind}" must map to the close module declared on its web/lib/document-kinds.ts entry`,
+    );
+  }
+});
+
+test("an unmapped document kind fails explicitly instead of posting under GL alone", () => {
+  assert.throws(
+    () => closeModuleForDocument("not_a_real_document_kind"),
+    CloseError,
+  );
 });
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -528,6 +564,158 @@ test(
           sql`drop function if exists plock_inject_failure()`,
         );
       }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Cash documents versus their own period locks. The production entry point is
+// postDocument — the same call every drawer, API route, and importer makes —
+// so these regressions exercise that path, not a helper beside it.
+// ---------------------------------------------------------------------------
+
+const POST_DEPS = (org: ScratchOrg) => ({
+  control: {
+    ar: org.accounts.ar,
+    ap: org.accounts.ap,
+    bank: org.accounts.bank,
+  },
+});
+
+/** Seed an approved-ready draft cash document honouring its posting rule. */
+async function seedCashDocument(
+  org: ScratchOrg,
+  kind: "check" | "deposit" | "transfer",
+  number: string,
+  createdBy: string,
+): Promise<string> {
+  const documentId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id,
+       document_date, currency, subtotal, tax_total, total, created_by)
+    values (
+      ${documentId}, ${org.orgId}, ${kind}, 'draft', ${number},
+      ${org.subsidiaryId}, ${org.date}, 'CAD', '10', '0', '10', ${createdBy}
+    )
+  `);
+  if (kind === "transfer") {
+    // Kernel contract: line 0 = destination carrying the amount, line 1 =
+    // source naming only its account with zero.
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, subsidiary_id,
+         amount, quantity, unit_price, tax_amount, tax_input_amount)
+      values
+        (${org.orgId}, ${documentId}, 1, ${org.accounts.bank}, ${org.subsidiaryId},
+         '10', '1', '10', '0', '10'),
+        (${org.orgId}, ${documentId}, 2, ${org.accounts.clearing}, ${org.subsidiaryId},
+         '0', '1', '0', '0', '0')
+    `);
+  } else {
+    await db.execute(sql`
+      insert into document_lines
+        (org_id, document_id, line_number, account_id, subsidiary_id,
+         amount, quantity, unit_price, tax_amount, tax_input_amount)
+      values
+        (${org.orgId}, ${documentId}, 1,
+         ${kind === "check" ? org.accounts.cogs : org.accounts.revenue},
+         ${org.subsidiaryId}, '10', '1', '10', '0', '10')
+    `);
+  }
+  return documentId;
+}
+
+async function postCashDocumentThroughKernel(
+  org: ScratchOrg,
+  actorId: string,
+  kind: "check" | "deposit" | "transfer",
+  number: string,
+): Promise<void> {
+  const documentId = await seedCashDocument(org, kind, number, actorId);
+  await withOrgTransaction(org.orgId, async () => {
+    const released = await submitAndReleaseIfUngated(kind, documentId, actorId);
+    assert.equal(released.autoApproved, true);
+    await postDocument(documentId, POST_DEPS(org), { deferEffects: true });
+  });
+}
+
+test(
+  "cash documents post through the kernel while their modules are open",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Cash poster", "admin"),
+      );
+      // Validity control for the closed-lock rejections below: each seeded
+      // cash document genuinely posts when no lock stands in the way.
+      await postCashDocumentThroughKernel(org, actorId, "check", "CHK-OPEN-1");
+      await postCashDocumentThroughKernel(org, actorId, "deposit", "DEP-OPEN-1");
+      await postCashDocumentThroughKernel(org, actorId, "transfer", "TRF-OPEN-1");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a closed AP period rejects a check",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Check poster", "admin"),
+      );
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "ap",
+        state: "closed",
+        actorId,
+        reason: CLOSE_REASON,
+      });
+      await assert.rejects(
+        postCashDocumentThroughKernel(org, actorId, "check", "CHK-LOCKED-1"),
+        (error: unknown) => errorChainMatches(error, /AP is closed/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a closed banking period rejects a deposit and a transfer",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Banking poster", "admin"),
+      );
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "banking",
+        state: "closed",
+        actorId,
+        reason: CLOSE_REASON,
+      });
+      await assert.rejects(
+        postCashDocumentThroughKernel(org, actorId, "deposit", "DEP-LOCKED-1"),
+        (error: unknown) => errorChainMatches(error, /BANKING is closed/),
+      );
+      await assert.rejects(
+        postCashDocumentThroughKernel(org, actorId, "transfer", "TRF-LOCKED-1"),
+        (error: unknown) => errorChainMatches(error, /BANKING is closed/),
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
