@@ -45,6 +45,33 @@ export function netsuiteCredsFromEnvFile(): NetSuiteCreds | null {
 
 const pct = (s: string | number) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 
+/**
+ * A deterministic security refusal, not a transient fault: something tried to
+ * bounce a credentialed NetSuite request off-origin via an HTTP redirect.
+ * Callers must surface it immediately instead of retrying or following.
+ */
+class NetSuiteRedirectRefused extends Error {}
+
+/**
+ * NetSuite credentials must never cross an HTTP redirect boundary. Even a
+ * trusted NetSuite origin can otherwise redirect a request — carrying the
+ * OAuth1 Authorization header (consumer key, token id, realm), and for POSTs
+ * the whole body — to a host that was never allowlisted. Manual mode keeps
+ * every hop under our control; undici surfaces the real 3xx response (not a
+ * browser-style opaque one), so any redirect with a Location is refused
+ * outright rather than followed.
+ */
+async function netsuiteFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(url, { ...init, redirect: "manual" });
+  const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+  if (location !== null) {
+    throw new NetSuiteRedirectRefused(
+      `NetSuite request to ${typeof url === "string" ? url : url.href} attempted an HTTP ${res.status} redirect to ${location}; credentialed requests are never followed`,
+    );
+  }
+  return res;
+}
+
 function oauthHeader(creds: NetSuiteCreds, method: string, url: string, query: Record<string, string | number>): string {
   const oauth: Record<string, string> = {
     oauth_consumer_key: creds.consumerKey,
@@ -95,7 +122,7 @@ async function suiteqlPage(
     const timer = setTimeout(() => ctl.abort(), 60_000);
     try {
       const qp = { limit, offset };
-      const res = await fetch(`${url}?limit=${limit}&offset=${offset}`, {
+      const res = await netsuiteFetch(`${url}?limit=${limit}&offset=${offset}`, {
         method: "POST",
         headers: {
           Authorization: oauthHeader(creds, "POST", url, qp),
@@ -113,6 +140,7 @@ async function suiteqlPage(
       }
       return res;
     } catch (e) {
+      if (e instanceof NetSuiteRedirectRefused) throw e;
       lastErr = e;
       if (attempt < 4) await sleep(attempt * 2000);
     } finally {
@@ -174,7 +202,7 @@ export async function netsuiteRestlet<T = unknown>(
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
-      const response = await fetch(`${endpoint}?${search.toString()}`, {
+      const response = await netsuiteFetch(`${endpoint}?${search.toString()}`, {
         method,
         headers: {
           Authorization: oauthHeader(creds, method, endpoint, query),
@@ -195,6 +223,7 @@ export async function netsuiteRestlet<T = unknown>(
       }
       return await response.json() as T;
     } catch (error) {
+      if (error instanceof NetSuiteRedirectRefused) throw error;
       lastError = error;
       if (attempt < 4) await sleep(attempt * 2_000);
     } finally {
@@ -215,7 +244,7 @@ export async function netsuiteRecords<T = Record<string, unknown>>(
   let offset = 0;
   for (;;) {
     const query = { limit, offset };
-    const res = await fetch(`${endpoint}?limit=${limit}&offset=${offset}`, {
+    const res = await netsuiteFetch(`${endpoint}?limit=${limit}&offset=${offset}`, {
       headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
     });
     if (!res.ok) throw new Error(`SuiteTalk ${recordType} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
@@ -234,7 +263,7 @@ export async function netsuiteRecord<T = Record<string, unknown>>(
 ): Promise<T> {
   const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}/${encodeURIComponent(String(id))}`;
   const query = { expandSubResources: "true" };
-  const res = await fetch(`${endpoint}?expandSubResources=true`, {
+  const res = await netsuiteFetch(`${endpoint}?expandSubResources=true`, {
     headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
   });
   if (!res.ok) throw new Error(`SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
@@ -296,7 +325,7 @@ async function netsuiteSoapRequest(
   </soap-env:Header>
   <soap-env:Body>${body}</soap-env:Body>
 </soap-env:Envelope>`;
-      const response = await fetch(url, {
+      const response = await netsuiteFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
@@ -313,6 +342,7 @@ async function netsuiteSoapRequest(
       }
       return text;
     } catch (error) {
+      if (error instanceof NetSuiteRedirectRefused) throw error;
       lastError = error;
       if (attempt < 3) await sleep(attempt * 2_000);
     } finally {
@@ -464,7 +494,7 @@ export async function netsuiteSoapFileGet(
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 180_000);
     try {
-      const response = await fetch(url, {
+      const response = await netsuiteFetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "get" },
         body: envelope,
@@ -489,6 +519,7 @@ export async function netsuiteSoapFileGet(
       if (bytes.length === 0) throw new Error(`SuiteTalk SOAP file-get returned empty content for ${fileId}`);
       return { name, bytes };
     } catch (error) {
+      if (error instanceof NetSuiteRedirectRefused) throw error;
       lastError = error;
       if (attempt < 3) await sleep(attempt * 2_000);
     } finally {
