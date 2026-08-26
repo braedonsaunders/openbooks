@@ -46,6 +46,8 @@ const taxRateDomainConstraintsMigrationPath =
   "schema/migrations/generated/0042_tax_rate_domain_constraints.sql";
 const effectiveDateOverlapExclusionMigrationPath =
   "schema/migrations/generated/0051_effective_date_overlap_exclusion_constraints.sql";
+const bankFeedAttemptWatermarkMigrationPath =
+  "schema/migrations/generated/0054_bank_feed_attempt_watermark.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -91,6 +93,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0050_ownership_policy_first_use_serialization.sql",
     "0051_effective_date_overlap_exclusion_constraints.sql",
     "0052_durable_work_lease_fencing.sql",
+    "0054_bank_feed_attempt_watermark.sql",
     "0055_flow_scheduled_occurrence_durability.sql",
   ]);
   assert.deepEqual(
@@ -830,4 +833,17 @@ test("the governed query catalog exposes views, never access-control tables", ()
     baseline,
     /revoke all privileges on all tables in schema public from openbooks_read/i,
   );
+});
+
+test("bank-feed sync bookkeeping separates the attempt watermark from the success watermark", () => {
+  const migration = readFileSync(bankFeedAttemptWatermarkMigrationPath, "utf8");
+
+  assert.match(
+    migration,
+    /ALTER TABLE public\.bank_feed_connections\s+ADD COLUMN last_attempt_at timestamp with time zone/,
+  );
+  // The attempt cursor is pure addition: no backfill, no data rewrite, and no
+  // touch of last_sync_at (the success-only pull cursor sinceFor reads).
+  assert.match(migration, /COMMENT ON COLUMN public\.bank_feed_connections\.last_attempt_at/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });

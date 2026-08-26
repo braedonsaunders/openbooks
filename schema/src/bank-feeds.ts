@@ -50,7 +50,14 @@ export const bankFeedConnections = pgTable(
       .notNull()
       .default("daily"),
     nextSyncAt: timestamp("next_sync_at", { withTimezone: true }),
+    /** SUCCESS watermark: when a sync last completed without error. The only
+     *  cursor the scheduler's pull window derives from — a failed sync never
+     *  advances it, so retries re-fetch the window that never imported. */
     lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    /** ATTEMPT watermark: when the connection last finished a sync try,
+     *  whatever the outcome (success, empty, or failure). Operator-facing
+     *  bookkeeping only — it must never feed back into window derivation. */
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     lastResult: jsonb("last_result"),
     lastError: text("last_error"),
     isActive: boolean("is_active").notNull().default(true),

@@ -368,6 +368,9 @@ function cadenceIntervalMs(cadence: string): number {
 }
 
 function sinceFor(lastSyncAt: Date | string | null, today: string): string {
+  // Reads the SUCCESS watermark only. Attempt bookkeeping (last_attempt_at)
+  // must never feed into this window: failed syncs happen on top of the last
+  // real cursor, and a retry has to re-cover their whole unimported span.
   if (!lastSyncAt) {
     // Cold start: pull the last 90 days so the first sync has history.
     return addCalendarDays(today, -90);
@@ -435,13 +438,18 @@ async function syncOne(
 }
 
 /**
- * Record one sync attempt. `last_sync_at` is the SUCCESS watermark that
- * `sinceFor` derives the next pull window from, so it may only move when the
- * sync completed without error — advancing it over a failed window would make
- * the next sync start after transactions that were never imported, dropping
- * them permanently and invisibly. Attempt bookkeeping (result payload, error,
- * status) is recorded either way. An empty-but-successful pull also advances:
- * the provider provably had nothing in the window.
+ * Record one finished sync attempt. Two independent cursors:
+ *
+ *  - `last_sync_at` is the SUCCESS watermark that `sinceFor` derives the next
+ *    pull window from, so it may only move when the sync completed without
+ *    error — advancing it over a failed window would make the next sync start
+ *    after transactions that were never imported, dropping them permanently
+ *    and invisibly. An empty-but-successful pull also advances: the provider
+ *    provably had nothing in the window.
+ *  - `last_attempt_at` is the ATTEMPT watermark: moved on every finished
+ *    attempt (success or failure) so operator surfaces can show how recently
+ *    a failing feed actually tried. It never feeds back into window
+ *    derivation.
  */
 async function recordSyncOutcome(
   connection: { id: string; orgId: string },
@@ -452,14 +460,16 @@ async function recordSyncOutcome(
     await db.execute(outcome.error
       ? sql`
         update bank_feed_connections
-           set last_result = ${lastResult}::jsonb,
+           set last_attempt_at = now(),
+               last_result = ${lastResult}::jsonb,
                last_error = ${outcome.error},
                status = 'error'
          where id = ${connection.id} and org_id = ${connection.orgId}
       `
       : sql`
         update bank_feed_connections
-           set last_sync_at = now(),
+           set last_attempt_at = now(),
+               last_sync_at = now(),
                last_result = ${lastResult}::jsonb,
                last_error = null,
                status = 'connected'

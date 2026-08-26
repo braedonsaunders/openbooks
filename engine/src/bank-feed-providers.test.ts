@@ -577,10 +577,25 @@ async function loadConnection(connectionId: string): Promise<ConnectionRow> {
   return r.rows[0]!;
 }
 
+type AttemptRow = ConnectionRow & { last_attempt_at: Date | null };
+
+/** Attempt-bookkeeping reader: also surfaces when the connection last TRIED to sync. */
+async function loadAttemptBookkeeping(connectionId: string): Promise<AttemptRow> {
+  const r = (await db.execute<AttemptRow>(sql`
+    select last_sync_at, last_attempt_at, status, last_error
+      from bank_feed_connections where id = ${connectionId}
+  `));
+  return r.rows[0]!;
+}
+
 /** Raw SQL reads surface timestamptz as Date or string depending on driver; compare instants. */
-function asWatermarkMs(value: ConnectionRow["last_sync_at"]): number | null {
+function asWatermarkMs(value: Date | string | null): number | null {
   if (value === null) return null;
   return value instanceof Date ? value.getTime() : new Date(String(value)).getTime();
+}
+
+function asInstantDay(value: Date): string {
+  return new Date(asWatermarkMs(value)!).toISOString().slice(0, 10);
 }
 
 interface PlaidTransaction {
@@ -853,6 +868,109 @@ test(
       assert.equal(await countZeroUuidActorRows(f.orgId), 0);
     } finally {
       routeState.authz = null;
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "attempt bookkeeping moves on every sync while only successes move the pull window's cursor",
+  { skip: !DB },
+  async (t) => {
+    const f = await seedFeedFixture();
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const script: ScriptedResponse[] = [];
+      // Every requested pull window gets recorded so the recovery assertions
+      // below can prove WHERE the cursor came from.
+      const windows = scriptProvider(t, script);
+
+      // T0: a successful sync establishes both cursors — the success
+      // watermark AND the attempt watermark move together.
+      script.push(plaidPage([feedTxn("feed-history", addCalendarDays(today, -60), "-40.00")]));
+      let outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+
+      let row = await loadAttemptBookkeeping(f.connectionId);
+      const successMs = asWatermarkMs(row.last_sync_at);
+      const attemptMs1 = asWatermarkMs(row.last_attempt_at);
+      assert.ok(successMs, "a successful sync advances the success watermark");
+      assert.ok(attemptMs1, "a successful sync also records the attempt");
+      assert.ok(Math.abs(attemptMs1! - successMs!) < 5_000, "the attempt and success instants coincide on success");
+
+      // Age the success watermark: the connection last successfully synced 12
+      // days ago. This is the discriminative setup — without it, success and
+      // failed attempts share a day and cannot tell which cursor the window
+      // came from. The aged value becomes the frozen baseline below.
+      await db.execute(sql`
+        update bank_feed_connections
+           set last_sync_at = last_sync_at - interval '12 days'
+         where id = ${f.connectionId}
+      `);
+      const agedRow = await loadAttemptBookkeeping(f.connectionId);
+      const agedSuccessMs = asWatermarkMs(agedRow.last_sync_at)!;
+      // The discriminating property of the scenario: the frozen success
+      // cursor now sits ~a fortnight behind the live attempt cursor.
+      assert.notEqual(
+        asInstantDay(new Date(agedSuccessMs)),
+        asInstantDay(new Date(attemptMs1!)),
+        "the aged success cursor must land on a different day than the live attempts",
+      );
+      const agedSuccessDay = asInstantDay(new Date(agedSuccessMs));
+
+      // Failure #1: provider outage. The attempt watermark MUST advance —
+      // otherwise operators cannot tell how recently a failing feed last
+      // tried — while the success watermark stays frozen at its aged value.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await makeDue(f.connectionId);
+      script.length = 0;
+      script.push({ status: 500, body: { error: "provider outage" } });
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.ok(outcome.error, "the scripted outage must surface as an error outcome");
+
+      row = await loadAttemptBookkeeping(f.connectionId);
+      const attemptMs2 = asWatermarkMs(row.last_attempt_at);
+      assert.ok(attemptMs2 && attemptMs2 > attemptMs1!, "a failed sync still advances the attempt watermark");
+      assert.equal(asWatermarkMs(row.last_sync_at), agedSuccessMs, "a failed sync never moves the success watermark");
+      assert.equal(row.status, "error");
+      assert.ok(row.last_error);
+
+      // Failure #2: import rejection AFTER the provider answered. Again the
+      // attempt moves, the success cursor does not.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      await makeDue(f.connectionId);
+      script.length = 0;
+      script.push(plaidPage([feedTxn("feed-mismatch", addCalendarDays(today, -1), "-5.00", "EUR")]));
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.match(String(outcome.error), /currency/i);
+
+      row = await loadAttemptBookkeeping(f.connectionId);
+      const attemptMs3 = asWatermarkMs(row.last_attempt_at);
+      assert.ok(attemptMs3 && attemptMs3 > attemptMs2!, "each failed attempt advances the attempt watermark");
+      assert.equal(asWatermarkMs(row.last_sync_at), agedSuccessMs, "import rejections never move the success watermark");
+
+      // Recovery: the retry window derives from the SUCCESS watermark alone.
+      // If sinceFor ever read the ATTEMPT watermark instead, this start_date
+      // would jump forward to the failure day (~today) and silently skip every
+      // transaction that accumulated between the two cursors' days.
+      await makeDue(f.connectionId);
+      script.length = 0;
+      script.push(
+        plaidPage([feedTxn("feed-recovered-history", addCalendarDays(agedSuccessDay, 5), "-10.00")]),
+      );
+      outcome = myOutcome(await runDueBankFeeds(), f.connectionId);
+      assert.equal(outcome.error, undefined);
+      assert.deepEqual(
+        windows[windows.length - 1],
+        { start_date: addCalendarDays(agedSuccessDay, -2), end_date: today },
+        "the retry window must come from the success watermark (two-day overlap), not from any attempt",
+      );
+      assert.equal(outcome.imported, 1);
+
+      row = await loadAttemptBookkeeping(f.connectionId);
+      assert.ok(asWatermarkMs(row.last_sync_at)! >= attemptMs1!, "recovery completes: success watermark lives again");
+      assert.ok(asWatermarkMs(row.last_attempt_at)! >= attemptMs3!);
+    } finally {
       await dropScratchOrgReporting(f.orgId);
     }
   },
