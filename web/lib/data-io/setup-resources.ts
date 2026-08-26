@@ -234,7 +234,10 @@ async function writeSetup(
       }
     } catch (e) {
       outcome.failed++
-      outcome.errors.push({ row: rowNo, message: (e as { message?: string })?.message ?? 'write failed' })
+      // Drizzle wraps the driver error, so the storage guard's message lives
+      // on `cause` — surface that, never the wrapper's query echo.
+      const cause = (e as { cause?: { message?: string } })?.cause
+      outcome.errors.push({ row: rowNo, message: cause?.message ?? (e as { message?: string })?.message ?? 'write failed' })
     }
   }
   return outcome
