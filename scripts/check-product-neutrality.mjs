@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 const joined = (...parts) => parts.join("");
 
@@ -88,7 +89,14 @@ const connectorPaths = [
   /^README\.md$/,
   /^CHANGELOG\.md$/,
   /^scripts\/check-product-neutrality\.mjs$/,
-  /^engine\/src\/(?:netsuite|qbo\.ts$|xero\.ts$|odoo\.ts$|erpnext\.ts$|dynamics\.ts$|qbd\/|sync\/)/,
+  // The gate's own contract test quotes vendor names as fixture data; without
+  // this line the prevention control could never describe what it prevents.
+  /^scripts\/check-product-neutrality\.test\.mjs$/,
+  // Connector implementations and their regression tests may name the system
+  // they integrate with or verify: a test that cannot say which connector it
+  // exercises cannot fail for the right reason. Product/UI code outside these
+  // files stays vendor-neutral.
+  /^engine\/src\/(?:netsuite|(?:qbo|xero|odoo|erpnext|dynamics)(?:\.test)?\.ts$|qbd\/|sync\/)/,
   // Feature-gate and reversal invariants assert connector-specific gates and
   // source enums by exact file path; naming the system under test is the point
   // of these tests, not product copy.
@@ -110,7 +118,7 @@ const connectorPaths = [
   /^web\/messages\/[^/]+\/sync\.json$/,
 ];
 
-function isConnectorPath(filePath) {
+export function isConnectorPath(filePath) {
   return connectorPaths.some((pattern) => pattern.test(filePath));
 }
 
@@ -122,78 +130,97 @@ function firstMatch(text, patterns) {
   return null;
 }
 
-const publicFiles = execFileSync(
-  "git",
-  ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-  {
-    encoding: "utf8",
-  },
-)
-  .split("\0")
-  .filter(Boolean);
+function discoverPublicFiles() {
+  return execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    {
+      encoding: "utf8",
+    },
+  )
+    .split("\0")
+    .filter(Boolean);
+}
 
-const violations = [];
+/**
+ * Audit the candidate public snapshot (tracked + untracked-but-not-ignored
+ * files) and return every neutrality violation as a human-readable line.
+ * Exported so the gate's policy is testable without a git fixture.
+ */
+export function auditPublicSnapshot(publicFiles) {
+  const violations = [];
 
-for (const filePath of publicFiles) {
-  // A tracked file deleted in the working tree is no longer part of the
-  // candidate public snapshot, even before its deletion is staged.
-  if (!existsSync(filePath)) continue;
-  // TypeScript incremental state is a generated compiler cache, not product
-  // copy or source. It embeds every imported filename and string literal.
-  if (filePath.endsWith(".tsbuildinfo")) continue;
-  if (
-    privatePathPatterns.some((pattern) => pattern.test(filePath)) ||
-    containsPrivateProvenance(filePath)
-  ) {
-    violations.push(`${filePath}: private provenance identifier in path`);
-  }
+  for (const filePath of publicFiles) {
+    // A tracked file deleted in the working tree is no longer part of the
+    // candidate public snapshot, even before its deletion is staged.
+    if (!existsSync(filePath)) continue;
+    // TypeScript incremental state is a generated compiler cache, not product
+    // copy or source. It embeds every imported filename and string literal.
+    if (filePath.endsWith(".tsbuildinfo")) continue;
+    if (
+      privatePathPatterns.some((pattern) => pattern.test(filePath)) ||
+      containsPrivateProvenance(filePath)
+    ) {
+      violations.push(`${filePath}: private provenance identifier in path`);
+    }
 
-  const vendorPathMatch = firstMatch(filePath, vendorPatterns);
-  if (vendorPathMatch && !isConnectorPath(filePath)) {
-    violations.push(
-      `${filePath}: accounting-vendor name in non-connector path`,
-    );
-  }
-
-  let source;
-  try {
-    source = readFileSync(filePath, "utf8");
-  } catch {
-    continue;
-  }
-  if (source.includes("\0")) continue;
-
-  if (
-    executableSourcePattern.test(filePath) &&
-    !fixtureSourcePattern.test(filePath) &&
-    (hardcodedOperatorIdentityPattern.test(source) || oneShotMutationPattern.test(source))
-  ) {
-    violations.push(
-      `${filePath}: executable tenant-specific operator helper belongs outside the public product`,
-    );
-  }
-
-  if (containsPrivateProvenance(source)) {
-    violations.push(
-      `${filePath}: private provenance identifier in public content`,
-    );
-  }
-
-  if (!isConnectorPath(filePath)) {
-    const vendorMatch = firstMatch(source, vendorPatterns);
-    if (vendorMatch) {
-      const line = source.slice(0, vendorMatch.index).split("\n").length;
+    const vendorPathMatch = firstMatch(filePath, vendorPatterns);
+    if (vendorPathMatch && !isConnectorPath(filePath)) {
       violations.push(
-        `${filePath}:${line}: accounting-vendor name outside connector scope`,
+        `${filePath}: accounting-vendor name in non-connector path`,
       );
     }
+
+    let source;
+    try {
+      source = readFileSync(filePath, "utf8");
+    } catch {
+      continue;
+    }
+    if (source.includes("\0")) continue;
+
+    if (
+      executableSourcePattern.test(filePath) &&
+      !fixtureSourcePattern.test(filePath) &&
+      (hardcodedOperatorIdentityPattern.test(source) || oneShotMutationPattern.test(source))
+    ) {
+      violations.push(
+        `${filePath}: executable tenant-specific operator helper belongs outside the public product`,
+      );
+    }
+
+    if (containsPrivateProvenance(source)) {
+      violations.push(
+        `${filePath}: private provenance identifier in public content`,
+      );
+    }
+
+    if (!isConnectorPath(filePath)) {
+      const vendorMatch = firstMatch(source, vendorPatterns);
+      if (vendorMatch) {
+        const line = source.slice(0, vendorMatch.index).split("\n").length;
+        violations.push(
+          `${filePath}:${line}: accounting-vendor name outside connector scope`,
+        );
+      }
+    }
   }
+
+  return violations;
 }
 
-if (violations.length > 0) {
-  console.error("Product-neutrality audit failed:");
-  for (const violation of violations) console.error(`- ${violation}`);
-  process.exit(1);
+function main() {
+  const violations = auditPublicSnapshot(discoverPublicFiles());
+
+  if (violations.length > 0) {
+    console.error("Product-neutrality audit failed:");
+    for (const violation of violations) console.error(`- ${violation}`);
+    process.exit(1);
+  }
+
+  console.log("Product-neutrality audit passed.");
 }
 
-console.log("Product-neutrality audit passed.");
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
