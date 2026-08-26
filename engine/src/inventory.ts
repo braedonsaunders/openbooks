@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "./db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "./db.ts";
 import {
   add,
   cmp,
@@ -981,6 +981,9 @@ export interface ReceiveInput {
    *  inventory; we only record the cost layer + movement (linked to linkEntryId). */
   postJournal?: boolean;
   linkEntryId?: string | null;
+  /** Join the caller's transaction instead of opening one. Required when the
+   * receipt belongs to a larger accounting unit such as vendor-bill posting. */
+  tx?: SqlExecutor;
 }
 
 export interface MovementResult {
@@ -1022,7 +1025,7 @@ export async function receiveInventory(
     locationId: input.locationId ?? null,
   };
 
-  return await db.transaction(async (tx) => {
+  const apply = async (tx: Runner): Promise<MovementResult> => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
     await assertStockLocationAdmitsSubsidiary(
       tx,
@@ -1296,7 +1299,8 @@ export async function receiveInventory(
     }
 
     return { movementId, entryId, value: assetDelta };
-  });
+  };
+  return input.tx ? apply(input.tx) : db.transaction(apply);
 }
 
 async function insertLayer(
@@ -3281,11 +3285,116 @@ export async function resolveBillInventoryAccounts(
 }
 
 /**
- * After a vendor bill posts, receive each inventory line into stock. If the item
- * has a clearing account the bill DR'd it, so the receipt posts DR inventory /
- * CR clearing (draining it, + PPV under standard costing). Otherwise the bill
- * DR'd inventory directly and we record the layer with no separate entry.
- * Idempotent: a line that already produced a receipt movement is skipped.
+ * A vendor bill may only post into a state its receipt effects can satisfy.
+ * Document lines carry no lot or serial evidence, so a tracked line cannot be
+ * received. A standard-cost variance likewise needs a received-not-billed
+ * account. Reject either condition before the posting transaction writes.
+ */
+export async function assertBillReceiptsPostable(
+  runner: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return;
+  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  if (lines.length === 0) return;
+  const profiles = (await runner.execute<{
+    item_id: string;
+    tracking: string;
+    standard_cost: string | null;
+  }>(sql`
+    select item_id, tracking, standard_cost
+      from item_inventory_profiles
+     where org_id = ${orgId}
+       and item_id in (${sql.join(lines.map((line) => sql`${line.itemId}`), sql`, `)})`));
+  const byItem = new Map(profiles.rows.map((row) => [row.item_id, row]));
+  for (const line of lines) {
+    const profile = byItem.get(line.itemId);
+    if (!profile) continue;
+    if (profile.tracking !== "none") {
+      throw new InventoryError(
+        `${profile.tracking}-tracked item requires ${profile.tracking} evidence on its receipt; vendor-bill lines cannot carry lot or serial evidence (item ${line.itemId})`,
+      );
+    }
+    if (line.costingMethod === "standard" && !line.clearingAccountId) {
+      const actualUnitCost = isZero(line.quantity)
+        ? "0"
+        : unitCostPerQuantity(line.amount, line.quantity)!;
+      const standardUnitCost = profile.standard_cost ?? actualUnitCost;
+      const receipt = receiveStandard(
+        line.quantity,
+        actualUnitCost,
+        standardUnitCost,
+      );
+      if (!isZero(receipt.variance)) {
+        throw new InventoryError(
+          `standard-cost receipt of item ${line.itemId} books purchase price variance of ${receipt.variance} but has no received-not-billed account`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Apply every inventory receipt a vendor bill owes in the caller's transaction.
+ * All lines are one accounting unit: a failure on any line rolls the complete
+ * set back. Stored movements make a replay idempotent per document line.
+ */
+export async function applyBillInventoryReceipts(
+  runner: SqlExecutor,
+  orgId: string,
+  actorId: string | null,
+  documentId: string,
+  billEntryId: string,
+  date: string,
+  subsidiaryId: string,
+): Promise<number> {
+  if (!(await inventoryFeatureEnabled(runner, orgId))) return 0;
+  const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
+  for (const key of [
+    ...new Set(
+      lines.map((line) => `${line.itemId}:${line.stockLocationId}`),
+    ),
+  ].sort()) {
+    const separator = key.indexOf(":");
+    await lockInventoryPosition(
+      runner,
+      key.slice(0, separator),
+      key.slice(separator + 1),
+    );
+  }
+  let count = 0;
+  for (const line of lines) {
+    const seen = (await runner.execute(sql`
+      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${line.lineId} and kind = 'receipt' limit 1`));
+    if (seen.rows[0]) continue;
+    const unitCost = isZero(line.quantity)
+      ? "0"
+      : unitCostPerQuantity(line.amount, line.quantity)!;
+    await receiveInventory(orgId, actorId, {
+      itemId: line.itemId,
+      stockLocationId: line.stockLocationId,
+      quantity: line.quantity,
+      unitCost,
+      subsidiaryId,
+      offsetAccountId: line.clearingAccountId ?? undefined,
+      postJournal: line.clearingAccountId != null,
+      linkEntryId: billEntryId,
+      date,
+      documentLineId: line.lineId,
+      idempotencyKey: inventoryPostingEffectKey(line.lineId, "receipt"),
+      memo: "Inventory receipt (bill)",
+      tx: runner,
+    });
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Post-commit drain for historical pending rows. New postings apply receipts
+ * inside their accounting transaction; a replay applies any missing receipts
+ * together and skips those already stored.
  */
 export async function applyInventoryReceiptsForBill(
   orgId: string,
@@ -3295,33 +3404,17 @@ export async function applyInventoryReceiptsForBill(
   date: string,
   subsidiaryId: string,
 ): Promise<number> {
-  if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
-  const lines = await loadDocumentInventoryLines(db, orgId, documentId);
-  let count = 0;
-  for (const l of lines) {
-    const seen = (await db.execute(sql`
-      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'receipt' limit 1`));
-    if (seen.rows[0]) continue;
-    const unitCost = isZero(l.quantity)
-      ? "0"
-      : unitCostPerQuantity(l.amount, l.quantity)!;
-    await receiveInventory(orgId, actorId, {
-      itemId: l.itemId,
-      stockLocationId: l.stockLocationId,
-      quantity: l.quantity,
-      unitCost,
-      subsidiaryId,
-      offsetAccountId: l.clearingAccountId ?? undefined,
-      postJournal: l.clearingAccountId != null,
-      linkEntryId: billEntryId,
+  return db.transaction((tx) =>
+    applyBillInventoryReceipts(
+      tx,
+      orgId,
+      actorId,
+      documentId,
+      billEntryId,
       date,
-      documentLineId: l.lineId,
-      idempotencyKey: inventoryPostingEffectKey(l.lineId, "receipt"),
-      memo: "Inventory receipt (bill)",
-    });
-    count++;
-  }
-  return count;
+      subsidiaryId,
+    ),
+  );
 }
 
 /**
