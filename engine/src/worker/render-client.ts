@@ -19,6 +19,7 @@ export async function renderReportPdf(
   const qs = new URLSearchParams({ orgId, definitionId, ...params });
   const res = await fetch(`${appBaseUrl()}/api/internal/reports/render?${qs.toString()}`, {
     headers: { "x-internal-token": token },
+    redirect: "error",
     signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) {

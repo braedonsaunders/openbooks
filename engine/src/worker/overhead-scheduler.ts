@@ -103,6 +103,7 @@ async function publishForOrg(orgId: string, effectiveFrom: string): Promise<void
           method: "POST",
           headers: { "Content-Type": "application/json", "x-internal-token": process.env.OPENBOOKS_INTERNAL_TOKEN || "" },
           body: JSON.stringify({ orgId, effectiveFrom }),
+          redirect: "error",
           signal: AbortSignal.timeout(120_000),
         });
         const j = (await res.json().catch(() => ({}))) as { published?: number; error?: string };

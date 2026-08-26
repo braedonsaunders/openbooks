@@ -72,18 +72,6 @@ const KNOWN_UNSAFE = [
     findingId: "fnd_mt9jrpuy_4c7az9",
     reason: "ledger-parity ERP harness sends `Authorization: token key:secret` through a redirect-following fetch",
   },
-  {
-    path: "engine/src/worker/render-client.ts",
-    fn: "renderReportPdf",
-    findingId: "fnd_mt9jreit_487sxh",
-    reason: "internal render calls send x-internal-token, which survives cross-origin redirects",
-  },
-  {
-    path: "engine/src/worker/overhead-scheduler.ts",
-    fn: "publishForOrg",
-    findingId: "fnd_mt9jreit_487sxh",
-    reason: "internal publish calls send x-internal-token, which survives cross-origin redirects",
-  },
 ];
 
 function discoverServerSources() {
