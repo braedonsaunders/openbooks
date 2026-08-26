@@ -48,6 +48,7 @@ export const parties = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("parties_org_id_id_unique").on(t.orgId, t.id),
     index("parties_org_name").on(t.orgId, t.displayName),
     uniqueIndex("parties_org_shortcode").on(t.orgId, t.shortCode),
     uniqueIndex("parties_org_source_identity")

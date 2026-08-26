@@ -81,6 +81,7 @@ export const accounts = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("accounts_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("accounts_org_number").on(t.orgId, t.number),
     index("accounts_org_type").on(t.orgId, t.type),
     index("accounts_parent").on(t.parentId),

@@ -22,6 +22,8 @@ const closePostingFenceMigrationPath =
   "schema/migrations/generated/0022_close_posting_fence.sql";
 const wipPrebillSandboxWipeMigrationPath =
   "schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql";
+const documentTenantForeignKeysMigrationPath =
+  "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -52,6 +54,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0022_close_posting_fence.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
+    "0039_document_tenant_coherent_foreign_keys.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
   ]);
   assert.deepEqual(
@@ -62,6 +65,27 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("document financial references are tenant-coherent without rewriting history", () => {
+  const migration = readFileSync(documentTenantForeignKeysMigrationPath, "utf8");
+
+  assert.match(migration, /legacy data violates tenant coherence/i);
+  assert.match(migration, /referenced_org_id/);
+  assert.match(
+    migration,
+    /FOREIGN KEY \(org_id, party_id\) REFERENCES public\.parties\(org_id, id\)/,
+  );
+  assert.match(
+    migration,
+    /FOREIGN KEY \(org_id, account_id\) REFERENCES public\.accounts\(org_id, id\)/,
+  );
+  assert.match(
+    migration,
+    /FOREIGN KEY \(org_id, from_document_id\) REFERENCES public\.documents\(org_id, id\)/,
+  );
+  assert.match(migration, /VALIDATE CONSTRAINT document_lines_account_id_fkey/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("bank statement source evidence is mandatory after forward migrations", () => {

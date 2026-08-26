@@ -189,6 +189,7 @@ export const timeEntries = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("time_entries_org_id_id_unique").on(t.orgId, t.id),
     index("time_entries_employee_date").on(t.employeePartyId, t.workedOn),
     index("time_entries_project").on(t.projectId, t.isBillable),
     index("time_entries_status").on(t.orgId, t.status),

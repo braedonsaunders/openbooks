@@ -211,6 +211,7 @@ export const itemRateVersions = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("item_rate_versions_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("item_rate_versions_book_from").on(
       t.rateBookId,
       t.effectiveFrom,

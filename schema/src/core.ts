@@ -147,7 +147,10 @@ export const accountingPeriods = pgTable(
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber)],
+  (t) => [
+    uniqueIndex("accounting_periods_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber),
+  ],
 );
 
 /**
@@ -194,9 +197,21 @@ const dimensionColumns = {
   ...auditColumns,
 };
 
-export const departments = pgTable("departments", dimensionColumns);
-export const locations = pgTable("locations", dimensionColumns);
-export const classes = pgTable("classes", dimensionColumns);
+export const departments = pgTable(
+  "departments",
+  dimensionColumns,
+  (t) => [uniqueIndex("departments_org_id_id_unique").on(t.orgId, t.id)],
+);
+export const locations = pgTable(
+  "locations",
+  dimensionColumns,
+  (t) => [uniqueIndex("locations_org_id_id_unique").on(t.orgId, t.id)],
+);
+export const classes = pgTable(
+  "classes",
+  dimensionColumns,
+  (t) => [uniqueIndex("classes_org_id_id_unique").on(t.orgId, t.id)],
+);
 
 /**
  * Projects (jobs) are a core dimension supporting job costing, WIP, and
@@ -232,6 +247,7 @@ export const projects = pgTable(
     notes: text("notes"),
   },
   (t) => [
+    uniqueIndex("projects_org_id_id_unique").on(t.orgId, t.id),
     index("projects_customer").on(t.customerId),
     uniqueIndex("projects_org_source_identity")
       .on(
@@ -251,14 +267,18 @@ export const projects = pgTable(
  * All cards post to one liability account; per-card
  * detail lives on journal lines via `payment_card_id`.
  */
-export const paymentCards = pgTable("payment_cards", {
-  id: id(),
-  orgId: orgRef(),
-  holderPartyId: uuid("holder_party_id").notNull(),
-  liabilityAccountId: uuid("liability_account_id").notNull(),
-  label: text("label").notNull(), // "Visa …4821 — K. Laroche"
-  lastFour: text("last_four"),
-  network: text("network"),
-  isActive: boolean("is_active").notNull().default(true),
-  ...auditColumns,
-});
+export const paymentCards = pgTable(
+  "payment_cards",
+  {
+    id: id(),
+    orgId: orgRef(),
+    holderPartyId: uuid("holder_party_id").notNull(),
+    liabilityAccountId: uuid("liability_account_id").notNull(),
+    label: text("label").notNull(), // "Visa …4821 — K. Laroche"
+    lastFour: text("last_four"),
+    network: text("network"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("payment_cards_org_id_id_unique").on(t.orgId, t.id)],
+);

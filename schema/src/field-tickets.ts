@@ -39,6 +39,7 @@ export const fieldTickets = pgTable(
     ...auditColumns,
   },
   (t) => [
+    uniqueIndex("field_tickets_org_id_document_id_unique").on(t.orgId, t.documentId),
     index("field_tickets_org_period").on(t.orgId, t.periodStart, t.periodEnd),
     index("field_tickets_foreman").on(t.orgId, t.foremanPartyId),
     check("field_tickets_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),

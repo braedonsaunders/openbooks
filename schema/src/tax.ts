@@ -144,39 +144,43 @@ export const taxRegistrations = pgTable(
  * Tax codes with dated rates for jurisdiction-specific indirect-tax regimes.
  * Compound taxes are represented by tax groups that sum component codes.
  */
-export const taxCodes = pgTable("tax_codes", {
-  id: id(),
-  orgId: orgRef(),
-  code: text("code").notNull(), // "HST-ON", "GST", "EXEMPT"
-  name: text("name").notNull(),
-  /** Structured jurisdiction ownership. Country and region are denormalized for indexed filtering. */
-  jurisdictionId: uuid("jurisdiction_id"),
-  country: text("country"),
-  region: text("region"),
-  appliesTo: text("applies_to", { enum: ["sales", "purchases", "both"] })
-    .notNull()
-    .default("both"),
-  collectedAccountId: uuid("collected_account_id"), // liability (sales tax collected)
-  paidAccountId: uuid("paid_account_id"), // recoverable ITC asset
-  /** How the component affects settlement and GL projection. */
-  calculationType: text("calculation_type", {
-    enum: ["standard", "withholding", "reverse_charge"],
-  })
-    .notNull()
-    .default("standard"),
-  /** Withholding receivable/payable account; standard/reverse use paid/collected. */
-  withholdingAccountId: uuid("withholding_account_id"),
-  /** Standalone-code price entry includes this tax. Groups own their inclusive flag. */
-  priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
-  /** This component's basis includes earlier non-withholding group components. */
-  compoundOnPrevious: boolean("compound_on_previous").notNull().default(false),
-  /** Statutory rounding precision, usually cents. */
-  roundingScale: integer("rounding_scale").notNull().default(2),
-  /** Non-recoverable portion is expensed to the line's account instead. */
-  recoverablePercent: money("recoverable_percent").notNull().default("100"),
-  isActive: boolean("is_active").notNull().default(true),
-  ...auditColumns,
-});
+export const taxCodes = pgTable(
+  "tax_codes",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(), // "HST-ON", "GST", "EXEMPT"
+    name: text("name").notNull(),
+    /** Structured jurisdiction ownership. Country and region are denormalized for indexed filtering. */
+    jurisdictionId: uuid("jurisdiction_id"),
+    country: text("country"),
+    region: text("region"),
+    appliesTo: text("applies_to", { enum: ["sales", "purchases", "both"] })
+      .notNull()
+      .default("both"),
+    collectedAccountId: uuid("collected_account_id"), // liability (sales tax collected)
+    paidAccountId: uuid("paid_account_id"), // recoverable ITC asset
+    /** How the component affects settlement and GL projection. */
+    calculationType: text("calculation_type", {
+      enum: ["standard", "withholding", "reverse_charge"],
+    })
+      .notNull()
+      .default("standard"),
+    /** Withholding receivable/payable account; standard/reverse use paid/collected. */
+    withholdingAccountId: uuid("withholding_account_id"),
+    /** Standalone-code price entry includes this tax. Groups own their inclusive flag. */
+    priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
+    /** This component's basis includes earlier non-withholding group components. */
+    compoundOnPrevious: boolean("compound_on_previous").notNull().default(false),
+    /** Statutory rounding precision, usually cents. */
+    roundingScale: integer("rounding_scale").notNull().default(2),
+    /** Non-recoverable portion is expensed to the line's account instead. */
+    recoverablePercent: money("recoverable_percent").notNull().default("100"),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [uniqueIndex("tax_codes_org_id_id_unique").on(t.orgId, t.id)],
+);
 
 export const taxRates = pgTable(
   "tax_rates",
@@ -192,14 +196,18 @@ export const taxRates = pgTable(
   (t) => [index("tax_rates_code").on(t.taxCodeId)],
 );
 
-export const taxGroups = pgTable("tax_groups", {
-  id: id(),
-  orgId: orgRef(),
-  code: text("code").notNull(),
-  name: text("name").notNull(),
-  priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
-  isActive: boolean("is_active").notNull().default(true),
-});
+export const taxGroups = pgTable(
+  "tax_groups",
+  {
+    id: id(),
+    orgId: orgRef(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    priceIncludesTax: boolean("price_includes_tax").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+  },
+  (t) => [uniqueIndex("tax_groups_org_id_id_unique").on(t.orgId, t.id)],
+);
 
 export const taxGroupMembers = pgTable(
   "tax_group_members",
