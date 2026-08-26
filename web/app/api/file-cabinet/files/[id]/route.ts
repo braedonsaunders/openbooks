@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server'
 import { deleteFile, getFile, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
-import { recordFileEvent } from '../../../../../lib/file-audit'
 import { fileViewer, requireFileAccess, requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
@@ -34,16 +33,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 
   if (typeof body.name === 'string' && body.name.trim()) {
-    const ok = await renameFile(gate.user.orgId, id, body.name.trim(), gate.user.id)
-    if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    await recordFileEvent({
-      orgId: gate.user.orgId,
+    // The verb commits the rename and its attributable audit atomically.
+    const ok = await renameFile(gate.user.orgId, id, body.name.trim(), gate.user.id, {
       actorId: gate.user.id,
-      table: 'files',
-      rowId: id,
-      action: 'rename',
-      changes: { name: body.name.trim() },
     })
+    if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   if (typeof body.folderId === 'string') {
     if (!isUuid(body.folderId)) {
@@ -52,16 +46,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Moving also needs Editor+ on the destination folder.
     const destGate = await requireFolderAccess(gate, body.folderId, 'editor')
     if (destGate) return destGate
-    const ok = await moveFile(gate.user.orgId, id, body.folderId, gate.user.id)
-    if (!ok) return NextResponse.json({ error: 'cannot move file' }, { status: 400 })
-    await recordFileEvent({
-      orgId: gate.user.orgId,
+    const ok = await moveFile(gate.user.orgId, id, body.folderId, gate.user.id, {
       actorId: gate.user.id,
-      table: 'files',
-      rowId: id,
-      action: 'move',
-      changes: { folderId: body.folderId },
     })
+    if (!ok) return NextResponse.json({ error: 'cannot move file' }, { status: 400 })
   }
   return NextResponse.json({ ok: true })
 }
@@ -76,15 +64,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gateAccess = await requireFileAccess(gate, id, 'manager')
   if (gateAccess) return gateAccess
   const purge = new URL(req.url).searchParams.get('purge') === '1'
-  const ok = purge ? await purgeFile(gate.user.orgId, id) : await deleteFile(gate.user.orgId, id)
+  // The verb commits the mutation and its attributable audit atomically (for
+  // purge, before any post-commit S3 deletion).
+  const audit = { actorId: gate.user.id }
+  const ok = purge
+    ? await purgeFile(gate.user.orgId, id, audit)
+    : await deleteFile(gate.user.orgId, id, audit)
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  await recordFileEvent({
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    table: 'files',
-    rowId: id,
-    action: 'delete',
-    changes: { permanent: purge },
-  })
   return NextResponse.json({ ok: true })
 }
