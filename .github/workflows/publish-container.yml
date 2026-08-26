@@ -203,6 +203,9 @@ jobs:
           OPENBOOKS_RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
           OPENBOOKS_SCANNED_IMAGE: ${{ env.IMAGE_NAME }}@${{ needs.container-security.outputs.digest }}
         run: |
+          # Without pipefail a failing `sed` would yield an empty tag list
+          # that only the explicit count check below catches.
+          set -o pipefail
           mapfile -t release_tags < <(printf '%s\n' "$OPENBOOKS_RELEASE_TAGS" | sed '/^$/d')
           if [ "${#release_tags[@]}" -eq 0 ]; then
             echo "No release tags were generated" >&2
