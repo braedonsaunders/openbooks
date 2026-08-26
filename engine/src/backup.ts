@@ -14,7 +14,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { sql } from "drizzle-orm";
-import { db, longPool, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
+import { db, longPool, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
 import { getS3Client, s3Bucket, s3Enabled } from "./file-storage.ts";
 import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
 import {
@@ -404,6 +404,92 @@ export async function auditBackupEvent(args: {
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }
 
+export class BackupStorageDeleteError extends Error {
+  readonly cause: unknown;
+
+  constructor(key: string, cause: unknown) {
+    super(`could not delete backup object ${key}`);
+    this.name = "BackupStorageDeleteError";
+    this.cause = cause;
+  }
+}
+
+export interface BackupPurgeRunArgs {
+  orgId: string;
+  runId: string;
+  objectKey: string | null;
+  actorId: string | null;
+  reason: "deleted" | "rotated";
+  kind?: string | null;
+  fileName?: string | null;
+  byteSize?: number | string | null;
+  sha256?: string | null;
+  maxKeep?: number;
+}
+
+/**
+ * Purge a stored backup without creating an unaudited destruction window.
+ * The append-only intent commits before S3 is touched. The ledger stamp and
+ * completion evidence then commit together; if that transaction fails, the
+ * intent remains visible and the still-live ledger row makes the idempotent S3
+ * delete retryable.
+ */
+export async function purgeBackupRun(args: BackupPurgeRunArgs): Promise<boolean> {
+  assertUuid(args.orgId);
+  assertUuid(args.runId);
+  if (orgContext.getStore()?.txDb) {
+    throw new Error("backup purge must own its intent and completion transactions");
+  }
+  if (args.objectKey && args.objectKey !== backupObjectKey(args.orgId, args.runId)) {
+    throw new Error("backup object key does not match its ledger identity");
+  }
+
+  const evidence = {
+    purgeReason: args.reason,
+    kind: args.kind,
+    fileName: args.fileName,
+    byteSize: args.byteSize,
+    sha256: args.sha256,
+    maxKeep: args.maxKeep,
+  };
+  await auditBackupEvent({
+    orgId: args.orgId,
+    tableName: "backup_runs",
+    rowId: args.runId,
+    actorId: args.actorId,
+    changes: { event: "backup_purge_requested", ...evidence },
+  });
+
+  if (args.objectKey) {
+    try {
+      await deleteBackupObject(args.objectKey);
+    } catch (error) {
+      throw new BackupStorageDeleteError(args.objectKey, error);
+    }
+  }
+
+  return withOrgTransaction(args.orgId, async () => {
+    const stamped = (await db.execute<{ id: string }>(sql`
+      update backup_runs
+         set purged_at = now(), purge_reason = ${args.reason}, updated_at = now()
+       where id = ${args.runId} and org_id = ${args.orgId} and purged_at is null
+       returning id`));
+    if (!stamped.rows[0]) return false;
+
+    await auditBackupEvent({
+      orgId: args.orgId,
+      tableName: "backup_runs",
+      rowId: args.runId,
+      actorId: args.actorId,
+      changes: {
+        event: args.reason === "deleted" ? "backup_deleted" : "backup_rotated",
+        ...evidence,
+      },
+    });
+    return true;
+  });
+}
+
 /**
  * Execute one queued backup_runs row (BullMQ worker entry). Idempotent: only a
  * row still 'queued' is claimed, so a redelivered job no-ops. The export spools
@@ -628,9 +714,9 @@ export async function executeBackupRun(runId: string): Promise<void> {
 
 /**
  * Retention: keep the newest policy.maxKeep completed backups; purge the rest.
- * Purging deletes the S3 object and stamps the ledger row (purged_at +
- * purge_reason='rotated') — the row is never hard-deleted. An S3 delete
- * failure leaves the row live so the next rotation retries it.
+ * Purging first records an append-only intent, then deletes the S3 object and
+ * atomically commits the ledger stamp plus completion evidence. The row is
+ * never hard-deleted; any failed stage leaves durable, retryable state.
  */
 export async function rotateBackups(orgId: string): Promise<void> {
   assertUuid(orgId);
@@ -645,38 +731,28 @@ export async function rotateBackups(orgId: string): Promise<void> {
      order by created_at desc
      offset ${maxKeep}`));
 
+  let rotated = 0;
   for (const run of excess.rows) {
-    if (run.object_key) {
-      try {
-        await deleteBackupObject(run.object_key);
-      } catch (err) {
-        console.error(`[backup] rotation: S3 delete failed for ${run.object_key} (will retry next run):`, (err as Error).message);
-        continue;
-      }
-    }
-    // Stamp + evidence commit atomically: an audit failure rolls the purge
-    // stamp back so the next rotation retries this run instead of having
-    // destroyed its object without any durable record of why.
-    await withOrgTransaction(orgId, async () => {
-      await db.execute(sql`
-        update backup_runs
-           set purged_at = now(), purge_reason = 'rotated', updated_at = now()
-         where id = ${run.id} and org_id = ${orgId}`);
-      await auditBackupEvent({
+    try {
+      const purged = await purgeBackupRun({
         orgId,
-        tableName: "backup_runs",
-        rowId: run.id,
+        runId: run.id,
+        objectKey: run.object_key,
         actorId: null,
-        changes: {
-          event: "backup_rotated",
-          fileName: run.file_name,
-          byteSize: run.byte_size,
-          maxKeep,
-        },
+        reason: "rotated",
+        fileName: run.file_name,
+        byteSize: run.byte_size,
+        maxKeep,
       });
-    });
+      if (purged) rotated += 1;
+    } catch (error) {
+      console.error(
+        `[backup] rotation: purge failed for ${run.id} (will retry next run):`,
+        (error as Error).message,
+      );
+    }
   }
-  if (excess.rows.length > 0) {
-    console.log(`[backup] org ${orgId}: rotated out ${excess.rows.length} backup(s) beyond keep=${maxKeep}`);
+  if (rotated > 0) {
+    console.log(`[backup] org ${orgId}: rotated out ${rotated} backup(s) beyond keep=${maxKeep}`);
   }
 }

@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/src/db.ts";
 import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/src/backup.ts";
 import { guardPermission } from "../../../../../lib/authz";
 
@@ -62,7 +62,8 @@ export async function PUT(req: Request) {
   };
   const nextRunAt = enabled ? computeNextRunAt(shape, new Date()).toISOString() : null;
 
-  const existing = (await db.execute<{
+  await withOrgTransaction(orgId, async () => {
+    const existing = (await db.execute<{
       enabled: boolean;
       frequency: string;
       hour_utc: number;
@@ -72,45 +73,46 @@ export async function PUT(req: Request) {
     }>(sql`
     select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
       from backup_policies where org_id = ${orgId}`));
-  const before = existing.rows[0];
+    const before = existing.rows[0];
 
-  await db.execute(sql`
-    insert into backup_policies
-      (org_id, enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep, next_run_at, created_by, updated_by)
-    values
-      (${orgId}, ${enabled}, ${frequency}, ${hourUtc}, ${dayOfWeek}, ${dayOfMonth}, ${maxKeep},
-       ${nextRunAt}, ${actor.id}, ${actor.id})
-    on conflict (org_id) do update set
-      enabled = excluded.enabled,
-      frequency = excluded.frequency,
-      hour_utc = excluded.hour_utc,
-      day_of_week = excluded.day_of_week,
-      day_of_month = excluded.day_of_month,
-      max_keep = excluded.max_keep,
-      next_run_at = excluded.next_run_at,
-      updated_at = now(),
-      updated_by = excluded.updated_by
-    where backup_policies.org_id = ${orgId}`);
+    await db.execute(sql`
+      insert into backup_policies
+        (org_id, enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep, next_run_at, created_by, updated_by)
+      values
+        (${orgId}, ${enabled}, ${frequency}, ${hourUtc}, ${dayOfWeek}, ${dayOfMonth}, ${maxKeep},
+         ${nextRunAt}, ${actor.id}, ${actor.id})
+      on conflict (org_id) do update set
+        enabled = excluded.enabled,
+        frequency = excluded.frequency,
+        hour_utc = excluded.hour_utc,
+        day_of_week = excluded.day_of_week,
+        day_of_month = excluded.day_of_month,
+        max_keep = excluded.max_keep,
+        next_run_at = excluded.next_run_at,
+        updated_at = now(),
+        updated_by = excluded.updated_by
+      where backup_policies.org_id = ${orgId}`);
 
-  const after = { enabled, frequency, hour_utc: hourUtc, day_of_week: dayOfWeek, day_of_month: dayOfMonth, max_keep: maxKeep };
-  const changes: Record<string, unknown> = { event: "backup_policy_updated" };
-  const fields = [
-    ["enabled", before?.enabled ?? null, after.enabled],
-    ["frequency", before?.frequency ?? null, after.frequency],
-    ["hourUtc", before?.hour_utc ?? null, after.hour_utc],
-    ["dayOfWeek", before?.day_of_week ?? null, after.day_of_week],
-    ["dayOfMonth", before?.day_of_month ?? null, after.day_of_month],
-    ["maxKeep", before?.max_keep ?? null, after.max_keep],
-  ] as const;
-  for (const [key, from, to] of fields) {
-    if (from !== to) changes[key] = [from, to];
-  }
-  await auditBackupEvent({
-    orgId,
-    tableName: "backup_policies",
-    rowId: orgId,
-    actorId: actor.id,
-    changes,
+    const after = { enabled, frequency, hour_utc: hourUtc, day_of_week: dayOfWeek, day_of_month: dayOfMonth, max_keep: maxKeep };
+    const changes: Record<string, unknown> = { event: "backup_policy_updated" };
+    const fields = [
+      ["enabled", before?.enabled ?? null, after.enabled],
+      ["frequency", before?.frequency ?? null, after.frequency],
+      ["hourUtc", before?.hour_utc ?? null, after.hour_utc],
+      ["dayOfWeek", before?.day_of_week ?? null, after.day_of_week],
+      ["dayOfMonth", before?.day_of_month ?? null, after.day_of_month],
+      ["maxKeep", before?.max_keep ?? null, after.max_keep],
+    ] as const;
+    for (const [key, from, to] of fields) {
+      if (from !== to) changes[key] = [from, to];
+    }
+    await auditBackupEvent({
+      orgId,
+      tableName: "backup_policies",
+      rowId: orgId,
+      actorId: actor.id,
+      changes,
+    });
   });
 
   return NextResponse.json({ ok: true, nextRunAt });
