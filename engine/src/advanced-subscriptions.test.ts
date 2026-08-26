@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { SYSTEM_ACTOR_ID } from "./banking.ts";
 import {
   AdvancedSubscriptionError,
   addMonths,
@@ -52,4 +54,37 @@ test("renewal boundary respects invoice timing and policy", () => {
 
 test("multi-component invoice total preserves ledger precision", () => {
   assert.equal(subscriptionComponentTotal([{ quantity: "10", unitPrice: "12.50" }, { quantity: "1", unitPrice: "29.99" }]), "154.9900");
+});
+
+// --- scheduled renewal provenance (fnd_mt97nsbf_qvlaww) --------------------
+
+test("the scheduler renewal no longer reads or borrows subscriptions.created_by", () => {
+  const source = readFileSync(new URL("./advanced-subscriptions.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function prepareAdvancedSubscriptionBilling");
+  const body = source.slice(start);
+  // The old code selected subscriptions.created_by, refused a NULL author
+  // ("automatic renewal needs an owning user"), and passed that historic user
+  // into applyAmendment for the scheduler-generated amendment.
+  assert.doesNotMatch(body, /created_by|createdBy/, "the scheduler must not consult the subscription's historical author");
+  assert.doesNotMatch(body, /owning user/, "null-author imports must renew under system provenance");
+});
+
+test("scheduled renewals stamp system provenance onto the amendment row", () => {
+  const source = readFileSync(new URL("./advanced-subscriptions.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function prepareAdvancedSubscriptionBilling");
+  const body = source.slice(start);
+  assert.match(
+    body,
+    /applyAmendment\(\s*orgId,\s*null,\s*\{[\s\S]*?type: "renew"[\s\S]*?\},\s*\{\s*system:\s*\{/,
+    "auto-renewal must apply its amendment as an explicit system run",
+  );
+  assert.match(
+    body,
+    /origin: "subscription-billing-scheduler"/,
+    "the scheduler source marker is persisted in the amendment's request snapshot",
+  );
+  const applyStart = source.indexOf("export async function applyAmendment");
+  const applyBody = source.slice(applyStart, start > applyStart ? start : undefined);
+  assert.match(applyBody, /SYSTEM_ACTOR_ID/, "system amendments carry the documented engine actor");
+  assert.notEqual(SYSTEM_ACTOR_ID, "00000000-0000-0000-0000-000000000000", "the zero UUID means 'no actor at all' and is never persisted");
 });
