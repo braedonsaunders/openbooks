@@ -1988,6 +1988,16 @@ async function upsertLock(args: {
   `);
 }
 
+/** Serialize every lock-state transition for one period and book, including
+ * the close-run and controlled-reopen writers, so a scoped relaxation can
+ * never interleave between an effective close check and its commit. */
+function periodScopeAdvisoryLock(executor: SqlExecutor, orgId: string, periodId: string, bookId: string): Promise<unknown> {
+  return executor.execute(sql`
+    select pg_advisory_xact_lock(
+      hashtextextended(${`period-lock:${orgId}:${periodId}:${bookId}`}, 0)
+    )`);
+}
+
 /** Administrative lock control used by Setup. A closed scope can only be
  * reopened through the independently approved reopen-case workflow. */
 export async function setPeriodLockState(args: {
@@ -2003,17 +2013,48 @@ export async function setPeriodLockState(args: {
   if (!args.reason.trim())
     throw new CloseError("a lock-state reason is required");
   await db.transaction(async (tx) => {
+    await periodScopeAdvisoryLock(tx, args.orgId, args.periodId, args.bookId);
     await assertCloseScope(tx, {
       ...args,
       subsidiaryIds: args.subsidiaryId ? [args.subsidiaryId] : [],
     });
-    const current = (await tx.execute<{ state: string }>(sql`
-      select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+    const current = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+      select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
         and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
         and module = ${args.module} for update`));
-    if (args.state === "open" && current.rows[0]?.state === "closed") {
+    // Storage evaluates the exact row before the org-wide fallback row, so a
+    // relaxation here shadows any stronger lock above it. Refuse whenever the
+    // effective governing lock (this exact row, else the org-wide row for the
+    // same module) currently forbids writes, or when the targeted row carries
+    // an active approved reopen window whose expiry a rewrite would erase.
+    const governing = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+      select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+        and book_id = ${args.bookId} and module = ${args.module}
+        and (${args.subsidiaryId ? sql`subsidiary_id = ${args.subsidiaryId} or ` : sql``}subsidiary_id is null)
+      order by (subsidiary_id is not null) desc limit 1`));
+    if (
+      args.state !== "closed" &&
+      periodLockBlocksPosting(
+        governing.rows[0] && {
+          state: governing.rows[0].state,
+          reopenExpiresAt: governing.rows[0].reopen_expires_at,
+          reason: null,
+        },
+        false,
+      )
+    ) {
       throw new CloseError(
         "closed periods must be reopened through an approved reopen request",
+      );
+    }
+    if (
+      args.state !== "closed" &&
+      current.rows[0]?.state === "open" &&
+      current.rows[0].reopen_expires_at != null &&
+      new Date(current.rows[0].reopen_expires_at) > new Date()
+    ) {
+      throw new CloseError(
+        "an active reopen window must be ended through the controlled re-close workflow",
       );
     }
     if (args.module === "gl" && args.state === "closed") {
@@ -2028,17 +2069,50 @@ export async function setPeriodLockState(args: {
         );
       }
     }
-    if (args.module !== "gl" && args.state === "open") {
-      const gl = (await tx.execute<{ state: string }>(sql`
-        select state from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
-          and book_id = ${args.bookId} and subsidiary_id is not distinct from ${args.subsidiaryId ?? null}
-          and module = 'gl'`));
-      if (gl.rows[0]?.state === "closed")
+    if (args.module !== "gl" && args.state !== "closed") {
+      const gl = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+        select state, reopen_expires_at from period_locks where org_id = ${args.orgId} and period_id = ${args.periodId}
+          and book_id = ${args.bookId} and module = 'gl'
+          and (${args.subsidiaryId ? sql`subsidiary_id = ${args.subsidiaryId} or ` : sql``}subsidiary_id is null)
+        order by (subsidiary_id is not null) desc limit 1`));
+      if (
+        periodLockBlocksPosting(
+          gl.rows[0] && {
+            state: gl.rows[0].state,
+            reopenExpiresAt: gl.rows[0].reopen_expires_at,
+            reason: null,
+          },
+          false,
+        )
+      )
         throw new CloseError(
           "GL must be reopened before a subledger can be opened",
         );
     }
     await upsertLock({ ...args, tx, reason: args.reason.trim() });
+    if (!args.subsidiaryId && args.state === "closed") {
+      // A scope-wide close must dominate every narrower lock: storage prefers
+      // the exact row, so each remaining child lock is tightened in the same
+      // transaction (mirrored into the audit trail) instead of being shadowed.
+      const children = (await tx.execute<{ subsidiary_id: string }>(sql`
+        select subsidiary_id from period_locks
+         where org_id = ${args.orgId} and period_id = ${args.periodId} and book_id = ${args.bookId}
+           and module = ${args.module} and subsidiary_id is not null and state <> 'closed'
+         for update`));
+      for (const child of children.rows) {
+        await upsertLock({
+          tx,
+          orgId: args.orgId,
+          periodId: args.periodId,
+          bookId: args.bookId,
+          subsidiaryId: child.subsidiary_id,
+          module: args.module,
+          state: "closed",
+          actorId: args.actorId,
+          reason: args.reason.trim(),
+        });
+      }
+    }
     await tx.execute(sql`
       insert into close_events (org_id, event_type, actor_id, payload)
       values (${args.orgId}, 'period.lock_changed', ${args.actorId},
@@ -2053,6 +2127,10 @@ export async function closeApprovedRun(
 ): Promise<void> {
   await refreshCloseRun(orgId, runId, actorId);
   await db.transaction(async (tx) => {
+    const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
+      select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
+    if (!target.rows[0]) throw new CloseError("close run not found");
+    await periodScopeAdvisoryLock(tx, orgId, target.rows[0].period_id, target.rows[0].book_id);
     const run = (await tx.execute<{
         period_id: string;
         book_id: string;
@@ -2283,6 +2361,7 @@ export async function decidePeriodReopen(args: {
          where id = ${args.requestId} and org_id = ${args.orgId}`);
       return;
     }
+    await periodScopeAdvisoryLock(tx, args.orgId, row.period_id, row.book_id);
     const policy = (await tx.execute<{ rules: { defaultHours?: number; maxHours?: number } }>(sql`select rules from close_policies
       where org_id = ${args.orgId} and code = 'controlled-reopen' and is_active limit 1`));
     const defaultHours = Number(policy.rows[0]?.rules?.defaultHours ?? 24);
