@@ -4,7 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from './bills'
 import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { add, mulRatio, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, fromUnits, mulRatio, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { billableRemainderUnits, lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts'
 import { remainingOrderLine } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
@@ -122,10 +123,15 @@ export async function convertOrder(
     if (!target) throw new ConversionError(`Cannot convert a ${doc.kind} into ${targetKind}`)
 
     const lines = (await tx.execute(sql`
-      select id, line_number, item_id, account_id, description, quantity, unit, unit_price,
-             amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id, location_id, class_id, extra_dims,
-             stock_location_id, is_billable, quantity_billed
-        from document_lines where document_id = ${sourceId} and org_id = ${orgId} order by line_number
+      select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description, dl.quantity, dl.unit,
+             dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
+             dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
+             dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
+             i.kind as item_kind
+        from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+       where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
+       order by dl.line_number
+       for update of dl
     `))
 
     // Remaining (un-pulled) quantity per line.
@@ -141,11 +147,29 @@ export async function convertOrder(
       }))
       .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
+    // One shared ceiling for every billing channel: a purchase order pulls
+    // forward only what is received-and-unbilled, so manual conversion cannot
+    // bypass the receipt leg the AP capture channel respects.
+    const covered = (
+      doc.kind === 'purchase_order'
+        ? remaining.flatMap((row) => {
+            const units = billableRemainderUnits({
+              orderedQuantity: String(row.line.quantity),
+              billedQuantity: String(row.line.quantity_billed),
+              fulfilledQuantity: String(row.line.quantity_fulfilled),
+              itemId: row.line.item_id ?? null,
+              itemKind: row.line.item_kind ?? null,
+            })
+            return units > 0n ? [{ ...row, units }] : []
+          })
+        : remaining.map((row) => ({ ...row, units: toUnits(row.remainder.quantity) }))
+    )
+    if (covered.length === 0) throw new ConversionError('Received quantities do not cover any line yet')
     // Source lines stay. Turning Inventory off must refuse a conversion that
     // would copy inventory / assembly / kit onto the new document.
     if (!(await isFeatureEnabled(orgId, 'inventory'))) {
       const itemIds = [...new Set(
-        remaining.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+        covered.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
@@ -159,7 +183,7 @@ export async function convertOrder(
     // would copy equipment_charge onto the new document.
     if (!(await isFeatureEnabled(orgId, 'equipment'))) {
       const itemIds = [...new Set(
-        remaining.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+        covered.map((row) => row.line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
@@ -194,10 +218,11 @@ export async function convertOrder(
     const newId = created.id
 
     let lineNo = 1
-    for (const r of remaining) {
+    for (const r of covered) {
       const l = r.line
-      const amount = r.remainder.amount
-      const taxAmount = r.remainder.taxAmount
+      const remainderUnits = toUnits(r.remainder.quantity)
+      const amount = mulRatio(r.remainder.amount, r.units, remainderUnits)
+      const taxAmount = mulRatio(r.remainder.taxAmount, r.units, remainderUnits)
       convertedAmounts.push(amount)
       convertedTaxes.push(taxAmount)
       const inserted = (await tx.execute<{ id: string }>(sql`
@@ -205,14 +230,13 @@ export async function convertOrder(
               quantity, unit, unit_price, amount, tax_code_id, tax_group_id, tax_amount, department_id, project_id,
               location_id, class_id, extra_dims, stock_location_id, is_billable, created_by)
         values (${orgId}, ${newId}, ${lineNo}, ${l.item_id}, ${l.account_id}, ${l.description},
-              ${r.remainder.quantity}, ${l.unit}, ${l.unit_price}, ${amount},
+              ${fromUnits(r.units)}, ${l.unit}, ${l.unit_price}, ${amount},
               ${l.tax_code_id}, ${l.tax_group_id}, ${taxAmount}, ${l.department_id}, ${l.project_id},
               ${l.location_id}, ${l.class_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.stock_location_id}, ${l.is_billable}, ${userId})
         returning id
       `))
       const newLineId = inserted.rows[0]!.id
       const originalQty = toUnits(String(l.quantity))
-      const remainingQty = toUnits(r.remainder.quantity)
       if (originalQty !== 0n && (l.tax_code_id || l.tax_group_id)) {
         const components = (await tx.execute<{
           tax_code_id: string
@@ -249,13 +273,13 @@ export async function convertOrder(
           documentLineId: newLineId,
           actorId: userId,
           components: components.rows.map((c) => {
-            const tax = mulRatio(String(c.tax_amount), remainingQty, originalQty)
-            const recoverable = mulRatio(String(c.recoverable_amount), remainingQty, originalQty)
+            const tax = mulRatio(String(c.tax_amount), r.units, originalQty)
+            const recoverable = mulRatio(String(c.recoverable_amount), r.units, originalQty)
             return {
               taxCodeId: c.tax_code_id,
               sequence: c.sequence,
               ratePercent: String(c.rate_percent),
-              taxableAmount: mulRatio(String(c.taxable_amount), remainingQty, originalQty),
+              taxableAmount: mulRatio(String(c.taxable_amount), r.units, originalQty),
               taxAmount: tax,
               recoverableAmount: recoverable,
               // Keep the recovery crossfoot: scale tax and recoverable, then
@@ -273,10 +297,17 @@ export async function convertOrder(
           }),
         })
       }
-      // advance billed qty on the source line
+      // Advance billed qty on the source line. The advance is guarded by the
+      // same ceiling the remainder was computed from, so a concurrent channel
+      // that consumed the cover makes THIS conversion fail whole (the row
+      // lock already serializes; the predicate documents and enforces it).
+      const coveredQty = fromUnits(r.units)
+      const receiptRequired = l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
       await tx.execute(sql`
-        update document_lines set quantity_billed = quantity_billed + ${r.remainder.quantity}, updated_by = ${userId}
-        where id = ${l.id} and org_id = ${orgId}
+        update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}
+         where id = ${l.id} and org_id = ${orgId}
+           and quantity_billed + ${coveredQty} <= quantity
+           ${receiptRequired ? sql`and quantity_billed + ${coveredQty} <= quantity_fulfilled` : sql``}
       `)
       lineNo++
     }

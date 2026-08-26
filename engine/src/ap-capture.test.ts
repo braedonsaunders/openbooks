@@ -8,6 +8,7 @@ import {
   validateNormalizedCapture,
   validatePurchaseOrderQuantities,
 } from "./ap-capture.ts";
+import { billableRemainderUnits, matchPurchaseOrderLine } from "./ap-capture-service.ts";
 
 test("upload signature validation accepts supported formats and rejects mislabeled content", () => {
   assert.equal(captureContentMatchesMime(new Uint8Array([0x25, 0x50, 0x44, 0x46]), "application/pdf"), true);
@@ -136,4 +137,41 @@ test("PO matching enforces both ordered and received quantities exactly", () => 
     invoiceQuantity: "1.0000", orderedQuantity: "1.0000", billedQuantity: "0.0000",
     fulfilledQuantity: "0.0000", requiresReceipt: false,
   }), []);
+});
+
+const stockPoLine = {
+  invoiceQuantity: "6.0000",
+  orderedQuantity: "10.0000",
+  billedQuantity: "0.0000",
+  fulfilledQuantity: "6.0000",
+  poUnitPrice: "10.0000",
+  itemId: "item-1",
+  itemKind: "inventory",
+};
+
+test("PO match refuses an off-price capture the quantity and receipt legs would pass", () => {
+  // Quantities clear both legs (6 ≤ 10 ordered, 6 ≤ 6 received), but +50% on
+  // unit price is far outside tolerance and must block, not ride through.
+  const codes = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" })
+    .map((matchIssue) => matchIssue.code);
+  assert.ok(codes.includes("po_price_variance"));
+  const variance = matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "15.0000" })
+    .find((matchIssue) => matchIssue.code === "po_price_variance");
+  assert.deepEqual(variance, { code: "po_price_variance", expected: "10.0000", actual: "15.0000" });
+  // The receipt leg cannot be routed around on either channel: an unreceived
+  // stock line bills nothing, even with ordered quantity remaining.
+  assert.deepEqual(
+    matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.0000", fulfilledQuantity: "0.0000" })
+      .map((matchIssue) => matchIssue.code),
+    ["receipt_quantity_shortfall"],
+  );
+  assert.equal(billableRemainderUnits({
+    orderedQuantity: "10.0000", billedQuantity: "0.0000", fulfilledQuantity: "0.0000",
+    itemId: "item-1", itemKind: "inventory",
+  }), 0n);
+});
+
+test("PO match accepts captures within the price tolerance unchanged", () => {
+  assert.deepEqual(matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.1500" }), []);
+  assert.deepEqual(matchPurchaseOrderLine({ ...stockPoLine, invoiceUnitPrice: "10.2000" }), []);
 });
