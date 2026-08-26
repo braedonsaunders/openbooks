@@ -51,8 +51,10 @@ import { fieldTickets } from "./field-tickets";
  *
  * Kinds (initial set, from actual usage): vendor_bill, vendor_credit,
  * vendor_payment, expense_report, customer_invoice, customer_credit,
- * customer_payment, sales_order, purchase_order, cheque, card_charge,
- * card_refund, transfer, quote.
+ * customer_payment, sales_order, sales_fulfillment, purchase_order, cheque,
+ * card_charge, card_refund, transfer, quote. A sales_fulfillment is immutable
+ * operational shipment evidence: its inventory movement and COGS journal are
+ * committed with the document, independently from customer billing.
  */
 export const documents = pgTable(
   "documents",
@@ -423,7 +425,8 @@ export const documentLines = pgTable(
 );
 
 /**
- * Document relationship chains (SO → PO, SO → invoice, bill → payment run):
+ * Document relationship chains (SO → fulfillment → invoice, SO → PO,
+ * bill → payment run):
  * explicit and queryable, replacing source platform's tangle of createdfrom +
  * link tables + custbody "SO Created From" workarounds.
  */

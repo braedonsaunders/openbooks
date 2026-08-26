@@ -7,6 +7,10 @@
 
 export const ORDER_KINDS = ['quote', 'sales_order', 'purchase_order'] as const
 export type OrderKind = (typeof ORDER_KINDS)[number]
+/** Immutable operational document created when stock physically leaves on a
+ * sales order. It is deliberately not an ORDER_KIND: it cannot be edited or
+ * converted as another commercial commitment. */
+export const SALES_FULFILLMENT_KIND = 'sales_fulfillment' as const
 
 /**
  * What a given order kind is allowed to convert into.

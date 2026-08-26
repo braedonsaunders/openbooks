@@ -1,14 +1,21 @@
 import 'server-only'
+import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from './bills'
-import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
+import {
+  ORDER_KINDS,
+  SALES_FULFILLMENT_KIND,
+  type OrderKind,
+  CONVERSION_TARGETS,
+} from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { add, fromUnits, mulRatio, neg, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { billableRemainderUnits, lineRequiresReceipt } from '@openbooks/engine/src/ap-capture-service.ts'
 import { remainingOrderLine } from './order-cycle-math'
 import { isFeatureEnabled } from './features'
 import { businessToday } from '@openbooks/engine/src/business-date.ts'
+import { applySalesFulfillmentInventoryIssues } from '@openbooks/engine/src/inventory.ts'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -93,6 +100,346 @@ interface ConvertResult {
   id: string
   documentNumber: string
   kind: string
+  replayed?: boolean
+}
+
+export interface SalesFulfillmentLineInput {
+  sourceLineId: string
+  quantity: string
+  lotId?: string | null
+  serialId?: string | null
+}
+
+export interface SalesFulfillmentInput {
+  fulfillmentDate: string
+  /** Required stable command identity. A lost response can be retried with the
+   * same key; the stored fulfillment is returned instead of shipping twice. */
+  idempotencyKey: string
+  lines: SalesFulfillmentLineInput[]
+}
+
+interface CanonicalFulfillmentLine {
+  sourceLineId: string
+  quantity: string
+  lotId: string | null
+  serialId: string | null
+}
+
+interface SalesFulfillmentSourceRow extends Record<string, unknown> {
+  id: string
+  kind: string
+  status: string
+  party_id: string | null
+  currency: string
+  fx_rate: string
+  document_date: string
+  due_date: string | null
+  subsidiary_id: string | null
+  department_id: string | null
+  project_id: string | null
+  location_id: string | null
+  class_id: string | null
+  extra_dims: Record<string, unknown> | null
+  memo: string | null
+  billing_method: string | null
+}
+
+interface SalesFulfillmentSourceLineRow extends Record<string, unknown> {
+  id: string
+  line_number: number
+  item_id: string | null
+  account_id: string | null
+  description: string | null
+  quantity: string
+  unit: string | null
+  department_id: string | null
+  project_id: string | null
+  location_id: string | null
+  class_id: string | null
+  extra_dims: Record<string, unknown> | null
+  stock_location_id: string | null
+  quantity_fulfilled: string
+  custom: Record<string, unknown> | null
+  item_kind: string | null
+  has_inventory_profile: boolean
+}
+
+function canonicalFulfillmentLines(lines: SalesFulfillmentLineInput[]): CanonicalFulfillmentLine[] {
+  if (lines.length === 0) throw new ConversionError('Select at least one line to fulfill')
+  const seen = new Set<string>()
+  const canonical = lines.map((line) => {
+    const sourceLineId = line.sourceLineId.trim()
+    if (!sourceLineId) throw new ConversionError('Fulfillment line id is required')
+    if (seen.has(sourceLineId)) throw new ConversionError(`Fulfillment line ${sourceLineId} was selected more than once`)
+    seen.add(sourceLineId)
+    let quantity: string
+    try {
+      const units = toUnits(line.quantity)
+      if (units <= 0n) throw new Error('non-positive')
+      quantity = fromUnits(units)
+    } catch {
+      throw new ConversionError(`Fulfillment quantity for line ${sourceLineId} must be positive`)
+    }
+    return {
+      sourceLineId,
+      quantity,
+      lotId: line.lotId?.trim() || null,
+      serialId: line.serialId?.trim() || null,
+    }
+  })
+  return canonical.sort((a, b) => a.sourceLineId.localeCompare(b.sourceLineId))
+}
+
+/**
+ * Record one immutable sales shipment and relieve inventory/COGS in the same
+ * transaction. Source order and line locks fence concurrent partial shipments;
+ * a stable command key makes serial and concurrent retries exactly-once.
+ */
+export async function fulfillSalesOrder(
+  orgId: string,
+  userId: string,
+  sourceId: string,
+  input: SalesFulfillmentInput,
+): Promise<ConvertResult> {
+  if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
+  const idempotencyKey = input.idempotencyKey.trim()
+  if (idempotencyKey.length < 1 || idempotencyKey.length > 500) {
+    throw new ConversionError('Fulfillment idempotency key must be between 1 and 500 characters')
+  }
+  const requested = canonicalFulfillmentLines(input.lines)
+  const command = {
+    fulfillmentDate: input.fulfillmentDate,
+    lines: requested,
+  }
+  return db.transaction(async (tx) => {
+    const sourceResult = (await tx.execute<SalesFulfillmentSourceRow>(sql`
+      select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
+             subsidiary_id, department_id, project_id, location_id, class_id,
+             extra_dims, memo, billing_method
+        from documents
+       where id = ${sourceId} and org_id = ${orgId}
+       for update
+    `))
+    const source = sourceResult.rows[0]
+    if (!source) throw new ConversionError('Sales order not found')
+    if (source.kind !== 'sales_order') throw new ConversionError('Only a sales order can be fulfilled')
+    if (source.status === 'draft') throw new ConversionError('Issue the sales order before fulfilling it')
+    if (source.status === 'voided') throw new ConversionError('This sales order is voided')
+    if (source.status !== 'approved') throw new ConversionError(`This sales order is ${source.status}`)
+
+    // The source header lock serializes every fulfillment command for this SO.
+    // That makes the JSON key unique at the owning aggregate boundary without
+    // a second global command table, and lets a retry compare its exact payload.
+    const replay = (await tx.execute<{
+      id: string
+      document_number: string
+      command_matches: boolean
+    }>(sql`
+      select target.id, target.document_number,
+             target.custom->'salesFulfillmentCommand' = ${JSON.stringify(command)}::jsonb as command_matches
+        from document_links link
+        join documents target
+          on target.id = link.to_document_id and target.org_id = link.org_id
+       where link.org_id = ${orgId} and link.from_document_id = ${sourceId}
+         and link.link_type = 'fulfills' and target.kind = ${SALES_FULFILLMENT_KIND}
+         and target.custom->>'fulfillmentIdempotencyKey' = ${idempotencyKey}
+       limit 1
+    `)).rows[0]
+    if (replay) {
+      if (!replay.command_matches) {
+        throw new ConversionError('Fulfillment idempotency key was already used with a different shipment', 409)
+      }
+      return {
+        id: replay.id,
+        documentNumber: replay.document_number,
+        kind: SALES_FULFILLMENT_KIND,
+        replayed: true,
+      }
+    }
+
+    const sourceLines = (await tx.execute<SalesFulfillmentSourceLineRow>(sql`
+      select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
+             dl.quantity, dl.unit, dl.department_id, dl.project_id, dl.location_id,
+             dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
+             dl.custom, i.kind as item_kind,
+             profile.item_id is not null as has_inventory_profile
+        from document_lines dl
+        left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+        left join item_inventory_profiles profile
+          on profile.item_id = dl.item_id and profile.org_id = dl.org_id
+       where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
+       order by dl.line_number
+       for update of dl
+    `)).rows
+    const sourceById = new Map(sourceLines.map((line) => [line.id, line]))
+    const selected = requested.map((request) => {
+      const line = sourceById.get(request.sourceLineId)
+      if (!line) throw new ConversionError(`Sales-order line ${request.sourceLineId} was not found`)
+      const remaining = toUnits(String(line.quantity)) - toUnits(String(line.quantity_fulfilled))
+      const shipping = toUnits(request.quantity)
+      if (remaining <= 0n) throw new ConversionError(`Sales-order line ${line.line_number} is already fully fulfilled`)
+      if (shipping > remaining) {
+        throw new ConversionError(
+          `Sales-order line ${line.line_number} has only ${fromUnits(remaining)} remaining to fulfill`,
+        )
+      }
+      return { request, line }
+    })
+
+    if (!(await isFeatureEnabled(orgId, 'inventory'))) {
+      const inventoryLine = selected.find(({ line }) =>
+        line.item_id != null && INVENTORY_ITEM_KINDS.has(String(line.item_kind)),
+      )
+      if (inventoryLine) throw new ConversionError('Inventory is disabled')
+    }
+    const uncostedInventoryLine = selected.find(({ line }) =>
+      line.item_id != null &&
+      INVENTORY_ITEM_KINDS.has(String(line.item_kind)) &&
+      !line.has_inventory_profile,
+    )
+    if (uncostedInventoryLine) {
+      throw new ConversionError(
+        `Sales-order line ${uncostedInventoryLine.line.line_number} is an inventory item without a costing profile`,
+      )
+    }
+
+    const documentNumber = await nextDocumentNumber(orgId, SALES_FULFILLMENT_KIND, 'SHIP-', source.subsidiary_id)
+    const fulfillmentId = randomUUID()
+    const custom = {
+      fulfillmentIdempotencyKey: idempotencyKey,
+      salesFulfillmentCommand: command,
+    }
+    await tx.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, party_id, document_date, currency,
+         fx_rate, status, subsidiary_id, department_id, project_id, location_id,
+         class_id, extra_dims, billing_method, memo, subtotal, tax_total, total,
+         custom, created_by, updated_by)
+      values
+        (${fulfillmentId}, ${orgId}, ${SALES_FULFILLMENT_KIND}, ${documentNumber},
+         ${source.party_id}, ${input.fulfillmentDate}, ${source.currency}, ${source.fx_rate},
+         'draft', ${source.subsidiary_id}, ${source.department_id}, ${source.project_id},
+         ${source.location_id}, ${source.class_id}, ${JSON.stringify(source.extra_dims ?? {})}::jsonb,
+         ${source.billing_method}, ${source.memo}, '0', '0', '0',
+         ${JSON.stringify(custom)}::jsonb, ${userId}, ${userId})
+    `)
+
+    let lineNumber = 1
+    for (const { request, line } of selected) {
+      const lineCustom = {
+        ...(line.custom ?? {}),
+        fulfillment: {
+          sourceLineId: line.id,
+          lotId: request.lotId,
+          serialId: request.serialId,
+        },
+      }
+      await tx.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, item_id, account_id, description,
+           quantity, unit, unit_price, amount, tax_amount, department_id,
+           project_id, location_id, class_id, extra_dims, stock_location_id,
+           is_billable, custom, created_by, updated_by)
+        values
+          (${orgId}, ${fulfillmentId}, ${lineNumber}, ${line.item_id}, ${line.account_id},
+           ${line.description}, ${request.quantity}, ${line.unit}, '0', '0', '0',
+           ${line.department_id}, ${line.project_id}, ${line.location_id}, ${line.class_id},
+           ${JSON.stringify(line.extra_dims ?? {})}::jsonb, ${line.stock_location_id}, false,
+           ${JSON.stringify(lineCustom)}::jsonb, ${userId}, ${userId})
+      `)
+      const advanced = (await tx.execute<{ id: string }>(sql`
+        update document_lines
+           set quantity_fulfilled = quantity_fulfilled + ${request.quantity},
+               updated_by = ${userId}
+         where id = ${line.id} and org_id = ${orgId}
+           and quantity_fulfilled + ${request.quantity} <= quantity
+        returning id
+      `)).rows[0]
+      if (!advanced) {
+        throw new ConversionError(`Sales-order line ${line.line_number} changed while it was being fulfilled`, 409)
+      }
+      lineNumber++
+    }
+
+    await tx.execute(sql`
+      insert into document_links
+        (org_id, from_document_id, to_document_id, link_type, created_by)
+      values (${orgId}, ${sourceId}, ${fulfillmentId}, 'fulfills', ${userId})
+    `)
+    await applySalesFulfillmentInventoryIssues(
+      tx,
+      orgId,
+      userId,
+      fulfillmentId,
+      input.fulfillmentDate,
+      source.subsidiary_id,
+    )
+    await tx.execute(sql`
+      update documents
+         set status = 'approved', updated_by = ${userId}
+       where id = ${fulfillmentId} and org_id = ${orgId}
+    `)
+    return { id: fulfillmentId, documentNumber, kind: SALES_FULFILLMENT_KIND }
+  })
+}
+
+/** Existing conversion routes carry only a target kind. Fulfill the complete
+ * current remainder through that established surface while deriving a stable
+ * key from the observed source state: concurrent clicks share a key and replay
+ * the winner instead of creating two shipments. Call fulfillSalesOrder
+ * directly when a picker supplies explicit partial quantities. */
+async function fulfillSalesOrderRemainder(
+  orgId: string,
+  userId: string,
+  sourceId: string,
+): Promise<ConvertResult> {
+  const fulfillmentDate = await businessToday(orgId)
+  const rows = (await db.execute<{
+    id: string
+    quantity: string
+    quantity_fulfilled: string
+  }>(sql`
+    select line.id, line.quantity, line.quantity_fulfilled
+      from document_lines line
+      join documents source
+        on source.id = line.document_id and source.org_id = line.org_id
+     where line.org_id = ${orgId} and source.id = ${sourceId}
+       and source.kind = 'sales_order'
+     order by line.id
+  `)).rows
+  const lines = rows.flatMap((line) => {
+    const remaining = toUnits(line.quantity) - toUnits(line.quantity_fulfilled)
+    return remaining > 0n
+      ? [{ sourceLineId: line.id, quantity: fromUnits(remaining) }]
+      : []
+  })
+  if (lines.length === 0) {
+    const latest = (await db.execute<{ id: string; document_number: string }>(sql`
+      select target.id, target.document_number
+        from document_links link
+        join documents target
+          on target.id = link.to_document_id and target.org_id = link.org_id
+       where link.org_id = ${orgId} and link.from_document_id = ${sourceId}
+         and link.link_type = 'fulfills' and target.kind = ${SALES_FULFILLMENT_KIND}
+       order by target.created_at desc, target.id desc
+       limit 1
+    `)).rows[0]
+    if (!latest) throw new ConversionError('Every line is already fully fulfilled')
+    return {
+      id: latest.id,
+      documentNumber: latest.document_number,
+      kind: SALES_FULFILLMENT_KIND,
+      replayed: true,
+    }
+  }
+  const idempotencyKey = `sales-fulfillment-remainder:${createHash('sha256')
+    .update(JSON.stringify({ sourceId, fulfillmentDate, lines }))
+    .digest('hex')}`
+  return fulfillSalesOrder(orgId, userId, sourceId, {
+    fulfillmentDate,
+    idempotencyKey,
+    lines,
+  })
 }
 
 /**
@@ -107,6 +454,9 @@ export async function convertOrder(
   targetKind: string,
 ): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
+  if (targetKind === SALES_FULFILLMENT_KIND) {
+    return fulfillSalesOrderRemainder(orgId, userId, sourceId)
+  }
   return db.transaction(async (tx) => {
     const src = (await tx.execute<any>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
@@ -147,11 +497,14 @@ export async function convertOrder(
       }))
       .filter((row): row is { line: any; remainder: NonNullable<ReturnType<typeof remainingOrderLine>> } => row.remainder !== null)
     if (remaining.length === 0) throw new ConversionError('Every line is already fully converted')
-    // One shared ceiling for every billing channel: a purchase order pulls
-    // forward only what is received-and-unbilled, so manual conversion cannot
-    // bypass the receipt leg the AP capture channel respects.
+    // One shared physical-quantity ceiling for both billing legs. A purchase
+    // order bills received-and-unbilled stock; a sales order bills shipped-and-
+    // unbilled stock. Service/non-stock lines remain two-way matched.
+    const fulfillmentGovernedBilling =
+      (doc.kind === 'purchase_order' && target.kind === 'vendor_bill') ||
+      (doc.kind === 'sales_order' && target.kind === 'customer_invoice')
     const covered = (
-      doc.kind === 'purchase_order'
+      fulfillmentGovernedBilling
         ? remaining.flatMap((row) => {
             const units = billableRemainderUnits({
               orderedQuantity: String(row.line.quantity),
@@ -164,7 +517,7 @@ export async function convertOrder(
           })
         : remaining.map((row) => ({ ...row, units: toUnits(row.remainder.quantity) }))
     )
-    if (covered.length === 0) throw new ConversionError('Received quantities do not cover any line yet')
+    if (covered.length === 0) throw new ConversionError('Fulfilled quantities do not cover any line yet')
     // Source lines stay. Turning Inventory off must refuse a conversion that
     // would copy inventory / assembly / kit onto the new document.
     if (!(await isFeatureEnabled(orgId, 'inventory'))) {
@@ -303,12 +656,14 @@ export async function convertOrder(
       // lock already serializes; the predicate documents and enforces it).
       const coveredQty = fromUnits(r.units)
       const receiptRequired = l.item_id != null && lineRequiresReceipt(l.item_kind ?? null)
-      await tx.execute(sql`
+      const advanced = (await tx.execute<{ id: string }>(sql`
         update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}
          where id = ${l.id} and org_id = ${orgId}
            and quantity_billed + ${coveredQty} <= quantity
            ${receiptRequired ? sql`and quantity_billed + ${coveredQty} <= quantity_fulfilled` : sql``}
-      `)
+        returning id
+      `)).rows[0]
+      if (!advanced) throw new ConversionError(`Line ${l.line_number} changed while it was being converted`, 409)
       lineNo++
     }
 
