@@ -298,11 +298,15 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
     assert.equal(partial.rows[0]!.n, 0);
 
     // With every needed pair covered, the same wrapped call commits the whole
-    // period at once: current = latest spot on/before period end; average and
-    // historical fall back to it when no in-period rates or prior period exist.
+    // period at once. USD retains the prior-period control above (average
+    // falls back to current), while EUR's two in-period observations exercise
+    // PostgreSQL's wider-scale avg(numeric) result and prove it is normalized
+    // to the persisted numeric(19,10) FX boundary.
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
-      values (${org.orgId}, 'EUR', 'CAD', '2026-06-25', 'spot', '0.6600000000')`);
+      values
+        (${org.orgId}, 'EUR', 'CAD', '2026-07-10', 'spot', '0.6400000000'),
+        (${org.orgId}, 'EUR', 'CAD', '2026-07-20', 'spot', '0.6800000000')`);
     const written = await withOrgTransaction(org.orgId, () =>
       deriveConsolidatedRates(org.orgId, org.periodId),
     );
@@ -310,9 +314,9 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
     const expected = [
       {
         from_currency: "EUR",
-        current_rate: "0.6600000000",
+        current_rate: "0.6800000000",
         average_rate: "0.6600000000",
-        historical_rate: "0.6600000000",
+        historical_rate: "0.6800000000",
       },
       {
         from_currency: "USD",

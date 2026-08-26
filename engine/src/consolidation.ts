@@ -317,7 +317,7 @@ async function deriveConsolidatedRatesIn(orgId: string, periodId: string, exec: 
           where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
             and rate_type = 'spot' and as_of <= ${period.ends_on}
           order by as_of desc limit 1) as current,
-        (select avg(rate) from fx_rates
+        (select avg(rate)::numeric(19,10) from fx_rates
           where org_id = ${orgId} and from_currency = ${pair.from} and to_currency = ${pair.to}
             and rate_type = 'spot'
             and as_of between ${period.starts_on} and ${period.ends_on}) as average,
