@@ -37,7 +37,7 @@ export default async function CashFlow({
   const to = period.to
   const dims = q.dims
   const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
-  const m = (v: ExactDecimal) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: ExactDecimal) => money(v, { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)

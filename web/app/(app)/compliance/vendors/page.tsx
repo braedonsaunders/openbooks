@@ -29,6 +29,7 @@ import { loadRequirementPolicies } from '@openbooks/engine/src/compliance.ts'
 import { FORM_TYPES } from '@openbooks/engine/src/information-returns.ts'
 import { pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { decimalCmp } from '../../../../lib/statement-format'
 import { complianceTabs } from '../tabs'
 import { VendorComplianceDrawer } from './VendorComplianceDrawer'
 import { MatrixFilters } from './MatrixFilters'
@@ -195,9 +196,9 @@ export default async function ComplianceVendorsPage({
                     )
                   })}
                   <TableCell className="text-right tabular-nums">
-                    {Number(row.openBalance) > 0 ? (
+                    {decimalCmp(row.openBalance, '0') > 0 ? (
                       <span className={row.blocksPayment ? 'font-semibold text-red-600 dark:text-red-400' : ''}>
-                        {money(Number(row.openBalance))}
+                        {money(row.openBalance)}
                       </span>
                     ) : (
                       <span className="text-slate-300 dark:text-slate-600">—</span>

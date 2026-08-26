@@ -36,7 +36,7 @@ export default async function Partners({
   const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const [all, org] = await Promise.all([partnerBalances(k), orgInfo()])
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
   const q = params.q?.toLowerCase()
   const filtered = q ? all.filter((r) => (r.display_name ?? '').toLowerCase().includes(q)) : all
   const presented = (value: string) => k === 'payable' ? decimalNeg(value) : value

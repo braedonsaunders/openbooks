@@ -42,7 +42,7 @@ export default async function PartnerStatementPage({
     partnerStatement(partyId, authz.user.orgId, { from: period.from, to: period.to, side }),
     orgInfo(),
   ])
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
   const keep = toSearchParams(q).toString()
   const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
   const openingTo = new Date(`${period.from}T00:00:00Z`)

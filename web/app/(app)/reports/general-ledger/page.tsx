@@ -39,7 +39,7 @@ export default async function GeneralLedgerPage({
     dimensionOptions(undefined, dims.projectId),
     orgInfo(),
   ])
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)

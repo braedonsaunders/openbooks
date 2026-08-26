@@ -64,7 +64,7 @@ function ValueCells({ values, drills, currency, weight }: { values: Values; dril
       ? value === null ? '—' : format.number(Number(value), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
       : key === 'hours'
         ? format.number(Number(value ?? 0), { maximumFractionDigits: 2 })
-        : money(Number(value ?? 0), { currency: currency || undefined, accounting: true })
+        : money(value ?? '0', { currency: currency || undefined, accounting: true })
     return (
       <TableCell key={key} className={cn('text-right whitespace-nowrap tabular-nums', weight, negative && 'text-red-600 dark:text-red-400')}>
         {target ? (

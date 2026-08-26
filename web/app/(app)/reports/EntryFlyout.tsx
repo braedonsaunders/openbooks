@@ -165,8 +165,8 @@ export function EntryFlyout() {
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{l.party}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{l.department}</TableCell>
-                  <TableCell className="text-right tabular-nums">{isDebit ? money(Number(l.amount)) : ''}</TableCell>
-                  <TableCell className="text-right tabular-nums">{isCredit ? money(Number(decimalNeg(l.amount))) : ''}</TableCell>
+                  <TableCell className="text-right tabular-nums">{isDebit ? money(l.amount) : ''}</TableCell>
+                  <TableCell className="text-right tabular-nums">{isCredit ? money(decimalNeg(l.amount)) : ''}</TableCell>
                 </TableRow>
               )
             })}
@@ -174,8 +174,8 @@ export function EntryFlyout() {
               <TableCell colSpan={4} className="font-semibold">
                 {t('detail.totals')}
               </TableCell>
-              <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(Number(totalDebit))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(Number(totalDebit))}</TableCell>
+              <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totalDebit)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

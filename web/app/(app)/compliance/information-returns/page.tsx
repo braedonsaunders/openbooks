@@ -118,7 +118,7 @@ export default async function InformationReturnsPage() {
                     ) : null}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {money(Number(filing.filedTotal), { currency: filing.currency })}
+                    {money(filing.filedTotal, { currency: filing.currency })}
                   </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_TONE[filing.status] ?? 'secondary'}>
@@ -183,7 +183,7 @@ export default async function InformationReturnsPage() {
                     <TableCell className="text-slate-500 dark:text-slate-400">
                       {row.taxClassification ? t(`taxClassification.${row.taxClassification}`) : '—'}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{money(Number(row.paidThisYear))}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(row.paidThisYear)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

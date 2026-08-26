@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
+import { globSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createMoneyFormatter } from './money-format.ts'
+import { decimalAdd, decimalNeg, decimalSum } from './statement-format.ts'
+
+const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
 
 test('locale controls separators and currency placement without changing currency', () => {
   const en = createMoneyFormatter('en', 'CAD').money(1234.56)
@@ -53,4 +60,44 @@ test('decimal strings never cross the binary floating-point boundary', () => {
     '$9,007,199,254,740,993.1234',
   )
   assert.equal(format.money('-0.0000'), '$0.00')
+})
+
+test('repository money formatters never receive Number-coerced exact decimals', () => {
+  const coercion = /\b(?:money|moneyCompact|m|fmt)\s*\(\s*Number\s*\(/g
+  const violations = globSync('{app,components,lib}/**/*.{ts,tsx}', { cwd: webRoot })
+    .filter((path) => !path.endsWith('.test.ts') && !path.endsWith('.test.tsx'))
+    .flatMap((path) => {
+      const text = source(path)
+      return [...text.matchAll(coercion)].map((match) => ({
+        path,
+        line: text.slice(0, match.index).split('\n').length,
+      }))
+    })
+
+  assert.deepEqual(violations, [])
+})
+
+test('representative report and UI boundaries preserve high-value cents and normal controls', () => {
+  const format = createMoneyFormatter('en-US', 'USD')
+  const reportMoney = (exactDecimal: string) => format.money(decimalAdd(exactDecimal, decimalNeg('0.0000')))
+  const uiMoney = (exactDecimal: string) => format.money(decimalSum([exactDecimal]))
+
+  for (const [value, expected] of [
+    ['900719925474099.9400', '$900,719,925,474,099.94'],
+    ['1234.5600', '$1,234.56'],
+  ] as const) {
+    assert.equal(reportMoney(value), expected)
+    assert.equal(uiMoney(value), expected)
+  }
+
+  const drill = source('lib/report-drill-data.ts')
+  assert.match(drill, /value: money\(result\.net\)/)
+  assert.match(drill, /money\(decimalAdd\(actual, decimalNeg\(budget\)\)\)/)
+
+  const profitability = source('app/(app)/reports/project-profitability/ProjectProfitabilityTable.tsx')
+  assert.match(profitability, /money\(value \?\? '0'/)
+
+  const wip = source('app/(app)/projects/wip-billing/WipBillingWorkspace.tsx')
+  assert.match(wip, /decimalSum\(\[/)
+  assert.match(wip, /value=\{money\(analytics\.aging\.over90\)\}/)
 })

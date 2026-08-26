@@ -37,7 +37,7 @@ export default async function JournalPage({
     dimensionOptions(),
     orgInfo(),
   ])
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
 
   return (
     <ListPageLayout

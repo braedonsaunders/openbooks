@@ -24,7 +24,7 @@ export default async function TaxProvisionDetail({ params }: { params: Promise<{
   const { id } = await params
   const run = await getProvisionRun(authz.user.orgId, id)
   if (!run) notFound()
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
   const payload = run.payload as {
     framework?: 'asc740' | 'ias12'
     pretaxBookIncome: string

@@ -495,7 +495,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
     const max = Math.max(...data.calendar.map((c) => c.amount), 1)
     return {
       tooltip: { formatter: (p: { data: [string, number] }) => `${p.data[0]}<br/>${money0(p.data[1])}` },
-      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: unknown) => money(Number(v)) },
+      visualMap: { min: 0, max, orient: 'horizontal' as const, left: 'center', top: 0, inRange: { color: ['#e2e8f0', '#99f6e4', '#14b8a6', '#f59e0b', '#ef4444'] }, formatter: (v: number) => money(v) },
       calendar: years.map((y, i) => ({
         range: y, top: 60 + i * 150, left: 40, right: 10, cellSize: ['auto', 13] as [string, number],
         itemStyle: { borderColor: 'rgba(148,163,184,0.15)', borderWidth: 1 },

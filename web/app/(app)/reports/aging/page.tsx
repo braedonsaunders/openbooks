@@ -56,7 +56,7 @@ export default async function Aging({
     dimensionOptions(),
     orgInfo(),
   ])
-  const m = (v: string | number) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string | number) => money(v, { currency: org?.base_currency })
 
   const title = `${side === 'ap' ? t('payablesTitle') : t('receivablesTitle')} · ${detail ? t('detail') : t('summary')}`
 

@@ -8,8 +8,10 @@ import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import type { LaborCostComponent } from '@openbooks/engine/src/labor-costing.ts'
+import { add, mulDecimal, mulPercent } from '@openbooks/engine/src/money.ts'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
+import { canonicalDecimal, compareDecimal } from '@/lib/exact-decimal'
 
 /**
  * Guided setup — four plain questions, then we do the configuration. Each
@@ -73,13 +75,18 @@ export function LaborCostingWizard(props: {
     ]
   }, [burden, customPct, t, tc])
 
-  const exampleWage = Number(fallbackRate) > 0 ? Number(fallbackRate) : 40
-  const example = (mult: number) => {
-    let r = exampleWage * mult
+  const exactFallbackRate = canonicalDecimal(fallbackRate, 4)
+  const hasFallbackRate = exactFallbackRate !== null && compareDecimal(exactFallbackRate, '0') > 0
+  const exampleWage = hasFallbackRate ? exactFallbackRate : '40'
+  const example = (multiplier: string) => {
+    const scaledWage = mulDecimal(exampleWage, multiplier)
+    let result = scaledWage
     for (const c of components) {
-      if (c.kind === 'percent_of_wage') r += (c.scaleWithOvertime ? exampleWage * mult : exampleWage) * (Number(c.value) / 100)
+      if (c.kind === 'percent_of_wage') {
+        result = add(result, mulPercent(c.scaleWithOvertime ? scaledWage : exampleWage, String(c.value)))
+      }
     }
-    return r
+    return result
   }
 
   if (!props.open) return null
@@ -97,7 +104,7 @@ export function LaborCostingWizard(props: {
         })
         if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
       }
-      if (Number(fallbackRate) > 0) {
+      if (hasFallbackRate) {
         await call('POST', {
           action: 'save-rate',
           employeePartyId: null,
@@ -280,9 +287,9 @@ export function LaborCostingWizard(props: {
               </li>
               <li className="flex items-start gap-2">
                 <Check size={15} className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
-                {Number(fallbackRate) > 0
+                {hasFallbackRate
                   ? t('reviewFallback', {
-                      rate: money(Number(fallbackRate)),
+                      rate: money(exactFallbackRate ?? '0'),
                     })
                   : t('reviewWagesOnRecord')}
               </li>
@@ -295,13 +302,13 @@ export function LaborCostingWizard(props: {
               <span className="text-slate-500 dark:text-slate-400">{t('reviewExample', { wage: money(exampleWage) })}</span>
               <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
                 <span>
-                  {t('exReg')}: {money(example(1))}/h
+                  {t('exReg')}: {money(example('1'))}/h
                 </span>
                 <span>
-                  {t('exOt')}: {money(example(1.5))}/h
+                  {t('exOt')}: {money(example('1.5'))}/h
                 </span>
                 <span>
-                  {t('exDt')}: {money(example(2))}/h
+                  {t('exDt')}: {money(example('2'))}/h
                 </span>
               </div>
             </div>
