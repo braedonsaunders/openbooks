@@ -14,7 +14,7 @@
  *   - the fail-closed verification gate refuses an uncovered legacy row,
  *   - legacy statements receive honest append-only gap attestations (never a
  *     fabricated SHA-256) and raw_file_ref becomes mandatory,
- *   - the companion idempotency migration composes over the attestations,
+ *   - the later companion idempotency migration composes over the attestations,
  *   - reapplying the evidence migration creates no second attestations (the
  *     property bootstrap's approved `reapply` digest transition relies on),
  *   - the remaining published chain completes over the upgraded data.
@@ -300,10 +300,10 @@ test("legacy upgrades attest the gap honestly and make source evidence mandatory
     },
   );
 
-  // The idempotency migration applies right after in publish order and must
-  // compose over gap attestations: only genuinely hashed sources backfill.
+  // The idempotency migration applies later in publish order and must compose
+  // over gap attestations: only genuinely hashed sources backfill.
   await fixture.client.query(
-    TAIL_FILES.find((file) => file.name === "0010_bank_statement_source_idempotency.sql")!
+    TAIL_FILES.find((file) => file.name === "0036_bank_statement_source_idempotency.sql")!
       .content,
   );
   const hashes = await fixture.client.query<{

@@ -34,12 +34,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0004_scheduler_outbox.sql",
     "0005_posting_effects.sql",
     "0006_recurring_occurrence_guard.sql",
-    "0006_terminal_failure_surfacing.sql",
     "0007_posting_effects_terminal_lifecycle.sql",
     "0008_durable_work_lease_fencing.sql",
     "0009_posting_effect_idempotency_keys.sql",
     "0010_bank_statement_source_evidence.sql",
-    "0010_bank_statement_source_idempotency.sql",
     "0011_payment_run_live_selection.sql",
     "0012_payment_run_posting_recovery.sql",
     "0013_document_revision_monotonic.sql",
@@ -50,6 +48,8 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0019_sandbox_wipe_guard_guc.sql",
     "0020_inventory_subsidiary_ownership.sql",
     "0022_close_posting_fence.sql",
+    "0035_terminal_failure_surfacing.sql",
+    "0036_bank_statement_source_idempotency.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -63,7 +63,7 @@ export const schedulerOutbox = pgTable(
      * Stamped exactly once, by the attempt whose failure exhausts the retry
      * ceiling. Null on rows that are still cycling through backoff, which is
      * what lets operators alert on poison work without also alerting on every
-     * transient failure (migration 0006_terminal_failure_surfacing).
+     * transient failure (migration 0035_terminal_failure_surfacing).
      */
     terminalFailedAt: timestamp("terminal_failed_at", { withTimezone: true }),
     /** System identity of the worker attempt that recorded the terminal failure. */
