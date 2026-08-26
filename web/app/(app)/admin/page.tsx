@@ -114,7 +114,7 @@ const GROUPS: Group[] = [
         href: '/admin/email',
         icon: <Mail size={18} />,
         cardKey: 'email',
-        permission: 'admin.users.manage',
+        permission: 'admin.setup.manage',
       },
       {
         href: '/admin/pdf-templates',

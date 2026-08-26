@@ -8,7 +8,7 @@ import { EmailSettingsForm } from './EmailSettingsForm'
 export const dynamic = 'force-dynamic'
 
 export default async function EmailSettingsPage() {
-  const authz = await requirePermission('admin.users.manage')
+  const authz = await requirePermission('admin.setup.manage')
   const tHub = await getTranslations('admin.hub')
   const config = await readOrgEmailConfigView(authz.user.orgId)
 
