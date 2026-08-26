@@ -850,6 +850,49 @@ interface StubComputation {
 }
 
 /**
+ * The transaction advisory lock that fences one employee's STATUTORY YEAR —
+ * the identity two pay runs share when they can corrupt each other's
+ * year-to-date, and the thing both must hold before either computes or
+ * commits against it.
+ *
+ * Two runs for the same employee and tax year used to synchronize on nothing
+ * they both held: each locked its own pay_runs row, so their calculations
+ * read the same YTD base and their commits neither saw each other nor
+ * waited — both posted withholdings computed from the same unconsumed
+ * ceilings. Locking the RUN row cannot fix this; the fence is keyed by the
+ * EMPLOYEE AND TAX YEAR both racing runs carry.
+ *
+ * Transaction-scoped like every advisory lock in this codebase
+ * (`payroll-remittance.ts`, `fx-revaluation.ts`, `inventory.ts`), so it is
+ * released at COMMIT or ROLLBACK and never leaks across the pool.
+ * `calculatePayRun` takes it around every year-to-date read and
+ * `commitPayRun` around its freshness gates: the second of two racing runs
+ * therefore re-reads a world in which the first has already committed, and is
+ * refused as stale (`payRunStaleness`'s "ytd" reason) instead of paying twice.
+ */
+export const employeeTaxYearFenceKey = (
+  orgId: string,
+  employeePartyId: string | null | undefined,
+  taxYear: number | string | null | undefined,
+): string => `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
+
+/**
+ * Take the fences for a run's employees, IN SORTED KEY ORDER.
+ *
+ * A run fences everyone on its roster, an overlapping run fences a subset of
+ * it; acquiring in one deterministic order is what lets overlapping rosters
+ * queue behind each other instead of deadlocking mid-set.
+ */
+async function takeEmployeeTaxYearFences(
+  tx: Pick<typeof db, "execute">,
+  keys: readonly string[],
+): Promise<void> {
+  for (const key of [...new Set(keys)].sort()) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+  }
+}
+
+/**
  * Every tax certificate this employee has on file, as `resolveCertificate`
  * reads them.
  *
@@ -1222,6 +1265,22 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       ) roster
       order by roster.display_name
     `));
+
+    // Fence the calculation on the EMPLOYEE-AND-TAX-YEAR identity (see
+    // `employeeTaxYearFenceKey`) BEFORE any year-to-date is read and before a
+    // single stub row is written. Two runs sharing an employee and year used
+    // to compute their statutory amounts against the same unconsumed ceilings
+    // whenever their calculations overlapped; the fence orders them, so the
+    // second calculation reads a year-to-date that already includes the first
+    // run's stubs. Taken AFTER this run's own row lock above, in sorted key
+    // order — the same total order `commitPayRun` uses — so overlapping
+    // rosters queue instead of deadlocking. The roster is fenced whole (not
+    // merely whoever ends up with a stub): who gets a stub is decided below,
+    // and every one of these employees' YTD inputs are read on this pass.
+    await takeEmployeeTaxYearFences(
+      tx,
+      employees.rows.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
+    );
 
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     // Movements are deleted with the stubs that produced them, on the same
@@ -2958,12 +3017,33 @@ export async function commitPayRun(input: {
     if (run.doc_status !== "draft" && run.doc_status !== "approved") {
       throw new PayrollError("pay run document is not editable");
     }
+    // Fence the commit on the EMPLOYEE-AND-TAX-YEAR identity every racing run
+    // must hold (see `employeeTaxYearFenceKey`) — not on this run's own row,
+    // which a concurrent same-year run never contends on. Taken BEFORE the
+    // freshness gate below, so the gate's answer describes the world as of
+    // THIS RUN'S TURN IN THE FENCE ORDER: if another run for one of these
+    // employees committed while this transaction waited, the gate sees its
+    // committed stubs ("ytd" staleness) and refuses, which is exactly what
+    // makes exactly ONE of two racing runs able to commit. Sorted key order —
+    // the order `calculatePayRun` already acquires in — so overlapping
+    // rosters queue instead of deadlocking mid-set.
+    const fencedEmployees = (await tx.execute<{ employee_party_id: string }>(sql`
+      select distinct s.employee_party_id
+        from pay_stubs s
+       where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+    `));
+    await takeEmployeeTaxYearFences(
+      tx,
+      fencedEmployees.rows.map((e) =>
+        employeeTaxYearFenceKey(orgId, e.employee_party_id, run.tax_year),
+      ),
+    );
     // The freshness gate, asked ON THIS TRANSACTION so an engine caller that
     // skips the route's pre-flight gets the same refusal, against the same
     // snapshot the claim below will run under. Dynamic import keeps the
     // payroll-run ↔ payroll-readiness cycle out of the engine's load order
     // (same idiom as the approval gate just below).
-    const { assertPayRunNotStale, staleCalculationMessage } =
+    const { assertPayRunNotStale } =
       await import("./payroll-readiness.ts");
     await assertPayRunNotStale(orgId, documentId, tx);
     // Money must not move before the run is approved. Dynamic import keeps the
@@ -3019,27 +3099,20 @@ export async function commitPayRun(input: {
               and l.department_id is not distinct from te.department_id
           )
     `);
-    // Belt AND braces, deliberately. The freshness gate above and this
-    // re-check are two statements, and READ COMMITTED gives each its own
-    // snapshot: time approved in between would otherwise ride the claim
-    // update while no stub ever priced it — the exact defect this control
-    // exists to make impossible. Anything committed AFTER this statement
-    // stays unclaimed (never falsely marked paid) and is priced by the next
-    // calculation instead.
-    const lateTime = (await tx.execute<{ stale: boolean | null }>(sql`
-      select r.calculated_at is not null
-         and exists (
-           select 1 from time_entries t
-            where t.org_id = r.org_id and t.status = 'approved'
-              and t.worked_on between r.period_start and r.period_end
-              and t.updated_at > r.calculated_at
-         ) as stale
-        from pay_runs r
-       where r.org_id = ${orgId} and r.document_id = ${documentId}
-    `));
-    if (lateTime.rows[0]?.stale === true) {
-      throw new PayrollError(staleCalculationMessage(["time"]));
-    }
+    // Belt AND braces, deliberately — the same doctrine as the gate that
+    // opened this transaction, now asked again at the LAST moment. The two
+    // gates are separate statements and READ COMMITTED gives each its own
+    // snapshot, so the first gate's answer cannot see what commits after it:
+    // a wage row, a rate, a plan, org settings, or ANOTHER RUN'S COMMIT could
+    // land in the gap between check and terminal write and ride under a
+    // freshness answer that was true when it was taken. The fences above
+    // order two racing COMMITS against each other; this second read closes
+    // the remaining gap for every OTHER writer — anything committed before
+    // this statement executes is SEEN by it (fresh snapshot), and the run is
+    // refused and recalculated instead of posting figures edited past. Only
+    // writes committing after this statement stay outside it, exactly as the
+    // time claim above leaves them unclaimed for the next calculation.
+    await assertPayRunNotStale(orgId, documentId, tx);
     await tx.execute(sql`
       update pay_runs set run_status = 'committed', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
