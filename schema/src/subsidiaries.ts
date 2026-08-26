@@ -121,6 +121,8 @@ export const subsidiaryOwnershipInterests = pgTable(
     orgId: orgRef(),
     parentSubsidiaryId: uuid("parent_subsidiary_id").notNull(),
     subsidiaryId: uuid("subsidiary_id").notNull(),
+    /** Inclusive ownership window. Active policies may not overlap for one
+     *  consolidated subsidiary (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     ownershipPercent: fxRate("ownership_percent").notNull(),

@@ -34,6 +34,8 @@ export const laborCostRates = pgTable(
     basis: text("basis", { enum: ["hour", "year"] }).notNull().default("hour"),
     /** Divisor for basis=year (2080 = 40h × 52w). */
     annualHours: money("annual_hours").notNull().default("2080"),
+    /** Inclusive validity window. Active windows may not overlap within one
+     *  labor scope (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     notes: text("notes"),

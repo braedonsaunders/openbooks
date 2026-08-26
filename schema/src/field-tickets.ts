@@ -64,6 +64,8 @@ export const fieldTicketPolicies = pgTable(
     period: text("period", {
       enum: ["shift", "daily", "weekly"],
     }).notNull(),
+    /** Inclusive validity window. Active windows may not overlap within one
+     *  scope identity (storage constraint 0051). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),

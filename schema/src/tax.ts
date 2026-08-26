@@ -130,6 +130,8 @@ export const taxRegistrations = pgTable(
       .default("quarterly"),
     /** The return form this registration files — joins tax_return_forms.code. */
     returnFormCode: text("return_form_code"),
+    /** Inclusive registration window. Active registrations may not overlap
+     *  within one jurisdiction/return-form identity (storage constraint 0051). */
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),
