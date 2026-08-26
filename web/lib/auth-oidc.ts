@@ -71,9 +71,21 @@ function assertSecureEndpoint(value: string, label: string): URL {
   return url;
 }
 
+/** OIDC traffic must never cross an HTTP redirect boundary. The token
+ *  exchange authenticates the tenant with its client secret (form body or
+ *  Basic header), and fetch follows redirects by default — a 307/308 preserves
+ *  method AND body, re-issuing that secret to whichever host the Location
+ *  names. Discovery and JWKS carry no secret themselves, but a redirected
+ *  discovery document chooses where the NEXT request sends the secret and a
+ *  redirected JWKS chooses which signing keys are trusted, so every outbound
+ *  OIDC call fails closed instead of following. */
+function oidcFetch(url: string | URL, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
 async function fetchJson(url: string): Promise<Record<string, unknown>> {
   assertSecureEndpoint(url, "OIDC endpoint");
-  const response = await fetch(url, {
+  const response = await oidcFetch(url, {
     headers: { Accept: "application/json" },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
@@ -221,7 +233,7 @@ export async function completeOidcAuthorization(input: {
       headers.Authorization = `Basic ${Buffer.from(`${oauthFormEncode(configuration.clientId)}:${oauthFormEncode(configuration.clientSecret)}`).toString("base64")}`;
     }
   }
-  const response = await fetch(metadata.token_endpoint, {
+  const response = await oidcFetch(metadata.token_endpoint, {
     method: "POST",
     headers,
     body,
