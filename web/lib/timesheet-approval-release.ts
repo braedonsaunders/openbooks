@@ -26,20 +26,14 @@ export async function releaseTimesheetWeekApproval(
   const parsed = await resolveTimesheetWeek(subjectId, orgId)
   if (!parsed) throw new Error(`unknown timesheet week: ${subjectId}`)
   const from = parsed.weekStart
-  const to = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`))
-  const through = to.rows[0]!.d
 
   if (outcome === 'approved') {
     await approveSubmittedTimeEntries({
       orgId,
       actorId,
       employeePartyId: parsed.employeePartyId,
-      from,
-      to: through,
+      weekStart: from,
     })
-    await setTimesheetWeekStatus(
-      orgId, parsed.employeePartyId, from, 'approved', actorId, null,
-    )
     return
   }
 
@@ -47,6 +41,7 @@ export async function releaseTimesheetWeekApproval(
   // told only that it came back, which is the complaint every timesheet system
   // that skips this earns.
   const reason = (comment ?? '').trim() || 'Rejected by approver'
+  const through = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)).rows[0]!.d
   await setTimesheetWeekStatus(
     orgId, parsed.employeePartyId, from, 'rejected', actorId, reason,
   )
