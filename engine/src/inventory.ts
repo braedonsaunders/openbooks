@@ -21,7 +21,9 @@ import {
 } from "./inventory-costing.ts";
 import {
   loadSubsidiaryContext,
+  restrictionAdmits,
   validateSubsidiaryRestrictions,
+  type SubsidiaryContext,
 } from "./subsidiaries.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -85,6 +87,86 @@ export interface InventoryProfile extends InventoryAccounts {
 }
 
 export class InventoryError extends Error {}
+
+/**
+ * The movement would touch stock or a warehouse owned by another legal
+ * entity (or a position whose stock belongs to one). The API layer maps this
+ * to 403: it is an authorization-boundary refusal, not a validation miss.
+ */
+export class InventoryOwnershipError extends InventoryError {}
+
+/** Every movement books into exactly one active legal entity. */
+function assertMovementOwner(ctx: SubsidiaryContext, subsidiaryId: string): void {
+  const owner = ctx.byId.get(subsidiaryId);
+  if (!owner) throw new InventoryError(`subsidiary ${subsidiaryId} does not exist`);
+  if (!owner.isActive) {
+    throw new InventoryError(`subsidiary "${owner.name}" is inactive`);
+  }
+}
+
+/**
+ * A stock location sits under a `locations` dimension row that may be
+ * restricted to one subsidiary's subtree. Receiving into, issuing from, or
+ * transferring through a location that does not admit the posting entity is
+ * exactly how one subsidiary ends up holding another's goods.
+ */
+async function assertStockLocationAdmitsSubsidiary(
+  tx: Runner,
+  orgId: string,
+  ctx: SubsidiaryContext,
+  stockLocationId: string,
+  subsidiaryId: string,
+): Promise<void> {
+  const r = (await tx.execute<{
+      code: string;
+      subsidiary_id: string | null;
+      includeChildren: boolean;
+    }>(sql`
+    select sl.code, l.subsidiary_id, l.subsidiary_include_children as "includeChildren"
+      from stock_locations sl
+      join locations l on l.id = sl.location_id and l.org_id = sl.org_id
+     where sl.id = ${stockLocationId} and sl.org_id = ${orgId}`));
+  const location = r.rows[0];
+  if (!location) {
+    throw new InventoryError(
+      `stock location ${stockLocationId} does not belong to the organization`,
+    );
+  }
+  if (
+    !restrictionAdmits(ctx, location.subsidiary_id, location.includeChildren, subsidiaryId)
+  ) {
+    throw new InventoryOwnershipError(
+      `stock location "${location.code}" is restricted to another legal entity`,
+    );
+  }
+}
+
+/**
+ * Fail closed when a position holds open layers owned by ANOTHER entity.
+ * Consuming them is storage-impossible since ownership landed in the schema,
+ * but a bare "insufficient stock" would leak another entity's holdings and
+ * mask the real authorization problem — name it instead.
+ */
+async function assertNoForeignOnHand(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  stockLocationId: string,
+  subsidiaryId: string,
+): Promise<void> {
+  const r = (await tx.execute(sql`
+    select 1 from cost_layers
+     where org_id = ${orgId} and item_id = ${itemId}
+       and stock_location_id = ${stockLocationId}
+       and remaining_quantity > 0
+       and subsidiary_id <> ${subsidiaryId}
+     limit 1`));
+  if (r.rows.length) {
+    throw new InventoryOwnershipError(
+      "on-hand stock at this location is owned by another legal entity",
+    );
+  }
+}
 
 function persistReceiptMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4);
@@ -380,13 +462,31 @@ async function getOnHandWith(
   orgId: string,
   itemId: string,
   stockLocationId: string,
-  selection: { lotId?: string | null; serialId?: string | null } = {},
+  selection: {
+    lotId?: string | null;
+    serialId?: string | null;
+    /** Count only layers owned by this entity; omit to span the position. */
+    subsidiaryId?: string;
+  } = {},
 ): Promise<{ quantity: string; value: string; unitCost: string }> {
   const lotId = selection.lotId ?? null;
   const serialId = selection.serialId ?? null;
+  const subId = selection.subsidiaryId ?? null;
+  // Layer sums are scoped per legal entity so one subsidiary's availability,
+  // and the average cost a receipt inherits, can never be driven by another
+  // entity's stock sharing the same warehouse.
+  const layerScope = subId ? sql`and cost_layers.subsidiary_id = ${subId}` : sql``;
+  const provisionalScope = subId
+    ? sql`and exists (
+            select 1 from inventory_movements owner_mv
+             where owner_mv.id = inventory_provisional_costs.issue_movement_id
+               and owner_mv.org_id = ${orgId}
+               and owner_mv.subsidiary_id = ${subId})`
+    : sql``;
   const r = (await runner.execute<{ quantity: string; value: string }>(sql`
     select (coalesce((select sum(remaining_quantity) from cost_layers
                        where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
+                         ${layerScope}
                          and (${lotId}::uuid is null and ${serialId}::uuid is null
                               or exists (
                                 select 1 from inventory_movements source
@@ -397,9 +497,11 @@ async function getOnHandWith(
                               ))),0)
             - coalesce((select sum(remaining_quantity) from inventory_provisional_costs
                          where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
+                           ${provisionalScope}
                            and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as quantity,
            (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers
                        where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
+                         ${layerScope}
                          and (${lotId}::uuid is null and ${serialId}::uuid is null
                               or exists (
                                 select 1 from inventory_movements source
@@ -410,6 +512,7 @@ async function getOnHandWith(
                               ))),0)
             - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs
                          where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
+                           ${provisionalScope}
                            and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`));
   const quantity = r.rows[0]?.quantity ?? "0";
   const value = r.rows[0]?.value ?? "0";
@@ -641,6 +744,7 @@ export async function receiveInventory(
   const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
+  assertMovementOwner(ctx, input.subsidiaryId);
 
   const dims = {
     departmentId: input.departmentId ?? null,
@@ -650,10 +754,18 @@ export async function receiveInventory(
 
   return await db.transaction(async (tx) => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    await assertStockLocationAdmitsSubsidiary(
+      tx,
+      orgId,
+      ctx,
+      input.stockLocationId,
+      input.subsidiaryId,
+    );
 
     // Costing lives under the position lock: a receipt without an explicit
     // cost carries at the average prevailing at commit time — a pre-lock
     // snapshot would let a concurrent movement strand it on a stale value.
+    // Only the receiving entity's layers feed that average.
     let layerUnitCost = input.unitCost;
     if (layerUnitCost === undefined) {
       const onHand = await getOnHandWith(
@@ -661,6 +773,7 @@ export async function receiveInventory(
         orgId,
         input.itemId,
         input.stockLocationId,
+        { subsidiaryId: input.subsidiaryId },
       );
       layerUnitCost = isZero(onHand.unitCost) ? "0" : onHand.unitCost;
     }
@@ -835,9 +948,9 @@ export async function receiveInventory(
     const receiptUnitCost = persistReceiptMoney(layerUnitCost, "receipt unit cost");
     const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
-        (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
+        (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id, quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
-      values (${orgId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
+      values (${orgId}, ${input.subsidiaryId}, ${input.itemId}, 'receipt', ${input.date}, ${input.stockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${receiptQuantity}, ${receiptUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
@@ -860,10 +973,12 @@ export async function receiveInventory(
     }
 
     if (receiptUnits > 0n && profile.costingMethod === "moving_average") {
-      // Blend into the single running layer for this item+location.
+      // Blend into THIS entity's running layer for the item+location; another
+      // legal entity's blended layer sharing the warehouse is untouchable.
       const existing = (await tx.execute<{ id: string; remaining_quantity: string; unit_cost: string }>(sql`
         select id, remaining_quantity, unit_cost from cost_layers
          where org_id = ${orgId} and item_id = ${input.itemId} and stock_location_id = ${input.stockLocationId}
+           and subsidiary_id = ${input.subsidiaryId}
          order by received_at limit 1`));
       if (existing.rows[0]) {
         const cur = existing.rows[0];
@@ -924,8 +1039,8 @@ async function insertLayer(
 ): Promise<void> {
   await tx.execute(sql`
     insert into cost_layers
-      (org_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
-    values (${orgId}, ${input.itemId}, ${input.stockLocationId}, ${movementId}, ${input.date},
+      (org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
+    values (${orgId}, ${input.subsidiaryId}, ${input.itemId}, ${input.stockLocationId}, ${movementId}, ${input.date},
             ${quantity}, ${quantity}, ${unitCost}, null, null)`);
 }
 
@@ -978,6 +1093,7 @@ export async function issueInventory(
   const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
   const ctx = await loadSubsidiaryContext(db, orgId);
+  assertMovementOwner(ctx, input.subsidiaryId);
   const offset = input.offsetAccountId ?? profile.cogsAccountId;
   const dims = {
     departmentId: input.departmentId ?? null,
@@ -987,6 +1103,13 @@ export async function issueInventory(
 
   return await db.transaction(async (tx) => {
     await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
+    await assertStockLocationAdmitsSubsidiary(
+      tx,
+      orgId,
+      ctx,
+      input.stockLocationId,
+      input.subsidiaryId,
+    );
     await validateTrackingSelection(
       tx,
       orgId,
@@ -1005,22 +1128,37 @@ export async function issueInventory(
       orgId,
       input.itemId,
       input.stockLocationId,
-      { lotId: input.lotId, serialId: input.serialId },
+      { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId },
     );
     const shortage =
       toUnits(input.quantity) -
       (toUnits(onHand.quantity) > 0n ? toUnits(onHand.quantity) : 0n);
-    if (
-      shortage > 0n &&
-      (!profile.allowNegativeInventory || profile.tracking !== "none")
-    ) {
-      throw new InventoryError(
-        `insufficient stock: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this tracking configuration)`,
+    if (shortage > 0n) {
+      // A shortfall while another legal entity's layers sit in the same
+      // position is a cross-entity attempt, not a stockout — refuse it as
+      // one instead of leaking their holdings through availability errors.
+      await assertNoForeignOnHand(
+        tx,
+        orgId,
+        input.itemId,
+        input.stockLocationId,
+        input.subsidiaryId,
       );
+      if (!profile.allowNegativeInventory || profile.tracking !== "none") {
+        throw new InventoryError(
+          `insufficient stock: need ${input.quantity}, on hand ${onHand.quantity} (negative inventory is disabled for this tracking configuration)`,
+        );
+      }
     }
     const provisionalUnitCost =
       shortage > 0n
-        ? await resolveProvisionalUnitCost(tx, orgId, profile, input.itemId)
+        ? await resolveProvisionalUnitCost(
+            tx,
+            orgId,
+            profile,
+            input.itemId,
+            input.subsidiaryId,
+          )
         : onHand.unitCost;
     const { cost, unitCost, consumptions, shortfallQuantity } =
       await consumeLayers(
@@ -1033,6 +1171,7 @@ export async function issueInventory(
         onHand,
         provisionalUnitCost,
         { lotId: input.lotId, serialId: input.serialId },
+        input.subsidiaryId,
       );
 
     const lines: JournalLineInput[] = [
@@ -1066,17 +1205,24 @@ export async function issueInventory(
     const issueQuantity = persistReceiptMoney(input.quantity, "issue quantity");
     const mv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
-        (org_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
+        (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id, serial_id,
          quantity, unit_cost, total_value,
          document_line_id, journal_entry_id, idempotency_key, status, memo, created_by, updated_by)
-      values (${orgId}, ${input.itemId}, 'issue', ${input.date}, ${input.stockLocationId},
+      values (${orgId}, ${input.subsidiaryId}, ${input.itemId}, 'issue', ${input.date}, ${input.stockLocationId},
               ${input.lotId ?? null}, ${input.serialId ?? null},
               ${neg(issueQuantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
               ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const movementId = mv.rows[0]!.id;
-    await recordConsumptions(tx, orgId, consumptions, movementId, actorId);
+    await recordConsumptions(
+      tx,
+      orgId,
+      input.subsidiaryId,
+      consumptions,
+      movementId,
+      actorId,
+    );
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`
         insert into inventory_provisional_costs
@@ -1105,6 +1251,7 @@ async function resolveProvisionalUnitCost(
   orgId: string,
   profile: InventoryProfile,
   itemId: string,
+  subsidiaryId: string,
 ): Promise<string> {
   if (profile.negativeCostBasis === "configured") {
     if (profile.provisionalUnitCost == null)
@@ -1122,7 +1269,8 @@ async function resolveProvisionalUnitCost(
   }
   const last = (await tx.execute<{ unit_cost: string }>(sql`
     select unit_cost from inventory_movements
-     where org_id=${orgId} and item_id=${itemId} and kind in ('receipt','return','assembly_build','transfer_in')
+     where org_id=${orgId} and item_id=${itemId} and subsidiary_id=${subsidiaryId}
+       and kind in ('receipt','return','assembly_build','transfer_in')
        and status='posted' and unit_cost is not null
      order by moved_at desc,created_at desc,id desc limit 1
   `));
@@ -1176,6 +1324,8 @@ async function consumeLayers(
   onHand: { quantity: string; value: string; unitCost: string },
   provisionalUnitCost = onHand.unitCost,
   selection: { lotId?: string | null; serialId?: string | null } = {},
+  /** Consuming entity — only layers it owns are reachable. */
+  subsidiaryId?: string,
 ): Promise<{
   cost: string;
   unitCost: string;
@@ -1184,6 +1334,9 @@ async function consumeLayers(
 }> {
   const lotId = selection.lotId ?? null;
   const serialId = selection.serialId ?? null;
+  const ownershipScope = subsidiaryId
+    ? sql`and layer.subsidiary_id = ${subsidiaryId}`
+    : sql``;
   const layersRes = (await tx.execute<{ id: string; remaining: string; unit_cost: string }>(sql`
     select layer.id, layer.remaining_quantity as remaining, layer.unit_cost
       from cost_layers layer
@@ -1193,6 +1346,7 @@ async function consumeLayers(
      where layer.org_id = ${orgId} and layer.item_id = ${itemId}
        and layer.stock_location_id = ${stockLocationId}
        and layer.remaining_quantity > 0
+       ${ownershipScope}
        and (${lotId}::uuid is null or source.lot_id = ${lotId}::uuid)
        and (${serialId}::uuid is null or source.serial_id = ${serialId}::uuid)
      order by layer.received_at, layer.id`));
@@ -1244,6 +1398,7 @@ async function consumeLayers(
 async function recordConsumptions(
   tx: Runner,
   orgId: string,
+  subsidiaryId: string,
   consumptions: Consumption[],
   movementId: string,
   actorId: string | null,
@@ -1253,8 +1408,8 @@ async function recordConsumptions(
       update cost_layers set remaining_quantity = remaining_quantity - ${c.quantity}, updated_at = now()
        where id = ${c.layerId} and org_id = ${orgId}`);
     await tx.execute(sql`
-      insert into cost_layer_consumptions (org_id, cost_layer_id, issue_movement_id, quantity, unit_cost, created_by, updated_by)
-      values (${orgId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${actorId}, ${actorId})`);
+      insert into cost_layer_consumptions (org_id, subsidiary_id, cost_layer_id, issue_movement_id, quantity, unit_cost, created_by, updated_by)
+      values (${orgId}, ${subsidiaryId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${actorId}, ${actorId})`);
   }
 }
 
@@ -1339,6 +1494,7 @@ export async function adjustInventory(
 async function addLayerAtCost(
   tx: Runner,
   orgId: string,
+  subsidiaryId: string,
   itemId: string,
   stockLocationId: string,
   quantity: string,
@@ -1348,9 +1504,12 @@ async function addLayerAtCost(
   date: string,
 ): Promise<void> {
   if (method === "moving_average") {
+    // Blend only the owning entity's running layer — another legal entity's
+    // blended layer at a shared warehouse must never absorb this value.
     const existing = (await tx.execute<{ id: string; remaining_quantity: string; unit_cost: string }>(sql`
       select id, remaining_quantity, unit_cost from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
+         and subsidiary_id = ${subsidiaryId}
        order by received_at limit 1`));
     if (existing.rows[0]) {
       const cur = existing.rows[0];
@@ -1370,8 +1529,8 @@ async function addLayerAtCost(
   }
   await tx.execute(sql`
     insert into cost_layers
-      (org_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
-    values (${orgId}, ${itemId}, ${stockLocationId}, ${movementId}, ${date}, ${quantity}, ${quantity}, ${unitCost}, null, null)`);
+      (org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at, original_quantity, remaining_quantity, unit_cost, created_by, updated_by)
+    values (${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${movementId}, ${date}, ${quantity}, ${quantity}, ${unitCost}, null, null)`);
 }
 
 export interface TransferInput {
@@ -1433,6 +1592,8 @@ async function transferInventoryTx(
     throw new InventoryError(`no accounting period for ${input.date}`);
   const bookId = await primaryBookId(orgId, tx);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, tx);
+  const ctx = await loadSubsidiaryContext(tx, orgId);
+  assertMovementOwner(ctx, input.subsidiaryId);
 
   // Serialize every transfer touching either position. Sorting the lock keys
   // prevents two opposite-direction transfers from deadlocking.
@@ -1441,6 +1602,13 @@ async function transferInventoryTx(
     input.toStockLocationId,
   ].sort()) {
     await lockInventoryPosition(tx, input.itemId, locationId);
+    await assertStockLocationAdmitsSubsidiary(
+      tx,
+      orgId,
+      ctx,
+      locationId,
+      input.subsidiaryId,
+    );
   }
   await validateTrackingSelection(
     tx,
@@ -1460,9 +1628,16 @@ async function transferInventoryTx(
     orgId,
     input.itemId,
     input.fromStockLocationId,
-    { lotId: input.lotId, serialId: input.serialId },
+    { lotId: input.lotId, serialId: input.serialId, subsidiaryId: input.subsidiaryId },
   );
   if (cmp(input.quantity, onHand.quantity) > 0) {
+    await assertNoForeignOnHand(
+      tx,
+      orgId,
+      input.itemId,
+      input.fromStockLocationId,
+      input.subsidiaryId,
+    );
     throw new InventoryError(
       `insufficient stock at source: need ${input.quantity}, on hand ${onHand.quantity}`,
     );
@@ -1492,6 +1667,7 @@ async function transferInventoryTx(
     onHand,
     onHand.unitCost,
     { lotId: input.lotId, serialId: input.serialId },
+    input.subsidiaryId,
   );
 
   // Optional location-reclass entry (value nets to zero, dimensions differ).
@@ -1530,10 +1706,10 @@ async function transferInventoryTx(
   const fromMovementId = randomUUID();
   await tx.execute(sql`
       insert into inventory_movements
-        (id, org_id, item_id, kind, moved_at, stock_location_id, lot_id,
+        (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id, status,
          memo, created_by, updated_by)
-      values (${fromMovementId}, ${orgId}, ${input.itemId}, 'transfer_out',
+      values (${fromMovementId}, ${orgId}, ${input.subsidiaryId}, ${input.itemId}, 'transfer_out',
               ${input.date}, ${input.fromStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${neg(transferQuantity)}, ${unitCost},
               ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null},
@@ -1541,19 +1717,27 @@ async function transferInventoryTx(
   const toMovementId = randomUUID();
   await tx.execute(sql`
       insert into inventory_movements
-        (id, org_id, item_id, kind, moved_at, stock_location_id, lot_id,
+        (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
          serial_id, quantity, unit_cost, total_value, journal_entry_id,
          paired_movement_id, status, memo, created_by, updated_by)
-      values (${toMovementId}, ${orgId}, ${input.itemId}, 'transfer_in',
+      values (${toMovementId}, ${orgId}, ${input.subsidiaryId}, ${input.itemId}, 'transfer_in',
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${transferQuantity}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
               ${actorId}, ${actorId})`);
 
-  await recordConsumptions(tx, orgId, consumptions, fromMovementId, actorId);
+  await recordConsumptions(
+    tx,
+    orgId,
+    input.subsidiaryId,
+    consumptions,
+    fromMovementId,
+    actorId,
+  );
   await addLayerAtCost(
     tx,
     orgId,
+    input.subsidiaryId,
     input.itemId,
     input.toStockLocationId,
     input.quantity,
@@ -1594,6 +1778,8 @@ export interface ReverseInventoryResult {
 }
 type ReversibleMovement = {
   id: string;
+  org_id: string;
+  subsidiary_id: string;
   item_id: string;
   kind: string;
   moved_at: string;
@@ -1881,7 +2067,7 @@ export async function reverseInventoryMovement(
 
   return db.transaction(async (tx) => {
     const sourceResult = (await tx.execute<ReversibleMovement>(sql`
-      select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+      select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
         from inventory_movements
@@ -1937,7 +2123,7 @@ export async function reverseInventoryMovement(
           "transfer movement is missing its paired source leg",
         );
       const pair = (await tx.execute<ReversibleMovement>(sql`
-        select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+        select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
                serial_id, quantity, unit_cost, total_value, journal_entry_id,
                paired_movement_id, status
           from inventory_movements
@@ -2078,12 +2264,12 @@ export async function reverseInventoryMovement(
         sources.length === 2 && source === sources[1] ? firstReversalId : null;
       await tx.execute(sql`
         insert into inventory_movements
-          (id, org_id, item_id, kind, moved_at, stock_location_id, lot_id,
+          (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
            serial_id, quantity, unit_cost, total_value, journal_entry_id,
            paired_movement_id, reverses_movement_id, reversal_reason, status,
            memo, created_by, updated_by)
         values
-          (${reversalId}, ${orgId}, ${source.item_id}, 'return',
+          (${reversalId}, ${orgId}, ${source.subsidiary_id}, ${source.item_id}, 'return',
            ${input.reversalDate}, ${source.stock_location_id}, ${source.lot_id},
            ${source.serial_id}, ${neg(source.quantity)}, ${source.unit_cost},
            ${source.total_value == null ? null : neg(source.total_value)},
@@ -2179,6 +2365,8 @@ export async function buildAssembly(
     throw new InventoryError(`no accounting period for ${input.date}`);
   const bookId = await primaryBookId(orgId);
   const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  assertMovementOwner(ctx, input.subsidiaryId);
 
   const bom = (await db.execute<{ component_item_id: string; quantity_per: string }>(sql`
     select component_item_id, quantity_per from bom_components
@@ -2217,14 +2405,31 @@ export async function buildAssembly(
     for (const itemId of positionItemIds) {
       await lockInventoryPosition(tx, itemId, input.stockLocationId);
     }
+    await assertStockLocationAdmitsSubsidiary(
+      tx,
+      orgId,
+      ctx,
+      input.stockLocationId,
+      input.subsidiaryId,
+    );
     for (const component of components) {
       component.onHand = await getOnHandWith(
         tx,
         orgId,
         component.itemId,
         input.stockLocationId,
+        { subsidiaryId: input.subsidiaryId },
       );
       if (cmp(component.reqQty, component.onHand.quantity) > 0) {
+        // Components owned by another entity in the shared position are not
+        // raw material for this build — refuse as a cross-entity attempt.
+        await assertNoForeignOnHand(
+          tx,
+          orgId,
+          component.itemId,
+          input.stockLocationId,
+          input.subsidiaryId,
+        );
         throw new InventoryError(
           `insufficient component ${component.itemId}: need ${component.reqQty}, on hand ${component.onHand.quantity}`,
         );
@@ -2247,6 +2452,9 @@ export async function buildAssembly(
         input.stockLocationId,
         c.reqQty,
         c.onHand!,
+        undefined,
+        {},
+        input.subsidiaryId,
       );
       totalCost = add(totalCost, cost);
       consumeLines.push({
@@ -2283,14 +2491,15 @@ export async function buildAssembly(
       const pc = perComponent[i]!;
       const mv = (await tx.execute<{ id: string }>(sql`
         insert into inventory_movements
-          (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
-        values (${orgId}, ${c.itemId}, 'assembly_consume', ${input.date}, ${input.stockLocationId},
+          (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
+        values (${orgId}, ${input.subsidiaryId}, ${c.itemId}, 'assembly_consume', ${input.date}, ${input.stockLocationId},
                 ${neg(c.reqQty)}, ${isZero(c.reqQty) ? "0" : unitCostPerQuantity(pc.cost, c.reqQty)!},
                 ${neg(pc.cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
         returning id`));
       await recordConsumptions(
         tx,
         orgId,
+        input.subsidiaryId,
         pc.consumptions,
         mv.rows[0]!.id,
         actorId,
@@ -2304,13 +2513,14 @@ export async function buildAssembly(
     const buildQuantity = persistReceiptMoney(input.quantity, "assembly build quantity");
     const buildMv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
-        (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
-      values (${orgId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
+        (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
+      values (${orgId}, ${input.subsidiaryId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
               ${buildQuantity}, ${unitCost}, ${totalCost}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     await addLayerAtCost(
       tx,
       orgId,
+      input.subsidiaryId,
       input.assemblyItemId,
       input.stockLocationId,
       input.quantity,
@@ -2347,7 +2557,7 @@ export async function reverseAssemblyBuild(
 
   return db.transaction(async (tx) => {
     const requested = (await tx.execute<ReversibleMovement>(sql`
-      select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+      select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
         from inventory_movements
@@ -2363,7 +2573,7 @@ export async function reverseAssemblyBuild(
     }
 
     const sources = (await tx.execute<ReversibleMovement>(sql`
-      select id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+      select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id,
              paired_movement_id, status
         from inventory_movements
@@ -2449,12 +2659,12 @@ export async function reverseAssemblyBuild(
       reversalIds.push(reversalId);
       await tx.execute(sql`
         insert into inventory_movements
-          (id, org_id, item_id, kind, moved_at, stock_location_id, lot_id,
+          (id, org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, lot_id,
            serial_id, quantity, unit_cost, total_value, journal_entry_id,
            reverses_movement_id, reversal_reason, status, memo,
            created_by, updated_by)
         values
-          (${reversalId}, ${orgId}, ${source.item_id}, 'return',
+          (${reversalId}, ${orgId}, ${source.subsidiary_id}, ${source.item_id}, 'return',
            ${input.reversalDate}, ${source.stock_location_id}, ${source.lot_id},
            ${source.serial_id}, ${neg(source.quantity)}, ${source.unit_cost},
            ${source.total_value == null ? null : neg(source.total_value)},
@@ -3461,6 +3671,8 @@ export async function postLandedCostVoucher(
   const periodId = await periodForDate(orgId, input.voucherDate);
   if (!periodId)
     throw new InventoryError(`no accounting period for ${input.voucherDate}`);
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  assertMovementOwner(ctx, input.subsidiaryId);
 
   const targetKeys = input.targets.map(
     (target) => `${target.itemId}:${target.stockLocationId}`,
@@ -3492,6 +3704,15 @@ export async function postLandedCostVoucher(
     }[] = [];
     for (const target of input.targets) {
       const profile = await resolveProfile(orgId, target.itemId, tx);
+      await assertStockLocationAdmitsSubsidiary(
+        tx,
+        orgId,
+        ctx,
+        target.stockLocationId,
+        input.subsidiaryId,
+      );
+      // Capitalize only onto the voucher entity's own layers — freight on
+      // another legal entity's stock is another form of taking its value.
       const layers = (
         (await tx.execute<OpenLayer>(sql`
         select id, source_movement_id, received_at::text, original_quantity,
@@ -3499,6 +3720,7 @@ export async function postLandedCostVoucher(
           from cost_layers
          where org_id = ${orgId} and item_id = ${target.itemId}
            and stock_location_id = ${target.stockLocationId}
+           and subsidiary_id = ${input.subsidiaryId}
            and remaining_quantity > 0
          order by received_at, id
          for update`))
