@@ -101,10 +101,11 @@ export interface PostingDeps {
   /**
    * Accounts whose journal lines are OPEN ITEMS (all asset_receivable /
    * liability_payable accounts). Resolved lazily by postDocument /
-   * regenerateGlImpactTx for journal documents; lets a journal's AR/AP legs
-   * participate in payment applications — openbooks' model applies ANY
-   * crediting document (journal, credit memo, payment) to open items, the way
-   * source platform's own receipt journals settle invoices.
+   * regenerateGlImpactTx for journal, deposit, expense report and check
+   * documents; lets their AR/AP legs participate in payment applications —
+   * openbooks' model applies ANY crediting document (journal, credit memo,
+   * payment) to open items, the way source platform's own receipt journals
+   * settle invoices.
    */
   openItemAccountIds?: Set<string>;
   /**
@@ -813,6 +814,16 @@ export const RULES: Record<string, RuleFn> = {
       amount: purchaseBaseAmount(l, deps), // debit net + nonrecoverable tax
       memo: l.description,
       partyId: l.partyId ?? doc.partyId,
+      // A check written against an AR/AP control account settles the open
+      // items it pays (the bills behind that balance) exactly like the AP leg
+      // of a vendor_payment: the entity-bearing control leg must carry
+      // is_open_item to be a valid application source. A party-less leg is a
+      // direct GL control posting and stays outside aging.
+      isOpenItem: controlLineIsOpenItem(
+        l.accountId!,
+        l.partyId ?? doc.partyId,
+        deps.openItemAccountIds,
+      ),
       ...dims(doc, l),
     }));
     const tax = purchaseTaxLines(doc, lines, deps, 1);
@@ -1010,7 +1021,8 @@ export function assertFinalKernelBalance(
 
 /**
  * Accounts whose lines are open items on a journal (all AR/AP-typed accounts
- * of the org). One indexed select; called only for journal documents.
+ * of the org). One indexed select; called for journal, deposit, expense report
+ * and check documents.
  */
 async function resolveOpenItemAccounts(
   runner: Pick<typeof db, "execute">,
@@ -1241,7 +1253,8 @@ export async function postDocument(
   if (
     (doc.kind === "journal" ||
       doc.kind === "deposit" ||
-      doc.kind === "expense_report") &&
+      doc.kind === "expense_report" ||
+      doc.kind === "check") &&
     !deps.openItemAccountIds
   ) {
     deps = {
@@ -1943,7 +1956,8 @@ export async function regenerateGlImpactTx(
   if (
     (doc.kind === "journal" ||
       doc.kind === "deposit" ||
-      doc.kind === "expense_report") &&
+      doc.kind === "expense_report" ||
+      doc.kind === "check") &&
     !deps.openItemAccountIds
   ) {
     deps = {
