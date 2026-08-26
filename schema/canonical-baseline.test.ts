@@ -32,6 +32,8 @@ const paymentSurchargeRuleUniquenessMigrationPath =
   "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql";
 const accountPostingClassificationSerializationMigrationPath =
   "schema/migrations/generated/0046_account_posting_classification_serialization.sql";
+const subscriptionConfigurationInvariantsMigrationPath =
+  "schema/migrations/generated/0041_subscription_configuration_invariants.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -66,6 +68,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0038_ledger_tenant_coherent_foreign_keys.sql",
     "0039_document_tenant_coherent_foreign_keys.sql",
     "0040_payroll_commit_selection_fence.sql",
+    "0041_subscription_configuration_invariants.sql",
     "0043_sandbox_wip_prebill_wipe_guard.sql",
     "0046_account_posting_classification_serialization.sql",
   ]);
@@ -102,6 +105,38 @@ test("account classification edits serialize with first journal-line inserts", (
     /CREATE TRIGGER account_posting_classification_guard\s+BEFORE UPDATE OF type, is_summary ON public\.accounts/i,
   );
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("base subscription configuration fails closed at the storage boundary", () => {
+  const migration = readFileSync(subscriptionConfigurationInvariantsMigrationPath, "utf8");
+
+  assert.match(migration, /legacy data violates subscription configuration invariant/i);
+  assert.match(migration, /This migration never rewrites financial intent/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+  assert.match(
+    migration,
+    /CONSTRAINT subscription_plans_amount_nonnegative\s+CHECK \(amount >= 0\)/,
+  );
+  assert.match(
+    migration,
+    /CONSTRAINT subscription_plans_cadence_valid\s+CHECK \([\s\S]*?interval_count > 0/,
+  );
+  assert.match(
+    migration,
+    /CONSTRAINT subscriptions_pricing_valid\s+CHECK \(quantity > 0 AND \(price_override IS NULL OR price_override >= 0\)\)/,
+  );
+  assert.match(
+    migration,
+    /CONSTRAINT subscriptions_period_valid\s+CHECK \([\s\S]*?start_on <= next_bill_on[\s\S]*?current_period_start >= start_on AND current_period_start <= next_bill_on/,
+  );
+  for (const constraint of [
+    "subscription_plans_amount_nonnegative",
+    "subscription_plans_cadence_valid",
+    "subscriptions_pricing_valid",
+    "subscriptions_period_valid",
+  ]) {
+    assert.match(migration, new RegExp(`VALIDATE CONSTRAINT ${constraint}`));
+  }
 });
 
 test("document financial references are tenant-coherent without rewriting history", () => {

@@ -39,6 +39,12 @@ import { inventoryFeatureEnabled } from "./inventory.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
+export const SUBSCRIPTION_INTERVALS = ["weekly", "monthly", "quarterly", "annually"] as const;
+
+const SUBSCRIPTION_INTERVAL_SET = new Set<string>(SUBSCRIPTION_INTERVALS);
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+const POSTGRES_MONEY_MAX_UNITS = 9_999_999_999_999_999_999n;
+
 export class SubscriptionError extends Error {
   constructor(message: string, readonly status = 422) {
     super(message);
@@ -46,15 +52,64 @@ export class SubscriptionError extends Error {
   }
 }
 
-/** Persist a subscription quantity or price through exact decimal then ledger money. Fail closed. */
-function persistSubscriptionMoney(value: unknown, label: string): string {
+/**
+ * Canonicalize base-subscription money without crossing the IEEE-754 boundary.
+ * The range mirrors numeric(19,4); callers choose whether zero is meaningful.
+ */
+export function normalizeSubscriptionMoney(
+  value: unknown,
+  label: string,
+  requirement: "nonnegative" | "positive",
+): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) throw new SubscriptionError(`${label} must be an exact decimal`);
+  let normalized: string;
   try {
-    return normalizeMoney(exact);
+    normalized = normalizeMoney(exact);
   } catch {
     throw new SubscriptionError(`${label} must be an exact decimal`);
   }
+  const units = toUnits(normalized);
+  if (units > POSTGRES_MONEY_MAX_UNITS || units < -POSTGRES_MONEY_MAX_UNITS) {
+    throw new SubscriptionError(`${label} is outside the supported money range`);
+  }
+  if (requirement === "positive" ? units <= 0n : units < 0n) {
+    throw new SubscriptionError(
+      requirement === "positive"
+        ? `${label} must be greater than zero`
+        : `${label} must be nonnegative`,
+    );
+  }
+  return normalized;
+}
+
+/** Parse one supported base-plan cadence without Number coercion or fallback. */
+export function normalizeSubscriptionCadence(
+  interval: unknown,
+  intervalCount: unknown,
+): { interval: Interval; intervalCount: number } {
+  if (typeof interval !== "string" || !SUBSCRIPTION_INTERVAL_SET.has(interval)) {
+    throw new SubscriptionError("interval must be weekly, monthly, quarterly, or annually");
+  }
+  const count =
+    typeof intervalCount === "number"
+      ? intervalCount
+      : typeof intervalCount === "string" && /^[1-9]\d*$/.test(intervalCount)
+        ? Number(intervalCount)
+        : Number.NaN;
+  if (!Number.isSafeInteger(count) || count <= 0 || count > POSTGRES_INTEGER_MAX) {
+    throw new SubscriptionError("interval count must be a positive integer");
+  }
+  return { interval: interval as Interval, intervalCount: count };
+}
+
+/** Persist a subscription quantity or price through the shared domain rules. */
+function persistSubscriptionMoney(
+  value: unknown,
+  label: string,
+  requirement: "nonnegative" | "positive",
+): string {
+  return normalizeSubscriptionMoney(value, label, requirement);
 }
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
@@ -63,7 +118,18 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 function toIso(d: Date): string {
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  return `${String(d.getUTCFullYear()).padStart(4, "0")}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+function subscriptionDate(isoDate: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || isoDate.startsWith("0000-")) {
+    throw new SubscriptionError("billing date must be a valid ISO date");
+  }
+  const date = new Date(`${isoDate}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || toIso(date) !== isoDate) {
+    throw new SubscriptionError("billing date must be a valid ISO date");
+  }
+  return date;
 }
 
 /**
@@ -72,18 +138,29 @@ function toIso(d: Date): string {
  * Pure — unit-tested.
  */
 export function advanceSubscription(isoDate: string, interval: Interval, intervalCount = 1): string {
-  const n = Math.max(1, intervalCount);
+  const cadence = normalizeSubscriptionCadence(interval, intervalCount);
+  const n = cadence.intervalCount;
+  const sourceDate = subscriptionDate(isoDate);
   const [y, m, d] = isoDate.split("-").map(Number);
-  if (interval === "weekly") {
-    const base = new Date(Date.UTC(y!, m! - 1, d!));
+  if (cadence.interval === "weekly") {
+    const base = new Date(sourceDate);
     base.setUTCDate(base.getUTCDate() + 7 * n);
+    if (Number.isNaN(base.getTime()) || base.getUTCFullYear() > 9999) {
+      throw new SubscriptionError("billing cadence advances outside the supported date range");
+    }
     return toIso(base);
   }
-  const monthStep = (interval === "monthly" ? 1 : interval === "quarterly" ? 3 : 12) * n;
+  const monthStep = (cadence.interval === "monthly" ? 1 : cadence.interval === "quarterly" ? 3 : 12) * n;
   const targetMonthIndex = m! - 1 + monthStep;
   const targetYear = y! + Math.floor(targetMonthIndex / 12);
+  if (!Number.isSafeInteger(targetYear) || targetYear > 9999) {
+    throw new SubscriptionError("billing cadence advances outside the supported date range");
+  }
   const targetMonth = ((targetMonthIndex % 12) + 12) % 12;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  const lastDayDate = new Date(0);
+  lastDayDate.setUTCHours(0, 0, 0, 0);
+  lastDayDate.setUTCFullYear(targetYear, targetMonth + 1, 0);
+  const lastDay = lastDayDate.getUTCDate();
   return `${targetYear}-${pad(targetMonth + 1)}-${pad(Math.min(d!, lastDay))}`;
 }
 
@@ -94,10 +171,13 @@ export function monthlyRecurringRevenue(
   intervalCount: number,
   quantity: string,
 ): string {
-  const perPeriod = mul(amount, quantity);
-  const count = BigInt(Math.max(1, Math.trunc(intervalCount)));
-  if (interval === "weekly") return mulRatio(perPeriod, 52n, 12n * count);
-  const months = interval === "monthly" ? 1n : interval === "quarterly" ? 3n : 12n;
+  const cadence = normalizeSubscriptionCadence(interval, intervalCount);
+  const normalizedAmount = normalizeSubscriptionMoney(amount, "amount", "nonnegative");
+  const normalizedQuantity = normalizeSubscriptionMoney(quantity, "quantity", "positive");
+  const perPeriod = mul(normalizedAmount, normalizedQuantity);
+  const count = BigInt(cadence.intervalCount);
+  if (cadence.interval === "weekly") return mulRatio(perPeriod, 52n, 12n * count);
+  const months = cadence.interval === "monthly" ? 1n : cadence.interval === "quarterly" ? 3n : 12n;
   return mulRatio(perPeriod, 1n, months * count);
 }
 
@@ -282,8 +362,8 @@ export async function createSubscriptionInvoice(
     taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
   }> = [];
   for (const input of invoiceLines) {
-    const quantity = persistSubscriptionMoney(input.quantity, "quantity");
-    const unitPrice = persistSubscriptionMoney(input.unitPrice, "unit price");
+    const quantity = persistSubscriptionMoney(input.quantity, "quantity", "positive");
+    const unitPrice = persistSubscriptionMoney(input.unitPrice, "unit price", "nonnegative");
     const amount = mul(quantity, unitPrice);
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";
@@ -444,9 +524,20 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const orgBusinessDates = new Map<string, string>();
 
   const due = await withBypass(async () =>
-    (await db.execute<{ id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }>(sql`
+    (await db.execute<{
+      id: string;
+      orgId: string;
+      nextBillOn: string;
+      currentPeriodStart: string | null;
+      interval: Interval;
+      intervalCount: number;
+      quantity: string;
+      priceOverride: string | null;
+      planAmount: string;
+    }>(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
              s.current_period_start as "currentPeriodStart",
+             s.quantity, s.price_override as "priceOverride", p.amount as "planAmount",
              coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -468,7 +559,14 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     }
     if (row.nextBillOn > today) continue;
 
+    let advanced: string;
     try {
+      // Validate every stored base value before an advanced-lifecycle helper or
+      // billing transaction can write. The same checks run again at invoice
+      // persistence, so a bypassed or residual row cannot become a charge.
+      normalizeSubscriptionMoney(row.quantity, "stored quantity", "positive");
+      normalizeSubscriptionMoney(row.priceOverride ?? row.planAmount, "stored price", "nonnegative");
+      advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
         await withBypass(async () => db.execute(sql`
@@ -482,7 +580,6 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       await withBypass(async () => db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id} and org_id = ${row.orgId}`));
       continue;
     }
-    const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
     // Claim the occurrence INSIDE the billing transaction: the tick that flips
     // next_bill_on off its current value and billOne's invoice commit
     // atomically, so no crash window can strand an advanced next_bill_on with
@@ -656,15 +753,18 @@ export async function changeSubscription(
 
     const oldQty = row.quantity;
     const oldPrice = row.priceOverride ?? row.planAmount;
-    const newQty = persistSubscriptionMoney(changes.quantity ?? oldQty, "quantity");
+    const persistedOldQty = persistSubscriptionMoney(oldQty, "stored quantity", "positive");
+    const persistedOldPrice = persistSubscriptionMoney(oldPrice, "stored price", "nonnegative");
+    const newQty = persistSubscriptionMoney(changes.quantity ?? persistedOldQty, "quantity", "positive");
     const persistedPriceOverride = changes.priceOverride == null
       ? null
-      : persistSubscriptionMoney(changes.priceOverride, "price override");
+      : persistSubscriptionMoney(changes.priceOverride, "price override", "nonnegative");
     const newPrice = changes.priceOverride !== undefined
       ? (persistedPriceOverride ?? row.planAmount)
-      : oldPrice;
-    const oldFull = mul(oldQty, oldPrice);
-    const newFull = mul(newQty, newPrice);
+      : persistedOldPrice;
+    const persistedNewPrice = persistSubscriptionMoney(newPrice, "price", "nonnegative");
+    const oldFull = mul(persistedOldQty, persistedOldPrice);
+    const newFull = mul(newQty, persistedNewPrice);
 
     const periodStart = row.currentPeriodStart ?? row.startOn;
     const periodEnd = row.nextBillOn;
