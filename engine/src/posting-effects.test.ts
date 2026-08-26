@@ -85,8 +85,8 @@ test("downstream posting effects carry storage-enforced idempotency keys", () =>
   const inventory = source("./inventory.ts");
   assert.match(inventory, /inventoryPostingEffectKey/);
   assert.match(inventory, /idempotency_key/);
-  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\(l\.lineId, "receipt"\)/);
-  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\(l\.lineId, "issue"\)/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\((?:line|l)\.lineId, "receipt"\)/);
+  assert.match(inventory, /idempotencyKey: inventoryPostingEffectKey\((?:line|l)\.lineId, "issue"\)/);
 
   const revenue = source("./revenue-recognition.ts");
   assert.match(revenue, /revenueContractPostingEffectKey/);
