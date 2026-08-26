@@ -299,9 +299,9 @@ function runCabinetAtomicityScenario(source: string): void {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
-/** Shared fixture: a folder holding a file with two DB-stored versions and an
- *  attachment link — everything a purge must account for. */
-const PURGE_FIXTURE = `
+/** Shared fixture: a folder holding a file with two DB-stored versions —
+ *  everything a purge must account for before any links are added. */
+const FILE_FIXTURE = `
   const actor = randomUUID();
   const folderId = randomUUID();
   const fileId = randomUUID();
@@ -326,6 +326,11 @@ const PURGE_FIXTURE = `
       select id from file_versions where file_id = \${fileId} and version_number = 2
     ) where id = \${fileId}
   \`);
+`;
+
+/** Shared fixture: a folder holding a file with two DB-stored versions and an
+ *  attachment link — everything a purge must account for. */
+const PURGE_FIXTURE = `${FILE_FIXTURE}
   await db.execute(sql\`
     insert into file_attachments (org_id, file_id, target_table, target_id)
     values (\${orgId}, \${fileId}, 'documents', \${linkTarget})
@@ -466,6 +471,110 @@ test(
         );
         // Redacted: metadata only — no blob payload key anywhere in the evidence.
         assert.ok(!/"bytes"/.test(JSON.stringify(evidence)), "evidence carries no blob bytes");
+      } finally {
+        await dropScratchOrg(orgId);
+      }
+    `);
+  },
+);
+
+/**
+ * Regression coverage for the permanent-purge retention defect in
+ * web/lib/file-cabinet.ts: purgeFile used to permit any file not referenced by
+ * ap_capture_items and then delete all file_attachments, versions, blobs, and
+ * the file — so evidence attached to a POSTED document (or a live compliance
+ * record or fixed asset) could be permanently destroyed from the ?purge=1
+ * route. The purge now refuses, before any delete, while any attachment
+ * targets a posted document, a non-superseded compliance record, or a fixed
+ * asset; superseded compliance records do not block (controlled renewal), and
+ * unbound files stay purgeable.
+ */
+test(
+  "purge refuses while any attachment targets a posted document (zero deletion)",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runCabinetAtomicityScenario(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { purgeFile } from "./web/lib/file-cabinet.ts";
+
+      installTrustedTestDatabaseBypass();
+
+      const org = await createScratchOrg();
+      const orgId = org.orgId;
+      try {
+        // A real POSTED document. documents_posted_period_required only
+        // demands non-null posting columns (no FKs back them), so
+        // representative uuids satisfy the check without a ledger fixture.
+        const documentId = randomUUID();
+        await db.execute(sql\`
+          insert into documents (id, org_id, kind, document_number, document_date,
+                                 currency, status, posted_entry_id, posting_period_id)
+          values (\${documentId}, \${orgId}, 'vendor_bill', 'RETAIN-1', current_date,
+                  'USD', 'posted', \${randomUUID()}, \${randomUUID()})
+        \`);
+        const fileName = "posted-evidence.txt";
+        const linkTarget = documentId;
+        ${PURGE_FIXTURE}
+
+        // THE DEFECT: pre-fix this returned true with every row destroyed.
+        // The guard must refuse BEFORE any delete runs — through the same
+        // audited verb the ?purge=1 route exposes.
+        assert.equal(await purgeFile(orgId, fileId, { actorId: actor }), false);
+
+        // Committed state after the refused purge: file, versions, blobs, and
+        // the attachment link all survive intact.
+        ${COUNTS_QUERY}
+        assert.equal(counts.files, 1, "the file row survives");
+        assert.equal(counts.versions, 2, "both versions survive");
+        assert.equal(counts.blobs, 2, "both blobs survive");
+        assert.equal(counts.links, 1, "the attachment link survives");
+        const evidence = (await db.execute(sql\`
+          select count(*)::int as n from audit_log
+           where table_name = 'files' and row_id = \${fileId}
+        \`)).rows[0].n;
+        assert.equal(evidence, 0, "a refused purge writes no purge evidence");
+      } finally {
+        await dropScratchOrg(orgId);
+      }
+    `);
+  },
+);
+
+test(
+  "unbound files stay purgeable",
+  { skip: !env.OPENBOOKS_DB_URL },
+  () => {
+    runCabinetAtomicityScenario(`
+      import assert from "node:assert/strict";
+      import { randomUUID } from "node:crypto";
+      import { sql } from "drizzle-orm";
+      import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
+      import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
+      import { purgeFile } from "./web/lib/file-cabinet.ts";
+
+      installTrustedTestDatabaseBypass();
+
+      const org = await createScratchOrg();
+      const orgId = org.orgId;
+      try {
+        const fileName = "disposable.txt";
+        ${FILE_FIXTURE}
+
+        // Control: with no attachment links at all the guard does not fire and
+        // the disposable file purges cleanly.
+        assert.equal(await purgeFile(orgId, fileId), true);
+
+        ${COUNTS_QUERY}
+        assert.equal(counts.files, 0, "the unbound file is gone");
+        assert.equal(counts.versions, 0, "all versions are gone");
+        assert.equal(counts.blobs, 0, "all blobs are gone");
+        assert.equal(counts.links, 0, "there were never any links to lose");
       } finally {
         await dropScratchOrg(orgId);
       }
