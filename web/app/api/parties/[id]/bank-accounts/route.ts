@@ -162,6 +162,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       { status: 409 },
     )
   }
+  // A material edit re-enters approval (below), so it must never mutate the
+  // evidence an in-flight payment instruction was approved against: those
+  // instructions keep paying exactly what their file generation locked, but a
+  // fresh edit here would leave them pointing at unapproved details. Refuse at
+  // the mutation boundary — same dependency rule as retirement (DELETE).
+  const dependencies = (await db.execute<{ inFlightPayment: boolean }>(sql`
+    select exists (
+      select 1
+        from payment_instructions instruction
+       where instruction.org_id = ${user.orgId}
+         and instruction.payee_bank_account_id = ${accountId}
+         and instruction.status in ('pending', 'approved', 'generated', 'sent')
+    ) as "inFlightPayment"
+  `))
+  if (dependencies.rows[0]?.inFlightPayment) {
+    return NextResponse.json(
+      { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
+      { status: 422 },
+    )
+  }
 
   const accountNumber = body.accountNumber?.trim()
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
