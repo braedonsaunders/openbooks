@@ -926,3 +926,154 @@ test(
     }
   },
 );
+
+test(
+  "time approved after calculate makes the COMMIT itself refuse — nothing is claimed, recalculation pays each entry exactly once",
+  { skip: !DB },
+  async () => {
+    // The route's freshness gate ran BEFORE `commitPayRun`, so the engine
+    // boundary itself had no opinion: a caller that skipped the route could
+    // commit a stub calculated before the hours existed, and the claim update
+    // marked those hours PAID because their group matched a priced wage line —
+    // money the employee never received, reported as paid. The gate now lives
+    // inside the commit transaction: this test drives `commitPayRun` directly,
+    // with no route and no wizard, and demands the refusal from the engine.
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          features: { payroll: true },
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable,
+            taxPayableAccountId: craPayable,
+            vacationPayableAccountId: vacationPayable,
+            wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Late Larry', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+      const addHours = async (workedOn: string) => {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                    billing_status, costing_basis, created_by, updated_by)
+          values (${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
+                  'unbilled', 'actual', ${actorId}, ${actorId})`);
+      };
+      await addHours("2026-07-06");
+      await addHours("2026-07-08");
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const first = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(first.errors, []);
+      assert.equal(first.gross, "1200.0000"); // 40h × $30
+
+      // THE DEFECT: time lands after Calculate, before Commit. Same employee,
+      // same group the stub already priced — exactly the shape the claim
+      // update used to mark as paid sight unseen.
+      await addHours("2026-07-10");
+      await addHours("2026-07-14");
+      assert.deepEqual(
+        (await payRunStaleness(org.orgId, run.documentId)).reasons,
+        ["time"],
+        "the new time registers as staleness",
+      );
+
+      // The ENGINE refuses on its own — no route gate, no disabled button.
+      await assert.rejects(
+        commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
+        /inputs changed after it was last calculated \(time\)/,
+      );
+      // And the refusal wrote nothing: no hour marked paid, the run still
+      // calculated, the document still empty of GL legs.
+      const claimedAfterRefusal = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and payroll_batch_ref is not null
+      `))).rows[0]!.n;
+      assert.equal(claimedAfterRefusal, 0, "no time was marked paid by the refused commit");
+      const statusAfterRefusal = ((await db.execute<{ run_status: string }>(sql`
+        select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.run_status;
+      assert.equal(statusAfterRefusal, "calculated");
+      const glAfterRefusal = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.n;
+      assert.equal(glAfterRefusal, 0);
+
+      // Recalculate — the stub now prices ALL four entries — and the SAME
+      // direct engine call commits.
+      const second = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(second.errors, []);
+      assert.equal(second.gross, "2400.0000"); // 80h × $30
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+
+      const claimed = ((await db.execute<{ n: number; distinct_n: number }>(sql`
+        select count(*)::int as n, count(distinct te.id)::int as distinct_n from time_entries te
+         where te.org_id = ${org.orgId}
+           and te.worked_on between ${"2026-07-05"} and ${"2026-07-18"}
+           and te.payroll_batch_ref = ${run.documentId}
+      `))).rows[0]!;
+      assert.equal(claimed.n, 4, "every eligible entry was claimed");
+      assert.equal(claimed.distinct_n, 4, "each eligible entry exactly once");
+      const unclaimed = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and status = 'approved'
+           and worked_on between ${"2026-07-05"} and ${"2026-07-18"}
+           and payroll_batch_ref is null
+      `))).rows[0]!.n;
+      assert.equal(unclaimed, 0, "no approved hour in the period was left behind");
+      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
+        select account_id, amount, party_id from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `));
+      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const netLeg = lines.rows.find((l) => l.party_id === employeeId);
+      assert.ok(netLeg, "the net pay leg carries the employee party");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
