@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -43,6 +43,8 @@ import {
 import { useBusinessToday } from "../../../../components/business-date-provider";
 import { useMoney } from "../../../../components/money-provider";
 import { HomeStatTile } from "../../../../components/module-home/client";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { decimalCmp, decimalSum } from "../../../../lib/statement-format";
 import type {
   PrebillDetail,
   PrebillLineRow,
@@ -146,16 +148,13 @@ export function WipBillingWorkspace({
     "return" | "void" | null
   >(null);
   const [workflowReason, setWorkflowReason] = useState("");
-  const agingTotal = useMemo(
-    () =>
-      ["current", "days1to30", "days31to60", "days61to90", "over90"].reduce(
-        (total, key) =>
-          total +
-          Number(analytics.aging[key as keyof typeof analytics.aging] ?? 0),
-        0,
-      ),
-    [analytics],
-  );
+  const agingTotal = decimalSum([
+    analytics.aging.current,
+    analytics.aging.days1to30,
+    analytics.aging.days31to60,
+    analytics.aging.days61to90,
+    analytics.aging.over90,
+  ]);
 
   async function createWorksheet() {
     if (!projectId || !periodEnd) return;
@@ -259,13 +258,13 @@ export function WipBillingWorkspace({
         />
         <HomeStatTile
           label={t("tiles.over90")}
-          value={money(Number(analytics.aging.over90))}
+          value={money(analytics.aging.over90)}
           sub={t("tiles.over90Sub", {
-            amount: money(Number(analytics.aging.days61to90)),
+            amount: money(analytics.aging.days61to90),
           })}
           icon="calendar-clock"
           accent="red"
-          tone={Number(analytics.aging.over90) > 0 ? "negative" : "neutral"}
+          tone={decimalCmp(analytics.aging.over90, "0") > 0 ? "negative" : "neutral"}
         />
         <HomeStatTile
           label={t("tiles.realization")}
@@ -275,20 +274,20 @@ export function WipBillingWorkspace({
               : `${(analytics.realization.percent * 100).toFixed(1)}%`
           }
           sub={t("tiles.realizationSub", {
-            amount: money(Number(analytics.realization.billed)),
+            amount: money(analytics.realization.billed),
           })}
           icon="trending-up"
           accent="emerald"
         />
         <HomeStatTile
           label={t("tiles.leakage")}
-          value={money(Number(analytics.leakage.total))}
+          value={money(analytics.leakage.total)}
           sub={t("tiles.leakageSub", {
-            amount: money(Number(analytics.leakage.heldOver90)),
+            amount: money(analytics.leakage.heldOver90),
           })}
           icon="triangle-alert"
-          accent={Number(analytics.leakage.total) > 0 ? "red" : "amber"}
-          tone={Number(analytics.leakage.total) > 0 ? "negative" : "neutral"}
+          accent={decimalCmp(analytics.leakage.total, "0") > 0 ? "red" : "amber"}
+          tone={decimalCmp(analytics.leakage.total, "0") > 0 ? "negative" : "neutral"}
         />
       </section>
 
@@ -386,7 +385,7 @@ export function WipBillingWorkspace({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {money(Number(row.proposedBillAmount))}
+                        {money(row.proposedBillAmount)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -621,26 +620,26 @@ export function WipBillingWorkspace({
             <div className="grid gap-3 sm:grid-cols-4">
               <DetailMetric
                 label={t("metrics.original")}
-                value={money(Number(selected.originalBillAmount))}
+                value={money(selected.originalBillAmount)}
               />
               <DetailMetric
                 label={t("metrics.proposed")}
-                value={money(Number(selected.proposedBillAmount))}
+                value={money(selected.proposedBillAmount)}
               />
               <DetailMetric
                 label={t("metrics.adjustment")}
-                value={money(Number(selected.adjustmentAmount))}
+                value={money(selected.adjustmentAmount)}
                 tone={
-                  Number(selected.adjustmentAmount) < 0
+                  decimalCmp(selected.adjustmentAmount, "0") < 0
                     ? "danger"
-                    : Number(selected.adjustmentAmount) > 0
+                    : decimalCmp(selected.adjustmentAmount, "0") > 0
                       ? "warning"
                       : "default"
                 }
               />
               <DetailMetric
                 label={t("metrics.cost")}
-                value={money(Number(selected.costAmount))}
+                value={money(selected.costAmount)}
               />
             </div>
             {selected.status === "approved" ? (
@@ -723,7 +722,7 @@ function PrebillLine({
   prebill: PrebillDetail;
   editable: boolean;
   onChanged: () => void;
-  money: (value: number) => string;
+  money: (value: string) => string;
 }) {
   const [amount, setAmount] = useState(line.proposedBillAmount);
   const [reason, setReason] = useState(line.adjustmentReason ?? "");
@@ -732,7 +731,9 @@ function PrebillLine({
   const [holdForm, setHoldForm] = useState<"hold" | "release" | null>(null);
   const [holdReason, setHoldReason] = useState("");
   const [holdEvidence, setHoldEvidence] = useState("");
-  const changed = Number(amount) !== Number(line.originalBillAmount);
+  const exactAmount = canonicalDecimal(amount, 4);
+  const amountComparison = exactAmount === null ? null : decimalCmp(exactAmount, line.originalBillAmount);
+  const changed = amountComparison !== 0;
   const t = useTranslations("projects.wipBilling");
 
   async function save() {
@@ -835,10 +836,10 @@ function PrebillLine({
         ) : null}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {money(Number(line.costAmount))}
+        {money(line.costAmount)}
       </TableCell>
       <TableCell className="text-right tabular-nums">
-        {money(Number(line.originalBillAmount))}
+        {money(line.originalBillAmount)}
       </TableCell>
       <TableCell>
         {editable && line.disposition === "bill" ? (
@@ -852,7 +853,7 @@ function PrebillLine({
                 className="max-w-36 text-right tabular-nums"
               />
               {changed ? (
-                Number(amount) > Number(line.originalBillAmount) ? (
+                amountComparison !== null && amountComparison > 0 ? (
                   <ArrowUpRight className="mt-2 size-4 text-amber-600" />
                 ) : (
                   <ArrowDownRight className="mt-2 size-4 text-red-600" />
@@ -980,7 +981,7 @@ function PrebillLine({
         ) : (
           <div className="text-right">
             <p className="font-medium tabular-nums">
-              {money(Number(line.proposedBillAmount))}
+              {money(line.proposedBillAmount)}
             </p>
             {line.adjustmentReason ? (
               <p className="mt-1 text-xs text-slate-500">

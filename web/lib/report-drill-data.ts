@@ -12,7 +12,7 @@ import { agingDetail, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
 import type { StatementDimFilter } from './statement-matrix'
-import { decimalCmp, decimalNeg, decimalSum } from './statement-format'
+import { decimalAdd, decimalCmp, decimalNeg, decimalSum } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
 
@@ -78,9 +78,9 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
     title: target.label,
     description: tr('drillDrawer.supporting'),
     summary: [
-      { label: tr('detail.netTotal'), value: money(Number(result.net)) },
-      { label: tr('trialBalance.columns.debits'), value: money(Number(result.totalDebit)) },
-      { label: tr('trialBalance.columns.credits'), value: money(Number(result.totalCredit)) },
+      { label: tr('detail.netTotal'), value: money(result.net) },
+      { label: tr('trialBalance.columns.debits'), value: money(result.totalDebit) },
+      { label: tr('trialBalance.columns.credits'), value: money(result.totalCredit) },
     ],
     columns: [
       { label: tc('labels.date') },
@@ -97,8 +97,8 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
         line.entryNumber,
         [line.accountNumber, line.accountName].filter(Boolean).join(' · '),
         [line.party, line.memo].filter(Boolean).join(' · '),
-        decimalCmp(line.amount, '0') > 0 ? money(Number(line.amount)) : '',
-        decimalCmp(line.amount, '0') < 0 ? money(Number(decimalNeg(line.amount))) : '',
+        decimalCmp(line.amount, '0') > 0 ? money(line.amount) : '',
+        decimalCmp(line.amount, '0') < 0 ? money(decimalNeg(line.amount)) : '',
       ],
       transaction: { entryId: line.entryId, docKind: line.docKind, docId: line.docId },
     })),
@@ -120,7 +120,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
-    summary: [{ label: tc('labels.total'), value: money(Number(decimalSum(rows.map((row) => row.open)))) }],
+    summary: [{ label: tc('labels.total'), value: money(decimalSum(rows.map((row) => row.open))) }],
     columns: [
       { label: tc('labels.party') },
       { label: tc('labels.reference') },
@@ -131,7 +131,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
     ],
     rows: paginate(rows, page).map((row) => ({
       key: row.docId,
-      cells: [row.partyName, row.reference, row.dueDate, row.ageDays, tr(`aging.buckets.${row.bucket}`), money(Number(row.open))],
+      cells: [row.partyName, row.reference, row.dueDate, row.ageDays, tr(`aging.buckets.${row.bucket}`), money(row.open)],
       transaction: { entryId: row.docId, docKind: row.docKind, docId: row.docId },
     })),
     linkColumn: 1,
@@ -174,7 +174,7 @@ async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>,
     ],
     rows: (result.rows as unknown as OrderDrillSqlRow[]).map((row) => ({
       key: row.id,
-      cells: [row.date, row.document_number, row.party, row.status, money(Number(row.total))],
+      cells: [row.date, row.document_number, row.party, row.status, money(String(row.total))],
       transaction: { entryId: row.id, docKind: row.kind, docId: row.id },
     })),
     linkColumn: 1,
@@ -344,8 +344,8 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
         const value = row[i] ?? null
         const kind = entity.columns.find((c) => c.key === visible[vi])?.kind
         // Money columns render currency-formatted, like every native drill.
-        if (kind === 'money' && value != null && value !== '' && !Number.isNaN(Number(value))) {
-          return money(Number(value))
+        if (kind === 'money' && value != null && value !== '') {
+          return money(String(value))
         }
         return value
       })
@@ -422,15 +422,15 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
          limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`),
     ])
     const totalRow = totals.rows[0] ?? { n: 0, actual: 0, budget: 0 }
-    const actual = Number(totalRow.actual)
-    const budget = Number(totalRow.budget)
+    const actual = String(totalRow.actual)
+    const budget = String(totalRow.budget)
     return {
       title: target.label,
       description: tr('drillDrawer.supporting'),
       summary: [
         { label: tr('budget.actual'), value: money(actual) },
         { label: tr('budget.budget'), value: money(budget) },
-        { label: tr('budget.variance'), value: money(actual - budget) },
+        { label: tr('budget.variance'), value: money(decimalAdd(actual, decimalNeg(budget))) },
       ],
       columns: [
         { label: tc('labels.type') }, { label: tc('labels.period') },
@@ -445,7 +445,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
           item.entry_number,
           [item.number, item.account].filter(Boolean).join(' · '),
           item.detail,
-          money(Number(item.amount)),
+          money(String(item.amount)),
         ],
         transaction: item.entry_id
           ? { entryId: item.entry_id, docKind: item.doc_kind, docId: item.doc_id }
@@ -470,9 +470,9 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
-    summary: [{ label: tc('labels.total'), value: money(Number(count.rows[0]?.amount ?? 0)) }],
+    summary: [{ label: tc('labels.total'), value: money(String(count.rows[0]?.amount ?? 0)) }],
     columns: [{ label: tc('labels.period') }, { label: tc('labels.account') }, { label: tc('labels.memo') }, { label: tc('labels.amount'), align: 'right' }],
-    rows: (rows.rows as unknown as BudgetLineSqlRow[]).map((item) => ({ key: item.id, cells: [item.period, [item.number, item.account].filter(Boolean).join(' · '), item.note, money(Number(item.amount))] })),
+    rows: (rows.rows as unknown as BudgetLineSqlRow[]).map((item) => ({ key: item.id, cells: [item.period, [item.number, item.account].filter(Boolean).join(' · '), item.note, money(String(item.amount))] })),
     page,
     perPage: REPORT_DRILL_PAGE_SIZE,
     total: Number(count.rows[0]?.n ?? 0),

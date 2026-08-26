@@ -9,6 +9,7 @@ import { requirePermission } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { loadComplianceOverview, requireComplianceFeature, stateTone } from '../../../lib/compliance'
 import { getMoneyFormatter } from '@/lib/money-server'
+import { decimalCmp } from '../../../lib/statement-format'
 import { complianceTabs } from './tabs'
 
 export const dynamic = 'force-dynamic'
@@ -100,10 +101,10 @@ export default async function ComplianceHomePage({
         <HomeStatTile
           icon="wallet"
           label={t('stats.exposure')}
-          value={moneyCompact(Number(overview.blockedExposure))}
+          value={moneyCompact(overview.blockedExposure)}
           sub={t('stats.exposureHint')}
-          accent={Number(overview.blockedExposure) > 0 ? 'amber' : 'slate'}
-          tone={Number(overview.blockedExposure) > 0 ? 'warning' : 'neutral'}
+          accent={decimalCmp(overview.blockedExposure, '0') > 0 ? 'amber' : 'slate'}
+          tone={decimalCmp(overview.blockedExposure, '0') > 0 ? 'warning' : 'neutral'}
         />
       </div>
 
@@ -138,7 +139,7 @@ export default async function ComplianceHomePage({
                     </p>
                   </div>
                   <span className="shrink-0 text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                    {money(Number(bill.openBalance))}
+                    {money(bill.openBalance)}
                   </span>
                 </li>
               ))}
@@ -249,7 +250,7 @@ export default async function ComplianceHomePage({
                     </p>
                   </div>
                   <span className="shrink-0 text-sm font-medium tabular-nums text-slate-700 dark:text-slate-200">
-                    {money(Number(row.paidThisYear))}
+                    {money(row.paidThisYear)}
                   </span>
                 </li>
               ))}

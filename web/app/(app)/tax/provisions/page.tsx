@@ -21,7 +21,7 @@ export default async function TaxProvisions() {
   const t = await getTranslations('tax.provisions')
   const org = await orgInfo()
   const runs = await listProvisionRuns(authz.user.orgId)
-  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const m = (v: string) => money(v, { currency: org?.base_currency })
 
   return (
     <ListPageLayout

@@ -154,7 +154,7 @@ export default async function LienWaiversPage({
                     <TableCell className="text-xs">{t(`waiverType.${waiver.waiverType}`)}</TableCell>
                     <TableCell className="tabular-nums">{waiver.throughDate}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {money(Number(waiver.amount), { currency: waiver.currency })}
+                      {money(waiver.amount, { currency: waiver.currency })}
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_TONE[waiver.status] ?? 'secondary'}>
