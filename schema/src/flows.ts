@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -25,6 +27,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  * (engine/src/flows/submit.ts), and a flow that produces gates flips the
  * document to pending_approval. There is no separate approval engine.
  *
+ *   flow_scheduled_occurrences (durable scheduled-trigger occurrence claims)
  *   flows
  *     ├─ flow_scheduled_occurrences (per-occurrence durability ledger for
  *     │                              scheduled triggers; crash-resumable claims)
@@ -123,6 +126,16 @@ export const flowRuns = pgTable(
     index("flow_runs_status").on(t.orgId, t.status),
   ],
 );
+
+/**
+ * Durable per-occurrence ledger for scheduled flow triggers: one row per due
+ * fire time of one trigger node, claimed by the SAME statement that advances
+ * flows.last_scheduled_run_at — a crash after the cursor advance leaves the
+ * claimed-but-unfinished row behind, and later ticks resume it instead of
+ * skipping it (at-least-once delivery; the run's own effect checkpoints make
+ * replays idempotent). Unique per (org, flow, node, fire time), so concurrent
+ * scanners collapse onto one occurrence.
+ */
 
 /**
  * Idempotency checkpoints: every completed action/gate writes one row keyed
@@ -331,6 +344,9 @@ export const flowScheduledOccurrences = pgTable(
 /*
 FOREIGN KEYS (added by the integrator's migration pass to
 schema/migrations/referential-integrity.sql):
+  flow_scheduled_occurrences.org_id → orgs.id (on delete cascade)
+  flow_scheduled_occurrences.flow_id → flows.id
+  flow_scheduled_occurrences.run_id → flow_runs.id
   flows.org_id                  → orgs.id (on delete cascade)
   flow_runs.org_id              → orgs.id (on delete cascade)
   flow_runs.flow_id             → flows.id (on delete cascade)
