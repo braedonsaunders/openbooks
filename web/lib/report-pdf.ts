@@ -157,6 +157,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     rows: g.rows.map((row) => row.map((cell, i) =>
       g.money?.[i] === true && typeof cell === 'string' && isExactDecimalText(cell) ? Number(cell) : cell,
     )),
+    ...(g.money ? { money: g.money } : {}),
     isEmpty: g.isEmpty,
   }))
   const rowCount = data.groups.reduce((n, g) => n + g.rows.length, 0)

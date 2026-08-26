@@ -1,5 +1,6 @@
 import type { PdfBranding } from '@openbooks/pdf'
 import type { ExportData } from './report-pdf'
+import { isExactDecimalText, pdfMoney } from './report-pdf-detail'
 
 const htmlEscape = (value: unknown): string => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -16,15 +17,6 @@ export const escapedPrintText = (value: unknown): string => htmlEscape(value)
   .replace(/→/g, ' - ')
   .replace(/[–—]/g, '-')
 
-function moneyFormatter(locale: string, currency: string) {
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
 /**
  * HTML paper view for the General Ledger. Its typography, spacing, rules and
  * account hierarchy deliberately mirror ReportPaper + ReportTable instead of
@@ -35,22 +27,21 @@ export function generalLedgerPaperHtml(
   branding: PdfBranding & { baseCurrency: string },
   locale = 'en',
 ): string {
-  const money = moneyFormatter(locale, branding.baseCurrency)
   const sections = data.groups.map((group) => {
     const body = group.rows.map((row, rowIndex) => {
       const isOpening = rowIndex === 0
       const isClosing = rowIndex === group.rows.length - 1
       const cells = row.map((cell, columnIndex) => {
-        const isMoney = columnIndex >= group.columns.length - 3
-        const numeric = typeof cell === 'number' ? cell : null
+        const isMoney = group.money?.[columnIndex] === true
+        const isExactMoney = isMoney && typeof cell === 'string' && isExactDecimalText(cell)
         const content = cell === null || cell === undefined || cell === ''
           ? ''
-          : isMoney && numeric !== null
-            ? money.format(numeric)
+          : isExactMoney
+            ? pdfMoney(cell, locale, branding.baseCurrency)
             : escapedPrintText(cell)
         const classes = [
           isMoney ? 'money' : '',
-          isMoney && numeric !== null && numeric < 0 ? 'negative' : '',
+          isExactMoney && cell.startsWith('-') && /[1-9]/.test(cell) ? 'negative' : '',
         ].filter(Boolean).join(' ')
         return `<td class="${classes}">${content}</td>`
       }).join('')
@@ -68,7 +59,7 @@ export function generalLedgerPaperHtml(
         </colgroup>
         <thead>
           <tr class="account-title"><th colspan="${group.columns.length}">${escapedPrintText(group.title)}</th></tr>
-          <tr>${group.columns.map((column, index) => `<th class="${index >= group.columns.length - 3 ? 'money' : ''}">${escapedPrintText(column)}</th>`).join('')}</tr>
+          <tr>${group.columns.map((column, index) => `<th class="${group.money?.[index] === true ? 'money' : ''}">${escapedPrintText(column)}</th>`).join('')}</tr>
         </thead>
         <tbody>${body}</tbody>
       </table>
