@@ -56,6 +56,84 @@ test("expense reports age only genuine AP control balances", () => {
   assert.equal(apProjection.at(-1)!.isOpenItem, true);
 });
 
+test("checks written against a party-bearing AP control leg settle open items", () => {
+  // Paying vendor bills by check debits the AP control account. That leg must
+  // be an open item so it can serve as an application source (from_line) —
+  // otherwise the ledger moves but the bill stays open and the subledger
+  // disagrees with the GL for that vendor.
+  const doc = {
+    id: "check",
+    kind: "check",
+    partyId: "vendor",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "ap",
+    amount: "100.0000",
+    taxAmount: "0",
+  } as unknown as PostingDocumentLine;
+  const deps = {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    openItemAccountIds: new Set(["ar", "ap"]),
+  };
+  const projected = RULES.check!(doc, [line], deps);
+  assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
+    ["ap", "100.0000"],
+    ["bank", "-100.0000"],
+  ]);
+  assert.equal(projected[0]!.isOpenItem, true);
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance(
+      projected.map((row) => ({ ...row, subsidiaryId: "sub" })),
+    ),
+  );
+
+  // A party-less control-account check is a direct GL posting and must not
+  // become an anonymous aging item.
+  const anonymous = RULES.check!(
+    { ...doc, partyId: null },
+    [line],
+    deps,
+  );
+  assert.notEqual(anonymous[0]!.isOpenItem, true);
+});
+
+test("ordinary expense checks stay direct bank disbursements", () => {
+  const doc = {
+    id: "check",
+    kind: "check",
+    partyId: "vendor",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as unknown as PostingDocument;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "office-supplies",
+    amount: "100.0000",
+    taxAmount: "0",
+  } as unknown as PostingDocumentLine;
+  const projected = RULES.check!(doc, [line], {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    openItemAccountIds: new Set(["ar", "ap"]),
+  });
+  assert.deepEqual(projected.map((row) => [row.accountId, row.amount]), [
+    ["office-supplies", "100.0000"],
+    ["bank", "-100.0000"],
+  ]);
+  assert.equal(
+    projected.some((row) => row.isOpenItem),
+    false,
+  );
+});
+
 test("final posting proof rejects whole-entry and per-subsidiary imbalance", () => {
   assert.doesNotThrow(() =>
     assertFinalKernelBalance([
