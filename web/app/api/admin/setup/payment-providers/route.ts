@@ -56,6 +56,17 @@ class SurchargeRuleDatingConflict extends Error {
   }
 }
 
+/** Drizzle/node-postgres may expose the server error directly or as `cause`. */
+function postgresErrorCode(error: unknown): string | undefined {
+  let current = error;
+  while (current && typeof current === "object") {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (typeof candidate.code === "string") return candidate.code;
+    current = candidate.cause;
+  }
+  return undefined;
+}
+
 /** Provider acceptance configuration. Secrets are write-only — responses only
  *  ever report their presence. */
 export async function GET() {
@@ -222,17 +233,18 @@ export async function POST(req: Request) {
           : null;
         if (id && !beforeRow) throw new SurchargeRuleMissing();
 
-        // Same provider tier + same start + overlapping method coverage =
-        // shadowing: resolution orders by specificity then newest-effective,
-        // breaking any remaining tie by raw id, so one of these rules would
-        // silently win every matching checkout regardless of admin intent.
+        // Same provider tier + overlapping effective window + overlapping
+        // method coverage = shadowing. This preflight gives an admin a useful
+        // message; migration 0023's exclusion constraint is the authoritative
+        // concurrency guard when two transactions both pass this read.
         // Disjoint methods (card-only vs bank-debit-only) never compete.
         const clash = await db.execute<{ id: string }>(sql`
           select id from payment_surcharge_rules
            where org_id = ${orgId} and is_active
-             and effective_from = ${values.effectiveFrom}
              and provider is not distinct from ${values.provider}
              and id is distinct from ${id}
+             and daterange(effective_from, effective_to, '[]')
+                 && daterange(${values.effectiveFrom}::date, ${values.effectiveTo}::date, '[]')
              and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
                    or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
            limit 1
@@ -281,6 +293,16 @@ export async function POST(req: Request) {
       }
       if (e instanceof SurchargeRuleDatingConflict) {
         return NextResponse.json({ error: e.message }, { status: 409 });
+      }
+      // The preflight above is intentionally unlocked. The storage constraint
+      // decides a concurrent race; expose the exact same API contract rather
+      // than leaking a constraint name or converting the loser into a 500.
+      const code = postgresErrorCode(e);
+      if (code === "23P01" || code === "23505") {
+        return NextResponse.json(
+          { error: new SurchargeRuleDatingConflict(values.effectiveFrom).message },
+          { status: 409 },
+        );
       }
       throw e;
     }

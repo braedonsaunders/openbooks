@@ -175,6 +175,8 @@ export const paymentSurchargeRules = pgTable(
     })
       .notNull()
       .default("all"),
+    /** Inclusive validity window. Active windows may not overlap within an
+     *  org/provider/payment-method identity (storage constraint 0023). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),

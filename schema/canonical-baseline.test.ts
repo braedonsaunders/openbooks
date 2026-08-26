@@ -26,6 +26,8 @@ const documentTenantForeignKeysMigrationPath =
   "schema/migrations/generated/0039_document_tenant_coherent_foreign_keys.sql";
 const ledgerTenantCoherenceMigrationPath =
   "schema/migrations/generated/0038_ledger_tenant_coherent_foreign_keys.sql";
+const paymentSurchargeRuleUniquenessMigrationPath =
+  "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql";
 
 test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
@@ -54,6 +56,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0019_sandbox_wipe_guard_guc.sql",
     "0020_inventory_subsidiary_ownership.sql",
     "0022_close_posting_fence.sql",
+    "0023_payment_surcharge_rule_uniqueness.sql",
     "0035_terminal_failure_surfacing.sql",
     "0036_bank_statement_source_idempotency.sql",
     "0038_ledger_tenant_coherent_foreign_keys.sql",
@@ -89,6 +92,20 @@ test("document financial references are tenant-coherent without rewriting histor
   );
   assert.match(migration, /VALIDATE CONSTRAINT document_lines_account_id_fkey/);
   assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
+});
+
+test("active payment surcharge windows cannot overlap within one pricing identity", () => {
+  const migration = readFileSync(paymentSurchargeRuleUniquenessMigrationPath, "utf8");
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public/);
+  assert.match(
+    migration,
+    /ADD CONSTRAINT payment_surcharge_rules_no_active_overlap\s+EXCLUDE USING gist/,
+  );
+  assert.match(migration, /org_id WITH =/);
+  assert.match(migration, /COALESCE\(provider, '__all_providers__'::text\)\) WITH =/);
+  assert.match(migration, /payment_method WITH =/);
+  assert.match(migration, /daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&/);
+  assert.match(migration, /WHERE \(is_active\)/);
 });
 
 test("bank statement source evidence is mandatory after forward migrations", () => {
