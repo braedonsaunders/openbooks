@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { RecurringError, runScheduleNow } from "@openbooks/engine/src/recurring.ts";
-import { requirePermission } from "../../../../lib/authz";
+import { guardPermission } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents";
 
 export const runtime = "nodejs";
@@ -22,7 +22,8 @@ async function ownedEnabled(orgId: string, id: string): Promise<boolean> {
 
 /** Toggle active, edit cadence/dates, or rename a schedule. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!(await ownedEnabled(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -59,7 +60,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   const outcome = await db.transaction(async (tx) => {
     // Snapshot first: deleting a schedule removes the only record of what was
@@ -104,7 +106,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
 /** Run now — force-generate a document from the template immediately. */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("documents.manage");
+  const authz = await guardPermission("documents.manage");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!(await ownedEnabled(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });

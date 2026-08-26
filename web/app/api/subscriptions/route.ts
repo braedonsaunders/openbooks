@@ -12,7 +12,7 @@ import {
 } from "@openbooks/engine/src/subscription-billing.ts";
 import { add, normalizeMoney } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
-import { requirePermission } from "../../../lib/authz";
+import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 
@@ -54,7 +54,8 @@ async function refuseInventoryPlanItem(
  * subscriptions automatically; this is the management + bill-now surface.
  */
 export async function GET() {
-  const authz = await requirePermission("ar.read");
+  const authz = await guardPermission("ar.read");
+  if (authz instanceof NextResponse) return authz;
   if (!(await isFeatureEnabled(authz.user.orgId, "subscriptionBilling"))) {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }
@@ -94,7 +95,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const authz = await requirePermission("ar.create");
+  const authz = await guardPermission("ar.create");
+  if (authz instanceof NextResponse) return authz;
   if (!(await isFeatureEnabled(authz.user.orgId, "subscriptionBilling"))) {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }

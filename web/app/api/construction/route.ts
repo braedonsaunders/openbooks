@@ -12,7 +12,7 @@ import {
   submitPayApplication,
   voidPayApplication,
 } from "@openbooks/engine/src/construction-billing.ts";
-import { guardPermission, requirePermission } from "../../../lib/authz";
+import { guardPermission } from "../../../lib/authz";
 import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
@@ -28,7 +28,8 @@ export const runtime = "nodejs";
  * GL-backed retainage held, and committed cost. POST is action-dispatched.
  */
 export async function GET(req: Request) {
-  const authz = await requirePermission("ar.read");
+  const authz = await guardPermission("ar.read");
+  if (authz instanceof NextResponse) return authz;
   const feature = await guardProjectsFeature(authz.user.orgId);
   if (feature) return feature;
   const url = new URL(req.url);
