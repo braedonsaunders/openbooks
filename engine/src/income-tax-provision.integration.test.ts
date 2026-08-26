@@ -5,12 +5,23 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { isZero, sum } from "./money.ts";
 import {
+  IncomeTaxProvisionError,
+  buildProvision,
   computeProvisionRun,
+  consolidateEntityResults,
+  detectProvisionSourceDrift,
   getProvisionRun,
   postProvisionRun,
+  provisionEntryNumber,
+  provisionReversalEntryNumber,
+  stackEnactedRateComponents,
+} from "./income-tax-provision.ts";
+import type {
+  EntityProvisionResult,
+  ProvisionSourceSnapshot,
 } from "./income-tax-provision.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -203,3 +214,543 @@ test(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Shared fixtures for the defect-regression cases below.
+// ---------------------------------------------------------------------------
+
+type TaxControlAccounts = Record<"expense" | "payable" | "dta" | "dtl" | "va", string>;
+
+async function seedTaxControlAccounts(orgId: string): Promise<TaxControlAccounts> {
+  const mk = async (number: string, name: string, type: string) => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    return id;
+  };
+  const accounts: TaxControlAccounts = {
+    expense: await mk("6100", "Income Tax Expense", "expense"),
+    payable: await mk("2110", "Income Tax Payable", "liability_current_other"),
+    dta: await mk("1410", "Deferred Tax Assets", "asset_current_other"),
+    dtl: await mk("2410", "Deferred Tax Liabilities", "liability_long_term"),
+    va: await mk("1415", "Valuation Allowance", "asset_current_other"),
+  };
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(settings, '{controlAccounts}',
+      coalesce(settings->'controlAccounts', '{}'::jsonb) ||
+      ${JSON.stringify({
+        incomeTaxExpense: accounts.expense,
+        incomeTaxPayable: accounts.payable,
+        deferredTaxAsset: accounts.dta,
+        deferredTaxLiability: accounts.dtl,
+        valuationAllowance: accounts.va,
+      })}::jsonb)
+    where id = ${orgId}`);
+  return accounts;
+}
+
+async function seedEnactedRate(
+  orgId: string,
+  jurisdiction: string,
+  ratePercent: string,
+  opts: { subsidiaryId?: string; effectiveFrom?: string; userId: string } ,
+): Promise<void> {
+  await db.execute(sql`
+    insert into income_tax_rates (org_id, jurisdiction, rate_percent, effective_from, subsidiary_id, created_by, updated_by)
+    values (${orgId}, ${jurisdiction}, ${ratePercent}, ${opts.effectiveFrom ?? "2020-01-01"}, ${opts.subsidiaryId ?? null}, ${opts.userId}, ${opts.userId})`);
+}
+
+async function createSubsidiary(
+  orgId: string,
+  name: string,
+  baseCurrency: string,
+): Promise<string> {
+  // CI loads the schema without the product seed; mirror the fixture's
+  // defensive currency registration before referencing the code.
+  await db.execute(sql`
+    insert into currencies (code, name, minor_units)
+    values (${baseCurrency}, ${baseCurrency}, 2)
+    on conflict (code) do nothing`);
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${id}, ${orgId}, ${name}, ${baseCurrency}, 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+  return id;
+}
+
+async function postInvoice(
+  org: ScratchOrg,
+  opts: { subsidiaryId: string; amount: string; currency?: string; number: string; userId: string },
+): Promise<void> {
+  const invoiceId = randomUUID();
+  const currency = opts.currency ?? "CAD";
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+       document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+    values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', ${opts.number},
+            ${opts.subsidiaryId}, ${org.customerId}, ${org.date}, ${currency}, '1',
+            ${opts.amount}, '0', ${opts.amount}, ${opts.userId})`);
+  await db.execute(sql`
+    insert into document_lines
+      (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+    values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', ${opts.amount}, ${opts.amount}, '0', '0')`);
+  await postDocument(invoiceId, {
+    control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+    },
+  });
+}
+
+interface RunPayload {
+  pretaxBookIncome: string;
+  currentTax: string;
+  totalExpense: string;
+  effectiveRatePercent: string | null;
+  entities: EntityProvisionResult[];
+}
+
+function payloadOf(run: { payload: Record<string, unknown> }): RunPayload {
+  return run.payload as unknown as RunPayload;
+}
+
+// ---------------------------------------------------------------------------
+// Pure units — the staleness fence, rate stacking and translation math are
+// decision logic that must hold without a database.
+// ---------------------------------------------------------------------------
+
+test("enacted rate stacking adds org-wide and subsidiary jurisdictions and fails closed on ambiguity", () => {
+  const blended = stackEnactedRateComponents([
+    { jurisdiction: "State", ratePercent: "5.0000", scope: "subsidiary" },
+    { jurisdiction: "Federal", ratePercent: "21.0000", scope: "org" },
+  ]);
+  assert.equal(blended.ratePercent, "26.0000");
+  assert.deepEqual(blended.jurisdictions, ["Federal", "State"]);
+
+  // A genuine 0% combined rate stays distinct from missing coverage.
+  const zero = stackEnactedRateComponents([
+    { jurisdiction: "Federal", ratePercent: "0", scope: "org" },
+  ]);
+  assert.equal(zero.ratePercent, "0.0000");
+
+  // The same jurisdiction at both scopes is ambiguous — never guessed.
+  assert.throws(
+    () =>
+      stackEnactedRateComponents([
+        { jurisdiction: "Federal", ratePercent: "21", scope: "org" },
+        { jurisdiction: "Federal", ratePercent: "18", scope: "subsidiary" },
+      ]),
+    IncomeTaxProvisionError,
+  );
+  assert.throws(
+    () =>
+      stackEnactedRateComponents([
+        { jurisdiction: "Federal", ratePercent: "-3", scope: "org" },
+      ]),
+    IncomeTaxProvisionError,
+  );
+});
+
+function lineageSnapshot(
+  over: Partial<ProvisionSourceSnapshot> = {},
+): ProvisionSourceSnapshot {
+  return {
+    framework: "asc740",
+    pretaxBySubsidiaryId: { a: "100.0000" },
+    fixedAssetDifferences: [],
+    rateRows: [
+      { jurisdiction: "Federal", ratePercent: "21.0000", subsidiaryId: null },
+    ],
+    priorPostedRunId: null,
+    priorPostedSnapshotHash: null,
+    priorBalancesBySubsidiaryId: {},
+    ...over,
+  };
+}
+
+test("source-lineage drift names exactly the section that changed", () => {
+  assert.deepEqual(detectProvisionSourceDrift(lineageSnapshot(), lineageSnapshot()), []);
+  assert.deepEqual(
+    detectProvisionSourceDrift(
+      lineageSnapshot(),
+      lineageSnapshot({ pretaxBySubsidiaryId: { a: "150.0000" } }),
+    ),
+    ["pretax book income"],
+  );
+  assert.deepEqual(
+    detectProvisionSourceDrift(
+      lineageSnapshot(),
+      lineageSnapshot({
+        rateRows: [
+          { jurisdiction: "Federal", ratePercent: "22.0000", subsidiaryId: null },
+        ],
+      }),
+    ),
+    ["enacted income tax rates"],
+  );
+  // Canonical ordering: identical rows captured in a different order are NOT
+  // drift, so byte-equivalent worlds never force a spurious recompute.
+  assert.deepEqual(
+    detectProvisionSourceDrift(
+      lineageSnapshot({
+        fixedAssetDifferences: [
+          { category: "fixed_assets", description: "A", difference: "1", source: "auto" },
+          { category: "fixed_assets", description: "B", difference: "2", source: "auto" },
+        ],
+      }),
+      lineageSnapshot({
+        fixedAssetDifferences: [
+          { category: "fixed_assets", description: "B", difference: "2", source: "auto" },
+          { category: "fixed_assets", description: "A", difference: "1", source: "auto" },
+        ],
+      }),
+    ),
+    [],
+  );
+});
+
+test("consolidation translates each entity before summing — never a raw unit sum", () => {
+  const root: EntityProvisionResult = {
+    subsidiaryId: "root",
+    name: "Root",
+    currency: "CAD",
+    fxRate: "1",
+    enactedRatePercent: "26.0000",
+    enactedRateJurisdictions: ["Federal"],
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    pretaxBookIncome: "200000.0000",
+    computation: buildProvision({
+      pretaxBookIncome: "200000.00",
+      enactedRatePercent: "26",
+      permanentDifferences: [],
+      lossCarryforwardUsed: "0",
+      valuationAllowance: "0",
+      differences: [],
+    }),
+  };
+  const usOps: EntityProvisionResult = {
+    ...root,
+    subsidiaryId: "us-ops",
+    name: "US Ops",
+    currency: "USD",
+    fxRate: "1.25",
+    enactedRatePercent: "21.0000",
+    pretaxBookIncome: "100000.0000",
+    computation: buildProvision({
+      pretaxBookIncome: "100000.00",
+      enactedRatePercent: "21",
+      permanentDifferences: [],
+      lossCarryforwardUsed: "0",
+      valuationAllowance: "0",
+      differences: [],
+    }),
+  };
+
+  const consolidated = consolidateEntityResults([usOps, root]);
+  // Raw unit sum would be 73,000; translation gives 52,000 + 21,000×1.25.
+  assert.equal(consolidated.totalExpense, "78250.0000");
+  assert.notEqual(consolidated.totalExpense, "73000.0000");
+  assert.equal(consolidated.pretaxBookIncome, "325000.0000");
+  assert.equal(consolidated.effectiveRatePercent, "24.07");
+  // With no timing differences the merged reconciliation still lands on total.
+  const statutory = consolidated.rateReconciliation.find((s) => s.key === "statutory")!;
+  const total = consolidated.rateReconciliation.find((s) => s.key === "total")!;
+  assert.equal(statutory.amount, consolidated.totalExpense);
+  assert.equal(total.amount, consolidated.totalExpense);
+
+  // Single-entity control: consolidation is the identity at fxRate 1.
+  const alone = consolidateEntityResults([root]);
+  assert.equal(alone.totalExpense, root.computation.totalExpense);
+});
+
+test("provision journal numbering is deterministic and collision-free through repeated same-year reposts", () => {
+  const sub = randomUUID();
+  const otherSub = randomUUID();
+  const mains = [1, 2, 3].map((v) => provisionEntryNumber(2026, v, sub));
+  const reversals = [1, 2, 3].map((v) => provisionReversalEntryNumber(2026, v, sub));
+  assert.equal(new Set([...mains, ...reversals]).size, 6, "all six numbers distinct");
+  for (const number of [...mains, ...reversals]) {
+    // Deterministic: recomputing yields the identical string.
+    const version = Number(number.match(/-v(\d+)-/)![1]!);
+    const expected = number.startsWith("ITX-REV-")
+      ? provisionReversalEntryNumber(2026, version, sub)
+      : provisionEntryNumber(2026, version, sub);
+    assert.equal(number, expected);
+  }
+  assert.notEqual(provisionEntryNumber(2026, 1, sub), provisionEntryNumber(2026, 1, otherSub));
+});
+
+// ---------------------------------------------------------------------------
+// DB-backed regression cases (one per defect, plus unchanged-input controls).
+// ---------------------------------------------------------------------------
+
+test("posting refuses a stale draft after ledger activity changes and zero rows are written", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Stale Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "1000000", number: "INV-STALE-1", userId });
+
+    const draftId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+
+    // The ledger moves AFTER the draft was reviewed.
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "500000", number: "INV-STALE-2", userId });
+
+    await assert.rejects(
+      () => postProvisionRun(org.orgId, draftId, userId),
+      /stale.*pretax book income/s,
+    );
+    // Zero journal/status writes happened for the rejected post.
+    const entries = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and origin = 'tax_provision'`));
+    assert.equal(entries.rows[0]!.n, 0);
+    const stillDraft = await getProvisionRun(org.orgId, draftId);
+    assert.equal(stillDraft?.status, "draft");
+
+    // Happy control: recompute against the live ledger posts cleanly.
+    const freshId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    assert.notEqual(freshId, draftId);
+    const { entryId } = await postProvisionRun(org.orgId, freshId, userId);
+    const posted = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where id = ${entryId}`));
+    assert.equal(posted.rows[0]!.status, "posted");
+    const payload = payloadOf((await getProvisionRun(org.orgId, freshId))!);
+    assert.equal(payload.pretaxBookIncome, "1500000.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("equal-aggregate drafts with different temporary-difference detail get distinct identities", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Detail Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+
+    const diffsA = [
+      { category: "fixed_assets" as const, description: "Fixture lease timing", difference: "100000", source: "manual" as const },
+      { category: "provisions" as const, description: "Warranty accrual", difference: "-50000", source: "manual" as const },
+    ];
+    // Same amounts, same categories, same aggregates — ONLY descriptions and
+    // composition differ. Under the aggregate-only hash this returned draft A.
+    const diffsB = [
+      { category: "fixed_assets" as const, description: "Tooling lease timing", difference: "100000", source: "manual" as const },
+      { category: "provisions" as const, description: "Rebate accrual", difference: "-50000", source: "manual" as const },
+    ];
+    const runA = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsA }, userId);
+    const runB = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsB }, userId);
+    assert.notEqual(runB, runA, "materially different workpapers must not reuse the prior draft");
+
+    const discarded = await getProvisionRun(org.orgId, runA);
+    assert.equal(discarded?.status, "discarded");
+    const detail = (await db.execute<{ description: string }>(sql`
+      select description from temporary_differences where run_id = ${runB} order by description`));
+    assert.deepEqual(
+      detail.rows.map((r) => r.description),
+      ["Rebate accrual", "Tooling lease timing"],
+    );
+
+    // Byte-equivalent retry remains idempotent.
+    const retry = await computeProvisionRun(org.orgId, 2026, { additionalDifferences: diffsB }, userId);
+    assert.equal(retry, runB);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("missing enacted-rate coverage fails closed while a genuine 0% rate computes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Coverage Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD");
+    // Only the ROOT has coverage; the active USD entity has none.
+    await seedEnactedRate(org.orgId, "CAD federal", "26", { subsidiaryId: org.subsidiaryId, userId });
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.25', 'manual')`);
+    await postInvoice(org, { subsidiaryId: usSub, amount: "100000", currency: "USD", number: "INV-COV-1", userId });
+
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, {}, userId),
+      /no enacted income tax rate covers US Ops/,
+    );
+
+    // Control: an explicit 0% row IS coverage and computes silently fine.
+    await seedEnactedRate(org.orgId, "US federal", "0", { subsidiaryId: usSub, userId });
+    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
+    const usEntity = payload.entities.find((e) => e.subsidiaryId === usSub)!;
+    assert.equal(usEntity.enactedRatePercent, "0.0000");
+    assert.equal(usEntity.computation.currentTax, "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("multi-entity provisions calculate, post and translate per entity instead of posting to the root", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Entity Tester", "admin");
+    const accounts = await seedTaxControlAccounts(org.orgId);
+    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD");
+    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
+    await seedEnactedRate(org.orgId, "US federal", "21", { subsidiaryId: usSub, userId });
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.25', 'manual')`);
+
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-ENT-CA", userId });
+    await postInvoice(org, { subsidiaryId: usSub, amount: "100000", currency: "USD", number: "INV-ENT-US", userId });
+
+    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    const run = (await getProvisionRun(org.orgId, runId))!;
+    const payload = payloadOf(run);
+    assert.equal(payload.entities.length, 2);
+    const ca = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
+    const us = payload.entities.find((e) => e.subsidiaryId === usSub)!;
+    assert.equal(ca.computation.currentTax, "52000.0000");
+    assert.equal(us.computation.currentTax, "21000.0000");
+    assert.equal(us.fxRate, "1.2500000000");
+    // Consolidated view translates: 52,000 + 21,000 × 1.25 = 78,250 — never
+    // the raw 73,000 unit sum.
+    assert.equal(payload.currentTax, "78250.0000");
+
+    await postProvisionRun(org.orgId, runId, userId);
+    const journals = (await db.execute<{
+      id: string;
+      subsidiary_id: string;
+      currency: string | null;
+      n: number;
+      balanced: string;
+    }>(sql`
+      select e.id, e.subsidiary_id,
+             (select currency from journal_lines l where l.entry_id = e.id limit 1) as currency,
+             count(*)::int as n,
+             sum(l.amount)::text as balanced
+        from journal_entries e
+        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+       where e.org_id = ${org.orgId} and e.origin = 'tax_provision' and e.status = 'posted'
+       group by e.id, e.subsidiary_id`));
+    assert.equal(journals.rows.length, 2, "one functional-currency journal per entity");
+    const bySub = new Map(journals.rows.map((j) => [j.subsidiary_id, j]));
+    const usJournal = bySub.get(usSub)!;
+    const caJournal = bySub.get(org.subsidiaryId)!;
+    assert.equal(usJournal.currency, "USD");
+    assert.equal(caJournal.currency, "CAD");
+    for (const journal of [usJournal, caJournal]) {
+      assert.equal(journal.balanced, "0.0000", `entity ${journal.subsidiary_id} balances on its own`);
+    }
+    // The USD entity's expense line carries its functional amount.
+    const usExpense = (await db.execute<{ amount: string }>(sql`
+      select l.amount from journal_lines l
+       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where e.id = ${usJournal.id} and l.account_id = ${accounts.expense}
+        and l.subsidiary_id = ${usSub}`));
+    assert.equal(usExpense.rows[0]!.amount, "21000.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("subsidiary rates stack onto org-wide jurisdictions deterministically and ambiguity fails closed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Stack Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    const otherSub = await createSubsidiary(org.orgId, "Other Co", "EUR");
+    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+    await seedEnactedRate(org.orgId, "State", "5", { subsidiaryId: org.subsidiaryId, userId });
+    // Unrelated jurisdiction scoped to ANOTHER entity must not touch the root.
+    await seedEnactedRate(org.orgId, "Other Province", "99", { subsidiaryId: otherSub, userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-STACK-1", userId });
+
+    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    const payload = payloadOf((await getProvisionRun(org.orgId, runId))!);
+    const rootEntity = payload.entities.find((e) => e.subsidiaryId === org.subsidiaryId)!;
+    assert.equal(rootEntity.enactedRatePercent, "26.0000", "org-wide 21% + subsidiary 5% stack");
+    assert.deepEqual(rootEntity.enactedRateJurisdictions, ["Federal", "State"]);
+    assert.equal(rootEntity.computation.currentTax, "26000.0000");
+
+    // Ambiguity: the SAME jurisdiction now configured at both scopes.
+    await seedEnactedRate(org.orgId, "State", "2", { userId });
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, {}, userId),
+      /both org-wide and subsidiary-scoped/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("third same-year repost writes a third distinct reversal without number collisions", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "26.5", { userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "1000000", number: "INV-REPOST-1", userId });
+
+    const diff = (n: number) => [
+      {
+        category: "fixed_assets" as const,
+        description: `P&E book vs tax v${n}`,
+        difference: String(n * 100000),
+        source: "manual" as const,
+      },
+    ];
+    const mainNumbers: string[] = [];
+    const reversalNumbers: string[] = [];
+    let previousEntryId: string | null = null;
+    for (const version of [1, 2, 3]) {
+      const runId = await computeProvisionRun(
+        org.orgId,
+        2026,
+        { additionalDifferences: diff(version) },
+        userId,
+      );
+      const { entryId } = await postProvisionRun(org.orgId, runId, userId);
+      const entryNumber = (await db.execute<{ entry_number: string }>(sql`
+        select entry_number from journal_entries where id = ${entryId}`)).rows[0]!.entry_number;
+      mainNumbers.push(entryNumber);
+      if (previousEntryId) {
+        const reversalRows: { entry_number: string }[] = (await db.execute<{ entry_number: string }>(sql`
+          select entry_number from journal_entries
+           where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${previousEntryId}`)).rows;
+        assert.equal(reversalRows.length, 1, "each superseded entry reversed exactly once");
+        reversalNumbers.push(reversalRows[0]!.entry_number);
+      }
+      previousEntryId = entryId;
+    }
+
+    // Three mains, two reversals — all six numbers distinct. The pre-fix code
+    // reused one fixed ITX-REV-FY number, so the THIRD repost collided.
+    assert.equal(new Set([...mainNumbers, ...reversalNumbers]).size, 5);
+    assert.match(reversalNumbers[0]!, /^ITX-REV-FY2026-v1-/);
+    assert.match(reversalNumbers[1]!, /^ITX-REV-FY2026-v2-/);
+
+    const statuses = (await db.execute<{ status: string; n: number }>(sql`
+      select status, count(*)::int as n from tax_provision_runs
+       where org_id = ${org.orgId} and fiscal_year = 2026 group by status`));
+    const byStatus = new Map(statuses.rows.map((r) => [r.status, r.n]));
+    assert.equal(byStatus.get("posted"), 1);
+    assert.equal(byStatus.get("superseded"), 2);
+
+    // Idempotent retry of the live run returns its own entry.
+    const liveRun = (await db.execute<{ id: string; journal_entry_id: string }>(sql`
+      select id, journal_entry_id from tax_provision_runs
+       where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`)).rows[0]!;
+    const retry = await postProvisionRun(org.orgId, liveRun.id, userId);
+    assert.equal(retry.entryId, liveRun.journal_entry_id);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
