@@ -12,7 +12,13 @@ import {
   type ResolvedPaymentMethod,
 } from "./payroll-payment-method.ts";
 import { hasUsablePayRateSql } from "./payroll-rate.ts";
-import { payrollSettings } from "./payroll-run.ts";
+import {
+  parsePayRunCalculationSource,
+  payRunCalculationSource,
+  payRunCalculationSourceChanges,
+  payRunCalculationSourceDigest,
+  payrollSettings,
+} from "./payroll-run.ts";
 import {
   jurisdictionKey,
   labourJurisdictionProblem,
@@ -883,6 +889,7 @@ export interface PayRunStaleness {
  */
 export const STALENESS_INPUT_CLASSES = [
   "missing",
+  "selection",
   "adjustments",
   "time",
   "wages",
@@ -915,6 +922,7 @@ export async function payRunStaleness(
 ): Promise<PayRunStaleness> {
   const rows = (await executor.execute<{
       calculated_at: Date | string | null; never_calculated: boolean;
+      calculation_source_snapshot: unknown; calculation_source_digest: string | null;
       adjustments_changed: boolean; time_changed: boolean;
       wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
       components_changed: boolean; component_definitions_changed: boolean;
@@ -922,7 +930,7 @@ export async function payRunStaleness(
       worker_comp_changed: boolean; time_types_changed: boolean;
       settings_changed: boolean; ytd_changed: boolean;
     }>(sql`
-    select r.calculated_at,
+    select r.calculated_at, r.calculation_source_snapshot, r.calculation_source_digest,
            r.calculated_at is null as never_calculated,
            exists (
              select 1 from pay_run_adjustments a
@@ -1041,17 +1049,44 @@ export async function payRunStaleness(
   // A missing run is not a fresh run. Fail closed and say why.
   if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
   if (row.never_calculated) return { stale: false, reasons: [], calculatedAt: null };
+  let selectionChanged = false;
+  let exactTimeChanged = false;
+  let exactTimeTypesChanged = false;
+  let exactWagesChanged = false;
+  const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
+  // Legacy calculated rows predate migration 0040. Keep their informational
+  // timestamp display intact; commit itself refuses the missing evidence and
+  // requires recalculation before money can move. A half-present/corrupt pair
+  // is different: that is damaged evidence and is stale everywhere.
+  if (row.calculation_source_snapshot == null && row.calculation_source_digest == null) {
+    // no exact-source overlay
+  } else if (!storedSource || !row.calculation_source_digest
+      || payRunCalculationSourceDigest(storedSource) !== row.calculation_source_digest) {
+    selectionChanged = true;
+  } else {
+    const currentSource = await payRunCalculationSource(orgId, documentId, executor);
+    if (!currentSource) {
+      selectionChanged = true;
+    } else if (payRunCalculationSourceDigest(currentSource) !== row.calculation_source_digest) {
+      const changes = payRunCalculationSourceChanges(storedSource, currentSource);
+      exactTimeChanged = changes.time;
+      exactTimeTypesChanged = changes.timeTypes;
+      exactWagesChanged = changes.wages;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages;
+    }
+  }
   const reasons = [
+    selectionChanged ? "selection" : null,
     row.adjustments_changed ? "adjustments" : null,
-    row.time_changed ? "time" : null,
-    row.wages_changed ? "wages" : null,
+    row.time_changed || exactTimeChanged ? "time" : null,
+    row.wages_changed || exactWagesChanged ? "wages" : null,
     row.roster_changed || row.employment_changed ? "roster" : null,
     row.components_changed ? "components" : null,
     row.component_definitions_changed ? "componentDefinitions" : null,
     row.derived_rules_changed ? "derivedRules" : null,
     row.entitlements_changed ? "entitlements" : null,
     row.worker_comp_changed ? "workerComp" : null,
-    row.time_types_changed ? "timeTypes" : null,
+    row.time_types_changed || exactTimeTypesChanged ? "timeTypes" : null,
     row.settings_changed ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
   ].filter((r): r is string => r !== null);
