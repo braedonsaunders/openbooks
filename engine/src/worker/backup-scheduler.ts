@@ -2,11 +2,12 @@ import { sql } from "drizzle-orm";
 import { enqueueBackupRun } from "@openbooks/jobs";
 import {
   auditBackupEvent,
+  backupObjectKey,
   computeNextRunAt,
   deleteBackupObject,
   headBackupObject,
 } from "../backup.ts";
-import { db, withBypassContext, withOrgContext } from "../db.ts";
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../db.ts";
 
 /**
  * Backup scheduler — polls for enabled backup_policies whose next_run_at is
@@ -82,53 +83,108 @@ export async function tick(): Promise<void> {
         }
       }
       if (recovered) {
-        const finalized = await withBypassContext(() =>
-          db.execute<{ id: string }>(sql`
+        // The reconciled run names its tenant: its ledger stamp and completion
+        // evidence commit as one unit inside that tenant's scope. An audit
+        // outage rolls the stamp back to 'running' (updated_at still stale),
+        // so the next tick retries this exact reconciliation instead of
+        // leaving a completed backup without durable evidence.
+        await withOrgTransaction(run.org_id, async () => {
+          const finalized = (await db.execute<{ id: string }>(sql`
           update backup_runs
              set status = 'completed', error = null, completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
            returning id`));
-        if (finalized.rows[0]) {
-          // The reconciled run names its tenant; write its evidence inside that
-          // tenant's scope rather than from the scheduler's contextless tick.
-          await withOrgContext(run.org_id, () =>
-            auditBackupEvent({
-              orgId: run.org_id,
-              tableName: "backup_runs",
-              rowId: run.id,
-              actorId: null,
-              changes: { event: "backup_upload_reconciled", sha256: run.sha256 },
-            }));
-        }
+          if (!finalized.rows[0]) return;
+          await auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: null,
+            changes: { event: "backup_upload_reconciled", sha256: run.sha256 },
+          });
+        });
       } else {
-        await withBypassContext(() =>
-          db.execute(sql`
+        // Same atomic unit for abandonment: a 'failed' ledger state never
+        // lands without evidence describing why its never-verified bytes were
+        // discarded. If the evidence write fails, the row stays 'running'.
+        await withOrgTransaction(run.org_id, async () => {
+          const abandoned = (await db.execute<{ id: string }>(sql`
           update backup_runs
              set status = 'failed', object_key = null,
                  error = 'worker stopped before the upload could be verified',
                  completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
-             and updated_at < now() - interval '6 hours'`));
+             and updated_at < now() - interval '6 hours'
+           returning id`));
+          if (!abandoned.rows[0]) return;
+          await auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: null,
+            changes: {
+              event: "backup_upload_abandoned",
+              reason: "worker stopped before the upload could be verified",
+            },
+          });
+        });
       }
     }
 
     // A synchronous cleanup may have failed after a known failed run. Retry
-    // those deterministic keys until no hidden object remains.
+    // those deterministic keys until no hidden object remains. Storage is only
+    // touched after the removal request itself carries durable evidence; the
+    // ledger reference is then cleared together with removal confirmation as
+    // one audited unit.
     const failedUploads = await withBypassContext(() =>
       db.execute<{ id: string; org_id: string; object_key: string }>(sql`
       select id, org_id, object_key from backup_runs
        where status = 'failed' and object_key is not null and purged_at is null
        limit 25`));
     for (const run of failedUploads.rows) {
+      if (run.object_key !== backupObjectKey(run.org_id, run.id)) {
+        console.error(
+          `[backup-scheduler] refusing orphan cleanup for ${run.id}: object key does not match its ledger identity`,
+        );
+        continue;
+      }
       try {
+        // Evidence precedes destruction: if this insert fails, control leaves
+        // the block before storage is ever addressed, and the next tick retries.
+        await withOrgContext(run.org_id, () =>
+          auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: null,
+            changes: { event: "backup_orphan_cleanup_requested", objectKey: run.object_key },
+          }));
         await deleteBackupObject(run.object_key);
-        await withBypassContext(() =>
-          db.execute(sql`
-          update backup_runs set object_key = null, updated_at = now()
-           where id = ${run.id} and org_id = ${run.org_id} and status = 'failed' and object_key = ${run.object_key}`));
       } catch (error) {
         console.error(`[backup-scheduler] orphan cleanup failed for ${run.object_key}:`, (error as Error).message);
+        continue;
+      }
+      try {
+        await withOrgTransaction(run.org_id, async () => {
+          const cleared = (await db.execute<{ id: string }>(sql`
+          update backup_runs set object_key = null, updated_at = now()
+           where id = ${run.id} and org_id = ${run.org_id} and status = 'failed' and object_key = ${run.object_key}
+           returning id`));
+          if (!cleared.rows[0]) return;
+          await auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: null,
+            changes: { event: "backup_orphan_removed", objectKey: run.object_key },
+          });
+        });
+      } catch (error) {
+        console.error(
+          `[backup-scheduler] orphan cleanup stamp failed for ${run.object_key}; will retry:`,
+          (error as Error).message,
+        );
       }
     }
 

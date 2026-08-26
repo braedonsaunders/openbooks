@@ -1,7 +1,13 @@
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { auditBackupEvent, backupFileBaseName, computeNextRunAt } from "./backup.ts";
+import {
+  auditBackupEvent,
+  backupFileBaseName,
+  backupObjectKey,
+  computeNextRunAt,
+  purgeBackupRun,
+} from "./backup.ts";
 import { db } from "./db.ts";
 
 const DAILY = { frequency: "daily", hourUtc: 2, dayOfWeek: 1, dayOfMonth: 1 } as const;
@@ -100,4 +106,43 @@ test("auditBackupEvent resolves and issues its evidence insert on success", asyn
     changes: { event: "backup_completed", sha256: "abc" },
   });
   assert.equal(inserts, 1);
+});
+
+test("purge refuses storage deletion when its intent evidence cannot be recorded", async (t) => {
+  // The append-only purge intent is the gate in front of storage destruction:
+  // an audit_log outage must leave the stored bytes untouched and visible.
+  t.mock.method(db, "execute", async () => {
+    throw new Error("injected audit outage during purge intent");
+  });
+  const orgId = randomUUID();
+  const runId = randomUUID();
+  await assert.rejects(
+    purgeBackupRun({
+      orgId,
+      runId,
+      objectKey: backupObjectKey(orgId, runId),
+      actorId: null,
+      reason: "deleted",
+      kind: "manual",
+      fileName: "acme-backup.json.gz",
+      byteSize: 1234,
+      sha256: "abc",
+    }),
+    /injected audit outage during purge intent/,
+  );
+});
+
+test("purge refuses a ledger identity that does not match its deterministic object key", async () => {
+  // Storage access by an arbitrary key outside the ledger's own naming cannot
+  // ride this path — it would bypass the org-scoped intent/completion chain.
+  await assert.rejects(
+    purgeBackupRun({
+      orgId: randomUUID(),
+      runId: randomUUID(),
+      objectKey: `backups/${randomUUID()}/${randomUUID()}.json.gz`,
+      actorId: null,
+      reason: "deleted",
+    }),
+    /object key does not match its ledger identity/,
+  );
 });
