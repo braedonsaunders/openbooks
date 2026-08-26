@@ -60,6 +60,15 @@ export async function requestPasswordReset(
     `));
     if (recent.rows[0]!.n >= REQUESTS_PER_HOUR) return;
 
+    // Fail closed before superseding an existing link or minting a new bearer
+    // credential. Without a controlled delivery path, there is nothing safe
+    // to hand to either the requester or the server logs.
+    const transport = await resolveOrgEmailTransport(user.org_id);
+    if (!transport) {
+      console.warn(`[password-reset] no email transport for org ${user.org_id}; request not issued`);
+      return;
+    }
+
     // A fresh request supersedes outstanding links.
     await db.execute(sql`
       update auth_password_resets set expires_at = now()
@@ -80,14 +89,6 @@ export async function requestPasswordReset(
       expiresMinutes: RESET_TOKEN_TTL_MIN,
     });
 
-    const transport = await resolveOrgEmailTransport(user.org_id);
-    if (!transport) {
-      // Self-hosted deployments without outbound email would otherwise
-      // dead-end here; the server operator can hand the link over. The raw
-      // link in server logs is as sensitive as the mailbox it would land in.
-      console.warn(`[password-reset] no email transport for org ${user.org_id}; reset link: ${resetUrl}`);
-      return;
-    }
     const logId = await insertEmailLog({
       orgId: user.org_id,
       recipients: [user.email],
