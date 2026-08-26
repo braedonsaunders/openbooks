@@ -281,15 +281,36 @@ async function secretsOf(row: TaxRateProviderConfigRow): Promise<Record<string, 
   return (await unsealJson(row.secrets)) as Record<string, string>;
 }
 
-async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
-  await assertNotSandbox(row.orgId, "avalara tax quote");
-  const secrets = await secretsOf(row);
-  if (!secrets.accountId || !secrets.licenseKey) throw new TaxRateProviderError("Avalara accountId and licenseKey required");
-  const companyCode = String(row.settings.companyCode ?? "DEFAULT");
+/**
+ * Tax provider credentials must never cross an HTTP redirect boundary. Even a
+ * trusted provider origin can answer a quote POST with a 3xx, and fetch would
+ * then replay the `Authorization` header — the Avalara account's license key,
+ * the TaxJar API key, or the custom hook's bearer secret — to whichever host
+ * the Location names. Every credential-bearing tax call goes through here so
+ * a redirect fails closed instead of leaking.
+ */
+function taxProviderFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, redirect: "error" });
+}
+
+export interface AvalaraQuoteConfig {
+  accountId: string;
+  licenseKey: string;
+  baseUrl?: string;
+  companyCode?: string;
+  /** Resolved quoting date; the wire layer stays free of org-calendar lookups. */
+  quotedOn: string;
+}
+
+/** Wire-level Avalara quote: basic-auth accountId:licenseKey create-transaction. */
+export async function quoteViaAvalara(
+  req: TaxQuoteRequest,
+  config: AvalaraQuoteConfig,
+): Promise<TaxQuoteResult> {
   const body = {
     type: "SalesOrder",
-    companyCode,
-    date: req.quotedOn ?? await businessToday(row.orgId),
+    companyCode: String(config.companyCode ?? "DEFAULT"),
+    date: config.quotedOn,
     customerCode: "OPENBOOKS",
     currencyCode: req.currency ?? "USD",
     addresses: {
@@ -310,13 +331,15 @@ async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest)
       },
     ],
   };
-  const auth = Buffer.from(`${secrets.accountId}:${secrets.licenseKey}`).toString("base64");
-  const base = String(row.settings.baseUrl ?? "https://rest.avatax.com");
-  const res = await fetch(`${base}/api/v2/transactions/create`, {
-    method: "POST",
-    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const auth = Buffer.from(`${config.accountId}:${config.licenseKey}`).toString("base64");
+  const res = await taxProviderFetch(
+    `${String(config.baseUrl ?? "https://rest.avatax.com")}/api/v2/transactions/create`,
+    {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const totalTax = providerMoney((raw as { totalTax?: number }).totalTax, "totalTax");
@@ -347,10 +370,24 @@ async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest)
   };
 }
 
-async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
-  await assertNotSandbox(row.orgId, "taxjar tax quote");
+async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+  await assertNotSandbox(row.orgId, "avalara tax quote");
   const secrets = await secretsOf(row);
-  if (!secrets.apiKey) throw new TaxRateProviderError("TaxJar apiKey required");
+  if (!secrets.accountId || !secrets.licenseKey) throw new TaxRateProviderError("Avalara accountId and licenseKey required");
+  return quoteViaAvalara(req, {
+    accountId: secrets.accountId,
+    licenseKey: secrets.licenseKey,
+    baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
+    companyCode: row.settings.companyCode == null ? undefined : String(row.settings.companyCode),
+    quotedOn: req.quotedOn ?? (await businessToday(row.orgId)),
+  });
+}
+
+/** Wire-level TaxJar quote: bearer API key, JSON v2/taxes. */
+export async function quoteViaTaxJar(
+  req: TaxQuoteRequest,
+  config: { apiKey: string; baseUrl?: string },
+): Promise<TaxQuoteResult> {
   const body = {
     from_country: req.shipFrom.country ?? req.shipTo.country ?? "US",
     from_zip: req.shipFrom.postalCode ?? req.shipTo.postalCode,
@@ -362,10 +399,9 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
     amount: wireAmountOrThrow(req.taxableAmount),
     shipping: 0,
   };
-  const base = String(row.settings.baseUrl ?? "https://api.taxjar.com");
-  const res = await fetch(`${base}/v2/taxes`, {
+  const res = await taxProviderFetch(`${String(config.baseUrl ?? "https://api.taxjar.com")}/v2/taxes`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${secrets.apiKey}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
@@ -406,16 +442,26 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
   };
 }
 
-async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
-  await assertNotSandbox(row.orgId, "custom tax quote");
-  const url = String(row.settings.quoteUrl ?? "");
-  if (!url) throw new TaxRateProviderError("custom_http requires settings.quoteUrl");
+async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+  await assertNotSandbox(row.orgId, "taxjar tax quote");
   const secrets = await secretsOf(row);
-  const res = await fetch(url, {
+  if (!secrets.apiKey) throw new TaxRateProviderError("TaxJar apiKey required");
+  return quoteViaTaxJar(req, {
+    apiKey: secrets.apiKey,
+    baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
+  });
+}
+
+/** Wire-level custom hook quote: optional bearer API key, JSON request echo. */
+export async function quoteViaCustomHttp(
+  req: TaxQuoteRequest,
+  config: { url: string; apiKey?: string },
+): Promise<TaxQuoteResult> {
+  const res = await taxProviderFetch(config.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(secrets.apiKey ? { Authorization: `Bearer ${secrets.apiKey}` } : {}),
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
     },
     body: JSON.stringify(req),
   });
@@ -430,6 +476,14 @@ async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteReque
     raw,
     provider: "custom_http",
   };
+}
+
+async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+  await assertNotSandbox(row.orgId, "custom tax quote");
+  const url = String(row.settings.quoteUrl ?? "");
+  if (!url) throw new TaxRateProviderError("custom_http requires settings.quoteUrl");
+  const secrets = await secretsOf(row);
+  return quoteViaCustomHttp(req, { url, apiKey: secrets.apiKey || undefined });
 }
 
 /**
