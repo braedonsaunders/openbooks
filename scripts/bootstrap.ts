@@ -80,8 +80,8 @@ export const APPROVED_MIGRATION_FILENAME_TRANSITIONS: ReadonlyArray<MigrationFil
     },
     reason:
       "move the lease-fencing backfill after terminal-failure column creation; " +
-      "fresh installs otherwise fail at 0008 because the approved 0006-to-0035 " +
-      "canonicalization reordered the column DDL behind its backfill",
+        "fresh installs otherwise fail at 0008 because the approved 0006-to-0035 " +
+        "canonicalization reordered the column DDL behind its backfill",
   },
 ];
 

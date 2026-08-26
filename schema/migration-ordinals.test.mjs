@@ -187,13 +187,13 @@ test("old applied history converges once without replaying migration bodies", as
       ...transitions.map((transition) => ({ ...transition.to })),
     ].sort((left, right) => left.filename.localeCompare(right.filename)),
   );
-  assert.equal(ledger.updateCount, 3);
+  assert.equal(ledger.updateCount, transitions.length);
   assert.equal(ledger.migrationBodyExecutions, 0);
 
   const converged = ledger.snapshot();
   await reconcileMigrationFilenameTransitions(ledger, transitions);
   assert.deepEqual(ledger.snapshot(), converged, "a second bootstrap is a no-op");
-  assert.equal(ledger.updateCount, 3, "canonical history must not be rewritten");
+  assert.equal(ledger.updateCount, transitions.length, "canonical history must not be rewritten");
   assert.equal(ledger.migrationBodyExecutions, 0);
 });
 

@@ -434,9 +434,12 @@ export async function tick(): Promise<void> {
         console.error("[scheduler] durable outbox tick failed:", e);
       }
 
-      // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
+      // Flows: scheduled triggers (durable per-occurrence claims beside the
+      // cron cursor on flows.last_scheduled_run_at). Recovery re-fires claims
+      // orphaned by a crash before runDueScheduledFlows scans new ones.
       try {
-        const { runDueScheduledFlows } = await import("./flows/scheduled.ts");
+        const { recoverLostScheduledFlows, runDueScheduledFlows } = await import("./flows/scheduled.ts");
+        await withBypassContext(() => recoverLostScheduledFlows());
         await runDueScheduledFlows();
       } catch (e) {
         console.error("[scheduler] scheduled flows scan failed:", e);
