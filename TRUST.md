@@ -251,6 +251,23 @@ disposal after impairment. **Every case in the register currently passes with
 no gaps and no partials.** That statement holds only for what the register
 covers — see the scope note below.
 
+The register also grows with the defects it is asked to judge. A fix that
+closes an accounting defect in a covered area leaves a conformance fixture
+behind — one that fails if that class of defect returns — so the published
+passing count moves down only when the product regresses, not up once during a
+repair campaign and then back to silence while its subject areas are being
+repaired again.
+[engine/src/conformance/matrix.ts](engine/src/conformance/matrix.ts) pins each
+covered area at or above its published floor via `REGISTERED_FLOORS`; deleting
+a claim, or shrinking an area below what it publishes, fails validation until
+the floor is lowered deliberately, in the same commit, with a reason. Fixtures
+must chase the *default* configuration rather than the convenient one: for
+foreign currency that means an exchange table holding only one direction of
+the currency pair — forcing the kernel to synthesise its own ten-decimal
+inverse rate, exactly where per-line rounding residuals actually arise — not
+tidy two-decimal header rates under which no rounding happens and any figure
+would pass.
+
 Full detail, including the shortfall text for every gap and partial:
 **[docs/trust/conformance-matrix.md](docs/trust/conformance-matrix.md)** and
 [engine/src/conformance/README.md](engine/src/conformance/README.md).

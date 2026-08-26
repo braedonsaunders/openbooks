@@ -29,6 +29,31 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...INCOME_TAX_CASES,
 ];
 
+/**
+ * The published floor for each subject area of the register, frozen at
+ * publication. This is what keeps the published count from going quiet:
+ *
+ *  - A fix that closes a defect in a covered area is expected to leave a
+ *    conformance fixture behind — the register grows with it.
+ *  - Deleting a case is how a claim is withdrawn. It cannot happen silently:
+ *    removing one makes `validateCorpus` fail until this floor is lowered in
+ *    the same commit, in public view, with a reason.
+ *  - Raising the floor above an area's current size fails validation too — set
+ *    it to what exists once the new cases land, never speculatively.
+ */
+export const REGISTERED_FLOORS: readonly {
+  area: string;
+  source: readonly ConformanceCase[];
+  minimum: number;
+}[] = [
+  { area: "revenue", source: REVENUE_CASES, minimum: 9 },
+  { area: "leases", source: LEASE_CASES, minimum: 6 },
+  { area: "foreign currency", source: FOREIGN_CURRENCY_CASES, minimum: 5 },
+  { area: "inventory", source: INVENTORY_CASES, minimum: 6 },
+  { area: "long-lived assets", source: LONG_LIVED_ASSET_CASES, minimum: 5 },
+  { area: "income tax", source: INCOME_TAX_CASES, minimum: 9 },
+];
+
 /** Every standard the corpus makes a claim about, in citation order. */
 export function coveredStandards(): string[] {
   const seen = new Set<string>();
@@ -90,6 +115,15 @@ export function validateCorpus(cases: readonly ConformanceCase[] = CONFORMANCE_C
       if (residual !== 0n && entry.lines.length > 0) {
         problems.push(`${kase.id}: expected entry "${entry.step}" does not balance`);
       }
+    }
+  }
+
+  for (const { area, source, minimum } of REGISTERED_FLOORS) {
+    if (source.length < minimum) {
+      problems.push(
+        `${area}: the register fell below its published floor of ${minimum} cases — ` +
+          `withdrawn claims must lower this floor deliberately, in the same commit, with a reason`,
+      );
     }
   }
   return problems;
