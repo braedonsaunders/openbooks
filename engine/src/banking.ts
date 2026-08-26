@@ -91,6 +91,24 @@ export interface BankingContext {
  */
 export const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000001";
 
+/** The zero UUID means "no actor at all" and is never persisted; see {@link requireActorId}. */
+const NO_ACTOR_SENTINEL_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * The zero UUID means "no actor at all" — an absence, not an identity. It must
+ * never name who performed a financial write, so the import boundary rejects
+ * it (and blank/whitespace actors) outright instead of silently persisting it
+ * where an audit query would read it as a person.
+ */
+function requireActorId(userId: string): void {
+  const trimmed = userId?.trim() ?? "";
+  if (!trimmed || trimmed === NO_ACTOR_SENTINEL_ID) {
+    throw new BankingError(
+      "A bank statement import requires a real actor: the authenticated operator or SYSTEM_ACTOR_ID — never a no-actor placeholder",
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Source decoding
 // ---------------------------------------------------------------------------
@@ -988,6 +1006,10 @@ export async function importStatement(
   ctx: BankingContext,
 ): Promise<ImportResult> {
   if (opts.lines.length === 0) throw new BankingError("No statement lines to import");
+  // Provenance gate: every persisted statement/line/audit actor comes from
+  // ctx.userId, so a no-actor placeholder arriving here would sink into all
+  // three evidence surfaces. Fail closed before any write.
+  requireActorId(ctx.userId);
   const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
   const currency = (opts.currency ?? account.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
