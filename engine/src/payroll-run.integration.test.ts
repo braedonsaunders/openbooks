@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import pg from "pg";
+import { db, env } from "./db.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
@@ -1073,6 +1074,451 @@ test(
       const netLeg = lines.rows.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "the net pay leg carries the employee party");
     } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// The employee-and-tax-year fence at the COMMIT boundary.
+//
+// Committing used to synchronize on nothing two racing runs both held: each
+// locked only its OWN pay_runs row, so two commits for one employee's tax
+// year each passed a freshness answer that was true when it was read and both
+// posted withholdings priced against the same unconsumed ceilings. And for
+// every OTHER writer the boundary asked its freshness question exactly once,
+// so an edit landing between that answer and the terminal write rode under
+// it. The fence (`employeeTaxYearFenceKey`, engine/src/payroll-run.ts) plus
+// the second freshness read at the commit boundary close both gaps.
+//
+// These tests hold that machinery to its interleavings with no sleeps and no
+// races of their own: row locks held on dedicated sessions park each
+// committing backend at a KNOWN statement, and its position in
+// pg_stat_activity proves exactly which gates have already executed.
+// ---------------------------------------------------------------------------
+
+/**
+ * The engine's fence identity for one employee's statutory year
+ * (`employeeTaxYearFenceKey`, engine/src/payroll-run.ts), restated locally so
+ * this regression stays runnable against trees without that export — there it
+ * must fail on BEHAVIOUR (the double commit succeeding), not on an import.
+ */
+const payRunYtdFenceKey = (
+  orgId: string,
+  employeePartyId: string,
+  taxYear: number,
+): string => `payroll-run-ytd:${orgId}:${employeePartyId}:${taxYear}`;
+
+/** The fence key split into the unsigned (classid, objid) halves pg_locks shows. */
+async function ytdFenceHalves(
+  key: string,
+): Promise<{ classid: bigint; objid: bigint }> {
+  const r = (await db.execute<{ key: string }>(sql`
+    select hashtextextended(${key}, 0)::text as key`));
+  const wide = BigInt.asUintN(64, BigInt(r.rows[0]!.key));
+  return { classid: wide >> 32n, objid: wide & 0xffffffffn };
+}
+
+/**
+ * A dedicated connection holding row locks ACROSS another session's open
+ * commit — the rendezvous that turns concurrency into an ordering.
+ */
+async function openLockSession(): Promise<pg.Client> {
+  const client = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
+  await client.connect();
+  await client.query("begin");
+  await client.query("select set_config('app.bypass_rls', 'on', true)");
+  return client;
+}
+
+async function closeLockSession(client: pg.Client | undefined): Promise<void> {
+  if (!client) return;
+  await client.query("rollback").catch(() => undefined);
+  await client.end().catch(() => undefined);
+}
+
+/** Settle instead of throw: a racing commit's refusal IS one of the outcomes. */
+const settle = <T>(promise: Promise<T>): Promise<PromiseSettledResult<T>> =>
+  promise.then(
+    (value): PromiseSettledResult<T> => ({ status: "fulfilled", value }),
+    (reason): PromiseSettledResult<T> => ({ status: "rejected", reason }),
+  );
+
+/**
+ * Backends blocked mid-commit ON the time-claim UPDATE. That update sits
+ * strictly BETWEEN the commit boundary's two freshness reads, so parking
+ * there proves a commit already holds its row lock, has acquired whatever
+ * fences exist for it, and has PASSED the first freshness gate — while the
+ * second has not run yet. The claim text is the only statement in the commit
+ * path naming `payroll_batch_ref`.
+ */
+async function parkedClaimBackends(): Promise<string[]> {
+  const claims = (await db.execute<{ pid: number }>(sql`
+    select pid from pg_stat_activity
+     where datname = current_database()
+       and state = 'active' and wait_event_type = 'Lock'
+       and query like '%payroll_batch_ref%'
+       and pid <> pg_backend_pid()`));
+  return claims.rows.map((r) => String(r.pid));
+}
+
+/** A backend queued on THIS employee-year's advisory fence (the fixed order). */
+async function ytdFenceQueued(fence: { classid: bigint; objid: bigint }): Promise<boolean> {
+  const queued = (await db.execute(sql`
+    select 1 from pg_locks
+     where locktype = 'advisory' and granted = false
+       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`));
+  return queued.rows.length > 0;
+}
+
+async function waitForInterleaving(what: string, probe: () => Promise<boolean>): Promise<void> {
+  for (let waited = 0; waited < 15_000; waited += 25) {
+    if (await probe()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const activity = await db.execute(sql`
+    select pid, state, wait_event_type, left(query, 160) as query
+      from pg_stat_activity where datname = current_database()`);
+  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity.rows)}`);
+}
+
+/**
+ * One hourly Ontario employee on a biweekly schedule with approved time in
+ * both halves of July 2026 — the smallest population in which two pay runs
+ * share an employee AND a tax year, the identity the fence keys on.
+ */
+async function seedFencedRaceOrg(): Promise<{
+  org: Awaited<ReturnType<typeof createScratchOrg>>;
+  actorId: string;
+  employeeId: string;
+  scheduleId: string;
+}> {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const account = async (number: string, name: string, type: string) => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                            reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+              '[]'::jsonb, '{}'::jsonb, true)`);
+    return id;
+  };
+  const wageExpense = await account("6000", "Wages expense", "expense");
+  const burdenExpense = await account("6010", "Payroll burden", "expense");
+  const netPayable = await account("2300", "Wages payable", "liability_current");
+  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+  const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+  await db.execute(sql`
+    update orgs set settings = settings || ${JSON.stringify({
+      features: { payroll: true },
+      payroll: {
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: burdenExpense,
+        netPayAccountId: netPayable,
+        cppPayableAccountId: craPayable,
+        eiPayableAccountId: craPayable,
+        taxPayableAccountId: craPayable,
+        vacationPayableAccountId: vacationPayable,
+        wagesTo: "expense",
+      },
+    })}::jsonb where id = ${org.orgId}`);
+  await seedPayrollComponents(org.orgId, actorId, "CA");
+
+  const employeeId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${employeeId}, ${org.orgId}, 'person', 'Racing Riley', true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                  is_active, created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, 'CAD', '30', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+  const scheduleId = randomUUID();
+  await db.execute(sql`
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                               pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+            ${actorId}, ${actorId})`);
+  await db.execute(sql`
+    insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                           pay_basis, federal_claim_code, provincial_claim_code,
+                                           vacation_percent, vacation_method, is_active,
+                                           created_by, updated_by)
+    values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 1, 1,
+            '4', 'accrue', true, ${actorId}, ${actorId})`);
+  // Two approved entries inside EACH period: every run in these tests must
+  // have real time to price AND real rows the claim update must lock.
+  for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-21", "2026-07-23"]) {
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                billing_status, costing_basis, created_by, updated_by)
+      values (${org.orgId}, ${employeeId}, ${workedOn}, 20, 'approved', false,
+              'unbilled', 'actual', ${actorId}, ${actorId})`);
+  }
+  return { org, actorId, employeeId, scheduleId };
+}
+
+test(
+  "two racing commits for one employee and tax year: exactly one may spend the year-to-date",
+  { skip: !DB },
+  async () => {
+    // Two calculated runs over consecutive periods, one employee, one
+    // statutory year, committed CONCURRENTLY. Each commit locks only its own
+    // pay_runs row, so nothing ordered them: whichever freshness answer each
+    // gate read was true when it was read, and both commits could post
+    // withholdings priced against the same unconsumed ceilings — CPP and EI
+    // withheld twice past the annual maximum. The defect needs BOTH commits
+    // past their gates before either writes, and a bare Promise.all races
+    // unpredictably — so the test pins the interleaving:
+    //
+    //   1. a lock session holds every time entry, parking any commit that
+    //      reaches its claim update;
+    //   2. a second session holds run B's rows so B cannot even start while
+    //     A parks on the claim (proof A's freshness gate already ran);
+    //   3. B is freed while A still sits parked, so B's gate reads a world in
+    //      which A has written NOTHING VISIBLE.
+    //
+    // Wherever B then comes to rest decides the question. Queued behind A on
+    // the employee-year fence means the gate will be re-asked on B's turn and
+    // exactly one commit survives. Parked beside A on its own claim means
+    // neither commit will ever check again, and releasing the entries lets
+    // them spend one year-to-date twice.
+    const { org, actorId, employeeId, scheduleId } = await seedFencedRaceOrg();
+    let holder: pg.Client | undefined;
+    let parker: pg.Client | undefined;
+    try {
+      const runA = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const runB = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+      });
+      const calcA = await calculatePayRun({ orgId: org.orgId, documentId: runA.documentId, actorId });
+      const calcB = await calculatePayRun({ orgId: org.orgId, documentId: runB.documentId, actorId });
+      assert.deepEqual(calcA.errors, []);
+      assert.deepEqual(calcB.errors, []);
+      const fence = await ytdFenceHalves(payRunYtdFenceKey(org.orgId, employeeId, 2026));
+
+      holder = await openLockSession();
+      await holder.query(
+        `select id from time_entries
+          where org_id = $1 and status = 'approved'
+            and worked_on between date '2026-07-05' and date '2026-08-01'
+          for update`,
+        [org.orgId],
+      );
+      parker = await openLockSession();
+      await parker.query(
+        `select 1 from pay_runs r
+           join documents d on d.id = r.document_id and d.org_id = r.org_id
+          where r.org_id = $1 and r.document_id = $2
+          for update`,
+        [org.orgId, runB.documentId],
+      );
+
+      const settledA = settle(commitPayRun({ orgId: org.orgId, documentId: runA.documentId, actorId }));
+      const settledB = settle(commitPayRun({ orgId: org.orgId, documentId: runB.documentId, actorId }));
+
+      // A parks ON its claim: past its row lock, past its first freshness
+      // gate, holding every write short of the terminal one.
+      await waitForInterleaving(
+        "run A to park on its time claim",
+        async () => (await parkedClaimBackends()).length >= 1,
+      );
+
+      // NOW free B, while A still sits parked: B's freshness gate will read a
+      // world in which A has written NOTHING VISIBLE. With the fence, B queues
+      // on the employee-year lock A's transaction holds and cannot ask its own
+      // freshness question until A finishes. Without it, B sails through its
+      // gate to ITS claim, and both commits sit past every check they will
+      // ever run.
+      await closeLockSession(parker);
+      parker = undefined;
+
+      // Wherever B comes to rest decides the question...
+      let observed = "";
+      await waitForInterleaving(
+        "the second commit to pass its own freshness gate",
+        async () => {
+          const parked = await parkedClaimBackends();
+          if (parked.length >= 2) {
+            observed = "both commits were past their gates at once";
+            return true;
+          }
+          if (parked.length >= 1 && (await ytdFenceQueued(fence))) {
+            observed = "second commit queued on the employee-year fence";
+            return true;
+          }
+          return false;
+        },
+      );
+
+      // Release both. The fence decides whose turn it was.
+      await closeLockSession(holder);
+      holder = undefined;
+
+      const [a, b] = await Promise.all([settledA, settledB]);
+      const outcomes = [
+        { documentId: runA.documentId, outcome: a },
+        { documentId: runB.documentId, outcome: b },
+      ];
+      const winners = outcomes.filter((r) => r.outcome.status === "fulfilled");
+      const losers = outcomes.filter((r) => r.outcome.status === "rejected");
+      assert.equal(winners.length, 1,
+        `exactly one of two racing commits may spend one employee's tax-year YTD (${observed})`);
+      assert.equal(losers.length, 1);
+      assert.match(
+        ((losers[0]!.outcome as PromiseRejectedResult).reason as Error).message,
+        /inputs changed after it was last calculated \(ytd\)/,
+      );
+      const winner = winners[0]!.documentId;
+      const loser = losers[0]!.documentId;
+
+      // Exactly one terminal state was written...
+      const statuses = (await db.execute<{ document_id: string; run_status: string }>(sql`
+        select document_id, run_status from pay_runs
+         where org_id = ${org.orgId}
+           and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
+      `));
+      assert.deepEqual(
+        new Map(statuses.rows.map((r) => [r.document_id, r.run_status])),
+        new Map([[winner, "committed"], [loser, "calculated"]]),
+      );
+      // ...money moved once: GL legs exist only for the winner...
+      const glRuns = (await db.execute<{ document_id: string }>(sql`
+        select distinct document_id from document_lines
+         where org_id = ${org.orgId}
+           and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
+      `));
+      assert.deepEqual(glRuns.rows.map((r) => r.document_id), [winner]);
+      const stubs = (await db.execute<{ gross: string }>(sql`
+        select gross from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${winner}
+      `));
+      assert.deepEqual(stubs.rows.map((s) => s.gross), ["1200.0000"]); // 40h × $30
+      // ...and only the winner's hours are claimed as paid.
+      const claims = (await db.execute<{ batch: string; n: number }>(sql`
+        select payroll_batch_ref as batch, count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and payroll_batch_ref is not null
+        group by payroll_batch_ref
+      `));
+      assert.deepEqual(claims.rows, [{ batch: winner, n: 2 }]);
+
+      // The refusal must be recoverable, not poisoning: the loser recalculates
+      // — now pricing the year WITH the winner's stubs — and commits cleanly,
+      // which also proves the transaction-scoped fence released at A's commit.
+      const recalc = await calculatePayRun({ orgId: org.orgId, documentId: loser, actorId });
+      assert.deepEqual(recalc.errors, []);
+      await commitPayRun({ orgId: org.orgId, documentId: loser, actorId });
+    } finally {
+      await closeLockSession(holder);
+      await closeLockSession(parker);
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "a wage edited between the commit boundary's two freshness reads refuses the commit",
+  { skip: !DB },
+  async () => {
+    // The commit boundary asks the freshness question TWICE: once when the
+    // transaction opens, and once at the LAST moment before the terminal
+    // write. The gap between those reads belongs to every other writer in the
+    // database — this test lives inside that gap. A lock session held on the
+    // run's own time entries parks the commit ON its claim update, which sits
+    // strictly between the two gates: reaching it proves the first gate has
+    // answered and the second has not run yet. A wage row edited exactly
+    // there used to ride under the first answer forever — the old belt-and-
+    // braces re-check watched only TIME entries, so any other input class
+    // (wages, rates, plans, settings) could change unobserved between the
+    // check and the money moving.
+    const { org, actorId, scheduleId } = await seedFencedRaceOrg();
+    let holder: pg.Client | undefined;
+    try {
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const calc = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(calc.errors, []);
+
+      holder = await openLockSession();
+      await holder.query(
+        `select id from time_entries
+          where org_id = $1 and status = 'approved'
+            and worked_on between date '2026-07-05' and date '2026-07-18'
+          for update`,
+        [org.orgId],
+      );
+      const pending = settle(commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }));
+      await waitForInterleaving(
+        "the commit to pass its first freshness gate and park on the time claim",
+        async () => (await parkedClaimBackends()).length >= 1,
+      );
+
+      // THE GAP. Configuration changes NOW — after the first freshness answer,
+      // before the second read and the terminal write. One millisecond past
+      // calculated_at, deterministically, never racing the clock.
+      await db.execute(sql`
+        update labor_cost_rates
+           set updated_at = (select calculated_at from pay_runs
+                              where org_id = ${org.orgId} and document_id = ${run.documentId})
+                            + interval '1 millisecond'
+         where org_id = ${org.orgId}`);
+      assert.deepEqual(
+        (await payRunStaleness(org.orgId, run.documentId)).reasons,
+        ["wages"],
+        "the edit registers as staleness while the commit sits between the gates",
+      );
+
+      // Release. The second gate — the one that re-reads freshness at the last
+      // moment on this transaction's own snapshot — now sees the wage row the
+      // first gate never did, and refuses instead of paying figures edited past.
+      await closeLockSession(holder);
+      holder = undefined;
+
+      const result = await pending;
+      assert.equal(result.status, "rejected",
+        "a config write landing inside the gate gap must refuse the commit");
+      assert.match(
+        ((result as PromiseRejectedResult).reason as Error).message,
+        /inputs changed after it was last calculated \(wages\)/,
+      );
+
+      // Nothing was written by the refused commit: no terminal state, no GL
+      // legs, no hour marked paid.
+      const status = ((await db.execute<{ run_status: string }>(sql`
+        select run_status from pay_runs
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.run_status;
+      assert.equal(status, "calculated");
+      const glLines = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `))).rows[0]!.n;
+      assert.equal(glLines, 0);
+      const claimed = ((await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and payroll_batch_ref is not null
+      `))).rows[0]!.n;
+      assert.equal(claimed, 0);
+      // The edit itself survived — it was never inside the rolled-back
+      // transaction — and still names the refusal reason.
+      assert.deepEqual(
+        (await payRunStaleness(org.orgId, run.documentId)).reasons,
+        ["wages"],
+      );
+
+      // Control: recalculate prices the edited world and the SAME engine call
+      // commits — the gate tracks inputs, it does not leak into a blocker.
+      const recalc = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(recalc.errors, []);
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    } finally {
+      await closeLockSession(holder);
       await dropScratchOrgReporting(org.orgId);
     }
   },
