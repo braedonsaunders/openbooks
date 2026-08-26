@@ -35,6 +35,13 @@ function bad(error: string, field?: string) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status: 422 })
 }
 
+/** A rule violated inside the mutation transaction, mapped to its 422 body after rollback. */
+class PatchInvalid extends Error {
+  constructor(readonly code: string, readonly field?: string) {
+    super(code)
+  }
+}
+
 function textOrNull(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -92,26 +99,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   let parentId: string | null | undefined
   if (body.parentId !== undefined) {
     parentId = textOrNull(body.parentId)
-    if (parentId) {
-      if (!isUuid(parentId) || parentId === id) return bad('invalid_parent', 'parentId')
-      const parent = (await db.execute<{ is_summary: boolean; type: string }>(sql`
-        select is_summary, type from accounts
-         where id = ${parentId} and org_id = ${gate.user.orgId}
-      `))
-      if (!parent.rows[0]?.is_summary) return bad('parent_must_be_summary', 'parentId')
-      if (parent.rows[0].type !== nextType) return bad('parent_type_mismatch', 'parentId')
-      const cycle = (await db.execute(sql`
-        with recursive descendants as (
-          select id from accounts where id = ${id} and org_id = ${gate.user.orgId}
-          union
-          select child.id from accounts child
-          join descendants d on child.parent_id = d.id
-          where child.org_id = ${gate.user.orgId}
-        )
-        select 1 from descendants where id = ${parentId} limit 1
-      `))
-      if (cycle.rows[0]) return bad('parent_cycle', 'parentId')
-    }
+    if (parentId && (!isUuid(parentId) || parentId === id)) return bad('invalid_parent', 'parentId')
   }
   const effectiveParentId = parentId !== undefined ? parentId : (existing.parent_id as string | null)
   if (effectiveParentId && body.type !== undefined && body.parentId === undefined) {
@@ -173,6 +161,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   try {
     await db.transaction(async (tx) => {
+      if (parentId !== undefined) {
+        // Serialize the org's chart-of-accounts hierarchy edits. The cycle walk
+        // below is only sound against every competing reparent's committed
+        // effect: two cross-reparents deciding on stale snapshots would both
+        // pass and commit a cycle (A.parent=B beside B.parent=A). The lock is
+        // transaction-scoped, so the loser waits here, then re-walks against
+        // the winner's committed parent before its own update may decide.
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(hashtextextended(${`accounts-hierarchy:${gate.user.orgId}`}, 0))
+        `)
+        if (parentId) {
+          const parent = (await tx.execute<{ is_summary: boolean; type: string }>(sql`
+            select is_summary, type from accounts
+             where id = ${parentId} and org_id = ${gate.user.orgId}
+          `))
+          if (!parent.rows[0]?.is_summary) throw new PatchInvalid('parent_must_be_summary', 'parentId')
+          if (parent.rows[0].type !== nextType) throw new PatchInvalid('parent_type_mismatch', 'parentId')
+          const cycle = (await tx.execute(sql`
+            with recursive descendants as (
+              select id from accounts where id = ${id} and org_id = ${gate.user.orgId}
+              union
+              select child.id from accounts child
+              join descendants d on child.parent_id = d.id
+              where child.org_id = ${gate.user.orgId}
+            )
+            select 1 from descendants where id = ${parentId} limit 1
+          `))
+          if (cycle.rows[0]) throw new PatchInvalid('parent_cycle', 'parentId')
+        }
+      }
       const updated = (await tx.execute<Record<string, unknown>>(sql`
         update accounts set
           number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
@@ -206,6 +224,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       `)
     })
   } catch (error) {
+    if (error instanceof PatchInvalid) return bad(error.code, error.field)
     const message = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}` : String(error)
     if (message.includes('accounts_org_number')) return bad('number_in_use', 'number')
     if (message.includes('account_changed')) {
