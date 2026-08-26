@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { deriveConsolidatedRates, runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
-import { db, withOrgTransaction } from "./db.ts";
+import { db, pool, withOrgTransaction } from "./db.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -11,6 +11,17 @@ import {
 } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+/** Poll until some backend is waiting on an ungranted advisory lock. */
+async function waitForAdvisoryWait(): Promise<boolean> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const waiting = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`));
+    if ((waiting.rows[0]?.n ?? 0) > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
 
 test("foreign-currency eliminations are exact, balanced, and safely rerunnable", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -345,6 +356,444 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
        where org_id = ${org.orgId} and period_id = ${org.periodId}
        order by from_currency`));
     assert.deepEqual(secondPass.rows, expected);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("auto-elimination aggregates only the destination book's own activity", { skip: !DB }, async () => {
+  // Regression (fnd_mt9f3f3d_i49xeh): with identical +100/-100 intercompany
+  // activity in a primary AND a secondary book, the primary-book adjustment
+  // must be -100/+100 — never -200/+200 folded in from the alternate ledger.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const eliminationSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      update accounts set eliminate = true
+       where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+
+    const secondaryBookId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${secondaryBookId}, ${org.orgId}, 'SEC', 'Secondary statutory', false, true, true)`);
+
+    const postPair = async (bookId: string, tag: string) => {
+      const entry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values (${entry}, ${org.orgId}, ${bookId}, ${org.subsidiaryId}, ${tag}, ${org.date}, ${org.periodId}, ${tag}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+          (${org.orgId}, ${entry}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1')`);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`);
+    };
+    await postPair(org.bookId, "IC-PRI");
+    await postPair(secondaryBookId, "IC-SEC");
+
+    const result = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.equal(result.lineCount, 2);
+    const entry = (await db.execute<{ book_id: string }>(sql`
+      select book_id from journal_entries where id = ${result.entryId}`));
+    assert.equal(entry.rows[0]!.book_id, org.bookId, "the elimination lands in the primary book");
+    const lines = (await db.execute<{ number: string; amount: string }>(sql`
+      select a.number, l.amount::text as amount
+        from journal_lines l join accounts a on a.id = l.account_id
+       where l.entry_id = ${result.entryId}
+       order by a.number`));
+    assert.deepEqual(lines.rows, [
+      { number: "1100", amount: "-100.0000" },
+      { number: "2000", amount: "100.0000" },
+    ]);
+    const secondaryEliminations = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and book_id = ${secondaryBookId} and origin = 'intercompany'`));
+    assert.equal(secondaryEliminations.rows[0]!.n, 0, "the secondary book keeps its own ledger");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("ownership consolidation reads activity and acquisition equity from the primary book only", { skip: !DB }, async () => {
+  // Regression (fnd_mt9f3f3d_i49xeh): profit (+100 vs +900) and acquisition-
+  // date equity (-1000 vs -4000) exist in BOTH books; every adjustment must
+  // derive from the primary book alone.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const childId = randomUUID();
+    const eliminationId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${childId},${org.orgId},${org.subsidiaryId},'Owned Co','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+        (${eliminationId},${org.orgId},${org.subsidiaryId},'Ownership eliminations','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+    const secondaryBookId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${secondaryBookId}, ${org.orgId}, 'SEC', 'Secondary statutory', false, true, true)`);
+    const defs = [
+      ["investment", "1400", "Investment in subsidiary", "asset_current_other"],
+      ["equityIncome", "4020", "Equity income", "income_other"],
+      ["nciEquity", "3100", "Non-controlling interest", "equity"],
+      ["nciIncome", "6100", "Profit attributable to NCI", "expense_other"],
+      ["goodwill", "1500", "Goodwill", "asset_fixed"],
+      ["fairValue", "1510", "Fair value adjustment", "asset_fixed"],
+      ["childEquity", "3000", "Child share capital", "equity"],
+    ] as const;
+    const accounts = new Map<string, string>();
+    for (const [key, number, name, type] of defs) {
+      const id = randomUUID();
+      accounts.set(key, id);
+      await db.execute(sql`
+        insert into accounts
+          (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${name},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+    }
+    const postEntry = async (bookId: string, tag: string, debitAccount: string, creditAccount: string, amount: string, postingDate?: string) => {
+      const entry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+        values (${entry},${org.orgId},${bookId},${childId},${tag},${postingDate ?? org.date},${org.periodId},${tag},'draft','manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+        values
+          (${org.orgId},${entry},1,${debitAccount},${childId},${amount},'CAD',${amount},'1'),
+          (${org.orgId},${entry},2,${creditAccount},${childId},${"-" + amount},'CAD',${"-" + amount},'1')`);
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    };
+    // Primary book: opening equity 1000 and period profit 100.
+    await postEntry(org.bookId, "OWN-CAP", org.accounts.bank, accounts.get("childEquity")!, "1000", "2026-07-01");
+    await postEntry(org.bookId, "OWN-PROFIT", org.accounts.bank, org.accounts.revenue, "100");
+    // Secondary statutory book: its own equity 4000 and profit 900.
+    await postEntry(secondaryBookId, "OWN-CAP-SEC", org.accounts.bank, accounts.get("childEquity")!, "4000", "2026-07-01");
+    await postEntry(secondaryBookId, "OWN-PROFIT-SEC", org.accounts.bank, org.accounts.revenue, "900");
+
+    const interestId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values (${interestId},${org.orgId},${org.subsidiaryId},${childId},'2026-07-01','80','full',
+              '2026-07-01','900','1000','1','proportionate',${accounts.get("investment")!},
+              ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+              ${accounts.get("goodwill")!},${accounts.get("fairValue")!})
+    `);
+
+    const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(run.entryIds.length, 2);
+    const books = (await db.execute<{ book_id: string }>(sql`
+      select distinct book_id from journal_entries where id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`));
+    assert.deepEqual(books.rows, [{ book_id: org.bookId }], "every adjustment lands in the primary book");
+    const balances = (await db.execute<{ number: string; amount: string }>(sql`
+      select a.number,coalesce(sum(l.amount),0)::text amount
+        from journal_lines l join journal_entries e on e.id=l.entry_id
+        join accounts a on a.id=l.account_id
+       where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
+       group by a.number order by a.number
+    `));
+    assert.deepEqual(balances.rows, [
+      { number: "1400", amount: "-900.0000" },
+      { number: "1500", amount: "100.0000" },
+      { number: "3000", amount: "1000.0000" },
+      { number: "3100", amount: "-220.0000" },
+      { number: "6100", amount: "20.0000" },
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a source posting committing mid-run stays out of the generation and is absorbed on retry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let clientB: import("pg").PoolClient | undefined;
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const eliminationSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      update accounts set eliminate = true
+       where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+    const pair = async (client: { query: (text: string, values?: unknown[]) => Promise<unknown> }, tag: string, ar: string) => {
+      const entry = randomUUID();
+      await client.query(
+        `insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,'draft','manual')`,
+        [entry, org.orgId, org.bookId, org.subsidiaryId, tag, org.date, org.periodId, tag],
+      );
+      await client.query(
+        `insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+         values ($1,$2,1,$3,$4,$5,'CAD',$5,'1'), ($1,$2,2,$6,$4,$7,'CAD',$7,'1')`,
+        [org.orgId, entry, org.accounts.ar, org.subsidiaryId, ar, org.accounts.ap, `-${ar}`],
+      );
+      await client.query(`update journal_entries set status='posted', posted_at=now() where id=$1`, [entry]);
+      return entry;
+    };
+    await pair(pool, "IC-A", "100.0000");
+
+    // Park the run on its very first statement: client B holds the session-
+    // level twin of the run's xact lock, so the REPEATABLE READ snapshot is
+    // pinned before any deciding read happens.
+    const lockKey = `elimination:${org.orgId}:${org.periodId}`;
+    clientB = await pool.connect();
+    await clientB.query(`select pg_advisory_lock(hashtextextended($1, 0))`, [lockKey]);
+    const runP = runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.ok(
+      await waitForAdvisoryWait(),
+      "the elimination run must park on its advisory lock before reading activity",
+    );
+
+    // A source posting COMMITS while the run sits blocked behind the lock.
+    await pair(clientB, "IC-LATE", "50.0000");
+    await clientB.query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [lockKey]);
+
+    const first = await runP;
+    assert.equal(first.lineCount, 2);
+    const firstLines = (await db.execute<{ number: string; amount: string }>(sql`
+      select a.number, l.amount::text as amount
+        from journal_lines l join accounts a on a.id = l.account_id
+       where l.entry_id = ${first.entryId}
+       order by a.number`));
+    assert.deepEqual(firstLines.rows, [
+      { number: "1100", amount: "-100.0000" },
+      { number: "2000", amount: "100.0000" },
+    ], "the mid-run commit is excluded wholesale from this generation");
+
+    // Invalidate-and-retry: the replacement reverses the stale generation once
+    // and absorbs the concurrent posting completely.
+    const second = await runAutoElimination(org.orgId, org.periodId, actorId);
+    const retryTotals = (await db.execute<{ number: string; total: string }>(sql`
+      select a.number, sum(l.amount)::text as total
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id
+        join accounts a on a.id = l.account_id
+       where e.id = ${second.entryId}
+       group by a.number order by a.number`));
+    assert.deepEqual(retryTotals.rows, [
+      { number: "1100", total: "-150.0000" },
+      { number: "2000", total: "150.0000" },
+    ]);
+    const reversals = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where reverses_entry_id = ${first.entryId} and status = 'posted'`));
+    assert.equal(reversals.rows[0]!.n, 1, "the stale generation is reversed exactly once");
+  } finally {
+    if (clientB) {
+      await clientB
+        .query(`select pg_advisory_unlock(hashtextextended($1, 0))`, [`elimination:${org.orgId}:${org.periodId}`])
+        .catch(() => undefined);
+      clientB.release();
+    }
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a fault after the prior reversal rolls back entries and evidence together", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const eliminationSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${eliminationSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      update accounts set eliminate = true
+       where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+    const postPair = async (tag: string) => {
+      const entry = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${tag}, ${org.date}, ${org.periodId}, ${tag}, 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values
+          (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+          (${org.orgId}, ${entry}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1')`);
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+    };
+    await postPair("IC-A");
+    const first = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.ok(first.entryId);
+
+    // Fault injection during replacement: occupy the exact entry number the
+    // next generation will take (a manual-origin row the engine's counters
+    // ignore) so the replacement INSERT hits journal_entries_org_number AFTER
+    // the prior reversal has already executed inside the transaction.
+    const blocker = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${blocker}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'ELIM-2026-07-2', ${org.date}, ${org.periodId}, 'number collision fault', 'draft', 'manual')`);
+
+    await assert.rejects(
+      runAutoElimination(org.orgId, org.periodId, actorId),
+      (error: any) => /journal_entries_org_number/.test(String(error?.cause?.message ?? error?.message)),
+    );
+
+    const gen1 = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where id = ${first.entryId}`));
+    assert.equal(gen1.rows[0]!.status, "posted", "the prior generation was never marked reversed");
+    const strayReversals = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where reverses_entry_id = ${first.entryId}`));
+    assert.equal(strayReversals.rows[0]!.n, 0, "no half-applied reversal survived the fault");
+    const elimEntries = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
+         and origin = 'intercompany' and status in ('posted', 'reversed')`));
+    assert.equal(elimEntries.rows[0]!.n, 1, "the failed run left exactly the pre-fault evidence");
+    const auditRows = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${org.orgId} and request_id = 'auto_elimination'`));
+    assert.equal(auditRows.rows[0]!.n, 1, "audit evidence matches the committed generations only");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an ownership fault after the prior reversal rolls back entries, run status, and evidence together", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const childId = randomUUID();
+    const eliminationId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values
+        (${childId},${org.orgId},${org.subsidiaryId},'Owned Co','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+        (${eliminationId},${org.orgId},${org.subsidiaryId},'Ownership eliminations','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+    const defs = [
+      ["investment", "1400", "Investment in subsidiary", "asset_current_other"],
+      ["equityIncome", "4020", "Equity income", "income_other"],
+      ["nciEquity", "3100", "Non-controlling interest", "equity"],
+      ["nciIncome", "6100", "Profit attributable to NCI", "expense_other"],
+      ["goodwill", "1500", "Goodwill", "asset_fixed"],
+      ["fairValue", "1510", "Fair value adjustment", "asset_fixed"],
+      ["childEquity", "3000", "Child share capital", "equity"],
+    ] as const;
+    const accounts = new Map<string, string>();
+    for (const [key, number, name, type] of defs) {
+      const id = randomUUID();
+      accounts.set(key, id);
+      await db.execute(sql`
+        insert into accounts
+          (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${name},${type},false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+    }
+    const capital = randomUUID();
+    const profit = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+      values
+        (${capital},${org.orgId},${org.bookId},${childId},'OWN-CAP','2026-07-01',${org.periodId},'Opening equity','draft','manual'),
+        (${profit},${org.orgId},${org.bookId},${childId},'OWN-PROFIT',${org.date},${org.periodId},'Period profit','draft','manual')
+    `);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+      values
+        (${org.orgId},${capital},1,${org.accounts.bank},${childId},'1000','CAD','1000','1'),
+        (${org.orgId},${capital},2,${accounts.get("childEquity")!},${childId},'-1000','CAD','-1000','1'),
+        (${org.orgId},${profit},1,${org.accounts.bank},${childId},'100','CAD','100','1'),
+        (${org.orgId},${profit},2,${org.accounts.revenue},${childId},'-100','CAD','-100','1')
+    `);
+    await db.execute(sql`
+      update journal_entries set status='posted', posted_at=now()
+       where id in (${capital}, ${profit})
+    `);
+    const interestId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiary_ownership_interests
+        (id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,
+         acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,
+         investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,
+         goodwill_account_id,fair_value_adjustment_account_id)
+      values (${interestId},${org.orgId},${org.subsidiaryId},${childId},'2026-07-01','80','full',
+              '2026-07-01','900','1000','1','proportionate',${accounts.get("investment")!},
+              ${accounts.get("equityIncome")!},${accounts.get("nciEquity")!},${accounts.get("nciIncome")!},
+              ${accounts.get("goodwill")!},${accounts.get("fairValue")!})
+    `);
+    const first = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+    assert.equal(first.entryIds.length, 2);
+
+    // Fault injector: armed between runs, it aborts the FIRST replacement
+    // post — reversal posts carry the 'Ownership consolidation reversal'
+    // memo and pass untouched — i.e. strictly after every prior reversal has
+    // executed inside the run's transaction.
+    await db.execute(sql`
+      create or replace function consol_slice_fault_injector() returns trigger language plpgsql as $fn$
+      begin
+        if coalesce(current_setting('openbooks.consol_slice_fault', true), 'off') = 'on'
+           and new.memo like 'Ownership consolidation %'
+           and new.memo <> 'Ownership consolidation reversal' then
+          raise exception 'injected consolidation fault during replacement';
+        end if;
+        return new;
+      end $fn$`);
+    await db.execute(sql`
+      create trigger consolidation_slice_fault
+        before insert on journal_entries
+        for each row execute function consol_slice_fault_injector()`);
+    try {
+      await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'on', false)`);
+      await assert.rejects(
+        runOwnershipConsolidation(org.orgId, org.periodId, actorId),
+        (error: any) => /injected consolidation fault during replacement/.test(String(error?.cause?.message ?? error?.message)),
+      );
+    } finally {
+      await db.execute(sql`select set_config('openbooks.consol_slice_fault', 'off', false)`);
+      await db.execute(sql`drop trigger if exists consolidation_slice_fault on journal_entries`);
+      await db.execute(sql`drop function if exists consol_slice_fault_injector()`);
+    }
+
+    const runs = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from ownership_consolidation_runs
+       where org_id = ${org.orgId} and period_id = ${org.periodId}
+       order by started_at, id`));
+    assert.equal(runs.rows.length, 2);
+    assert.deepEqual(runs.rows[0], { status: "posted", error: null });
+    assert.equal(runs.rows[1]!.status, "failed", "the aborted attempt lands terminal-failed");
+    assert.ok(runs.rows[1]!.error, "the failed run records its error — never stuck 'running'");
+    const evidence = (await db.execute<{ kind: string; run_id: string }>(sql`
+      select kind, run_id from ownership_consolidation_entries where org_id = ${org.orgId} order by kind`));
+    assert.deepEqual(evidence.rows, [
+      { kind: "acquisition", run_id: first.runId },
+      { kind: "nci_income", run_id: first.runId },
+    ], "evidence carries the committed generation only");
+    const priorStatus = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where id = any(${`{${first.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`));
+    assert.equal(priorStatus.rows[0]!.n, 2, "prior entries were never marked reversed");
+    const strayReversals = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where reverses_entry_id = any(${`{${first.entryIds.join(",")}}`}::uuid[])`));
+    assert.equal(strayReversals.rows[0]!.n, 0, "no half-applied reversal survived the fault");
   } finally {
     await dropScratchOrg(org.orgId);
   }
