@@ -140,7 +140,7 @@ export async function submitForApproval(
 export async function submitAndReleaseIfUngated(
   targetKind: string,
   targetId: string,
-  actorId: string,
+  actorId: string | null,
 ): Promise<SubmissionReleaseResult> {
   const result = await submitForApproval(targetKind, targetId, actorId);
   if (result.gated || result.flowError) {

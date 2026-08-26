@@ -113,7 +113,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   try {
-    const gen = await runScheduleNow(id);
+    const gen = await runScheduleNow(id, authz.user.id);
     return NextResponse.json(gen);
   } catch (e) {
     if (e instanceof RecurringError) return NextResponse.json({ error: e.message }, { status: e.status });
