@@ -1,4 +1,4 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { jsonObject, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/currencies.ts'
@@ -48,6 +48,22 @@ function persistFxRateCols<T extends { column: string; value: unknown }>(cols: T
       ? { ...column, value: updateFxRate({ rate: column.value }) }
       : column,
   )
+}
+
+/**
+ * Bind a validated id list as ONE pg-array parameter. Drizzle expands a raw
+ * JS array inside sql`` into a row constructor ($1, $2), so the list crosses
+ * sql.param exactly once and node-postgres serializes it natively — request
+ * values can never shape the statement text.
+ */
+const uuidArrayParam = (ids: string[]) => sql.param(ids)
+
+/** Boundary gate for request-supplied id lists: every entry must parse as the
+ * shared uuidId schema before SQL sees it, so a malformed or hostile id is the
+ * route's documented client error instead of PostgreSQL raising 22P02 outside
+ * this handler's validation catch. */
+function hasNonUuidEntry(ids: unknown[]): boolean {
+  return !ids.every((id) => uuidId.safeParse(id).success)
 }
 
 /** Reconcile a tax group's members join table to exactly `taxCodeIds`. */
@@ -455,10 +471,11 @@ async function validateEntityIntegrity(
       ['fairValueAdjustmentAccountId', 'fair_value_adjustment_account_id', (type) => type.startsWith('asset_'), 'Fair-value adjustment must use an asset account'],
     ]
     const ids = [...new Set(accountRules.map(([key, column]) => value(key, column)).filter(Boolean).map(String))]
+    if (hasNonUuidEntry(ids)) return 'Ownership accounts must be valid accounts from this organization'
     const rows = ids.length
       ? (((await db.execute(sql`
           select id,type from accounts where org_id=${orgId} and is_active and not is_summary
-            and id=any(${`{${ids.join(',')}}`}::uuid[])
+            and id=any(${uuidArrayParam(ids)}::uuid[])
         `)))).rows as { id: string; type: string }[]
       : []
     const typeById = new Map(rows.map((account) => [account.id, account.type]))
