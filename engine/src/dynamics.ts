@@ -26,6 +26,34 @@ export interface DynamicsApp {
   aadTenantId: string;
 }
 
+/**
+ * A deterministic security refusal, not a transient fault: something tried to
+ * bounce a credentialed Dynamics request off-origin via an HTTP redirect.
+ * Callers (and DynamicsClient.send's retry loop) must surface it immediately
+ * instead of retrying or following.
+ */
+class DynamicsRedirectRefused extends Error {}
+
+/**
+ * Dynamics credentials must never cross an HTTP redirect boundary. Even a
+ * trusted origin can otherwise redirect a request — carrying the POSTed
+ * client_secret body or the bearer token, and for 307/308 the whole body —
+ * to a host that was never allowlisted. Manual mode keeps every hop under our
+ * control; undici surfaces the real 3xx response (not a browser-style opaque
+ * one), so any redirect with a Location is refused outright rather than
+ * followed.
+ */
+async function dynamicsFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
+  const res = await fetch(url, { ...init, redirect: "manual" });
+  const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+  if (location !== null) {
+    throw new DynamicsRedirectRefused(
+      `Dynamics request to ${typeof url === "string" ? url : url.href} attempted an HTTP ${res.status} redirect to ${location}; credentialed requests are never followed`,
+    );
+  }
+  return res;
+}
+
 export interface DynamicsTokens {
   accessToken: string;
   refreshToken: string;
@@ -59,7 +87,7 @@ function toTokens(r: TokenResponse): DynamicsTokens {
 }
 
 export async function exchangeCode(app: DynamicsApp, code: string): Promise<DynamicsTokens> {
-  const res = await fetch(`${authBase(app.aadTenantId)}/token`, {
+  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -82,7 +110,7 @@ export async function exchangeCode(app: DynamicsApp, code: string): Promise<Dyna
  * BC (Microsoft Entra Applications, with permission sets).
  */
 export async function clientCredentialsToken(app: DynamicsApp): Promise<DynamicsTokens> {
-  const res = await fetch(`${authBase(app.aadTenantId)}/token`, {
+  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -98,7 +126,7 @@ export async function clientCredentialsToken(app: DynamicsApp): Promise<Dynamics
 }
 
 export async function refreshTokens(app: DynamicsApp, refreshToken: string): Promise<DynamicsTokens> {
-  const res = await fetch(`${authBase(app.aadTenantId)}/token`, {
+  const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -122,7 +150,7 @@ export async function listCompanies(
   environment: string,
 ): Promise<DynamicsCompany[]> {
   const url = `${API_ROOT}/${aadTenantId}/${environment}/api/v2.0/companies`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+  const res = await dynamicsFetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
   if (!res.ok) throw new Error(`Dynamics companies HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return ((await res.json()) as { value: DynamicsCompany[] }).value ?? [];
 }
@@ -152,7 +180,12 @@ export class DynamicsClient {
     return this.tokens.accessToken;
   }
 
-  /** One HTTP call, hard 30s timeout + bounded retry (429/5xx/network). */
+  /**
+   * One HTTP call with a hard per-attempt timeout and bounded retry (429/5xx/
+   * network). Non-retry 4xx errors surface immediately, and so do redirect
+   * refusals — they are a deterministic answer from the origin, not a flaky
+   * network.
+   */
   private async send(url: string): Promise<Response> {
     const token = await this.accessToken();
     let lastErr: unknown;
@@ -160,7 +193,7 @@ export class DynamicsClient {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 30_000);
       try {
-        const res = await fetch(url, {
+        const res = await dynamicsFetch(url, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
           signal: ctrl.signal,
         });
@@ -171,7 +204,8 @@ export class DynamicsClient {
         }
         return res;
       } catch (e) {
-        lastErr = e;
+        if (e instanceof DynamicsRedirectRefused) throw e; // never follow, never retry
+        lastErr = e; // network error / timeout abort — retry with backoff
         if (attempt < 4) await new Promise((r) => setTimeout(r, attempt * 2000));
       } finally {
         clearTimeout(timer);
