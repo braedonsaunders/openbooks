@@ -1,4 +1,4 @@
--- OpenBooks forward migration 0048_ownership_policy_first_use_serialization.
+-- OpenBooks forward migration 0050_ownership_policy_first_use_serialization.
 --
 -- ownership_interest_guard freezes a policy row only once COMMITTED evidence
 -- exists, and the FK from ownership_consolidation_entries takes just FOR KEY
