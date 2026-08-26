@@ -133,6 +133,29 @@ test('every workflow step that runs the test suite supplies the trusted-bypass c
   )
 })
 
+/** Quoted glob or path arguments, which is how both commands name their tests. */
+function testTargets(command) {
+  return new Set([...command.matchAll(/'([^']+\.(?:test\.ts|test\.mjs|test\.ts))'/g)].map((m) => m[1]))
+}
+
+test('the coverage job runs at least everything the canonical test command runs', () => {
+  // The coverage job called itself the full suite and published an lcov
+  // artifact, while its globs omitted web/app, web/components and both script
+  // tests — including this file. A failing assertion in any of them left the
+  // coverage job green.
+  const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
+  const workflow = readFileSync(join(WORKFLOW_DIR, 'test.yml'), 'utf8')
+  const coverageStep = workflow.slice(workflow.indexOf('Test suite with coverage'))
+  const canonical = testTargets(scripts.test)
+  const covered = testTargets(coverageStep.slice(0, coverageStep.indexOf('- name:', 1)))
+  const missing = [...canonical].filter((target) => !covered.has(target))
+  assert.deepEqual(
+    missing,
+    [],
+    `the coverage job advertises the full suite but does not run:\n${missing.join('\n')}`,
+  )
+})
+
 test('the canonical npm test script keeps the trusted-bypass contract it is trusted for', () => {
   const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts
   assert.match(scripts.test, /OPENBOOKS_TRUSTED_TEST_BYPASS=1/)
