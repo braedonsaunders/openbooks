@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "./db.ts";
 import { inventoryFeatureEnabled } from "./inventory.ts";
-import { cmp, sum } from "./money.ts";
+import { cmp, fromUnits, sum, toUnits } from "./money.ts";
 import {
   extractAzureInvoice,
   validatePurchaseOrderQuantities,
@@ -11,6 +11,7 @@ import {
   type NormalizedCapture,
 } from "./ap-capture.ts";
 import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
+import { permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
 import { getS3Blob } from "./file-storage.ts";
 import { runRecordFlows } from "./flows/index.ts";
 
@@ -105,6 +106,106 @@ async function resolvePurchaseOrder(
   return result.rows.length === 1 ? result.rows[0]!.id : null;
 }
 
+/**
+ * Item kinds that are never stock-received, so their purchase-order lines bill
+ * on a two-way match (ordered quantity + price). Every other kind — including
+ * an unknown or missing kind — requires the receipt leg of the match.
+ */
+export const RECEIPT_EXEMPT_ITEM_KINDS: ReadonlySet<string> = new Set([
+  "service",
+  "non_inventory",
+  "other_charge",
+  "equipment_charge",
+  "labor",
+  "absence",
+  "discount",
+]);
+
+const receiptExemptItemKindsSql = sql.join(
+  [...RECEIPT_EXEMPT_ITEM_KINDS].map((kind) => sql`${kind}`),
+  sql`, `,
+);
+
+export function lineRequiresReceipt(itemKind: string | null | undefined): boolean {
+  return typeof itemKind === "string" && !RECEIPT_EXEMPT_ITEM_KINDS.has(itemKind);
+}
+
+/** Line-level unit-price tolerance against the ordered price, as a percent. */
+export const PRICE_TOLERANCE_PERCENT = "2";
+
+/**
+ * Exact numeric(19,4) comparison — no floating point and no rounding drift:
+ * |invoiced − ordered| · 100 ≤ |ordered| · tolerance.
+ */
+export function priceWithinTolerance(
+  poUnitPrice: string,
+  invoiceUnitPrice: string,
+  tolerancePercent: string = PRICE_TOLERANCE_PERCENT,
+): boolean {
+  const expected = toUnits(poUnitPrice);
+  const actual = toUnits(invoiceUnitPrice);
+  const diff = expected >= actual ? expected - actual : actual - expected;
+  const basis = expected < 0n ? -expected : expected;
+  return diff * 1_000_000n <= basis * toUnits(tolerancePercent);
+}
+
+export type PurchaseOrderMatchIssue = {
+  code: "po_quantity_exceeded" | "receipt_quantity_shortfall" | "po_price_variance";
+  expected: string;
+  actual: string;
+};
+
+/**
+ * The one three-way match every billing channel shares: ordered quantity,
+ * received quantity (for stock kinds) and price. Extraction validation calls
+ * it per captured line, materialize re-runs it against fresh purchase-order
+ * rows at the write boundary, and manual conversion clamps its remainder with
+ * `billableRemainderUnits` so both channels bill against one ceiling.
+ */
+export function matchPurchaseOrderLine(input: {
+  invoiceQuantity: string;
+  invoiceUnitPrice: string;
+  orderedQuantity: string;
+  billedQuantity: string;
+  fulfilledQuantity: string;
+  poUnitPrice: string;
+  itemId: string | null;
+  itemKind: string | null;
+}): PurchaseOrderMatchIssue[] {
+  const invoiceQuantity = fromUnits(toUnits(input.invoiceQuantity));
+  const issues: PurchaseOrderMatchIssue[] = validatePurchaseOrderQuantities({
+    invoiceQuantity,
+    orderedQuantity: input.orderedQuantity,
+    billedQuantity: input.billedQuantity,
+    fulfilledQuantity: input.fulfilledQuantity,
+    requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
+  });
+  if (!priceWithinTolerance(input.poUnitPrice, input.invoiceUnitPrice)) {
+    issues.push({
+      code: "po_price_variance",
+      expected: fromUnits(toUnits(input.poUnitPrice)),
+      actual: fromUnits(toUnits(input.invoiceUnitPrice)),
+    });
+  }
+  return issues;
+}
+
+/** Received-and-unbilled headroom a purchase-order line can still be billed for. */
+export function billableRemainderUnits(input: {
+  orderedQuantity: string;
+  billedQuantity: string;
+  fulfilledQuantity: string;
+  itemId: string | null;
+  itemKind: string | null;
+}): bigint {
+  const remaining = toUnits(input.orderedQuantity) - toUnits(input.billedQuantity);
+  if (remaining <= 0n) return 0n;
+  if (input.itemId === null || !lineRequiresReceipt(input.itemKind)) return remaining;
+  const cover = toUnits(input.fulfilledQuantity) - toUnits(input.billedQuantity);
+  if (cover <= 0n) return 0n;
+  return cover < remaining ? cover : remaining;
+}
+
 type PoLine = {
   id: string;
   item_id: string | null;
@@ -114,6 +215,7 @@ type PoLine = {
   quantity: string;
   quantity_billed: string;
   quantity_fulfilled: string;
+  unit_price: string;
   item_kind: string | null;
 };
 
@@ -128,7 +230,8 @@ async function mapLines(
     const source = (await db.execute<PoLine>(sql`
       select dl.id, dl.item_id, coalesce(dl.account_id, i.expense_account_id) as account_id,
              i.code as item_code, dl.description,
-             dl.quantity, dl.quantity_billed, dl.quantity_fulfilled, i.kind as item_kind
+             dl.quantity, dl.quantity_billed, dl.quantity_fulfilled, dl.unit_price,
+             i.kind as item_kind
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${purchaseOrderId}
        order by dl.line_number
@@ -146,13 +249,18 @@ async function mapLines(
       }
       const po = candidates[0]!;
       used.add(po.id);
-      for (const quantityIssue of validatePurchaseOrderQuantities({
+      for (const matchIssue of matchPurchaseOrderLine({
         invoiceQuantity: line.quantity,
+        invoiceUnitPrice: line.unitPrice,
         orderedQuantity: po.quantity,
         billedQuantity: po.quantity_billed,
         fulfilledQuantity: po.quantity_fulfilled,
-        requiresReceipt: Boolean(po.item_kind && po.item_kind !== "service"),
-      })) issues.push(issue(quantityIssue.code, "blocking", { lineIndex, expected: quantityIssue.expected, actual: quantityIssue.actual }));
+        poUnitPrice: String(po.unit_price),
+        itemId: po.item_id,
+        itemKind: po.item_kind,
+      })) {
+        issues.push(issue(matchIssue.code, "blocking", { lineIndex, expected: matchIssue.expected, actual: matchIssue.actual }));
+      }
       if (!po.account_id) issues.push(issue("account_unresolved", "blocking", { lineIndex }));
       return {
         ...line,
@@ -406,10 +514,41 @@ export class CaptureMaterializationError extends Error {
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
+/** Effective permission check for engine-side authority gates (role grants + overrides). */
+async function actorHasPermission(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  permission: string,
+): Promise<boolean> {
+  const assignments = (await tx.execute<{ permissions: string[] | null }>(sql`
+    select r.permissions
+      from role_assignments a
+      join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+      join users u on u.id = a.user_id and u.org_id = a.org_id and u.is_active
+     where a.user_id = ${actorId} and a.org_id = ${orgId}
+  `));
+  const overrides = (await tx.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    select permission, effect from user_permission_overrides
+     where user_id = ${actorId} and org_id = ${orgId}
+  `));
+  return permissionSetCovers(
+    resolveEffectivePermissions({
+      rolePermissionSets: assignments.rows.map((row) =>
+        Array.isArray(row.permissions) ? row.permissions : [],
+      ),
+      overrides: overrides.rows,
+    }),
+    permission,
+  );
+}
+
 export async function materializeCapture(input: {
   orgId: string;
   captureItemId: string;
   actorId: string | null;
+  /** Accept an off-price PO match; requires AP approval and is audited. */
+  priceOverride?: boolean;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const result = await db.transaction(async (tx) => {
     const loaded = (await tx.execute<CaptureRow>(sql`
@@ -463,6 +602,80 @@ export async function materializeCapture(input: {
     const issues = validateNormalizedCapture(capture);
     if (issues.some((value) => value.severity === "blocking")) {
       throw new CaptureMaterializationError("Resolve the capture math errors before creating a draft");
+    }
+    // Re-run the shared three-way match against fresh purchase-order rows at
+    // the write boundary: a stored review verdict can be stale, and this is
+    // the path production actually bills through. Locking every PO line up
+    // front also serializes this materialize against convertOrder on the
+    // same order, so the two channels cannot overbill each other.
+    const priceVariances: Array<{ lineIndex: number; expected: string; actual: string }> = [];
+    if (item.purchase_order_id) {
+      await tx.execute(sql`
+        select id from document_lines
+         where org_id = ${input.orgId} and document_id = ${item.purchase_order_id}
+         order by line_number
+         for update
+      `);
+      const poLines = new Map(
+        (await tx.execute<{
+          id: string;
+          quantity: string;
+          quantity_billed: string;
+          quantity_fulfilled: string;
+          unit_price: string;
+          item_id: string | null;
+          item_kind: string | null;
+        }>(sql`
+          select dl.id, dl.quantity::text as quantity, dl.quantity_billed::text as quantity_billed,
+                 dl.quantity_fulfilled::text as quantity_fulfilled, dl.unit_price::text as unit_price,
+                 dl.item_id, i.kind as item_kind
+            from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+           where dl.org_id = ${input.orgId} and dl.document_id = ${item.purchase_order_id}
+        `)).rows.map((row) => [row.id, row]),
+      );
+      capture.lines.forEach((line, lineIndex) => {
+        if (!line.purchaseOrderLineId) return;
+        const po = poLines.get(line.purchaseOrderLineId);
+        if (!po) throw new CaptureMaterializationError(`Purchase order line ${lineIndex + 1} no longer exists`);
+        for (const matchIssue of matchPurchaseOrderLine({
+          invoiceQuantity: line.quantity,
+          invoiceUnitPrice: line.unitPrice,
+          orderedQuantity: po.quantity,
+          billedQuantity: po.quantity_billed,
+          fulfilledQuantity: po.quantity_fulfilled,
+          poUnitPrice: po.unit_price,
+          itemId: po.item_id,
+          itemKind: po.item_kind,
+        })) {
+          if (matchIssue.code === "po_price_variance") {
+            priceVariances.push({ lineIndex, expected: matchIssue.expected, actual: matchIssue.actual });
+            continue;
+          }
+          throw new CaptureMaterializationError(
+            `Purchase order line ${lineIndex + 1} cannot bill ${matchIssue.actual}: only ${matchIssue.expected} remains`,
+          );
+        }
+      });
+      if (priceVariances.length > 0) {
+        const variance = priceVariances[0]!;
+        if (!input.priceOverride) {
+          throw new CaptureMaterializationError(
+            `Line ${variance.lineIndex + 1} price ${variance.actual} differs from the ordered ${variance.expected} by more than the ${PRICE_TOLERANCE_PERCENT}% tolerance`,
+          );
+        }
+        if (!input.actorId || !(await actorHasPermission(tx, input.orgId, input.actorId, "ap.approve"))) {
+          throw new CaptureMaterializationError(
+            "Overriding the purchase order price match requires AP approval permission",
+            403,
+          );
+        }
+        await tx.execute(sql`
+          insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+          values (${input.orgId}, ${item.id}, 'price_variance_override',
+                  ${JSON.stringify({ tolerancePercent: PRICE_TOLERANCE_PERCENT, variances: priceVariances })}::jsonb,
+                  ${input.actorId})
+        `);
+      }
     }
     const org = (await tx.execute<{ org_currency: string | null; subsidiary_id: string | null; subsidiary_currency: string | null }>(sql`
       select o.base_currency as org_currency, s.id as subsidiary_id,
@@ -550,7 +763,8 @@ export async function materializeCapture(input: {
              and (dl.item_id is null or exists (
                select 1 from items i
                 where i.id = dl.item_id and i.org_id = ${input.orgId}
-                  and (i.kind = 'service' or dl.quantity_fulfilled - dl.quantity_billed >= ${line.quantity})
+                  and (i.kind in (${receiptExemptItemKindsSql})
+                       or dl.quantity_fulfilled - dl.quantity_billed >= ${line.quantity})
              ))
           returning id
         `));
