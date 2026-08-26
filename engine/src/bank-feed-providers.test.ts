@@ -11,8 +11,9 @@ import {
   runDueBankFeeds,
   sealCredentials,
 } from "./bank-feed-providers.ts";
+import { importStatement, BankingError } from "./banking.ts";
 import { addCalendarDays } from "./business-date.ts";
-import { db } from "./db.ts";
+import { db, withOrg } from "./db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -970,6 +971,54 @@ test(
       row = await loadAttemptBookkeeping(f.connectionId);
       assert.ok(asWatermarkMs(row.last_sync_at)! >= attemptMs1!, "recovery completes: success watermark lives again");
       assert.ok(asWatermarkMs(row.last_attempt_at)! >= attemptMs3!);
+    } finally {
+      await dropScratchOrgReporting(f.orgId);
+    }
+  },
+);
+
+test(
+  "importStatement fail-closes on no-actor sentinels so no caller can persist them",
+  { skip: !DB },
+  async () => {
+    const f = await seedFeedFixture();
+    try {
+      const lines = [{
+        postedOn: addCalendarDays(new Date().toISOString().slice(0, 10), -1),
+        amount: "-10.00",
+        description: "Sentinel guard control",
+        bankTransactionId: "feed-sentinel-guard",
+      }];
+      // The deepest boundary that owns statement/audit evidence refuses every
+      // flavor of "no actor at all" — zero UUID, blank, whitespace-only — with
+      // its own explicit banking-domain error, because once persisted the
+      // sentinel destroys queryable provenance for a financial import.
+      for (const forbidden of [ZERO_UUID, "", "   "]) {
+        await assert.rejects(
+          withOrg(f.orgId, () =>
+            importStatement(
+              { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
+              { orgId: f.orgId, userId: forbidden },
+            )),
+          BankingError,
+        );
+      }
+      // A rejected attempt must have written nothing at all.
+      const rows = (await db.execute<{ n: number }>(sql`
+        select (
+          (select count(*) from bank_statements where org_id = ${f.orgId}) +
+          (select count(*) from bank_statement_lines where org_id = ${f.orgId})
+        )::int as n
+      `));
+      assert.equal(Number(rows.rows[0]!.n), 0);
+      // Control: the same statement imports cleanly under a real actor.
+      const result = await withOrg(f.orgId, () =>
+        importStatement(
+          { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
+          { orgId: f.orgId, userId: f.userId },
+        ));
+      assert.equal(result.imported, 1);
+      assert.equal(await countZeroUuidActorRows(f.orgId), 0);
     } finally {
       await dropScratchOrgReporting(f.orgId);
     }
