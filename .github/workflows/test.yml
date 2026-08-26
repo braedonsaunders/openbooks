@@ -120,9 +120,11 @@ jobs:
         # would turn this job green while running nothing. Run one known
         # integration file and hard-fail if anything skipped or nothing ran.
         run: |
+          # `tee` exits 0, so without pipefail a failing suite greens the step.
+          set -o pipefail
           node --import tsx --test --test-force-exit --test-reporter=tap \
             engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
-          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
+          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (/^not ok \d+ - /m.test(s)) { console.error("FATAL: canary recorded a failing test"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
       - name: Full test suite (with database)
         run: npm test
@@ -209,8 +211,17 @@ jobs:
         run: npx tsx scripts/bootstrap.ts
 
       - name: Test suite with coverage
+        env:
+          # The same trusted-bypass contract the root `npm test` script and the
+          # restore drill use. Without it every DB-backed integration file
+          # throws on import, and this job silently measured a smaller suite.
+          NODE_ENV: test
+          OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
         run: |
-          node --import tsx --test --test-force-exit --experimental-test-coverage \
+          # `tee` exits 0, so without pipefail a failing suite greens the step.
+          set -o pipefail
+          node --import tsx --import ./engine/src/test-database-bypass.ts \
+            --test --test-force-exit --experimental-test-coverage \
             --test-reporter=spec --test-reporter-destination=stdout \
             --test-reporter=lcov --test-reporter-destination=lcov.info \
             'engine/src/**/*.test.ts' 'packages/**/*.test.ts' \
