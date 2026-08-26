@@ -52,6 +52,12 @@ type AdjustmentLine = { accountId: string; amount: string; memo: string };
  * Post acquisition, NCI, and equity-method consolidation adjustments. Every
  * adjustment lives in the elimination subsidiary, is exact to ledger scale,
  * and is append-only on rerun (prior effective entries are reversed first).
+ *
+ * Per-book semantics: the primary book is both the source AND the destination.
+ * Period activity and acquisition-date equity are read from primary-book
+ * journal entries only — alternate books (statutory, tax) carry their own
+ * adjustments and must never leak into the consolidated ledger — and every
+ * produced entry lands in that same book.
  */
 export async function runOwnershipConsolidation(
   orgId: string,
@@ -60,6 +66,11 @@ export async function runOwnershipConsolidation(
 ): Promise<{ runId: string; entryIds: string[] }> {
   if (!userId) throw new ConsolidationError("an attributable actor is required");
   try {
+    // REPEATABLE READ pins one snapshot for every deciding read (interests,
+    // prior generations, per-interest activity): a source posting that commits
+    // mid-run is excluded wholesale from this generation and absorbed by the
+    // replacement on the next run, instead of tearing the generation
+    // half-included under READ COMMITTED's per-statement snapshots.
     return await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
       const context = await loadSubsidiaryContext(tx, orgId);
@@ -135,7 +146,7 @@ export async function runOwnershipConsolidation(
           from ownership_consolidation_entries oce
           join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
           join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
-         where oce.org_id=${orgId} and oce.kind<>'reversal' and je.reverses_entry_id is null
+         where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal' and je.reverses_entry_id is null
            and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
       `));
       for (const old of prior.rows) {
@@ -144,13 +155,15 @@ export async function runOwnershipConsolidation(
       }
 
       for (const interest of interests.rows) {
+        // Source scope = the destination book: only primary-book entries feed
+        // consolidated adjustments (alternate books keep their own ledgers).
         const periodActivity = (await tx.execute<{ profit: string; distributions: string }>(sql`
           select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
                  coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
            from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
             join accounts a on a.id=l.account_id and a.org_id=l.org_id
-           where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
-             and e.period_id=${periodId}
+           where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+             and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId}
         `));
         const profit = periodActivity.rows[0]!.profit;
         const distributions = periodActivity.rows[0]!.distributions;
@@ -158,7 +171,7 @@ export async function runOwnershipConsolidation(
         if (interest.method === "full") {
           const acquisitionExists = (await tx.execute(sql`
             select 1 from ownership_consolidation_entries oce
-             join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
+             join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted' and je.book_id=${bookId}
             where oce.interest_id=${interest.id} and oce.kind='acquisition' and je.reverses_entry_id is null
               and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted') limit 1
           `));
@@ -167,8 +180,8 @@ export async function runOwnershipConsolidation(
               select l.account_id,coalesce(sum(l.amount),0)::text as amount
                 from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
                 join accounts a on a.id=l.account_id and a.org_id=l.org_id and a.type='equity'
-               where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
-                 and e.posting_date <= ${interest.acquisition_date}
+               where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
+                 and l.subsidiary_id=${interest.subsidiary_id} and e.posting_date <= ${interest.acquisition_date}
                group by l.account_id having sum(l.amount)<>0
             `));
             const translatedEquity = equity.rows.map((line) => ({ accountId: line.account_id, balance: mulRate(line.amount, interest.acquisition_rate) }));
@@ -210,7 +223,7 @@ export async function runOwnershipConsolidation(
       }
       await tx.execute(sql`update ownership_consolidation_runs set status='posted',finished_at=now(),updated_at=now() where id=${runId} and org_id=${orgId}`);
       return { runId, entryIds };
-    });
+    }, { isolationLevel: "repeatable read" });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await db.execute(sql`
@@ -306,6 +319,12 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
  * elimination subsidiary because flagged intercompany activity nets to zero
  * across the tree when due-to/due-from pairs are used consistently; any
  * residual is a real reconciliation break and aborts the run.
+ *
+ * Per-book semantics: the primary book is both the source AND the destination.
+ * Only intercompany activity posted in the primary book is eliminated — a
+ * secondary book's own IC entries belong to that book's ledger and must never
+ * be folded into the consolidated adjustment — and the resulting entry lands
+ * in the primary book.
  */
 export async function runAutoElimination(
   orgId: string,
@@ -323,9 +342,24 @@ export async function runAutoElimination(
 
   return db.transaction(async (tx) => {
   // One elimination run per tenant/period at a time. Every read that decides
-  // what to reverse or create happens after this transaction-scoped lock.
+  // what to reverse or create happens after this transaction-scoped lock, on
+  // ONE REPEATABLE READ snapshot: a source posting that commits mid-run is
+  // excluded wholesale from this generation and absorbed by the replacement
+  // on the next run (invalidate-and-retry), never half-torn into the totals.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`elimination:${orgId}:${periodId}`}, 0))`);
 
+  const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
+    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
+  const period = periodRes.rows[0];
+  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
+  const [book] = await tx
+    .select()
+    .from(schema.accountingBooks)
+    .where(sql`${schema.accountingBooks.orgId} = ${orgId} and ${schema.accountingBooks.isPrimary} = true`);
+  if (!book) throw new ConsolidationError("no primary accounting book is configured");
+
+  // Source scope = the destination book: only primary-book entries feed the
+  // consolidated elimination.
   const activity = (await tx.execute<{ accountId: string; subsidiaryId: string; total: string | null; missingRate: boolean }>(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
            sum(round(l.amount * case
@@ -343,7 +377,8 @@ export async function runAutoElimination(
        and consolidated.period_id = e.period_id
        and consolidated.from_currency = source_sub.base_currency
        and consolidated.to_currency = ${elim.baseCurrency}
-     where e.org_id = ${orgId} and e.period_id = ${periodId} and e.status in ('posted', 'reversed')
+     where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${book.id}
+       and e.status in ('posted', 'reversed')
        and a.eliminate and l.subsidiary_id <> ${elim.id}
      group by l.account_id, l.subsidiary_id
     having sum(l.amount) <> 0`));
@@ -363,6 +398,7 @@ export async function runAutoElimination(
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}
+       and original.book_id = ${book.id}
        and original.subsidiary_id = ${elim.id}
        and original.origin = 'intercompany' and original.status = 'posted'
        and original.reverses_entry_id is null
@@ -389,16 +425,6 @@ export async function runAutoElimination(
       translatedActivity.map((row) => ({ amount: neg(row.total), subsidiaryId: elim.id })),
     );
   }
-
-  const periodRes = (await tx.execute<{ ends_on: string; name: string }>(sql`
-    select ends_on, name from accounting_periods where id = ${periodId} and org_id = ${orgId}`));
-  const period = periodRes.rows[0];
-  const [book] = await tx
-    .select()
-    .from(schema.accountingBooks)
-    .where(sql`${schema.accountingBooks.orgId} = ${orgId} and ${schema.accountingBooks.isPrimary} = true`);
-  if (!period) throw new ConsolidationError(`period ${periodId} not found`);
-  if (!book) throw new ConsolidationError("no primary accounting book is configured");
 
     let lastReversalId: string | null = null;
     for (const p of prior.rows) {
@@ -435,6 +461,7 @@ export async function runAutoElimination(
     const generations = (await tx.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${orgId} and period_id = ${periodId}
+         and book_id = ${book.id}
          and subsidiary_id = ${elim.id} and origin = 'intercompany'
          and reverses_entry_id is null
          and entry_number like ${`ELIM-${period.name}%`}`));
@@ -477,5 +504,5 @@ export async function runAutoElimination(
       )
     `);
     return { entryId, lineCount: n };
-  });
+  }, { isolationLevel: "repeatable read" });
 }
