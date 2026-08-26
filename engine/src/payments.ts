@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrg, withOrgTransaction } from "./db.ts";
 import { businessToday } from "./business-date.ts";
 import { canonicalDecimal } from "./exact-decimal.ts";
@@ -1791,6 +1791,185 @@ export async function paymentRunComplianceDecisions(
 }
 
 /**
+ * The bank-file rails that carry payee bank details and therefore gate on the
+ * bank-details approval workflow (cheque/positive_pay print no account data).
+ */
+export type RailBankMethod = "ach" | "sepa" | "eft";
+
+/**
+ * The resolved — and control-checked — bank detail one instruction would put
+ * on a rail file. `ok:false` carries the exact readiness reason so the run
+ * view and every file writer speak the same control language; on success each
+ * rail reads its own fields (ach→routingNumber/savings, sepa→iban/bic,
+ * eft→institution/transit), all backed by the same decrypted account number.
+ */
+export type RailBankDetail =
+  | { ok: false; reason: string }
+  | {
+      ok: true;
+      routingNumber: string | null;
+      iban: string | null;
+      bic: string | null;
+      institution: string | null;
+      transit: string | null;
+      accountNumber: string;
+      savings: boolean;
+    };
+
+type BankDetailRow = {
+  approved_at: string | null;
+  is_active: boolean | null;
+  currency: string;
+  routing: Record<string, string> | null;
+  account_number_encrypted: string | null;
+};
+
+/**
+ * Resolve the bank detail a rail export would carry for one instruction, and
+ * name the control it fails. This is THE single mechanism behind payee bank
+ * evidence: `paymentRunReadiness` shows it as blockers, and every file writer
+ * (CPA-005 / NACHA / SEPA) consumes its resolved values — what is displayed,
+ * what is blocked, and what is exported can never diverge. An unapproved or
+ * inactive revision fails here on every rail.
+ */
+function resolveRailBankDetail(
+  method: RailBankMethod,
+  row: BankDetailRow,
+): RailBankDetail {
+  if (!row.approved_at) return { ok: false, reason: "bank account is not approved" };
+  if (!row.is_active) return { ok: false, reason: "bank account is inactive" };
+  const routing = row.routing ?? {};
+  if (method === "eft" && !/^\d{3}$/.test(routing.institution ?? "")) {
+    return { ok: false, reason: "missing/invalid 3-digit institution number" };
+  }
+  if (method === "eft" && !/^\d{5}$/.test(routing.transit ?? "")) {
+    return { ok: false, reason: "missing/invalid 5-digit transit number" };
+  }
+  if (!row.account_number_encrypted) {
+    return { ok: false, reason: "missing account number" };
+  }
+  const accountNumber = decryptAccountNumber(row.account_number_encrypted);
+  const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
+  const iban = (routing.iban ?? accountNumber).replace(/\s/g, "");
+  if (method === "ach" && !/^\d{9}$/.test(aba)) {
+    return { ok: false, reason: "missing/invalid 9-digit routing number" };
+  }
+  if (method === "sepa" && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) {
+    return { ok: false, reason: "missing/invalid IBAN" };
+  }
+  if (method === "eft" && row.currency !== "CAD") {
+    return { ok: false, reason: `CPA-005 CAD file cannot carry ${row.currency}` };
+  }
+  return {
+    ok: true,
+    routingNumber: /^\d{9}$/.test(aba) ? aba : null,
+    iban: /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban) ? iban : null,
+    bic: routing.bic ?? null,
+    institution: routing.institution ?? null,
+    transit: routing.transit ?? null,
+    accountNumber,
+    savings: routing.accountType === "savings",
+  };
+}
+
+/**
+ * Read every payable instruction's bank evidence under one transaction that
+ * also validates it, closing the read-validate-export gap for all three rails
+ * with one mechanism.
+ *
+ * Each referenced party_bank_accounts row is locked FOR UPDATE inside the same
+ * transaction that resolves its detail. Under READ COMMITTED the locking read
+ * re-reads the latest committed version once the lock is granted, so exactly
+ * one of two outcomes is possible when a maker edit races an export:
+ *
+ *   - the edit committed first → this call sees `pending` + inactive and
+ *     hard-blocks before anything is rendered; or
+ *   - the export locked first → the edit waits behind it and the file carries
+ *     the APPROVED revision the run was built against.
+ *
+ * A pending edit can never be what a payment file contains, and because the
+ * validation runs here — before any caller renders bytes or writes artifacts —
+ * a blocked export leaves no partial file and no partial audit trail.
+ */
+async function lockRunBankEvidence(
+  method: RailBankMethod,
+  runId: string,
+  orgId: string,
+): Promise<Array<{ id: string; amount: string; payee: string; documentNumber: string | null; detail: Extract<RailBankDetail, { ok: true }> }>> {
+  return withOrgTransaction(orgId, async () => {
+    const instructions = (await db.execute<{
+        id: string;
+        amount: string;
+        currency: string;
+        payee: string;
+        payee_bank_account_id: string | null;
+        document_number: string | null;
+      }>(sql`
+      select i.id, i.amount, i.currency, p.display_name as payee,
+             i.payee_bank_account_id, d.document_number
+        from payment_instructions i
+        join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
+        left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
+       where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
+       order by p.display_name, i.id
+    `));
+    if (instructions.rows.length === 0) throw new PaymentError("run has no payable instructions");
+
+    // Deterministic lock acquisition (single statement) keeps concurrent
+    // exports of one run from deadlocking each other.
+    const bankIds = [
+      ...new Set(
+        instructions.rows
+          .map((r) => r.payee_bank_account_id)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const banks = bankIds.length > 0
+      ? await db
+          .select({
+            id: schema.partyBankAccounts.id,
+            approvedAt: schema.partyBankAccounts.approvedAt,
+            isActive: schema.partyBankAccounts.isActive,
+            routing: schema.partyBankAccounts.routing,
+            accountNumberEncrypted: schema.partyBankAccounts.accountNumberEncrypted,
+          })
+          .from(schema.partyBankAccounts)
+          .where(and(eq(schema.partyBankAccounts.orgId, orgId), inArray(schema.partyBankAccounts.id, bankIds)))
+          .for("update")
+      : [];
+    const byId = new Map(banks.map((b) => [b.id, b]));
+
+    const evidence: Array<{ id: string; amount: string; payee: string; documentNumber: string | null; detail: Extract<RailBankDetail, { ok: true }> }> = [];
+    const blockers: string[] = [];
+    for (const r of instructions.rows) {
+      const bank = r.payee_bank_account_id ? byId.get(r.payee_bank_account_id) : undefined;
+      if (!bank) {
+        blockers.push(`${r.payee} (no approved bank account on file)`);
+        continue;
+      }
+      // The CPA-005 currency control keys off the INSTRUCTION's currency — the
+      // currency the run actually pays in.
+      const detail = resolveRailBankDetail(method, {
+        approved_at: bank.approvedAt,
+        is_active: bank.isActive,
+        currency: r.currency,
+        routing: bank.routing,
+        account_number_encrypted: bank.accountNumberEncrypted,
+      });
+      if (!detail.ok) {
+        blockers.push(`${r.payee} (${detail.reason})`);
+        continue;
+      }
+      evidence.push({ id: r.id, amount: r.amount, payee: r.payee, documentNumber: r.document_number, detail });
+    }
+    if (blockers.length > 0) {
+      throw new PaymentError(`cannot generate the payment file: ${blockers.join("; ")}`);
+    }
+    return evidence;
+  });
+}
+
+/**
  * Everything the run detail view and the file export need to agree on:
  * EFT settings state, per-instruction bank-detail blockers, and subcontractor
  * compliance blockers.
@@ -1807,7 +1986,6 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
      where r.id = ${runId} and r.org_id = ${orgId}
   `));
   const method = runInfo.rows[0]?.method;
-  const rail = runInfo.rows[0]?.rail;
   let eft: EftSettingsResult;
   if (method === "ach") eft = await loadNachaSettings(orgId, runId) as EftSettingsResult;
   else if (method === "sepa") eft = await loadSepaSettings(orgId, runId) as EftSettingsResult;
@@ -1838,38 +2016,12 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       blockers.push({ instructionId: r.id, payee: r.payee, reason: "no approved bank account on file" });
       continue;
     }
-    if (!r.approved_at) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "bank account is not approved" });
-      continue;
-    }
-    if (!r.is_active) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "bank account is inactive" });
-      continue;
-    }
-    const routing = r.routing ?? {};
-    if (method === "eft" && !/^\d{3}$/.test(routing.institution ?? "")) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 3-digit institution number" });
-      continue;
-    }
-    if (method === "eft" && !/^\d{5}$/.test(routing.transit ?? "")) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 5-digit transit number" });
-      continue;
-    }
-    if (!r.account_number_encrypted) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing account number" });
-      continue;
-    }
-    const aba = routing.aba ?? routing.routingNumber ?? routing.routing ?? "";
-    if (method === "ach" && !/^\d{9}$/.test(aba)) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid 9-digit routing number" });
-      continue;
-    }
-    if (method === "sepa" && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test((routing.iban ?? "").replace(/\s/g, ""))) {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: "missing/invalid IBAN" });
-      continue;
-    }
-    if (method === "eft" && r.currency !== "CAD") {
-      blockers.push({ instructionId: r.id, payee: r.payee, reason: `CPA-005 CAD file cannot carry ${r.currency}` });
+    // Only the three bank-detail rails carry account evidence; every other
+    // method (and any custom value) is gated elsewhere or not at all.
+    if (method !== "ach" && method !== "sepa" && method !== "eft") continue;
+    const detail = resolveRailBankDetail(method, r);
+    if (!detail.ok) {
+      blockers.push({ instructionId: r.id, payee: r.payee, reason: detail.reason });
     }
   }
   for (const blocker of blockers) blocker.source = "bank";
@@ -2738,40 +2890,27 @@ export async function loadCpa005RunFile(
     );
   }
 
-  const rows = (await db.execute<{
-      id: string;
-      amount: string;
-      payee: string;
-      routing: Record<string, string>;
-      account_number_encrypted: string;
-      document_number: string | null;
-    }>(sql`
-    select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted,
-           d.document_number
-      from payment_instructions i
-      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
-      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
-     order by p.display_name
-  `));
-  if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
+  // The readiness pass above is advisory display state re-checked for its side
+  // effects (compliance release checks); the file itself is built ONLY from
+  // evidence locked and re-validated atomically here, so an edit landing
+  // between the two stages can never steer the file.
+  const evidence = await lockRunBankEvidence("eft", runId, orgId);
 
   const today = await businessToday(orgId);
   const fundsDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
-  const payments: Cpa005Payment[] = rows.rows.map((r) => {
-    const units = toUnits(r.amount);
+  const payments: Cpa005Payment[] = evidence.map((e) => {
+    const units = toUnits(e.amount);
     if (units % 100n !== 0n) {
-      throw new PaymentError(`instruction for ${r.payee} has sub-cent precision (${r.amount})`);
+      throw new PaymentError(`instruction for ${e.payee} has sub-cent precision (${e.amount})`);
     }
     return {
       amountCents: units / 100n,
       fundsDate,
-      institution: r.routing.institution!,
-      transit: r.routing.transit!,
-      accountNumber: decryptAccountNumber(r.account_number_encrypted),
-      payeeName: r.payee,
-      crossReference: r.document_number ?? r.id.slice(0, 19),
+      institution: e.detail.institution!,
+      transit: e.detail.transit!,
+      accountNumber: e.detail.accountNumber,
+      payeeName: e.payee,
+      crossReference: e.documentNumber ?? e.id.slice(0, 19),
     };
   });
 
@@ -2934,29 +3073,22 @@ export async function loadNachaRunFile(runId: string, orgId: string): Promise<{ 
   const settings = await loadNachaSettings(orgId, runId);
   if (!settings.ok) throw new PaymentError(`ACH origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
-  const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
-    select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
-      from payment_instructions i
-      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
-      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
-     order by p.display_name
-  `));
-  if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
+  // Bank evidence is locked and approval-checked in the same transaction that
+  // feeds the file: a concurrent maker edit either waits behind this snapshot
+  // (the file carries the approved revision) or committed first (this
+  // hard-blocks on its unapproved state). It can never steer the entry data.
+  const evidence = await lockRunBankEvidence("ach", runId, orgId);
 
-  const entries: NachaEntry[] = rows.rows.map((r) => {
-    const units = toUnits(r.amount);
-    if (units % 100n !== 0n) throw new PaymentError(`instruction for ${r.payee} has sub-cent precision (${r.amount})`);
-    const routingNumber = r.routing.aba ?? r.routing.routingNumber ?? r.routing.routing ?? "";
-    if (!/^\d{9}$/.test(routingNumber)) throw new PaymentError(`${r.payee}: US ACH needs a 9-digit routing number`);
+  const entries: NachaEntry[] = evidence.map((e) => {
+    const units = toUnits(e.amount);
+    if (units % 100n !== 0n) throw new PaymentError(`instruction for ${e.payee} has sub-cent precision (${e.amount})`);
     return {
-      transactionCode: r.routing.accountType === "savings" ? "32" : "22",
-      routingNumber,
-      accountNumber: decryptAccountNumber(r.account_number_encrypted),
+      transactionCode: e.detail.savings ? "32" : "22",
+      routingNumber: e.detail.routingNumber!,
+      accountNumber: e.detail.accountNumber,
       amountCents: units / 100n,
-      individualId: (r.document_number ?? r.id).slice(0, 15),
-      individualName: r.payee,
+      individualId: (e.documentNumber ?? e.id).slice(0, 15),
+      individualName: e.payee,
     };
   });
   const today = await businessToday(orgId);
@@ -3051,6 +3183,7 @@ ${tx}
 }
 
 export async function loadSepaRunFile(runId: string, orgId: string, _now: Date): Promise<{ filename: string; content: string; runNumber: string }> {
+  await assertNotSandbox(orgId, "generate SEPA payment file");
   const [run] = await db.select().from(schema.paymentRuns).where(and(eq(schema.paymentRuns.id, runId), eq(schema.paymentRuns.orgId, orgId)));
   if (!run) throw new PaymentError("payment run not found");
   if (run.status === "cancelled") throw new PaymentError("run is cancelled");
@@ -3058,29 +3191,19 @@ export async function loadSepaRunFile(runId: string, orgId: string, _now: Date):
   const settings = await loadSepaSettings(orgId, runId);
   if (!settings.ok) throw new PaymentError(`SEPA origination is not configured on the payment bank profile: ${settings.missing.join(", ")}`);
 
-  const rows = (await db.execute<{ id: string; amount: string; payee: string; routing: Record<string, string>; account_number_encrypted: string; document_number: string | null }>(sql`
-    select i.id, i.amount, p.display_name as payee, b.routing, b.account_number_encrypted, d.document_number
-      from payment_instructions i
-      join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
-      join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
-      left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
-     where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
-     order by p.display_name
-  `));
-  if (rows.rows.length === 0) throw new PaymentError("run has no payable instructions");
+  // Same locked-evidence mechanism as the ACH and EFT writers: the creditor
+  // IBAN/BIC are resolved from bank rows that were approved and active at the
+  // instant of export, or the export fails outright.
+  const evidence = await lockRunBankEvidence("sepa", runId, orgId);
 
-  const payments = rows.rows.map((r) => {
-    const iban = (r.routing.iban ?? decryptAccountNumber(r.account_number_encrypted)).replace(/\s/g, "");
-    if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban)) throw new PaymentError(`${r.payee}: SEPA needs a valid IBAN`);
-    return {
-      endToEndId: r.document_number ?? r.id,
-      amount: r.amount,
-      creditorName: r.payee,
-      creditorIban: iban,
-      creditorBic: r.routing.bic ?? null,
-      remittance: r.document_number,
-    };
-  });
+  const payments = evidence.map((e) => ({
+    endToEndId: e.documentNumber ?? e.id,
+    amount: e.amount,
+    creditorName: e.payee,
+    creditorIban: e.detail.iban!,
+    creditorBic: e.detail.bic,
+    remittance: e.documentNumber,
+  }));
   const today = await businessToday(orgId);
   const content = buildSepaFile({
     settings: settings.settings,
