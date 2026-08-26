@@ -345,9 +345,17 @@ export async function buildScheduleWithRunner(
 
   // A user-authored method is a real FK, not a string that can accidentally
   // collide with a built-in. A stale/deactivated reference fails closed.
+  // The row is locked FOR SHARE for the whole schedule-build transaction: the
+  // entire plan is computed from this formula and only later written as the
+  // schedule and its lines, so a concurrent definition edit must park behind
+  // the build until it commits — the storage guard then rejects the edit
+  // against the now-visible schedule. An unlocked read let the edit commit in
+  // that window and left generated lines on a formula the method row no
+  // longer carried.
   const custom2 = (await runner.execute<{ id: string; formula: string; end_of_life: "fully_depreciate" | "retain_balance" }>(sql`
     select id, formula, end_of_life from depreciation_methods
-     where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1`));
+     where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1
+     for share`));
   if (depreciationMethodId && !custom2.rows[0]) throw new Error("configured depreciation formula is inactive or unavailable");
   const { firstPeriodFraction, firstFractionPeriods } = conventionFraction(convention);
 

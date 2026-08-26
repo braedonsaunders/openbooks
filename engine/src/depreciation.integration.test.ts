@@ -2,11 +2,75 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
-import { buildAllSchedules, buildSchedule, recordDepreciationInput, runDepreciation } from "./depreciation.ts";
+import type { PoolClient, QueryResult } from "pg";
+import { db, pool } from "./db.ts";
+import {
+  buildAllSchedules,
+  buildSchedule,
+  recordDepreciationInput,
+  runDepreciation,
+  type BuildScheduleResult,
+} from "./depreciation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+// ---------------------------------------------------------------------------
+// First-use formula immutability: a custom depreciation method's definition
+// must not be able to change while the FIRST schedule build that uses it is
+// between its formula read and its schedule/line inserts. buildSchedule reads
+// the formula, computes the whole plan in memory, and only then writes the
+// schedule — an unlocked read let a concurrent definition UPDATE commit in
+// that window, leaving generated lines on the old formula while the method
+// row carried the new one.
+// ---------------------------------------------------------------------------
+
+type FormulaEditResult = PromiseSettledResult<QueryResult>;
+
+const settleFormulaEdit = (promise: Promise<QueryResult>): Promise<FormulaEditResult> =>
+  promise.then(
+    (value): FormulaEditResult => ({ status: "fulfilled", value }),
+    (reason): FormulaEditResult => ({ status: "rejected", reason }),
+  );
+
+/** The backend pid, if any, currently parked behind `blockerPid`'s locks. */
+async function parkedBehind(blockerPid: number): Promise<number | null> {
+  const parked = await pool.query<{ pid: number }>(
+    `select pid from pg_stat_activity
+      where wait_event_type = 'Lock'
+        and pid <> $1::int
+        and $1::int = any(pg_blocking_pids(pid))
+      limit 1`,
+    [blockerPid],
+  );
+  return parked.rows[0] ? Number(parked.rows[0].pid) : null;
+}
+
+/**
+ * Observe a deterministic interleaving: the racing definition edit either
+ * settles (the vulnerable unlocked read) or parks behind the build's
+ * method-row lock.
+ */
+async function observeFormulaEdit(
+  buildPid: number,
+  waiterPid: number,
+  edit: Promise<FormulaEditResult>,
+): Promise<{ blocked: boolean; result?: FormulaEditResult }> {
+  let result: FormulaEditResult | undefined;
+  void edit.then((settled) => {
+    result = settled;
+  });
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    if (result) return { blocked: false, result };
+    const lockState = await pool.query<{ blocked: boolean }>(
+      "select $1::int = any(pg_blocking_pids($2::int)) as blocked",
+      [buildPid, waiterPid],
+    );
+    if (lockState.rows[0]?.blocked) return { blocked: true };
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out observing the racing formula edit on backend ${waiterPid}`);
+}
 
 async function seedAsset(
   method: "manual" | "units_of_production",
@@ -235,6 +299,142 @@ test("production evidence calculates exact charges and refuses lifetime overrun"
       }),
       /asset or GL period is closed/,
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a custom formula cannot change while its first schedule build is in flight", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const formulaId = randomUUID();
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    await db.execute(sql`
+      insert into depreciation_methods (id, org_id, code, name, formula, end_of_life, is_active, created_by, updated_by)
+      values (${formulaId}, ${org.orgId}, 'FIRST-USE', 'First-use straight line', '(OC-RV)/AL', 'fully_depreciate', true, ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into asset_categories
+        (id, org_id, name, asset_account_id, accumulated_depreciation_account_id,
+         depreciation_expense_account_id, default_method, default_convention, tax_attributes, is_active)
+      values (${categoryId}, ${org.orgId}, 'Equipment', ${org.accounts.invAsset}, ${org.accounts.clearing},
+              ${org.accounts.adjustment}, 'straight_line', 'full_month', '{}'::jsonb, true)`);
+    await db.execute(sql`
+      insert into fixed_assets
+        (id, org_id, subsidiary_id, category_id, asset_number, name, status, acquired_on, in_service_on,
+         acquisition_cost, salvage_value, depreciation_method, depreciation_method_id, useful_life_months, custom)
+      values (${assetId}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, 'ASSET-FIRST-USE',
+              'First-use formula race', 'in_service', ${org.date}, ${org.date}, '12000.0000', '2000.0000',
+              'straight_line', ${formulaId}, 12, '{}'::jsonb)`);
+    // No schedule exists yet — this build is the formula's first use.
+
+    // Session C fences the build's writes so the build parks mid-transaction,
+    // after its formula read and before any schedule state can commit.
+    const fence: PoolClient = await pool.connect();
+    const mutator: PoolClient = await pool.connect();
+    try {
+      await fence.query("begin");
+      await fence.query("select set_config('app.bypass_rls', 'on', true)");
+      await fence.query("lock table depreciation_schedules, depreciation_schedule_lines in exclusive mode");
+      const fencePid = (await fence.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+      let buildResult: BuildScheduleResult | undefined;
+      let buildError: unknown;
+      const buildPromise = buildSchedule(assetId, org.orgId, actorId, org.bookId).then(
+        (result) => {
+          buildResult = result;
+        },
+        (error) => {
+          buildError = error;
+        },
+      );
+
+      // Wait until the build is parked behind the fence: it has read the
+      // formula and holds whatever locks that read took, but nothing it
+      // wrote is committed.
+      let buildPid: number | null = null;
+      for (let attempt = 0; attempt < 400 && buildPid === null; attempt += 1) {
+        buildPid = await parkedBehind(fencePid);
+        if (buildPid === null) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(buildPid, "the first schedule build must park behind the write fence mid-transaction");
+
+      const inFlight = (await db.execute<{ schedules: number }>(sql`
+        select count(*)::int as schedules from depreciation_schedules
+         where org_id = ${org.orgId} and asset_id = ${assetId}`));
+      assert.equal(inFlight.rows[0]!.schedules, 0, "an in-flight build must expose no partial schedule");
+
+      // Session B: a definition edit racing the in-flight first build.
+      await mutator.query("begin");
+      await mutator.query("select set_config('app.bypass_rls', 'on', true)");
+      const mutatorPid = (await mutator.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+      const racingEdit = settleFormulaEdit(
+        mutator.query("update depreciation_methods set formula = 'OC/AL' where id = $1", [formulaId]),
+      );
+      const observation = await observeFormulaEdit(buildPid, mutatorPid, racingEdit);
+      assert.equal(
+        observation.blocked,
+        true,
+        "a formula edit racing the first schedule build must park behind the build's method-row lock, not commit against the unlocked read",
+      );
+
+      // Release the fence: the build finishes and commits schedule + lines.
+      await fence.query("commit");
+      await buildPromise;
+      assert.ok(buildError === undefined, `the first build must succeed (${String(buildError)})`);
+      assert.ok(buildResult);
+      assert.equal(buildResult.lineCount, 1);
+      assert.equal(buildResult.skippedMonths.length, 11);
+
+      // The parked edit wakes on the build's committed schedule and the
+      // storage guard rejects it: lines and method row stay consistent.
+      const edit = observation.result ?? await racingEdit;
+      assert.equal(edit.status, "rejected", "the racing formula edit must be rejected once the first schedule commits");
+      if (edit.status === "rejected") {
+        assert.match(String(edit.reason), /a depreciation formula used by a schedule is immutable/);
+      }
+      await mutator.query("rollback");
+
+      const state = (await db.execute<{ formula: string; method_id: string | null; lines: number; total: string; source: string }>(sql`
+        select m.formula, s.depreciation_method_id,
+               count(l.id)::int as lines, coalesce(sum(l.planned_amount), 0)::text as total,
+               min(l.source) as source
+          from depreciation_methods m
+          join depreciation_schedules s on s.depreciation_method_id = m.id and s.org_id = m.org_id
+          left join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
+         where m.org_id = ${org.orgId} and m.id = ${formulaId} and s.asset_id = ${assetId}
+         group by m.formula, s.depreciation_method_id`));
+      assert.deepEqual(state.rows[0], {
+        formula: "(OC-RV)/AL",
+        depreciation_method_id: formulaId,
+        lines: 1,
+        total: "833.3333",
+        source: "formula",
+      }, "schedule and lines must commit atomically on the formula they were generated from");
+
+      // Post-first-use definition changes are rejected at the storage boundary.
+      for (const mutation of [
+        sql`update depreciation_methods set formula = 'OC/AL' where id = ${formulaId}`,
+        sql`update depreciation_methods set end_of_life = 'retain_balance' where id = ${formulaId}`,
+        sql`update depreciation_methods set is_active = false where id = ${formulaId}`,
+      ]) {
+        await assert.rejects(
+          db.execute(mutation),
+          (error: unknown) => {
+            const wrapped = error as { message?: string; cause?: { message?: string } };
+            return /a depreciation formula used by a schedule is immutable/.test(
+              `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`,
+            );
+          },
+        );
+      }
+    } finally {
+      await fence.query("rollback").catch(() => undefined);
+      await mutator.query("rollback").catch(() => undefined);
+      fence.release();
+      mutator.release();
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }
