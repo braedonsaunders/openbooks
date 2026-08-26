@@ -17,16 +17,23 @@ import { runInSpan } from "../telemetry.ts";
  * never run.
  *
  * Ticks are claimed with a session-level Postgres advisory lock
- * (pg_try_advisory_lock on TICK_LOCK_KEY) so multi-replica deployments cannot
- * double-dispatch scheduled work. The module-local `running` flag only stops
- * overlap within one process; the lock is what excludes the other replicas.
- * Like every session lock it dies with its connection: it is released in the
- * finally block on both success and error paths, and if the connection broke
- * mid-tick the client is discarded rather than returned to the pool, so a
- * stale claim can never leak back into circulation.
+ * (pg_try_advisory_lock on a per-topology lock identity) so multi-replica
+ * deployments cannot double-dispatch scheduled work. The module-local `running`
+ * flag only stops overlap within one process; the lock is what excludes the
+ * other replicas. Like every session lock it dies with its connection: it is
+ * released in the finally block on both success and error paths, and if the
+ * connection broke mid-tick the client is discarded rather than returned to the
+ * pool, so a stale claim can never leak back into circulation.
+ *
+ * This module owns the claim primitive; engine/src/scheduler-lock.ts is the
+ * shared façade where every scheduler topology picks its lock identity and
+ * borrows the same primitive, so the report-scheduler tick and the broader web
+ * scheduler tick each exclude their own replicas without suppressing each
+ * other's non-identical duty sets.
  */
 const TICK_INTERVAL_MS = 60_000;
-const TICK_LOCK_KEY = "openbooks:report-scheduler-tick";
+/** Cross-replica identity of the report scheduler's tick, re-exported by scheduler-lock.ts. */
+export const TICK_LOCK_KEY = "openbooks:report-scheduler-tick";
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
@@ -45,20 +52,23 @@ export function stopReportScheduler(): void {
 }
 
 /**
- * Run `body` under the cross-replica tick claim. Returns null when another
- * replica holds the claim (body never runs); otherwise resolves with body's
- * result after releasing the claim, including when body throws.
+ * Run `body` under the cross-replica tick claim for `lockKey`. Returns null
+ * when another replica holds the claim (body never runs); otherwise resolves
+ * with body's result after releasing the claim, including when body throws.
+ * Each topology passes its own identity from scheduler-lock.ts, so two
+ * topologies with different duty sets never suppress each other while the
+ * replicas of ONE topology stay mutually exclusive.
  */
-export async function withTickClaim<T>(body: () => Promise<T>): Promise<T | null> {
+export async function withTickClaim<T>(lockKey: string, body: () => Promise<T>): Promise<T | null> {
   const client = await pool.connect();
   let held = false;
   try {
     const claimed = await client.query<{ locked: boolean }>(
       "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
-      [TICK_LOCK_KEY],
+      [lockKey],
     );
     if (claimed.rows[0]?.locked !== true) {
-      console.log("[report-scheduler] tick claim held by another replica; skipping");
+      console.log(`[${lockKey}] tick claim held by another replica; skipping`);
       return null;
     }
     held = true;
@@ -67,7 +77,7 @@ export async function withTickClaim<T>(body: () => Promise<T>): Promise<T | null
     let discard: Error | undefined;
     if (held) {
       try {
-        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [TICK_LOCK_KEY]);
+        await client.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
       } catch (e) {
         // The session may have died while held; destroy this connection so the
         // lock dies with it instead of being reused while still locked.
@@ -82,7 +92,7 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    await withTickClaim(async () => {
+    await withTickClaim(TICK_LOCK_KEY, async () => {
       // One span per claimed pass: every outbox/report attempt below joins it
       // as a child, so a collector shows the full tick tree per replica.
       await runInSpan("scheduler.tick", undefined, async () => {
