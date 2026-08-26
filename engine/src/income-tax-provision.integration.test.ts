@@ -265,6 +265,7 @@ async function createSubsidiary(
   orgId: string,
   name: string,
   baseCurrency: string,
+  parentId: string | null,
 ): Promise<string> {
   // CI loads the schema without the product seed; mirror the fixture's
   // defensive currency registration before referencing the code.
@@ -273,9 +274,22 @@ async function createSubsidiary(
     values (${baseCurrency}, ${baseCurrency}, 2)
     on conflict (code) do nothing`);
   const id = randomUUID();
+  // subsidiaries_org_root enforces exactly one parentless row per org; the
+  // scratch org fixture already created that root, so every test entity is
+  // parented under it (or the caller's chosen node).
   await db.execute(sql`
-    insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${id}, ${orgId}, ${name}, ${baseCurrency}, 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${id}, ${orgId}, ${parentId}, ${name}, ${baseCurrency}, 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+  // The scratch customer's party record defaults to the root entity only;
+  // grant it the new child so invoices may transact there — the same
+  // entity-record requirement the posting boundary enforces. The row is
+  // org-scoped to satisfy the tenant-coherence foreign keys.
+  await db.execute(sql`
+    insert into party_subsidiaries (id, org_id, party_id, subsidiary_id)
+    select gen_random_uuid(), ${orgId}, p.id, ${id}
+      from parties p
+     where p.org_id = ${orgId} and p.kind = 'customer'
+    on conflict do nothing`);
   return id;
 }
 
@@ -571,7 +585,7 @@ test("missing enacted-rate coverage fails closed while a genuine 0% rate compute
   try {
     const userId = await createScratchUser(org.orgId, "Coverage Tester", "admin");
     await seedTaxControlAccounts(org.orgId);
-    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD");
+    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
     // Only the ROOT has coverage; the active USD entity has none.
     await seedEnactedRate(org.orgId, "CAD federal", "26", { subsidiaryId: org.subsidiaryId, userId });
     await db.execute(sql`
@@ -601,7 +615,7 @@ test("multi-entity provisions calculate, post and translate per entity instead o
   try {
     const userId = await createScratchUser(org.orgId, "Entity Tester", "admin");
     const accounts = await seedTaxControlAccounts(org.orgId);
-    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD");
+    const usSub = await createSubsidiary(org.orgId, "US Ops", "USD", org.subsidiaryId);
     await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
     await seedEnactedRate(org.orgId, "US federal", "21", { subsidiaryId: usSub, userId });
     await db.execute(sql`
@@ -666,7 +680,7 @@ test("subsidiary rates stack onto org-wide jurisdictions deterministically and a
   try {
     const userId = await createScratchUser(org.orgId, "Stack Tester", "admin");
     await seedTaxControlAccounts(org.orgId);
-    const otherSub = await createSubsidiary(org.orgId, "Other Co", "EUR");
+    const otherSub = await createSubsidiary(org.orgId, "Other Co", "EUR", org.subsidiaryId);
     await seedEnactedRate(org.orgId, "Federal", "21", { userId });
     await seedEnactedRate(org.orgId, "State", "5", { subsidiaryId: org.subsidiaryId, userId });
     // Unrelated jurisdiction scoped to ANOTHER entity must not touch the root.
