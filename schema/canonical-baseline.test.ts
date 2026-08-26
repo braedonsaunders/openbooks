@@ -28,6 +28,8 @@ const subsidiaryTreeGuardSerializationMigrationPath =
   "schema/migrations/generated/0045_subsidiary_tree_guard_serialization.sql";
 const segmentValueHierarchySerializationMigrationPath =
   "schema/migrations/generated/0047_segment_value_hierarchy_serialization.sql";
+const rateBookCurrencySerializationMigrationPath =
+  "schema/migrations/generated/0048_rate_book_currency_serialization.sql";
 const ownershipPolicyFirstUseSerializationMigrationPath =
   "schema/migrations/generated/0050_ownership_policy_first_use_serialization.sql";
 const documentTenantForeignKeysMigrationPath =
@@ -84,6 +86,7 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     "0045_subsidiary_tree_guard_serialization.sql",
     "0046_account_posting_classification_serialization.sql",
     "0047_segment_value_hierarchy_serialization.sql",
+    "0048_rate_book_currency_serialization.sql",
     "0049_payment_schedule_occurrence_durability.sql",
     "0050_ownership_policy_first_use_serialization.sql",
     "0051_effective_date_overlap_exclusion_constraints.sql",
@@ -692,6 +695,31 @@ test("ledger headers, lines, and trigger reads are tenant coherent", () => {
   );
   assert.match(migration, /where id = v_entry and org_id = v_line_org/);
   assert.match(migration, /e\.id = l\.entry_id and e\.org_id = l\.org_id/);
+});
+
+test("first rate version creation serializes with rate-book currency edits", () => {
+  const migration = readFileSync(rateBookCurrencySerializationMigrationPath, "utf8");
+
+  // The storage guard must pin the tenant-owned book row with FOR SHARE from
+  // before the insert until commit, so a racing currency UPDATE cannot pass
+  // rate_book_currency_guard's history check while first-version creation is
+  // in flight — for API, import, and direct writers alike.
+  const lockGuard = migration.match(
+    /CREATE OR REPLACE FUNCTION public\.rate_version_book_lock_guard\(\) RETURNS trigger[\s\S]*?\$\$;/,
+  )?.[0];
+  assert.ok(lockGuard, "0048 must add a storage guard locking the book before a version insert");
+  assert.match(
+    lockGuard,
+    /from public\.item_rate_books book\s+where book\.id = new\.rate_book_id\s+and book\.org_id = new\.org_id\s+for share/i,
+  );
+  assert.match(lockGuard, /rate version must reference a tenant-owned rate book/i);
+
+  assert.match(
+    migration,
+    /CREATE TRIGGER item_rate_versions_book_lock\s+BEFORE INSERT ON public\.item_rate_versions/i,
+  );
+  assert.match(migration, /COMMENT ON FUNCTION public\.rate_version_book_lock_guard\(\) IS/);
+  assert.doesNotMatch(migration, /^\s*(?:UPDATE|DELETE\s+FROM)\s/im);
 });
 
 test("the baseline contains standards, payroll, authentication, and operational guards", () => {

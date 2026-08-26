@@ -6,6 +6,14 @@ import type { PoolClient, QueryResult } from "pg";
 import { db, pool } from "../engine/src/db.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../engine/src/test-fixtures.ts";
 
+/** Drizzle wraps driver errors (DrizzleQueryError), hiding the PostgreSQL
+ * message in `cause`; match the whole rendered chain so a trigger rejection
+ * stays assertable. */
+function pgMessage(error: unknown): string {
+  const cause = (error as { cause?: unknown }).cause;
+  return `${String(error)}\n${cause === undefined ? "" : String(cause)}`;
+}
+
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 type TreeUpdateResult = PromiseSettledResult<QueryResult>;
@@ -154,13 +162,13 @@ test("segment-value tree writes serialize per tenant and segment before cycle ch
       db.execute(sql`
         insert into segment_values (id, org_id, segment_id, parent_id, code, name)
         values (${rejectedDirect}, ${org.orgId}, ${segmentId}, ${otherSegmentValue}, 'BAD-SEGMENT', 'Bad segment parent')`),
-      /segment value parent is invalid/,
+      (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
     );
     await assert.rejects(
       db.execute(sql`
         insert into segment_values (id, org_id, segment_id, parent_id, code, name)
         values (${rejectedDirect}, ${org.orgId}, ${segmentId}, ${otherOrgValue}, 'BAD-ORG', 'Bad organization parent')`),
-      /segment value parent is invalid/,
+      (error: unknown) => pgMessage(error).includes("segment value parent is invalid"),
     );
     await db.execute(sql`
       insert into segment_values (id, org_id, segment_id, parent_id, code, name)
