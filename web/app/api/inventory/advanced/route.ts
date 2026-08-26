@@ -5,9 +5,11 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { businessToday } from "@openbooks/engine/src/business-date.ts";
 import {
   InventoryError,
+  InventoryIdempotencyConflictError,
   createTransferOrder,
   ensureLot,
   ensureSerial,
+  executeIdempotentInventoryAction,
   postLandedCostVoucher,
   queryLotRecall,
   receiveTransferOrder,
@@ -91,9 +93,12 @@ export async function POST(req: Request) {
   if (!parsedBody.ok) return parsedBody.response;
   const body = ((parsedBody.data));
   const action = typeof body?.action === "string" ? body.action : undefined;
-  // ensureLot/ensureSerial only mint catalog identifiers, so they keep the
-  // catalog-maintenance grant; every stock-moving verb demands the monetary
-  // authority mapped in INVENTORY_ADVANCED_ACTION_PERMISSIONS.
+  // ensureLot/ensureSerial only mint catalog identifiers (idempotent by
+  // construction), so they keep the catalog-maintenance grant and stay outside
+  // the replay boundary; every stock-moving verb demands the monetary
+  // authority mapped in INVENTORY_ADVANCED_ACTION_PERMISSIONS AND executes
+  // through the engine's canonical idempotency boundary, which fails closed
+  // on a missing or malformed idempotencyKey.
   const permission: CataloguePermission | undefined =
     action === "ensureLot" || action === "ensureSerial"
       ? "items.manage"
@@ -120,6 +125,15 @@ export async function POST(req: Request) {
     return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
   };
 
+  /** Run one monetary action through the engine's canonical replay boundary. */
+  const idempotent = <T>(operation: string, request: unknown, execute: () => Promise<T>) =>
+    executeIdempotentInventoryAction(orgId, userId, {
+      operation,
+      idempotencyKey: body?.idempotencyKey,
+      request,
+      execute,
+    });
+
   try {
     switch (body.action) {
       case "createTransfer": {
@@ -145,7 +159,7 @@ export async function POST(req: Request) {
             serialId: line.serialId ?? null,
           });
         }
-        const res = await createTransferOrder(orgId, userId, {
+        const input = {
           fromStockLocationId: body.fromStockLocationId,
           toStockLocationId: body.toStockLocationId,
           subsidiaryId,
@@ -153,22 +167,35 @@ export async function POST(req: Request) {
           inTransitAccountId: body.inTransitAccountId ?? null,
           memo: body.memo ?? null,
           lines,
-        });
-        return NextResponse.json(res, { status: 201 });
+        };
+        const { value: res, replayed } = await idempotent(
+          "inventory.transfer-order.create",
+          input,
+          () => createTransferOrder(orgId, userId, input),
+        );
+        return NextResponse.json({ replayed, ...res }, { status: 201 });
       }
       case "shipTransfer": {
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const res = await shipTransferOrder(orgId, userId, body.id, body.date);
-        return NextResponse.json(res);
+        const { value: res, replayed } = await idempotent(
+          "inventory.transfer-order.ship",
+          { id: body.id, date: body.date },
+          () => shipTransferOrder(orgId, userId, body.id, body.date),
+        );
+        return NextResponse.json({ replayed, ...res });
       }
       case "receiveTransfer": {
         if (!(await orderSubsidiaryInScope(body.id))) {
           return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
-        const res = await receiveTransferOrder(orgId, userId, body.id, body.date);
-        return NextResponse.json(res);
+        const { value: res, replayed } = await idempotent(
+          "inventory.transfer-order.receive",
+          { id: body.id, date: body.date },
+          () => receiveTransferOrder(orgId, userId, body.id, body.date),
+        );
+        return NextResponse.json({ replayed, ...res });
       }
       case "postLandedVoucher": {
         let subsidiaryId = body.subsidiaryId;
@@ -199,7 +226,7 @@ export async function POST(req: Request) {
             manualAmount: manualRaw === null ? null : normalizeMoney(manualRaw),
           });
         }
-        const res = await postLandedCostVoucher(orgId, userId, {
+        const input = {
           amount: normalizeMoney(amount),
           basis: body.basis ?? "value",
           freightAccountId: body.freightAccountId,
@@ -208,8 +235,13 @@ export async function POST(req: Request) {
           sourceDocumentLineId: body.sourceDocumentLineId ?? null,
           memo: body.memo ?? null,
           targets,
-        });
-        return NextResponse.json(res, { status: 201 });
+        };
+        const { value: res, replayed } = await idempotent(
+          "inventory.landed-voucher.post",
+          input,
+          () => postLandedCostVoucher(orgId, userId, input),
+        );
+        return NextResponse.json({ replayed, ...res }, { status: 201 });
       }
       case "ensureLot": {
         const id = await ensureLot(orgId, body.itemId, body.lotNumber, body.expiresOn ?? null, userId);
@@ -223,7 +255,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    const status = e instanceof InventoryError ? 422 : 500;
+    // Key reuse with different input is a conflict, not a validation miss.
+    const status =
+      e instanceof InventoryIdempotencyConflictError
+        ? 409
+        : e instanceof InventoryError
+          ? 422
+          : 500;
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
   }
 }

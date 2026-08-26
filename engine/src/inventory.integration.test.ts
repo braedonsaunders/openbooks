@@ -14,7 +14,9 @@ import {
   createTransferOrder,
   ensureLot,
   ensureSerial,
+  executeIdempotentInventoryAction,
   getOnHand,
+  InventoryIdempotencyConflictError,
   issueInventory,
   lockItemInventoryProfile,
   parseCostingMethod,
@@ -1211,4 +1213,171 @@ test("the costing route requires explicit costing policies and maps blocked flip
   assert.match(route, /recostingAuthorization/);
   assert.match(route, /before: before \?\? null/);
   assert.match(route, /revalueOpenLayersToStandardCost/);
+});
+
+// ---------------------------------------------------------------------------
+// Direct HTTP inventory actions replay through the canonical idempotency
+// boundary — one client key, one accounting unit, serially and concurrently
+// ---------------------------------------------------------------------------
+
+test("direct inventory action retries replay the stored result without duplicating accounting units", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const receiveOnce = (idempotencyKey: string, quantity = "10") => {
+      const input = {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity,
+        unitCost: "2.50",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+        memo: "HTTP retry identity",
+      };
+      return executeIdempotentInventoryAction(org.orgId, actor, {
+        operation: "inventory.receive",
+        idempotencyKey,
+        request: input,
+        execute: () => receiveInventory(org.orgId, actor, input),
+      });
+    };
+    const receiptCount = async () =>
+      (
+        await db.execute<{ n: string }>(sql`
+          select count(*)::text as n from inventory_movements
+           where org_id = ${org.orgId} and item_id = ${org.items.fifo}
+             and stock_location_id = ${org.stockLocationId}
+             and kind = 'receipt'`)
+      ).rows[0]!.n;
+
+    // Representative concurrent replay: three racing resends of ONE lost
+    // request. Exactly one accounting unit posts; the losers replay its
+    // committed result.
+    const glBefore = await glBalance(org.orgId, org.accounts.invAsset);
+    const key = `http-retry-${randomUUID()}`;
+    const raced = await Promise.all([receiveOnce(key), receiveOnce(key), receiveOnce(key)]);
+    assert.equal(
+      new Set(raced.map((r) => r.value.movementId)).size,
+      1,
+      "a retried key must not duplicate the movement",
+    );
+    assert.deepEqual(
+      raced.map((r) => r.value.value),
+      [raced[0]!.value.value, raced[0]!.value.value, raced[0]!.value.value],
+    );
+    assert.equal(raced.filter((r) => !r.replayed).length, 1);
+    assert.equal(await receiptCount(), "1");
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.invAsset)) -
+        toUnits(glBefore),
+      toUnits("25"),
+      "10 × 2.50 must hit the inventory GL exactly once",
+    );
+
+    // A later serial resend of the same lost response replays the committed
+    // evidence (the crash-after-commit case) instead of posting again.
+    const serialReplay = await receiveOnce(key);
+    assert.equal(serialReplay.replayed, true);
+    assert.deepEqual(serialReplay.value, raced[0]!.value);
+    assert.equal(await receiptCount(), "1");
+
+    // Same key with different input is a conflict and never a second posting.
+    await assert.rejects(receiveOnce(key, "11"), InventoryIdempotencyConflictError);
+    assert.equal(await receiptCount(), "1");
+
+    // Distinct-key happy control: a NEW key creates a NEW action.
+    const glBetween = await glBalance(org.orgId, org.accounts.invAsset);
+    const fresh = await receiveOnce(`http-retry-${randomUUID()}`);
+    assert.equal(fresh.replayed, false);
+    assert.notEqual(fresh.value.movementId, raced[0]!.value.movementId);
+    assert.equal(
+      toUnits(await glBalance(org.orgId, org.accounts.invAsset)) -
+        toUnits(glBetween),
+      toUnits("25"),
+    );
+    assert.equal(await receiptCount(), "2");
+
+    // A rolled-back attempt never burns its key: the failed claim shares the
+    // command's transaction, so the same key completes a fresh action after.
+    const burned = `rolled-back-${randomUUID()}`;
+    const overIssue = {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "9999",
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+    };
+    await assert.rejects(
+      executeIdempotentInventoryAction(org.orgId, actor, {
+        operation: "inventory.issue",
+        idempotencyKey: burned,
+        request: overIssue,
+        execute: () => issueInventory(org.orgId, actor, overIssue),
+      }),
+      /insufficient stock/,
+    );
+    const recovered = await executeIdempotentInventoryAction(org.orgId, actor, {
+      operation: "inventory.issue",
+      idempotencyKey: burned,
+      request: { ...overIssue, quantity: "2" },
+      execute: () =>
+        issueInventory(org.orgId, actor, { ...overIssue, quantity: "2" }),
+    });
+    assert.equal(recovered.replayed, false);
+
+    // Fail closed: no key, no ledger touch — the boundary owns the contract.
+    await assert.rejects(
+      executeIdempotentInventoryAction(org.orgId, actor, {
+        operation: "inventory.receive",
+        idempotencyKey: undefined,
+        request: {},
+        execute: () => Promise.resolve({ movementId: "nope", entryId: null, value: "0" }),
+      }),
+      /idempotencyKey/,
+    );
+    await assertInvariant(org);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("both inventory HTTP routes thread every monetary action through the idempotency boundary", () => {
+  const actionsRoute = readFileSync(
+    new URL("../../web/app/api/inventory/actions/route.ts", import.meta.url),
+    "utf8",
+  );
+  for (const operation of [
+    "inventory.receive",
+    "inventory.issue",
+    "inventory.adjust",
+    "inventory.transfer",
+    "inventory.build",
+    "inventory.landed",
+    "inventory.reverse",
+  ]) {
+    assert.match(actionsRoute, new RegExp(`operation: '${operation}'`));
+  }
+  assert.match(actionsRoute, /executeIdempotentInventoryAction/);
+  assert.match(actionsRoute, /idempotencyKey: body\.idempotencyKey/);
+  // Key reuse with different input maps to 409, ahead of InventoryError's 422.
+  assert.match(actionsRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
+
+  const advancedRoute = readFileSync(
+    new URL("../../web/app/api/inventory/advanced/route.ts", import.meta.url),
+    "utf8",
+  );
+  for (const operation of [
+    "inventory.transfer-order.create",
+    "inventory.transfer-order.ship",
+    "inventory.transfer-order.receive",
+    "inventory.landed-voucher.post",
+  ]) {
+    assert.match(advancedRoute, new RegExp(`"${operation}"`));
+  }
+  assert.match(advancedRoute, /executeIdempotentInventoryAction/);
+  assert.match(advancedRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
+  // Catalog-only ensures mint identifiers and stay OUTSIDE the replay boundary.
+  assert.match(advancedRoute, /await ensureLot\(orgId/);
+  assert.match(advancedRoute, /await ensureSerial\(orgId/);
 });
