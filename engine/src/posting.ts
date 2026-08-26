@@ -1648,6 +1648,23 @@ export async function postDocument(
  * `posting_effects` row in the posting transaction; this function drains it.
  * A crash after commit leaves the row for `processDuePostingEffects`.
  */
+/**
+ * Resolve the legal entity whose subledger a post-commit inventory effect
+ * touches. documents.subsidiary_id null *means* the org's root subsidiary —
+ * the same entity the posting kernel stamped on every journal line (see
+ * applySubsidiaries, which substitutes ctx.rootId for the null header) — so
+ * the meaning-bearing null must never gate an effect by truthiness or reach
+ * the subledger as something distinct from "root".
+ */
+async function postingEffectSubsidiaryId(
+  orgId: string,
+  subsidiaryId: string | null,
+): Promise<string> {
+  if (subsidiaryId) return subsidiaryId;
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  return ctx.rootId;
+}
+
 export async function runPostDocumentEffects(
   documentId: string,
   previousStatus = "draft",
@@ -1691,23 +1708,30 @@ export async function runPostDocumentEffects(
     const entryId = doc.postedEntryId ?? claimed?.entry_id ?? null;
     if (doc.kind === "customer_invoice") {
       await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
-      if (doc.subsidiaryId) {
-        await applyInventoryIssuesForInvoice(
-          doc.orgId,
-          effectActorId,
-          doc.id,
-          postingDate,
-          doc.subsidiaryId,
+      await applyInventoryIssuesForInvoice(
+        doc.orgId,
+        effectActorId,
+        doc.id,
+        postingDate,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
+      );
+    } else if (doc.kind === "vendor_bill") {
+      // A posted vendor_bill carries its entry id by construction — the
+      // kernel flips status and stamps posted_entry_id in one statement — so
+      // a missing id means the row is corrupt. Fail loudly into the retry/
+      // terminal lifecycle rather than skip the receipts and record success.
+      if (!entryId) {
+        throw new Error(
+          `posted vendor bill ${doc.documentNumber} has no posted journal entry; inventory receipts cannot run`,
         );
       }
-    } else if (doc.kind === "vendor_bill" && doc.subsidiaryId && entryId) {
       await applyInventoryReceiptsForBill(
         doc.orgId,
         effectActorId,
         doc.id,
         entryId,
         postingDate,
-        doc.subsidiaryId,
+        await postingEffectSubsidiaryId(doc.orgId, doc.subsidiaryId),
       );
     }
 
